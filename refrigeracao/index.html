@@ -1817,7 +1817,7 @@ function ctOpenOS(osId){
   h += '</div></div>';
 
   /* — Execução — */
-  var stepExec = CT_STATUS[o.status].step;
+  var stepExec = (CT_STATUS[o.status]||CT_STATUS['SOLICITADA']).step;
   if(stepExec>=2 && o.status!=='CANCELADA'){
     h += '<div class="ds"><div class="ds-title"><i class="fas fa-hard-hat mr1"></i>3 · Execução ('+regs.length+' registro'+(regs.length===1?'':'s')+')</div>';
     regs.forEach(function(r){
@@ -1861,7 +1861,7 @@ function ctOpenOS(osId){
   }
 
   /* — Fiscalização — */
-  if((CT_STATUS[o.status].step>=4) && o.status!=='CANCELADA'){
+  if(((CT_STATUS[o.status]||{}).step>=4) && o.status!=='CANCELADA'){
     h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1"></i>4 · Fiscalização</div>';
     if(o.fiscal){
       h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1"></i>Aprovada por '+esc(o.fiscal)+' em '+fmtDate(o.data_fiscalizacao)+'</div>' +
@@ -1879,7 +1879,7 @@ function ctOpenOS(osId){
   }
 
   /* — Certificação / NF + composição da ata — */
-  if((CT_STATUS[o.status].step>=5) && o.status!=='CANCELADA'){
+  if(((CT_STATUS[o.status]||{}).step>=5) && o.status!=='CANCELADA'){
     h += '<div class="ds"><div class="ds-title"><i class="fas fa-file-invoice mr1"></i>5 · NF · Composição da Ata · Certificação</div>';
     /* composição */
     var compTotal = ctCompTotal(osId);
