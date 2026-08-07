@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#1a1a18"/>
+<title>PMOC · CMASM</title>
+<style>
+:root{--bg:#1a1a18;--surface:#242420;--surface2:#2e2e2a;--border:#38382f;
+ --text:#e8e4d8;--text2:#a09a88;--text3:#6a6458;
+ --green:#5a9e6f;--yellow:#c9a84c;--red:#b85c4a;--blue:#4a7fa0;
+ --ff:'Inter',system-ui,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh}
+.hd{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;
+ display:flex;align-items:center;justify-content:space-between}
+.brand{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.hd-sub{font-size:12px;color:var(--text3)}
+.main{max-width:920px;margin:0 auto;padding:48px 20px}
+h1{font-size:24px;font-weight:700;margin-bottom:6px}
+.sub{font-size:14px;color:var(--text2);margin-bottom:36px;line-height:1.6}
+.lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+ color:var(--text3);margin:32px 0 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;
+ text-decoration:none;color:inherit;display:block;transition:.2s}
+.card:hover{border-color:var(--yellow);transform:translateY(-2px)}
+.card.off{opacity:.42;pointer-events:none}
+.ico{font-size:30px;margin-bottom:12px}
+.nm{font-size:15px;font-weight:700;margin-bottom:4px}
+.ds{font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.t{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px}
+.t-ok{background:rgba(90,158,111,.15);color:var(--green)}
+.t-wip{background:rgba(201,168,76,.15);color:var(--yellow)}
+.t-plan{background:rgba(74,127,160,.15);color:var(--blue)}
+.ft{text-align:center;padding:40px 20px;font-size:12px;color:var(--text3);
+ border-top:1px solid var(--border);margin-top:56px}
+</style>
+</head>
+<body>
+<div class="hd">
+  <div class="brand"><div class="dot"></div> PMOC · CMASM</div>
+  <div class="hd-sub">Marinha do Brasil · Ilha do Engenho · São Gonçalo/RJ</div>
+</div>
+<div class="main">
+  <h1>Plano de Manutenção, Operação e Controle</h1>
+  <div class="sub">Sistemas de manutenção da instalação. Acesse com seu cargo e senha.</div>
+
+  <div class="lbl">🔧 Em produção</div>
+  <div class="grid">
+    <a class="card" href="/refrigeracao">
+      <div class="ico">❄️</div>
+      <div class="nm">Refrigeração</div>
+      <div class="ds">171 unidades de climatização. OS com fluxo de contratação/ARP, fiscalização e certificação. QR code e impressão.</div>
+      <div class="tags"><span class="t t-ok">v2.8</span><span class="t t-ok">171 equip.</span></div>
+    </a>
+    <a class="card" href="/maquinas">
+      <div class="ico">⚙️</div>
+      <div class="nm">Máquinas de corte</div>
+      <div class="ds">7 máquinas com planos por horímetro, 34 peças com preço, consumo de combustível, ciclo de vida e lista de compras.</div>
+      <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-ok">59 planos</span></div>
+    </a>
+  </div>
+
+  <div class="lbl">📋 Planejados</div>
+  <div class="grid">
+    <div class="card off"><div class="ico">📢</div><div class="nm">Fonoclama</div>
+      <div class="ds">PA 70V — amplificadores, falantes, linhas, sirenes.</div>
+      <div class="tags"><span class="t t-plan">Planejado</span></div></div>
+    <div class="card off"><div class="ico">🚗</div><div class="nm">Transportes</div>
+      <div class="ds">Viaturas e embarcações. Planos por km / horas de motor.</div>
+      <div class="tags"><span class="t t-plan">Planejado</span></div></div>
+    <div class="card off"><div class="ico">⚡</div><div class="nm">Elétrica</div>
+      <div class="ds">Subestação, geradores, quadros de distribuição.</div>
+      <div class="tags"><span class="t t-plan">Planejado</span></div></div>
+    <div class="card off"><div class="ico">🔬</div><div class="nm">Calibração</div>
+      <div class="ds">~500 instrumentos metrológicos. Vencimentos e laudos.</div>
+      <div class="tags"><span class="t t-wip">Banco pronto</span></div></div>
+  </div>
+</div>
+<div class="ft">
+  CMASM · Centro de Mísseis e Armas Submarinas da Marinha · UASG 744030<br>
+  Divisão de Manutenção Especializada · Seção de Eletrônica
+</div>
+</body>
+</html>

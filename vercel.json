@@ -1,0 +1,8 @@
+{
+  "cleanUrls": true,
+  "outputDirectory": ".",
+  "rewrites": [
+    { "source": "/refrigeracao", "destination": "/refrigeracao/index.html" },
+    { "source": "/maquinas",     "destination": "/maquinas/index.html" }
+  ]
+}

@@ -1,0 +1,888 @@
+
+// ── CONFIG: substitua pela URL e anon key do seu projeto Supabase ──
+const SUPA_URL = 'https://thoaqipyhfmromsgzmjs.supabase.co'
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRob2FxaXB5aGZtcm9tc2d6bWpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjk5NTksImV4cCI6MjEwMTY0NTk1OX0.1Ig6ijb6SKgeQRgGwM54MyzlVr-n_feSAxaFTwbHRGY'
+// ─────────────────────────────────────────────────────────────────
+
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY)
+
+// ── estado global ──
+let ATIVOS = [], OS_LIST = [], MATERIAIS = [], PLANOS = [], PLANO_MATS = [], ABASTS = [], USOS = []
+let USUARIO = null
+let ATIVO_EDIT_ID = null
+
+// ── auth ──
+async function init(){
+  const { data: { session } } = await supa.auth.getSession()
+  if(session){
+    await carregarUsuario(session.user.id)
+    mostrarApp()
+  }
+  supa.auth.onAuthStateChange(async (_ev, session) => {
+    if(session){ await carregarUsuario(session.user.id); mostrarApp() }
+    else { mostrarLogin() }
+  })
+}
+
+async function carregarUsuario(uid){
+  const { data } = await supa.from('usuarios').select('*').eq('auth_id', uid).single()
+  USUARIO = data
+  if(USUARIO) document.getElementById('user-chip').textContent =
+    (USUARIO.funcao || USUARIO.posto_graduacao || USUARIO.nome || 'Usuário') + ' · ' + USUARIO.role
+}
+
+// ── auth via auth.js ─────────────────────────────────────────────
+// (substituir './auth.js' pelo URL do seu CDN ou raw.githubusercontent após publicar)
+// Por ora, Auth está inline abaixo para funcionar como arquivo único.
+
+async function sair(){ await supa.auth.signOut() }
+function mostrarApp(){
+  document.getElementById('login-screen').style.display = 'none'
+  document.getElementById('app').style.display = 'block'
+  carregarTudo()
+}
+function mostrarLogin(){
+  document.getElementById('login-screen').style.display = 'flex'
+  document.getElementById('app').style.display = 'none'
+}
+
+// ── dados ──
+async function carregarTudo(){
+  const [a, o, m, p, pm, ab, ur] = await Promise.all([
+    supa.from('maq_ativos').select('*').order('codigo'),
+    supa.from('maq_os').select('*, maq_ativos(codigo,nome), maq_planos(nome)').order('data_abertura', {ascending:false}),
+    supa.from('maq_materiais').select('*').order('nome'),
+    supa.from('maq_planos').select('*').eq('ativo', true).order('tipo_modelo').order('ordem'),
+    supa.from('maq_plano_materiais').select('*, maq_materiais(nome,unidade)'),
+    supa.from('maq_abastecimentos').select('*, maq_ativos(codigo,nome,emoji)').order('data',{ascending:false}),
+    supa.from('maq_uso_registros').select('*, maq_ativos(codigo,nome)').order('registrado_em',{ascending:false}),
+  ])
+  ATIVOS    = a.data || []
+  OS_LIST   = o.data || []
+  MATERIAIS = m.data || []
+  PLANOS    = p.data || []
+  PLANO_MATS= pm.data|| []
+  ABASTS    = ab.data|| []
+  USOS      = ur.data|| []
+  renderPainel(); renderAtivos(); renderVencimentos(); renderOS(); renderMateriais()
+  renderConsumo(); renderCiclo(); renderCompras()
+}
+
+// ── views ──
+function trocarView(id, btn){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'))
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'))
+  document.getElementById('view-'+id).classList.add('active')
+  btn.classList.add('active')
+}
+
+// ── PAINEL ──
+function renderPainel(){
+  const total  = ATIVOS.length
+  const op     = ATIVOS.filter(a => a.status === 'operante').length
+  const inop   = ATIVOS.filter(a => a.status === 'inoperante').length
+  const venc   = calcVencimentos().filter(v => v.pct >= 80).length
+  const baixo  = MATERIAIS.filter(m => m.estoque_atual < m.estoque_minimo).length
+
+  document.getElementById('kpi-total').textContent     = total
+  document.getElementById('kpi-operantes').textContent = op
+  document.getElementById('kpi-inop').textContent      = inop
+  document.getElementById('kpi-venc').textContent      = venc
+  document.getElementById('kpi-estoque-baixo').textContent = baixo
+
+  // inoperantes
+  const inopList = ATIVOS.filter(a => a.status !== 'operante')
+  const divInop = document.getElementById('painel-inop')
+  if(!inopList.length){
+    divInop.innerHTML = '<div class="empty"><div class="empty-ico">✅</div><p>Todas operantes</p></div>'
+  } else {
+    divInop.innerHTML = inopList.map(a => `
+      <div class="mat-alert">
+        <div class="mat-info">
+          <div class="mat-nome">${a.codigo} — ${a.nome}</div>
+          <div class="mat-stock">${a.local || '—'}</div>
+        </div>
+        <span class="badge ${a.status==='inoperante'?'b-red':'b-warn'}">${a.status.toUpperCase()}</span>
+      </div>`).join('')
+  }
+
+  // materiais críticos
+  const matsLow = MATERIAIS.filter(m => m.estoque_atual < m.estoque_minimo)
+  const divMats = document.getElementById('painel-mats')
+  if(!matsLow.length){
+    divMats.innerHTML = '<div class="empty"><div class="empty-ico">✅</div><p>Estoque OK</p></div>'
+  } else {
+    divMats.innerHTML = matsLow.map(m => `
+      <div class="mat-alert">
+        <div class="mat-info">
+          <div class="mat-nome">${m.nome}</div>
+          <div class="mat-stock">${m.estoque_atual} ${m.unidade} · mín: ${m.estoque_minimo}</div>
+        </div>
+        <span class="badge b-red">BAIXO</span>
+      </div>`).join('')
+  }
+}
+
+// ── ATIVOS ──
+function renderAtivos(){
+  const cat    = document.getElementById('filtro-cat').value
+  const status = document.getElementById('filtro-status').value
+  let lista = ATIVOS.filter(a =>
+    (!cat    || a.categoria === cat) &&
+    (!status || a.status    === status)
+  )
+  const tbody = document.getElementById('tb-ativos')
+  if(!lista.length){
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma máquina encontrada</td></tr>'
+    return
+  }
+  const statusBadge = s => s==='operante'?'b-ok':s==='inoperante'?'b-red':'b-warn'
+  tbody.innerHTML = lista.map(a => `
+    <tr onclick="abrirModalAtivo(${a.id})">
+      <td class="hi" style="color:${a.cor||'var(--text)'}">${a.emoji||''} ${a.codigo||'—'}</td>
+      <td class="hi">${a.nome}</td>
+      <td>${a.categoria||'—'}</td>
+      <td>${[a.fabricante,a.modelo].filter(Boolean).join(' ') || '—'}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>${a.uso_atual} ${a.unidade_uso}</span>
+        </div>
+      </td>
+      <td><span class="badge ${statusBadge(a.status)}">${a.status.toUpperCase()}</span></td>
+      <td>${a.local||'—'}</td>
+      <td>
+        <button class="btn btn-s btn-sm" onclick="event.stopPropagation();abrirModalOS(${a.id})">+ OS</button>
+      </td>
+    </tr>`).join('')
+}
+
+// ── VENCIMENTOS ──
+function calcVencimentos(){
+  const items = []
+  for(const ativo of ATIVOS){
+    if(ativo.status === 'baixado') continue
+    const planosAtivo = PLANOS.filter(p => p.tipo_modelo === ativo.tipo_modelo)
+    for(const plano of planosAtivo){
+      if(plano.unidade !== 'h' && plano.unidade !== 'km' && plano.unidade !== 'ciclos') continue
+      // último uso registrado neste plano
+      const ultimaOS = OS_LIST.find(o => o.ativo_id === ativo.id && o.plano_id === plano.id && o.status === 'concluida')
+      const baseUso = ultimaOS ? (ultimaOS.uso_na_os || 0) : 0
+      const proxUso = baseUso + plano.intervalo
+      const falta = proxUso - ativo.uso_atual
+      const pct = Math.min(100, Math.round(((ativo.uso_atual - baseUso) / plano.intervalo) * 100))
+      items.push({ ativo, plano, proxUso, falta, pct })
+    }
+  }
+  return items.sort((a,b) => b.pct - a.pct)
+}
+
+function renderVencimentos(){
+  const items = calcVencimentos()
+  const div = document.getElementById('venc-content')
+  if(!items.length){
+    div.innerHTML = '<div class="callout co-ok">Nenhum plano de manutenção configurado para os ativos cadastrados.</div>'
+    return
+  }
+  const card = v => {
+    const cls = v.pct >= 100 ? 'urgente' : v.pct >= 80 ? 'proximo' : 'ok'
+    const cor = v.pct >= 100 ? 'var(--red)' : v.pct >= 80 ? 'var(--yellow)' : 'var(--green)'
+    const label = v.pct >= 100 ?
+      `<span class="badge b-red">VENCIDO (${Math.abs(v.falta).toFixed(0)} ${v.plano.unidade} atrás)</span>` :
+      v.falta <= 5 ?
+      `<span class="badge b-warn">Falta ${v.falta.toFixed(0)} ${v.plano.unidade}</span>` :
+      `<span style="font-size:11px;color:var(--text3)">Falta ${v.falta.toFixed(0)} ${v.plano.unidade}</span>`
+    return `<div class="venc-card ${cls}">
+      <div class="venc-ativo">${v.ativo.codigo} — ${v.ativo.nome}</div>
+      <div class="venc-plano">${v.plano.nome} · a cada ${v.plano.intervalo} ${v.plano.unidade}</div>
+      <div class="uso-bar-wrap" style="margin:8px 0">
+        <div class="uso-bar" style="width:${v.pct}%;background:${cor}"></div>
+      </div>
+      <div class="venc-progress">
+        <span>${v.pct}% do intervalo</span> · ${label}
+        <button class="btn btn-s btn-sm" style="margin-left:auto"
+          onclick="abrirModalOS(${v.ativo.id}, ${v.plano.id})">Registrar OS</button>
+      </div>
+    </div>`
+  }
+  div.innerHTML = '<div class="venc-grid">' + items.map(card).join('') + '</div>'
+}
+
+// ── OS ──
+function renderOS(){
+  const tbody = document.getElementById('tb-os')
+  if(!OS_LIST.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma OS registrada</td></tr>'
+    return
+  }
+  const sBadge = s => s==='concluida'?'b-ok':s==='pendente'?'b-warn':s==='cancelada'?'b-red':'b-blue'
+  const tBadge = t => t==='preventiva'?'b-blue':t==='corretiva'?'b-red':'b-ok'
+  tbody.innerHTML = OS_LIST.slice(0,100).map(o => `<tr>
+    <td>${o.data_abertura||'—'}</td>
+    <td class="hi">${o.maq_ativos?.codigo||'?'} — ${o.maq_ativos?.nome||'?'}</td>
+    <td><span class="badge ${tBadge(o.tipo)}">${o.tipo.toUpperCase()}</span></td>
+    <td>${o.maq_planos?.nome || (o.tipo==='uso'?'Registro de uso':'Corretiva')}</td>
+    <td>${o.tecnico||'—'}</td>
+    <td><span class="badge ${sBadge(o.status)}">${o.status.toUpperCase()}</span></td>
+    <td>${o.status==='pendente'?`<button class="btn btn-p btn-sm" onclick="concluirOS('${o.id}')">Concluir</button>`:'—'}</td>
+  </tr>`).join('')
+}
+
+// ── MATERIAIS ──
+function renderMateriais(){
+  const tbody = document.getElementById('tb-materiais')
+  if(!MATERIAIS.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum material cadastrado</td></tr>'
+    return
+  }
+  tbody.innerHTML = MATERIAIS.map(m => {
+    const ok = m.estoque_atual >= m.estoque_minimo
+    const pct = m.estoque_minimo > 0 ? Math.min(100, Math.round((m.estoque_atual/m.estoque_minimo)*100)) : 100
+    return `<tr>
+      <td class="hi">${m.codigo||'—'}</td>
+      <td>${m.nome}</td>
+      <td><span class="badge b-blue">${m.tipo.toUpperCase()}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span>${m.estoque_atual} ${m.unidade}</span>
+          <div class="uso-bar-wrap" style="width:60px">
+            <div class="uso-bar" style="width:${pct}%;background:${ok?'var(--green)':'var(--red)'}"></div>
+          </div>
+        </div>
+      </td>
+      <td>${m.estoque_minimo} ${m.unidade}</td>
+      <td>${m.preco?('R$ '+Number(m.preco).toFixed(2)):'—'}</td>
+      <td><span class="badge ${ok?'b-ok':'b-red'}">${ok?'OK':'BAIXO'}</span></td>
+    </tr>`}).join('')
+}
+
+// ── COMPRAS ──
+function renderCompras(){
+  const div = document.getElementById('compras-content')
+  const linhas = []
+
+  // 1. Materiais abaixo do mínimo
+  const baixo = MATERIAIS.filter(m => m.estoque_atual < m.estoque_minimo)
+  for(const m of baixo){
+    const needed = m.estoque_minimo - m.estoque_atual
+    linhas.push({
+      codigo: m.codigo,
+      nome: m.nome,
+      unidade: m.unidade,
+      qtd: needed,
+      preco: m.preco,
+      motivo: `Repor estoque mínimo (atual: ${m.estoque_atual} · mín: ${m.estoque_minimo})`
+    })
+  }
+
+  // 2. Materiais dos planos que vão vencer em breve (pct >= 70)
+  const venc = calcVencimentos().filter(v => v.pct >= 70)
+  for(const v of venc){
+    const pm = PLANO_MATS.filter(p => p.plano_id === v.plano.id)
+    for(const pm_item of pm){
+      const mat = MATERIAIS.find(m => m.id === pm_item.material_id)
+      if(!mat) continue
+      // só adiciona se não já coberto pelo estoque
+      if(mat.estoque_atual >= pm_item.quantidade) continue
+      const existe = linhas.find(l => l.codigo === mat.codigo)
+      if(existe){
+        existe.qtd = Math.max(existe.qtd, pm_item.quantidade)
+        existe.motivo += ` + plano "${v.plano.nome}" em ${v.ativo.codigo}`
+      } else {
+        linhas.push({
+          codigo: mat.codigo,
+          nome: mat.nome,
+          unidade: mat.unidade,
+          preco: mat.preco,
+          qtd: pm_item.quantidade,
+          motivo: `Plano "${v.plano.nome}" em ${v.ativo.codigo} (${v.pct}% do intervalo)`
+        })
+      }
+    }
+  }
+
+  if(!linhas.length){
+    div.innerHTML = '<div class="callout co-ok">✅ Nenhuma compra necessária no momento. Todos os estoques estão adequados e nenhum plano está próximo do vencimento.</div>'
+    return
+  }
+
+  div.innerHTML = `
+    <div class="callout co-warn">⚠ ${linhas.length} ${linhas.length===1?'item':'itens'} a adquirir · <strong>Total estimado: R$ ${linhas.reduce((s,l)=>s+(l.preco||0)*l.qtd,0).toFixed(2)}</strong><br>Lista utilizável como insumo para processo licitatório (CATMAT/Compras.gov).</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn btn-s btn-sm" onclick="exportarComprasCSV()">⬇ Exportar CSV</button>
+    </div>
+    <div class="compra-grid">
+      ${linhas.map(l => `
+        <div class="compra-row">
+          <div>
+            <div class="compra-nome">${l.nome} ${l.codigo?'('+l.codigo+')':''}</div>
+            <div class="compra-det">${l.motivo}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="compra-qtd">${l.qtd.toFixed(1)} ${l.unidade}</div>
+            ${l.preco?`<div style="font-size:11px;color:var(--text3);margin-top:2px">R$ ${(l.preco*l.qtd).toFixed(2)}</div>`:''}
+          </div>
+        </div>`).join('')}
+    </div>`
+
+  // guarda para export
+  window._comprasData = linhas
+}
+
+function exportarComprasCSV(){
+  const linhas = window._comprasData || []
+  const header = 'Codigo,Nome,Quantidade,Unidade,PrecoUnit,Total,Motivo'
+  const rows = linhas.map(l => `${l.codigo||''},${JSON.stringify(l.nome)},${l.qtd},${l.unidade},${l.preco||''},${((l.preco||0)*l.qtd).toFixed(2)},${JSON.stringify(l.motivo)}`)
+  const csv = [header, ...rows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url
+  a.download = 'lista-compras-maquinas-' + new Date().toISOString().slice(0,10) + '.csv'
+  a.click()
+}
+
+
+// ══ CONSUMO ══════════════════════════════════════════════
+const fmtR = v => 'R$ ' + Number(v||0).toFixed(2)
+
+function renderConsumo(){
+  const totL   = ABASTS.reduce((s,a)=>s+Number(a.litros||0),0)
+  const totR   = ABASTS.reduce((s,a)=>s+Number(a.custo_total||0),0)
+  const totH   = USOS.reduce((s,u)=>s+Number(u.delta||0),0)
+  const rend   = totH>0 ? (totL/totH) : 0
+
+  document.getElementById('consumo-kpis').innerHTML = `
+    <div class="kpi kc-blue"><div class="kpi-n">${totL.toFixed(1)}</div><div class="kpi-l">Litros no total</div></div>
+    <div class="kpi kc-warn"><div class="kpi-n" style="font-size:1.4rem">${fmtR(totR)}</div><div class="kpi-l">Custo combustível</div></div>
+    <div class="kpi kc-ok"><div class="kpi-n">${totH.toFixed(0)}h</div><div class="kpi-l">Horas registradas</div></div>
+    <div class="kpi kc-gold"><div class="kpi-n">${rend.toFixed(2)}</div><div class="kpi-l">L/h médio da frota</div></div>`
+
+  // por máquina
+  const porMaq = {}
+  for(const a of ABASTS){
+    const k = a.ativo_id
+    porMaq[k] = porMaq[k] || {nome:(a.maq_ativos?.emoji||'')+' '+(a.maq_ativos?.codigo||'?'), n:0, L:0, R:0, h:0}
+    porMaq[k].n++; porMaq[k].L += Number(a.litros||0); porMaq[k].R += Number(a.custo_total||0)
+  }
+  for(const u of USOS){
+    if(porMaq[u.ativo_id]) porMaq[u.ativo_id].h += Number(u.delta||0)
+  }
+  const linhasMaq = Object.values(porMaq)
+  document.getElementById('tb-consumo-maq').innerHTML = linhasMaq.length ? linhasMaq.map(r=>`<tr>
+    <td class="hi">${r.nome}</td><td>${r.n}</td><td>${r.L.toFixed(1)} L</td>
+    <td>${fmtR(r.R)}</td><td>${r.h.toFixed(1)} h</td>
+    <td class="hi">${r.h>0?(r.L/r.h).toFixed(2)+' L/h':'—'}</td></tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3)">Nenhum abastecimento registrado</td></tr>'
+
+  // por operador
+  const porOp = {}
+  for(const u of USOS){
+    const k = (u.operador||'—').trim()
+    porOp[k] = porOp[k] || {h:0,L:0,R:0}
+    porOp[k].h += Number(u.delta||0)
+  }
+  for(const a of ABASTS){
+    const k = (a.operador||'—').trim()
+    porOp[k] = porOp[k] || {h:0,L:0,R:0}
+    porOp[k].L += Number(a.litros||0); porOp[k].R += Number(a.custo_total||0)
+  }
+  const ops = Object.entries(porOp)
+  document.getElementById('tb-consumo-op').innerHTML = ops.length ? ops.map(([nome,r])=>`<tr>
+    <td class="hi">${nome}</td><td>${r.h.toFixed(1)} h</td><td>${r.L.toFixed(1)} L</td>
+    <td>${fmtR(r.R)}</td><td>${r.h>0&&r.L>0?(r.L/r.h).toFixed(2)+' L/h':'—'}</td></tr>`).join('')
+    : '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3)">Sem registros</td></tr>'
+
+  // últimos abastecimentos
+  document.getElementById('tb-abast').innerHTML = ABASTS.length ? ABASTS.slice(0,50).map(a=>`<tr>
+    <td>${a.data||'—'}</td>
+    <td class="hi">${a.maq_ativos?.emoji||''} ${a.maq_ativos?.codigo||'?'}</td>
+    <td>${Number(a.litros).toFixed(1)} L</td>
+    <td>${a.preco_litro?fmtR(a.preco_litro):'—'}</td>
+    <td class="hi">${fmtR(a.custo_total)}</td>
+    <td>${a.horimetro??'—'}</td>
+    <td>${a.operador||'—'}</td></tr>`).join('')
+    : '<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text3)">Nenhum abastecimento</td></tr>'
+}
+
+function abrirModalAbastecimento(){
+  document.getElementById('ab-data').value = new Date().toISOString().slice(0,10)
+  document.getElementById('ab-ativo').innerHTML =
+    ATIVOS.map(a=>`<option value="${a.id}">${a.emoji||''} ${a.codigo} — ${a.nome}</option>`).join('')
+  ;['ab-litros','ab-preco','ab-horim','ab-obs'].forEach(id=>document.getElementById(id).value='')
+  document.getElementById('ab-oper').value = USUARIO?.nome || ''
+  document.getElementById('modal-abast').classList.add('open')
+}
+
+async function salvarAbastecimento(){
+  const ativo_id = parseInt(document.getElementById('ab-ativo').value)
+  const litros   = parseFloat(document.getElementById('ab-litros').value)
+  if(!ativo_id || !litros){ alert('Informe máquina e litros.'); return }
+  const { error } = await supa.from('maq_abastecimentos').insert({
+    ativo_id, litros,
+    data:        document.getElementById('ab-data').value,
+    preco_litro: parseFloat(document.getElementById('ab-preco').value) || null,
+    horimetro:   parseFloat(document.getElementById('ab-horim').value) || null,
+    combustivel: document.getElementById('ab-comb').value,
+    operador:    document.getElementById('ab-oper').value.trim(),
+    obs:         document.getElementById('ab-obs').value.trim(),
+  })
+  if(error){ alert('Erro: '+error.message); return }
+  fecharModal('modal-abast'); await carregarTudo()
+}
+
+// ══ CICLO DE VIDA ════════════════════════════════════════
+function calcCiclo(){
+  return ATIVOS.map(a=>{
+    const valor = Number(a.valor_aquisicao||0)
+    const vida  = Number(a.vida_util_h||0)
+    const resid = valor * (Number(a.valor_residual||0)/100)
+    const uso   = Number(a.uso_atual||0)
+    const pctVida = vida>0 ? Math.min(100, (uso/vida)*100) : 0
+    const deprec  = vida>0 ? Math.min(valor-resid, (valor-resid)*(uso/vida)) : 0
+    const valorAtual = valor - deprec
+
+    // custo de manutenção acumulado
+    const osAtivo = OS_LIST.filter(o=>o.ativo_id===a.id)
+    const custoManut = osAtivo.reduce((s,o)=>s+Number(o.custo_pecas||0)+Number(o.custo_mo||0),0)
+    const custoComb  = ABASTS.filter(x=>x.ativo_id===a.id).reduce((s,x)=>s+Number(x.custo_total||0),0)
+    const custoTotal = custoManut + custoComb
+    const custoHora  = uso>0 ? (deprec + custoTotal)/uso : 0
+
+    let situacao='ok', label='Operacional'
+    if(pctVida>=100){ situacao='critico'; label='Vida útil esgotada' }
+    else if(pctVida>=80){ situacao='alerta'; label='Fim de vida próximo' }
+    else if(custoManut > valor*0.6){ situacao='alerta'; label='Custo manut. alto' }
+    return {a, valor, vida, uso, pctVida, deprec, valorAtual, custoManut, custoComb, custoTotal, custoHora, situacao, label}
+  })
+}
+
+function renderCiclo(){
+  const items = calcCiclo()
+  const totalPatrim = items.reduce((s,i)=>s+i.valor,0)
+  const totalAtual  = items.reduce((s,i)=>s+i.valorAtual,0)
+  const totalManut  = items.reduce((s,i)=>s+i.custoTotal,0)
+  const criticos    = items.filter(i=>i.situacao!=='ok').length
+
+  document.getElementById('ciclo-kpis').innerHTML = `
+    <div class="kpi kc-blue"><div class="kpi-n" style="font-size:1.3rem">${fmtR(totalPatrim)}</div><div class="kpi-l">Patrimônio (aquisição)</div></div>
+    <div class="kpi kc-ok"><div class="kpi-n" style="font-size:1.3rem">${fmtR(totalAtual)}</div><div class="kpi-l">Valor atual estimado</div></div>
+    <div class="kpi kc-warn"><div class="kpi-n" style="font-size:1.3rem">${fmtR(totalManut)}</div><div class="kpi-l">Custo operacional acum.</div></div>
+    <div class="kpi kc-red"><div class="kpi-n">${criticos}</div><div class="kpi-l">Máquinas em alerta</div></div>`
+
+  const semDados = items.every(i=>i.uso===0)
+  const aviso = document.getElementById('ciclo-aviso')
+  if(semDados){
+    aviso.style.display='block'
+    aviso.innerHTML = '⚠ <strong>Dados insuficientes.</strong> Nenhuma hora de uso registrada ainda. A depreciação e o custo/hora só ficam significativos após alguns meses de registros reais de uso e manutenção.'
+  } else aviso.style.display='none'
+
+  const badge = s => s==='critico'?'b-red':s==='alerta'?'b-warn':'b-ok'
+  document.getElementById('tb-ciclo').innerHTML = items.map(i=>`<tr>
+    <td class="hi" style="color:${i.a.cor||'var(--text)'}">${i.a.emoji||''} ${i.a.codigo}</td>
+    <td>${fmtR(i.valor)}</td>
+    <td>${i.uso.toFixed(0)} h</td>
+    <td>${i.vida.toFixed(0)} h
+      <div class="uso-bar-wrap" style="margin-top:4px"><div class="uso-bar"
+        style="width:${i.pctVida}%;background:${i.pctVida>=100?'var(--red)':i.pctVida>=80?'var(--yellow)':'var(--green)'}"></div></div>
+    </td>
+    <td>${fmtR(i.deprec)}</td>
+    <td class="hi">${fmtR(i.valorAtual)}</td>
+    <td>${fmtR(i.custoTotal)}</td>
+    <td class="hi">${i.custoHora>0?fmtR(i.custoHora)+'/h':'—'}</td>
+    <td><span class="badge ${badge(i.situacao)}">${i.label}</span></td>
+  </tr>`).join('')
+
+  // timeline
+  const eventos = [
+    ...OS_LIST.map(o=>({d:o.data_abertura, t:'os', txt:`${o.maq_ativos?.codigo||'?'} — ${o.maq_planos?.nome||o.tipo}`, c:'var(--blue)'})),
+    ...ABASTS.map(a=>({d:a.data, t:'ab', txt:`${a.maq_ativos?.codigo||'?'} — ${Number(a.litros).toFixed(1)}L ${a.custo_total?'('+fmtR(a.custo_total)+')':''}`, c:'var(--yellow)'})),
+  ].filter(e=>e.d).sort((x,y)=>y.d.localeCompare(x.d)).slice(0,40)
+
+  document.getElementById('ciclo-timeline').innerHTML = eventos.length
+    ? eventos.map(e=>`<div style="display:flex;gap:12px;align-items:center;padding:8px 12px;background:var(--surface);
+        border-left:3px solid ${e.c};border-radius:0 6px 6px 0;margin-bottom:5px">
+        <span style="font-size:11px;color:var(--text3);min-width:82px">${e.d}</span>
+        <span style="font-size:16px">${e.t==='os'?'🔧':'⛽'}</span>
+        <span style="font-size:13px">${e.txt}</span></div>`).join('')
+    : '<div class="empty"><div class="empty-ico">📋</div><p>Sem eventos registrados</p></div>'
+}
+
+// ── MODAL OS ──
+function abrirModalOS(ativoId, planoId){
+  document.getElementById('os-data').value = new Date().toISOString().slice(0,10)
+  // popular select de ativos
+  const sel = document.getElementById('os-ativo')
+  sel.innerHTML = ATIVOS.map(a => `<option value="${a.id}" ${a.id===ativoId?'selected':''}>${a.codigo} — ${a.nome}</option>`).join('')
+  popularPlanosOS(ativoId, planoId)
+  sel.onchange = () => popularPlanosOS(parseInt(sel.value))
+  document.getElementById('os-tipo').value = planoId ? 'preventiva' : 'corretiva'
+  document.getElementById('os-delta').value = ''
+  document.getElementById('os-tecnico').value = USUARIO?.nome || ''
+  document.getElementById('os-desc').value = ''
+  document.getElementById('modal-os').classList.add('open')
+}
+
+function popularPlanosOS(ativoId, preselect){
+  const ativo = ATIVOS.find(a => a.id === ativoId)
+  const planos = ativo ? PLANOS.filter(p => p.tipo_modelo === ativo.tipo_modelo) : []
+  const sel = document.getElementById('os-plano')
+  sel.innerHTML = '<option value="">— sem plano (corretiva) —</option>' +
+    planos.map(p => `<option value="${p.id}" ${p.id===preselect?'selected':''}>${p.nome} (a cada ${p.intervalo}${p.unidade})</option>`).join('')
+  sel.onchange = () => mostrarMateriaisPlano(parseInt(sel.value))
+  if(preselect) mostrarMateriaisPlano(preselect)
+}
+
+function mostrarMateriaisPlano(planoId){
+  const wrap = document.getElementById('os-materiais-wrap')
+  const list = document.getElementById('os-materiais-list')
+  const pm = PLANO_MATS.filter(p => p.plano_id === planoId)
+  if(!pm.length){ wrap.style.display='none'; return }
+  wrap.style.display = 'block'
+  list.innerHTML = pm.map(p => `<div style="padding:4px 0;border-bottom:1px solid var(--border)">
+    ${p.maq_materiais?.nome || '?'} — ${p.quantidade} ${p.maq_materiais?.unidade||'un'}</div>`).join('')
+}
+
+async function salvarOS(){
+  const ativo_id  = parseInt(document.getElementById('os-ativo').value)
+  const plano_id  = parseInt(document.getElementById('os-plano').value) || null
+  const tipo      = document.getElementById('os-tipo').value
+  const data      = document.getElementById('os-data').value
+  const delta     = parseFloat(document.getElementById('os-delta').value) || 0
+  const tecnico   = document.getElementById('os-tecnico').value.trim()
+  const descricao = document.getElementById('os-desc').value.trim()
+
+  if(!ativo_id || !data){ alert('Preencha a máquina e a data.'); return }
+
+  const ativo = ATIVOS.find(a => a.id === ativo_id)
+  const uso_na_os = (ativo?.uso_atual || 0) + delta
+
+  // inserir OS
+  // custo das peças do plano
+  let custo_pecas = 0
+  if(plano_id){
+    for(const item of PLANO_MATS.filter(p=>p.plano_id===plano_id)){
+      const mat = MATERIAIS.find(m=>m.id===item.material_id)
+      if(mat?.preco) custo_pecas += Number(mat.preco) * Number(item.quantidade)
+    }
+  }
+  const { error: erOS } = await supa.from('maq_os').insert({
+    ativo_id, plano_id, tipo,
+    status: 'concluida',
+    data_abertura: data, data_conclusao: data,
+    uso_na_os, tecnico, descricao, custo_pecas
+  })
+  if(erOS){ alert('Erro: ' + erOS.message); return }
+
+  // atualizar horímetro
+  if(delta > 0){
+    await supa.from('maq_ativos').update({ uso_atual: uso_na_os }).eq('id', ativo_id)
+    await supa.from('maq_uso_registros').insert({
+      ativo_id, delta, uso_total: uso_na_os, data,
+      operador: tecnico, obs: descricao
+    })
+  }
+
+  // debitar materiais do estoque
+  if(plano_id){
+    const pm = PLANO_MATS.filter(p => p.plano_id === plano_id)
+    for(const item of pm){
+      const mat = MATERIAIS.find(m => m.id === item.material_id)
+      if(mat){
+        const novo = Math.max(0, mat.estoque_atual - item.quantidade)
+        await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', mat.id)
+        await supa.from('maq_estoque_movimentos').insert({
+          material_id: mat.id, tipo: 'saida', quantidade: item.quantidade,
+          motivo: 'OS preventiva — ' + (PLANOS.find(p=>p.id===plano_id)?.nome||'')
+        })
+      }
+    }
+  }
+
+  fecharModal('modal-os')
+  await carregarTudo()
+}
+
+async function concluirOS(id){
+  if(!confirm('Marcar OS como concluída?')) return
+  await supa.from('maq_os').update({ status: 'concluida', data_conclusao: new Date().toISOString().slice(0,10) }).eq('id', id)
+  await carregarTudo()
+}
+
+// ── MODAL ATIVO ──
+function abrirModalAtivo(id){
+  ATIVO_EDIT_ID = id || null
+  const ativo = id ? ATIVOS.find(a => a.id === id) : null
+  document.getElementById('modal-ativo-titulo').textContent = ativo ? 'Editar máquina' : 'Nova máquina'
+  document.getElementById('at-codigo').value  = ativo?.codigo  || ''
+  document.getElementById('at-nome').value    = ativo?.nome    || ''
+  document.getElementById('at-cat').value     = ativo?.categoria|| 'rocadeira'
+  document.getElementById('at-status').value  = ativo?.status  || 'operante'
+  document.getElementById('at-fab').value     = ativo?.fabricante||''
+  document.getElementById('at-mod').value     = ativo?.modelo  || ''
+  document.getElementById('at-pat').value     = ativo?.patrimonio||''
+  document.getElementById('at-uso').value     = ativo?.uso_atual||0
+  document.getElementById('at-uni').value     = ativo?.unidade_uso||'h'
+  document.getElementById('at-local').value   = ativo?.local   || ''
+  document.getElementById('at-obs').value     = ativo?.obs     || ''
+  document.getElementById('modal-ativo').classList.add('open')
+}
+
+async function salvarAtivo(){
+  const campos = {
+    codigo:      document.getElementById('at-codigo').value.trim().toUpperCase(),
+    nome:        document.getElementById('at-nome').value.trim(),
+    categoria:   document.getElementById('at-cat').value,
+    status:      document.getElementById('at-status').value,
+    fabricante:  document.getElementById('at-fab').value.trim(),
+    modelo:      document.getElementById('at-mod').value.trim(),
+    patrimonio:  document.getElementById('at-pat').value.trim(),
+    uso_atual:   parseFloat(document.getElementById('at-uso').value) || 0,
+    unidade_uso: document.getElementById('at-uni').value,
+    local:       document.getElementById('at-local').value.trim(),
+    obs:         document.getElementById('at-obs').value.trim(),
+  }
+  if(!campos.nome){ alert('Nome obrigatório.'); return }
+
+  if(ATIVO_EDIT_ID){
+    const { error } = await supa.from('maq_ativos').update(campos).eq('id', ATIVO_EDIT_ID)
+    if(error){ alert('Erro: '+error.message); return }
+  } else {
+    const { error } = await supa.from('maq_ativos').insert(campos)
+    if(error){ alert('Erro: '+error.message); return }
+  }
+  fecharModal('modal-ativo')
+  await carregarTudo()
+}
+
+// ── MODAL MATERIAL ──
+function abrirModalMaterial(){
+  ['mat-cod','mat-nome','mat-uni'].forEach(id => {
+    document.getElementById(id).value = id==='mat-uni'?'un':''
+  })
+  document.getElementById('mat-tipo').value = 'consumivel'
+  document.getElementById('mat-min').value  = '2'
+  document.getElementById('modal-material').classList.add('open')
+}
+
+async function salvarMaterial(){
+  const nome = document.getElementById('mat-nome').value.trim()
+  if(!nome){ alert('Nome obrigatório.'); return }
+  const { error } = await supa.from('maq_materiais').insert({
+    codigo:          document.getElementById('mat-cod').value.trim().toUpperCase() || null,
+    nome,
+    tipo:            document.getElementById('mat-tipo').value,
+    unidade:         document.getElementById('mat-uni').value.trim() || 'un',
+    estoque_minimo:  parseFloat(document.getElementById('mat-min').value) || 0,
+    estoque_atual:   0,
+  })
+  if(error){ alert('Erro: '+error.message); return }
+  fecharModal('modal-material')
+  await carregarTudo()
+}
+
+// ── MODAL MOVIMENTO ──
+function abrirModalMovimento(){
+  const sel = document.getElementById('mov-material')
+  sel.innerHTML = MATERIAIS.map(m => `<option value="${m.id}">${m.nome} (${m.estoque_atual} ${m.unidade})</option>`).join('')
+  document.getElementById('mov-qtd').value    = '1'
+  document.getElementById('mov-motivo').value = ''
+  document.getElementById('modal-movimento').classList.add('open')
+}
+
+async function salvarMovimento(){
+  const material_id = parseInt(document.getElementById('mov-material').value)
+  const quantidade  = parseFloat(document.getElementById('mov-qtd').value)
+  const motivo      = document.getElementById('mov-motivo').value.trim()
+  if(!material_id || !quantidade){ alert('Preencha material e quantidade.'); return }
+
+  const mat = MATERIAIS.find(m => m.id === material_id)
+  const novo = (mat?.estoque_atual || 0) + quantidade
+  await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', material_id)
+  await supa.from('maq_estoque_movimentos').insert({ material_id, tipo: 'entrada', quantidade, motivo })
+  fecharModal('modal-movimento')
+  await carregarTudo()
+}
+
+// ── utils ──
+function fecharModal(id){ document.getElementById(id).classList.remove('open') }
+document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
+  if(e.target === o) o.classList.remove('open')
+}))
+
+// ── start ──
+// cargos deste app (podem ser sobrescritos por instância)
+const CARGOS = [
+  { label: 'Direção',  email: 'direcao@cmasm.local',  role: 'admin'      },
+  { label: 'Gestor',   email: 'gestor@cmasm.local',   role: 'gestor'     },
+  { label: 'Técnico',  email: 'tecnico@cmasm.local',  role: 'tecnico'    },
+  { label: 'Livre',    email: null,                   role: 'observador' },
+]
+
+// ── Auth inline (sem import de módulo externo, app é single-file) ──
+;(async function(){
+  const loginEl = document.getElementById('login-screen')
+
+  function emailDeCargo(cargo){ return cargo.email }
+
+  function renderLogin(){
+    loginEl.style.cssText = 'min-height:100vh;display:flex;align-items:center;' +
+      'justify-content:center;padding:20px'
+    loginEl.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;
+                  padding:36px 28px;width:100%;max-width:340px">
+        <div style="font-size:28px;margin-bottom:10px">⚙️</div>
+        <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:3px">PMOC Máquinas</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:28px">CMASM · Marinha do Brasil</div>
+
+        <div id="step-cargo">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+                      color:var(--text3);margin-bottom:12px">Selecione seu cargo</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="cargo-grid"></div>
+          <div onclick="mostrarStepEmail()" style="font-size:11px;color:var(--text3);
+               text-align:center;margin-top:18px;cursor:pointer;text-decoration:underline">
+            Admin — entrar com e-mail
+          </div>
+        </div>
+
+        <div id="step-senha" style="display:none">
+          <div onclick="voltarCargos()" id="cargo-chip"
+            style="display:inline-flex;align-items:center;gap:8px;
+                   background:var(--surface2);border:1px solid var(--border);border-radius:20px;
+                   padding:5px 14px;font-size:13px;font-weight:600;color:var(--text);
+                   margin-bottom:20px;cursor:pointer">
+            <span id="cargo-chip-label">—</span>
+            <span style="color:var(--text3);font-size:11px;font-weight:400">✕ trocar</span>
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Senha</label>
+            <input id="auth-senha" type="password" placeholder="••••••••" autocomplete="current-password"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+                     padding:9px 11px;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;
+                     font-family:var(--ff)"/>
+          </div>
+          <div id="auth-erro" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px"></div>
+          <button onclick="loginCargo()"
+            style="width:100%;background:var(--yellow);color:#1a1a18;border:none;border-radius:6px;
+                   padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--ff)">
+            Entrar
+          </button>
+        </div>
+
+        <div id="step-email" style="display:none">
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">E-mail</label>
+            <input id="auth-email" type="email" placeholder="admin@marinha.mil.br"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+                     padding:9px 11px;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;
+                     font-family:var(--ff)"/>
+          </div>
+          <div style="margin-bottom:14px">
+            <label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Senha</label>
+            <input id="auth-email-senha" type="password" placeholder="••••••••"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+                     padding:9px 11px;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;
+                     font-family:var(--ff)"/>
+          </div>
+          <div id="auth-email-erro" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px"></div>
+          <button onclick="loginEmail()"
+            style="width:100%;background:var(--yellow);color:#1a1a18;border:none;border-radius:6px;
+                   padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--ff)">
+            Entrar
+          </button>
+          <div onclick="voltarCargos()" style="font-size:11px;color:var(--text3);
+               text-align:center;margin-top:14px;cursor:pointer;text-decoration:underline">
+            ← Voltar
+          </div>
+        </div>
+      </div>`
+
+    // renderizar botões de cargo
+    const grid = document.getElementById('cargo-grid')
+    CARGOS.forEach(c => {
+      const btn = document.createElement('button')
+      btn.textContent = c.label
+      btn.style.cssText = 'background:var(--surface2);border:1px solid var(--border);' +
+        'border-radius:8px;padding:12px 8px;font-size:13px;font-weight:600;' +
+        'color:var(--text);cursor:pointer;font-family:var(--ff);width:100%'
+      btn.onmouseenter = () => btn.style.borderColor = 'var(--yellow)'
+      btn.onmouseleave = () => btn.style.borderColor = 'var(--border)'
+      btn.onclick = () => selecionarCargo(c)
+      grid.appendChild(btn)
+    })
+
+    document.getElementById('auth-senha').addEventListener('keydown', e => {
+      if(e.key==='Enter') loginCargo()
+    })
+    document.getElementById('auth-email-senha').addEventListener('keydown', e => {
+      if(e.key==='Enter') loginEmail()
+    })
+  }
+
+  let _cargoSel = null
+
+  window.selecionarCargo = function(cargo){
+    if(!cargo.email){
+      // modo Livre — observador sem senha
+      USUARIO = { role:'observador', nome:'Visitante', funcao:'Livre', cargo:'Livre' }
+      loginEl.style.display = 'none'
+      document.getElementById('app').style.display = 'block'
+      document.getElementById('user-chip').textContent = 'Livre · observador'
+      carregarTudo()
+      return
+    }
+    _cargoSel = cargo
+    document.getElementById('cargo-chip-label').textContent = cargo.label
+    document.getElementById('step-cargo').style.display = 'none'
+    document.getElementById('step-senha').style.display = 'block'
+    document.getElementById('auth-erro').textContent = ''
+    document.getElementById('auth-senha').value = ''
+    setTimeout(() => document.getElementById('auth-senha').focus(), 50)
+  }
+
+  window.voltarCargos = function(){
+    document.getElementById('step-senha').style.display = 'none'
+    document.getElementById('step-email').style.display = 'none'
+    document.getElementById('step-cargo').style.display = 'block'
+    _cargoSel = null
+  }
+
+  window.mostrarStepEmail = function(){
+    document.getElementById('step-cargo').style.display = 'none'
+    document.getElementById('step-email').style.display = 'block'
+  }
+
+  window.loginCargo = async function(){
+    if(!_cargoSel) return
+    const senha = document.getElementById('auth-senha').value
+    const erroEl = document.getElementById('auth-erro')
+    erroEl.textContent = ''
+    if(!senha){ erroEl.textContent = 'Digite a senha.'; return }
+    const { error } = await supa.auth.signInWithPassword({
+      email: _cargoSel.email, password: senha
+    })
+    if(error) erroEl.textContent = 'Senha incorreta.'
+  }
+
+  window.loginEmail = async function(){
+    const email = document.getElementById('auth-email').value.trim()
+    const senha = document.getElementById('auth-email-senha').value
+    const erroEl = document.getElementById('auth-email-erro')
+    erroEl.textContent = ''
+    if(!email||!senha){ erroEl.textContent='Preencha os campos.'; return }
+    const { error } = await supa.auth.signInWithPassword({ email, password: senha })
+    if(error) erroEl.textContent = 'E-mail ou senha incorretos.'
+  }
+
+  // checar sessão existente
+  const { data: { session } } = await supa.auth.getSession()
+  if(session){
+    await carregarUsuario(session.user.id)
+    mostrarApp()
+  } else {
+    renderLogin()
+  }
+
+  supa.auth.onAuthStateChange(async (_ev, session) => {
+    if(session){ await carregarUsuario(session.user.id); mostrarApp() }
+    else { renderLogin() }
+  })
+})()
