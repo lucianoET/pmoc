@@ -3,6 +3,7 @@
   "outputDirectory": ".",
   "rewrites": [
     { "source": "/refrigeracao", "destination": "/refrigeracao/index.html" },
-    { "source": "/maquinas",     "destination": "/maquinas/index.html" }
+    { "source": "/maquinas",     "destination": "/maquinas/index.html" },
+    { "source": "/transportes",  "destination": "/transportes/index.html" }
   ]
 }

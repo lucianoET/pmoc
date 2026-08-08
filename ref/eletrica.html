@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CMASM · Elétrica</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07111f;--bg2:#0d1e33;--bg3:#0a1828;--line:#1e3a5f;--tx:#e2e8f0;--tx2:#94a3b8;--tx3:#64748b;--green:#22c55e;--red:#ef4444;--amber:#f59e0b;--accent:#3b82f6;--mono:'JetBrains Mono',monospace;--sans:'DM Sans',sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-family:var(--sans)}
+.pmoc-root{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.pmoc-header{height:44px;background:var(--bg2);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 16px;flex-shrink:0}
+.pmoc-header-back{color:var(--tx2);font-size:12px;text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 8px;border-radius:5px;border:1px solid var(--line);transition:all .12s}.pmoc-header-back:hover{border-color:var(--accent);color:var(--accent)}
+.pmoc-header-sep{width:1px;height:20px;background:var(--line)}.pmoc-header-icon{font-size:18px}.pmoc-header-title{font-size:14px;font-weight:700;color:var(--tx);flex:1}.pmoc-header-meta{font-size:10px;color:var(--tx3);font-family:var(--mono)}
+.pmoc-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:600;font-family:var(--sans);transition:all .12s}
+.pmoc-btn-p{background:var(--accent);color:#fff}.pmoc-btn-p:hover{opacity:.88}.pmoc-btn-s{background:var(--green);color:#fff}.pmoc-btn-s:hover{opacity:.88}.pmoc-btn-g{background:var(--bg3);color:var(--tx2);border:1px solid var(--line)}.pmoc-btn-g:hover{border-color:var(--accent);color:var(--tx)}
+.pmoc-kpis{height:62px;background:var(--bg3);border-bottom:1px solid var(--line);display:flex;gap:1px;flex-shrink:0;overflow:hidden}
+.pmoc-kpi{flex:1;padding:8px 14px;background:var(--bg2);display:flex;flex-direction:column;justify-content:center;min-width:0}.pmoc-kpi-lbl{font-size:9px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pmoc-kpi-val{font-size:18px;font-weight:800;letter-spacing:-.03em;font-family:var(--mono);white-space:nowrap}
+.pmoc-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1.15fr) minmax(0,1fr);gap:1px;background:var(--line)}
+.pmoc-col{background:var(--bg);display:flex;flex-direction:column;overflow:hidden}.pmoc-col-hdr{padding:7px 12px;background:var(--bg2);border-bottom:1px solid var(--line);font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;flex-shrink:0;display:flex;align-items:center;gap:6px}.pmoc-col-body{flex:1;overflow-y:auto;min-height:0}.pmoc-col-body::-webkit-scrollbar{width:3px}.pmoc-col-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+.pmoc-right{background:var(--bg);display:flex;flex-direction:column;overflow:hidden;gap:1px}.pmoc-right-zone{background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:0}
+.pmoc-divider{height:1px;background:var(--line);flex-shrink:0}
+.pmoc-table{width:100%;border-collapse:collapse;font-size:11px}.pmoc-table th{padding:6px 10px;text-align:left;font-size:9px;font-weight:600;letter-spacing:.07em;color:var(--tx3);text-transform:uppercase;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--bg3);position:sticky;top:0;z-index:2}.pmoc-table td{padding:5px 10px;border-bottom:1px solid rgba(30,58,95,.5);vertical-align:middle}.pmoc-table tr:hover td{background:rgba(13,30,51,.6)}.pmoc-empty{text-align:center;color:var(--tx3);padding:14px;font-size:11px}
+.pmoc-footer{height:100px;background:var(--line);display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:1px;flex-shrink:0}.pmoc-footer-panel{background:var(--bg);display:flex;flex-direction:column;overflow:hidden}.pmoc-footer-hdr{padding:5px 12px;background:var(--bg2);border-bottom:1px solid var(--line);font-size:9px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;flex-shrink:0}.pmoc-footer-body{flex:1;overflow-y:auto;min-height:0}.pmoc-footer-body::-webkit-scrollbar{width:3px}.pmoc-footer-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+.pmoc-mbg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;display:none;align-items:center;justify-content:center}.pmoc-mbg.open{display:flex}.pmoc-mbox{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:20px;width:420px;max-width:95vw;max-height:90vh;overflow-y:auto}.pmoc-mh{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.pmoc-mh h3{font-size:14px;font-weight:700;color:var(--tx)}.pmoc-mc{background:none;border:none;color:var(--tx2);font-size:18px;cursor:pointer;padding:2px 6px;border-radius:4px}.pmoc-mc:hover{color:var(--tx);background:var(--bg3)}
+.pmoc-f{margin-bottom:10px}.pmoc-f label{display:block;font-size:10px;font-weight:600;color:var(--tx2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}.pmoc-inp,.pmoc-sel,.pmoc-txa{width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:12px;background:var(--bg3);color:var(--tx);outline:none;font-family:var(--sans);transition:border-color .12s}.pmoc-inp:focus,.pmoc-sel:focus,.pmoc-txa:focus{border-color:var(--accent)}.pmoc-sel option{background:var(--bg3);color:var(--tx)}.pmoc-txa{resize:vertical;min-height:50px}.pmoc-fg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pmoc-donut-wrap{display:flex;align-items:center;gap:8px;padding:8px 10px;flex-shrink:0}.pmoc-donut-svg{width:80px;height:80px;flex-shrink:0}.pmoc-legend{display:flex;flex-direction:column;gap:3px}
+</style>
+</head>
+<body>
+<div class="pmoc-root">
+  <div class="pmoc-header">
+    <a href="/" class="pmoc-header-back">← CMASM</a>
+    <div class="pmoc-header-sep"></div>
+    <span class="pmoc-header-icon" id="pmoc-icon">⚡</span>
+    <span class="pmoc-header-title" id="pmoc-title">Elétrica</span>
+    <span class="pmoc-header-meta" id="pmoc-date"></span>
+    <button class="pmoc-btn pmoc-btn-p" id="btn-reg">⏱ Registrar Uso</button>
+    <button class="pmoc-btn pmoc-btn-s" id="btn-manut">🔧 Nova Manut.</button>
+    <button class="pmoc-btn pmoc-btn-g" id="btn-refresh">⟳</button>
+  </div>
+  <div class="pmoc-kpis" id="pmoc-kpis"></div>
+  <div class="pmoc-main">
+    <div class="pmoc-col">
+      <div class="pmoc-col-hdr">⚙️ Equipamentos</div>
+      <div class="pmoc-col-body">
+        <table class="pmoc-table">
+          <thead><tr><th>Equipamento</th><th>Tipo</th><th style="text-align:right">Horímetro</th><th>Status</th><th style="text-align:right">Manut.</th></tr></thead>
+          <tbody id="pmoc-equip"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="pmoc-col" style="background:var(--bg3)">
+      <div class="pmoc-col-hdr">📊 Status da Frota</div>
+      <div class="pmoc-donut-wrap">
+        <div class="pmoc-donut-svg" id="pmoc-donut"></div>
+        <div class="pmoc-legend" id="pmoc-legend"></div>
+      </div>
+      <div class="pmoc-divider"></div>
+      <div class="pmoc-col-hdr">📈 Horas por Tipo</div>
+      <div style="padding:8px 10px;flex:1;overflow-y:auto" id="pmoc-bar"></div>
+    </div>
+    <div class="pmoc-right">
+      <div class="pmoc-right-zone">
+        <div class="pmoc-col-hdr">⚠️ Próx. Manutenções</div>
+        <div class="pmoc-col-body" style="padding:6px 8px" id="pmoc-alerts"></div>
+      </div>
+      <div class="pmoc-divider"></div>
+      <div class="pmoc-right-zone" style="background:var(--bg3)">
+        <div class="pmoc-col-hdr">📅 Últimos 7 dias</div>
+        <div style="padding:6px 8px;display:flex;gap:3px;align-items:stretch" id="pmoc-calendar"></div>
+      </div>
+    </div>
+  </div>
+  <div class="pmoc-footer">
+    <div class="pmoc-footer-panel">
+      <div class="pmoc-footer-hdr">🔧 Últimas Manutenções</div>
+      <div class="pmoc-footer-body">
+        <table class="pmoc-table">
+          <thead><tr><th>Data</th><th>Equip.</th><th>Serviço</th><th>Resp.</th><th style="text-align:right">h</th></tr></thead>
+          <tbody id="pmoc-last"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="pmoc-footer-panel">
+      <div class="pmoc-footer-hdr">📦 Estoque de Peças</div>
+      <div class="pmoc-footer-body">
+        <table class="pmoc-table">
+          <thead><tr><th>Peça</th><th style="text-align:right">Mín</th><th style="text-align:right">Atual</th><th></th></tr></thead>
+          <tbody id="pmoc-stock"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="pmoc-mbg" id="pmoc-modal-reg">
+  <div class="pmoc-mbox">
+    <div class="pmoc-mh"><h3>⏱ Registrar Uso</h3><button class="pmoc-mc" onclick="PMOC.closeModal('pmoc-modal-reg')">✕</button></div>
+    <div class="pmoc-f"><label>Equipamento *</label><select class="pmoc-sel" id="mo-uid"></select></div>
+    <div class="pmoc-fg">
+      <div class="pmoc-f"><label>Data *</label><input class="pmoc-inp" type="date" id="mo-data"></div>
+      <div class="pmoc-f"><label>Horas *</label><input class="pmoc-inp" type="number" id="mo-horas" min="0.1" step="0.1" placeholder="0.0"></div>
+    </div>
+    <div class="pmoc-f"><label>Operador</label><input class="pmoc-inp" id="mo-op" placeholder="Nome do técnico"></div>
+    <div class="pmoc-f"><label>Observações</label><textarea class="pmoc-txa" id="mo-obs"></textarea></div>
+    <button class="pmoc-btn pmoc-btn-p" onclick="PMOC.saveRegistro()">Salvar</button>
+  </div>
+</div>
+<div class="pmoc-mbg" id="pmoc-modal-manut">
+  <div class="pmoc-mbox">
+    <div class="pmoc-mh"><h3>🔧 Registrar Manutenção</h3><button class="pmoc-mc" onclick="PMOC.closeModal('pmoc-modal-manut')">✕</button></div>
+    <div class="pmoc-f"><label>Equipamento *</label><select class="pmoc-sel" id="mm-uid"></select></div>
+    <div class="pmoc-fg">
+      <div class="pmoc-f"><label>Data *</label><input class="pmoc-inp" type="date" id="mm-data"></div>
+      <div class="pmoc-f"><label>Horas manut.</label><input class="pmoc-inp" type="number" id="mm-horas" min="0" step="0.5" placeholder="0.0"></div>
+    </div>
+    <div class="pmoc-f"><label>Item do plano</label><select class="pmoc-sel" id="mm-tipo"><option value="">Selecionar…</option></select></div>
+    <div class="pmoc-f"><label>Descrição *</label><textarea class="pmoc-txa" id="mm-desc" placeholder="Descreva o serviço realizado…"></textarea></div>
+    <div class="pmoc-f"><label>Responsável</label><input class="pmoc-inp" id="mm-resp" placeholder="Nome do técnico"></div>
+    <button class="pmoc-btn pmoc-btn-s" onclick="PMOC.saveManut()">Salvar</button>
+  </div>
+</div>
+<script src="/static/pmoc-engine.js"></script>
+<script>
+document.getElementById('pmoc-date').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short',year:'numeric'});
+const TIPOS={
+  GERADOR:{nome:'Gerador',cor:'#f59e0b',emoji:'⚡',plano:[
+    {id:'ge01',iv:250,n:'Troca de óleo e filtro',its:['Óleo 15W-40','Filtro de óleo']},
+    {id:'ge02',iv:500,n:'Inspeção elétrica e banco de baterias',its:['Terminal elétrico','Bateria selada']},
+    {id:'ge03',iv:1000,n:'Revisão geral do grupo gerador',its:['Kit juntas','Correia alternador']},
+  ]},
+  QGBT:{nome:'QGBT / Painel',cor:'#3b82f6',emoji:'🧰',plano:[
+    {id:'qb01',iv:180,n:'Inspeção termográfica e reaperto',its:['Abraçadeira','Terminal elétrico']},
+    {id:'qb02',iv:720,n:'Limpeza técnica e revisão de barramentos',its:['Limpador dielétrico']},
+  ]},
+  NOBREAK:{nome:'Nobreak / UPS',cor:'#14b8a6',emoji:'🔋',plano:[
+    {id:'nb01',iv:180,n:'Teste de autonomia e alarmes',its:['Bateria selada']},
+    {id:'nb02',iv:720,n:'Inspeção eletrônica e ventilação',its:['Fusível']},
+  ]},
+  ILUMINACAO:{nome:'Iluminação / Refletor',cor:'#22c55e',emoji:'💡',plano:[
+    {id:'il01',iv:120,n:'Inspeção de luminárias e circuito',its:['Lâmpada LED','Reator/driver']},
+    {id:'il02',iv:500,n:'Substituição preventiva de lâmpadas',its:['Lâmpada LED']},
+  ]},
+};
+const DEFAULT_UNITS=[
+  {id:'u01',tipo:'GERADOR',nome:'GER-01',pat:'',obs:'Gerador principal — Sala de máquinas',ativo:true},
+  {id:'u02',tipo:'GERADOR',nome:'GER-02',pat:'',obs:'Gerador emergencial — Bloco Operacional',ativo:true},
+  {id:'u03',tipo:'GERADOR',nome:'GER-03',pat:'',obs:'Gerador do Paiol de Munição',ativo:true},
+  {id:'u04',tipo:'QGBT',nome:'QGBT-01',pat:'',obs:'Painel geral BT — Subestação principal',ativo:true},
+  {id:'u05',tipo:'QGBT',nome:'QGBT-02',pat:'',obs:'Painel distribuição — Bloco Administrativo',ativo:true},
+  {id:'u06',tipo:'QGBT',nome:'QGBT-03',pat:'',obs:'Painel de força — Galpão de manutenção',ativo:true},
+  {id:'u07',tipo:'QGBT',nome:'QGBT-04',pat:'',obs:'Painel de emergência — Centro de controle',ativo:true},
+  {id:'u08',tipo:'NOBREAK',nome:'UPS-01',pat:'',obs:'Nobreak sala de servidores — 10 kVA',ativo:true},
+  {id:'u09',tipo:'NOBREAK',nome:'UPS-02',pat:'',obs:'Nobreak central de monitoramento — 3 kVA',ativo:true},
+  {id:'u10',tipo:'NOBREAK',nome:'UPS-03',pat:'',obs:'Nobreak sala de operações — 6 kVA',ativo:true},
+  {id:'u11',tipo:'ILUMINACAO',nome:'ILU-01',pat:'',obs:'Refletores exteriores — pátio principal',ativo:true},
+  {id:'u12',tipo:'ILUMINACAO',nome:'ILU-02',pat:'',obs:'Iluminação de emergência — corredores',ativo:true},
+  {id:'u13',tipo:'ILUMINACAO',nome:'ILU-03',pat:'',obs:'Torre de iluminação — área do cais',ativo:true},
+];
+const DEFAULT_PARTS=[
+  {id:'pe01',d:'Óleo 15W-40',un:'L',cat:'lubrificante',pr:42,min:4},
+  {id:'pe02',d:'Filtro de óleo',un:'UN',cat:'mecanico',pr:28,min:3},
+  {id:'pe03',d:'Terminal elétrico',un:'UN',cat:'eletric',pr:3,min:20},
+  {id:'pe04',d:'Bateria selada 12V/7Ah',un:'UN',cat:'eletric',pr:380,min:2},
+  {id:'pe05',d:'Fusível (sortido)',un:'UN',cat:'eletric',pr:8,min:10},
+  {id:'pe06',d:'Lâmpada LED 20W',un:'UN',cat:'iluminacao',pr:18,min:8},
+  {id:'pe07',d:'Reator/driver LED',un:'UN',cat:'eletric',pr:35,min:4},
+  {id:'pe08',d:'Limpador dielétrico',un:'UN',cat:'quimico',pr:26,min:2},
+  {id:'pe09',d:'Abraçadeira de nylon',un:'PC',cat:'fixacao',pr:1,min:50},
+  {id:'pe10',d:'Correia alternador',un:'UN',cat:'mecanico',pr:85,min:2},
+];
+PMOC.init({sk:'eletrica_state',se:'eletrica_est',pageId:'eletrica',title:'Elétrica',icon:'⚡',accent:'#3b82f6',tipos:TIPOS,defaultUnits:DEFAULT_UNITS,defaultParts:DEFAULT_PARTS});
+</script>
+</body>
+</html>

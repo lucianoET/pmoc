@@ -1,0 +1,540 @@
+{
+  "state": {
+    "unidades": [
+      {
+        "id": "u01",
+        "tipo": "FS220",
+        "nome": "FS220-01",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u02",
+        "tipo": "FS220",
+        "nome": "FS220-02",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u03",
+        "tipo": "FS220",
+        "nome": "FS220-03",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u04",
+        "tipo": "FS220",
+        "nome": "FS220-04",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u05",
+        "tipo": "FS220",
+        "nome": "FS220-05",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u06",
+        "tipo": "FS220",
+        "nome": "FS220-06",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u07",
+        "tipo": "FS220",
+        "nome": "FS220-07",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u08",
+        "tipo": "FS220",
+        "nome": "FS220-08",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u09",
+        "tipo": "FS220",
+        "nome": "FS220-09",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u10",
+        "tipo": "FS220",
+        "nome": "FS220-10",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u11",
+        "tipo": "GAR",
+        "nome": "GAR-01",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u12",
+        "tipo": "GAR",
+        "nome": "GAR-02",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u13",
+        "tipo": "GAR",
+        "nome": "GAR-03",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u14",
+        "tipo": "GAR",
+        "nome": "GAR-04",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u15",
+        "tipo": "GAR",
+        "nome": "GAR-05",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u16",
+        "tipo": "GAR",
+        "nome": "GAR-06",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u17",
+        "tipo": "GAR",
+        "nome": "GAR-07",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u18",
+        "tipo": "GAR",
+        "nome": "GAR-08",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u19",
+        "tipo": "MS650",
+        "nome": "MS650-01",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u20",
+        "tipo": "COY",
+        "nome": "COY-01",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u21",
+        "tipo": "COY",
+        "nome": "COY-02",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u22",
+        "tipo": "COY",
+        "nome": "COY-03",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u23",
+        "tipo": "LGT",
+        "nome": "LGT-01",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u24",
+        "tipo": "TS114",
+        "nome": "TS114-01",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u25",
+        "tipo": "TS114",
+        "nome": "TS114-02",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u26",
+        "tipo": "TS114",
+        "nome": "TS114-03",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u27",
+        "tipo": "TS114",
+        "nome": "TS114-04",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      },
+      {
+        "id": "u28",
+        "tipo": "SOL",
+        "nome": "SOL-01",
+        "pat": "",
+        "obs": "",
+        "ativo": true
+      }
+    ],
+    "hist": {
+      "u01": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u02": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u03": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u04": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u05": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u06": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u07": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u08": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u09": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u10": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u11": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u12": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u13": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u14": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u15": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u16": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u17": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u18": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u19": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u20": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u21": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u22": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u23": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u24": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u25": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u26": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u27": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      },
+      "u28": {
+        "hor": 0,
+        "regs": [],
+        "manut": [],
+        "ulm": {}
+      }
+    }
+  },
+  "estoque": {
+    "pe01": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe02": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe03": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe04": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe05": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe06": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe07": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe08": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe09": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe10": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe11": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe12": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe13": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe14": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe15": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe16": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe17": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe18": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe19": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe20": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe21": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe22": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe23": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe24": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe25": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe26": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe27": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe28": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe29": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe30": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe31": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe32": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe33": {
+      "qt": 0,
+      "movs": []
+    },
+    "pe34": {
+      "qt": 0,
+      "movs": []
+    }
+  },
+  "exportedAt": "2026-08-07T09:12:22.679Z",
+  "version": "v2"
+}

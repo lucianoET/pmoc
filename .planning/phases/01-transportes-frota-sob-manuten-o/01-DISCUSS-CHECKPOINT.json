@@ -1,0 +1,23 @@
+{
+  "phase": "1",
+  "phase_name": "Transportes — Frota sob manutenção",
+  "timestamp": "2026-08-08T05:35:00-03:00",
+  "areas_completed": ["Dados legados & import", "Modelagem viatura×embarcação"],
+  "areas_remaining": ["Base de código & UI"],
+  "decisions": {
+    "Dados legados & import": [
+      {"question": "Onde estão os apps legados e quando entram?", "answer": "Usuário fornece arquivos antes de /gsd-plan-phase — análise entra no plano com dados reais", "options_presented": ["Forneço antes do plano", "Construir antes importar depois", "Só tenho planilhas"]},
+      {"question": "Estratégia de consolidação entre versões do legado", "answer": "Claude decide ao ver os dados reais (discretion)", "options_presented": ["Versão mais recente vence", "Merge campo a campo", "Você decide"]},
+      {"question": "Conteúdo do seed SQL", "answer": "Claude decide após avaliar qualidade do histórico legado (discretion)", "options_presented": ["Só inventário + planos", "Tudo que existir", "Você decide"]},
+      {"question": "Conferência pós-import", "answer": "Claude gera relatório (contagens por categoria + amostra) e usuário valida contra o legado", "options_presented": ["Relatório + sua conferência", "Contagens automáticas bastam"]}
+    ],
+    "Modelagem viatura×embarcação": [
+      {"question": "Tabela única ou separadas?", "answer": "Tabela única transp_ativos com categoria (viatura/embarcacao) + unidade_uso (km/horas), espelhando maq_ativos", "options_presented": ["Tabela única", "Duas tabelas"]},
+      {"question": "Amarração da unidade do plano", "answer": "Unidade herdada do tipo_modelo — plano usa intervalo na unidade do modelo, impede inconsistência ativo×plano", "options_presented": ["Unidade herdada do modelo", "Unidade no plano"]},
+      {"question": "Campos de documentação na Fase 1?", "answer": "Identificação sim (placa/chassi/RENAVAM/inscrição casco em transp_ativos); tabela de documentos com vencimento fica para Fase 2 (TRANSP-06)", "options_presented": ["Identificação sim vencimentos não", "Só básico", "Tudo na Fase 1"]},
+      {"question": "Estoque compartilhado com máquinas?", "answer": "Próprio: transp_materiais + transp_estoque_movimentos, prefixo próprio, módulos independentes", "options_presented": ["Próprio transp_materiais", "Compartilhar maq_materiais"]}
+    ]
+  },
+  "deferred_ideas": [],
+  "canonical_refs": [".planning/ROADMAP.md", ".planning/codebase/ARCHITECTURE.md", ".planning/codebase/CONCERNS.md", ".planning/codebase/CONVENTIONS.md", "maquinas/app.js", "supabase/01_maquinas_schema.sql"]
+}

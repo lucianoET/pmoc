@@ -1,0 +1,35 @@
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const test = require('node:test')
+
+const raiz = path.join(__dirname, '..')
+const html = fs.readFileSync(path.join(raiz, 'maquinas', 'index.html'), 'utf8')
+const app = fs.readFileSync(path.join(raiz, 'maquinas', 'app.js'), 'utf8')
+
+test('carrega o domínio antes da aplicação', () => {
+  const dominio = html.indexOf('/maquinas/operacoes.js')
+  const aplicacao = html.indexOf('/maquinas/app.js')
+  assert.ok(dominio >= 0)
+  assert.ok(dominio < aplicacao)
+})
+
+test('expõe operações, agenda e os três formulários do fluxo', () => {
+  for (const trecho of [
+    'data-view="operacoes"',
+    'data-view="agenda"',
+    'id="operacoes-kanban"',
+    'id="agenda-calendario"',
+    'id="modal-operacao"',
+    'id="modal-area"',
+    'id="modal-concluir-operacao"',
+  ]) assert.match(html, new RegExp(trecho))
+})
+
+test('carrega áreas e operações e conclui por RPC', () => {
+  assert.match(app, /from\('maq_areas'\)/)
+  assert.match(app, /from\('maq_operacoes'\)/)
+  assert.match(app, /rpc\('concluir_maq_operacao'/)
+  assert.match(app, /function renderOperacoes\(/)
+  assert.match(app, /function renderAgenda\(/)
+})

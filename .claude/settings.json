@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(curl -s https://thoaqipyhfmromsgzmjs.supabase.co/*)"
+    ]
+  }
+}

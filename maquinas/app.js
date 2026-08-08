@@ -8,8 +8,12 @@ const supa = supabase.createClient(SUPA_URL, SUPA_KEY)
 
 // ── estado global ──
 let ATIVOS = [], OS_LIST = [], MATERIAIS = [], PLANOS = [], PLANO_MATS = [], ABASTS = [], USOS = []
+let AREAS = [], OPERACOES = [], OPERACOES_ERRO = null
 let USUARIO = null
 let ATIVO_EDIT_ID = null
+let OPERACAO_CONCLUIR_ID = null
+let AGENDA_ANO = new Date().getFullYear()
+let AGENDA_MES = new Date().getMonth()
 
 // ── auth ──
 async function init(){
@@ -48,7 +52,7 @@ function mostrarLogin(){
 
 // ── dados ──
 async function carregarTudo(){
-  const [a, o, m, p, pm, ab, ur] = await Promise.all([
+  const [a, o, m, p, pm, ab, ur, ar, op] = await Promise.all([
     supa.from('maq_ativos').select('*').order('codigo'),
     supa.from('maq_os').select('*, maq_ativos(codigo,nome), maq_planos(nome)').order('data_abertura', {ascending:false}),
     supa.from('maq_materiais').select('*').order('nome'),
@@ -56,6 +60,8 @@ async function carregarTudo(){
     supa.from('maq_plano_materiais').select('*, maq_materiais(nome,unidade)'),
     supa.from('maq_abastecimentos').select('*, maq_ativos(codigo,nome,emoji)').order('data',{ascending:false}),
     supa.from('maq_uso_registros').select('*, maq_ativos(codigo,nome)').order('registrado_em',{ascending:false}),
+    supa.from('maq_areas').select('*').eq('ativo', true).order('nome'),
+    supa.from('maq_operacoes').select('*, maq_areas(nome,codigo,area_m2), maq_ativos(codigo,nome,emoji,uso_atual)').order('data_programada',{ascending:false}),
   ])
   ATIVOS    = a.data || []
   OS_LIST   = o.data || []
@@ -64,8 +70,12 @@ async function carregarTudo(){
   PLANO_MATS= pm.data|| []
   ABASTS    = ab.data|| []
   USOS      = ur.data|| []
+  AREAS     = ar.data|| []
+  OPERACOES = op.data|| []
+  OPERACOES_ERRO = ar.error || op.error || null
+  aplicarPermissoesOperacoes()
   renderPainel(); renderAtivos(); renderVencimentos(); renderOS(); renderMateriais()
-  renderConsumo(); renderCiclo(); renderCompras()
+  renderConsumo(); renderCiclo(); renderCompras(); renderOperacoes(); renderAgenda()
 }
 
 // ── views ──
@@ -225,6 +235,103 @@ function renderOS(){
     <td><span class="badge ${sBadge(o.status)}">${o.status.toUpperCase()}</span></td>
     <td>${o.status==='pendente'?`<button class="btn btn-p btn-sm" onclick="concluirOS('${o.id}')">Concluir</button>`:'—'}</td>
   </tr>`).join('')
+}
+
+// ── OPERAÇÕES DE SERVIÇO ──
+function esc(valor){
+  return String(valor ?? '').replace(/[&<>'"]/g, caractere => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;'
+  })[caractere])
+}
+
+function podeEditarOperacoes(){
+  return ['admin','gestor','tecnico','executor'].includes(USUARIO?.role)
+}
+
+function aplicarPermissoesOperacoes(){
+  const btnOperacao = document.getElementById('btn-nova-operacao')
+  const btnArea = document.getElementById('btn-nova-area')
+  if(btnOperacao) btnOperacao.style.display = podeEditarOperacoes() ? '' : 'none'
+  if(btnArea) btnArea.style.display = ['admin','gestor'].includes(USUARIO?.role) ? '' : 'none'
+}
+
+function renderOperacoes(){
+  const kanban = document.getElementById('operacoes-kanban')
+  const tbody = document.getElementById('tb-areas')
+  if(!kanban || !tbody) return
+  const colunas = [
+    ['programada','Programadas'],['em_execucao','Em execução'],
+    ['concluida','Concluídas'],['cancelada','Canceladas'],
+  ]
+  if(OPERACOES_ERRO){
+    document.getElementById('operacoes-kpis').innerHTML=''
+    kanban.innerHTML = '<div class="callout co-warn" style="grid-column:1/-1">Operações indisponíveis. A migração 12 precisa ser aplicada no Supabase.</div>'
+  } else {
+    const grupos = OperacoesMaq.agruparOperacoes(OPERACOES)
+    document.getElementById('operacoes-kpis').innerHTML = colunas.map(([status,label]) => `
+      <div class="kpi"><div class="kpi-n">${grupos[status].length}</div><div class="kpi-l">${label}</div></div>`).join('')
+    kanban.innerHTML = colunas.map(([status,label]) => `
+      <section class="kanban-col">
+        <div class="kanban-title"><span>${label}</span><span class="kanban-count">${grupos[status].length}</span></div>
+        ${grupos[status].length ? grupos[status].map(renderCartaoOperacao).join('') : '<div class="empty" style="padding:24px 8px"><p>Nenhuma operação</p></div>'}
+      </section>`).join('')
+  }
+  tbody.innerHTML = AREAS.length ? AREAS.map(area => `<tr>
+    <td class="hi">${esc(area.codigo || '—')}</td><td>${esc(area.nome)}</td>
+    <td>${esc(area.tipo)}</td><td>${area.area_m2 == null ? '—' : Number(area.area_m2).toLocaleString('pt-BR')+' m²'}</td>
+    <td>${area.periodicidade_dias ? area.periodicidade_dias+' dias' : '—'}</td><td>${esc(area.localizacao || '—')}</td>
+  </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma área cadastrada</td></tr>'
+}
+
+function renderCartaoOperacao(operacao){
+  const iniciar = podeEditarOperacoes() && operacao.status==='programada'
+    ? `<button class="btn btn-s btn-sm" onclick="iniciarOperacao('${operacao.id}')">Iniciar</button>` : ''
+  const concluir = podeEditarOperacoes() && operacao.status==='em_execucao'
+    ? `<button class="btn btn-p btn-sm" onclick="abrirConcluirOperacao('${operacao.id}')">Concluir</button>` : ''
+  return `<article class="op-card">
+    <div class="op-name">${esc(operacao.maq_areas?.nome || 'Área não informada')}</div>
+    <div class="op-meta">${esc(operacao.tipo_servico)} · ${esc(operacao.data_programada)}<br>
+      ${esc(operacao.maq_ativos?.emoji || '')} ${esc(operacao.maq_ativos?.codigo || '?')} · ${esc(operacao.operador || 'Sem operador')}
+      ${operacao.horas_utilizadas ? `<br>${Number(operacao.horas_utilizadas).toFixed(1)} h registradas` : ''}
+    </div>
+    ${iniciar || concluir ? `<div class="op-actions">${iniciar}${concluir}</div>` : ''}
+  </article>`
+}
+
+async function iniciarOperacao(id){
+  if(!podeEditarOperacoes()) return
+  const { error } = await supa.from('maq_operacoes').update({status:'em_execucao',iniciado_em:new Date().toISOString()}).eq('id',id)
+  if(error){ alert('Erro ao iniciar operação: '+error.message); return }
+  await carregarTudo()
+}
+
+function renderAgenda(){
+  const calendario = document.getElementById('agenda-calendario')
+  if(!calendario) return
+  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  document.getElementById('agenda-titulo').textContent = `${meses[AGENDA_MES]} ${AGENDA_ANO}`
+  const eventos = OperacoesMaq.criarEventosCalendario(OPERACOES,OS_LIST,AGENDA_ANO,AGENDA_MES)
+  const porData = eventos.reduce((grupos,evento)=>{
+    ;(grupos[evento.data] ||= []).push(evento); return grupos
+  },{})
+  const primeiroDia = new Date(AGENDA_ANO,AGENDA_MES,1).getDay()
+  const totalDias = new Date(AGENDA_ANO,AGENDA_MES+1,0).getDate()
+  const cabecalho = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(dia=>`<div class="calendar-weekday">${dia}</div>`).join('')
+  let dias = '<div class="calendar-day is-empty"></div>'.repeat(primeiroDia)
+  for(let dia=1;dia<=totalDias;dia++){
+    const data = `${AGENDA_ANO}-${String(AGENDA_MES+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
+    dias += `<div class="calendar-day"><div class="calendar-date">${dia}</div>${(porData[data]||[]).map(evento=>
+      `<div class="calendar-event ${evento.origem==='operacao'?'op':'os'}">${evento.origem==='operacao'?'Operação':'OS'} · ${esc(evento.titulo)}</div>`
+    ).join('')}</div>`
+  }
+  calendario.innerHTML = cabecalho+dias
+}
+
+function navegarAgenda(direcao){
+  AGENDA_MES += direcao
+  if(AGENDA_MES<0){ AGENDA_MES=11; AGENDA_ANO-- }
+  if(AGENDA_MES>11){ AGENDA_MES=0; AGENDA_ANO++ }
+  renderAgenda()
 }
 
 // ── MATERIAIS ──
@@ -700,6 +807,81 @@ async function salvarMovimento(){
   await supa.from('maq_estoque_movimentos').insert({ material_id, tipo: 'entrada', quantidade, motivo })
   fecharModal('modal-movimento')
   await carregarTudo()
+}
+
+function abrirModalArea(){
+  ;['area-codigo','area-nome','area-m2','area-periodicidade','area-localizacao','area-obs'].forEach(id=>document.getElementById(id).value='')
+  document.getElementById('area-tipo').value='corte'
+  document.getElementById('modal-area').classList.add('open')
+}
+
+async function salvarArea(){
+  const nome = document.getElementById('area-nome').value.trim()
+  if(!nome){ alert('Informe o nome da área.'); return }
+  const { error } = await supa.from('maq_areas').insert({
+    codigo: document.getElementById('area-codigo').value.trim().toUpperCase() || null,
+    nome,
+    tipo: document.getElementById('area-tipo').value,
+    area_m2: parseFloat(document.getElementById('area-m2').value) || null,
+    periodicidade_dias: parseInt(document.getElementById('area-periodicidade').value) || null,
+    localizacao: document.getElementById('area-localizacao').value.trim(),
+    obs: document.getElementById('area-obs').value.trim(),
+  })
+  if(error){ alert('Erro ao salvar área: '+error.message); return }
+  fecharModal('modal-area'); await carregarTudo()
+}
+
+function abrirModalOperacao(){
+  document.getElementById('operacao-area').innerHTML = '<option value="">— selecione —</option>'+AREAS.map(area=>`<option value="${area.id}">${esc(area.codigo || '')} ${esc(area.nome)}</option>`).join('')
+  document.getElementById('operacao-ativo').innerHTML = '<option value="">— selecione —</option>'+ATIVOS.filter(ativo=>ativo.ativo!==false).map(ativo=>`<option value="${ativo.id}">${esc(ativo.codigo)} — ${esc(ativo.nome)}</option>`).join('')
+  document.getElementById('operacao-tipo').value='corte'
+  document.getElementById('operacao-data').value=new Date().toISOString().slice(0,10)
+  document.getElementById('operacao-operador').value=USUARIO?.nome || ''
+  document.getElementById('operacao-obs').value=''
+  document.getElementById('modal-operacao').classList.add('open')
+}
+
+async function salvarOperacao(){
+  const operacao = {
+    area_id: document.getElementById('operacao-area').value || null,
+    ativo_id: parseInt(document.getElementById('operacao-ativo').value) || null,
+    tipo_servico: document.getElementById('operacao-tipo').value,
+    data_programada: document.getElementById('operacao-data').value,
+    operador: document.getElementById('operacao-operador').value.trim(),
+    obs: document.getElementById('operacao-obs').value.trim(),
+  }
+  const erros = OperacoesMaq.validarOperacao(operacao)
+  if(erros.length){ alert(erros[0]); return }
+  const { error } = await supa.from('maq_operacoes').insert(operacao)
+  if(error){ alert('Erro ao programar operação: '+error.message); return }
+  fecharModal('modal-operacao'); await carregarTudo()
+}
+
+function abrirConcluirOperacao(id){
+  const operacao = OPERACOES.find(item=>item.id===id)
+  if(!operacao) return
+  OPERACAO_CONCLUIR_ID=id
+  document.getElementById('concluir-operacao-resumo').textContent = `${operacao.maq_areas?.nome || 'Área'} · ${operacao.maq_ativos?.codigo || 'Máquina'}`
+  document.getElementById('concluir-horas').value=''
+  document.getElementById('concluir-area').value=operacao.maq_areas?.area_m2 || ''
+  document.getElementById('concluir-combustivel').value=''
+  document.getElementById('concluir-obs').value=operacao.obs || ''
+  document.getElementById('modal-concluir-operacao').classList.add('open')
+}
+
+async function concluirOperacao(){
+  const horas = parseFloat(document.getElementById('concluir-horas').value)
+  try { OperacoesMaq.projetarUsoTotal(0,horas) }
+  catch(error){ alert(error.message); return }
+  const { error } = await supa.rpc('concluir_maq_operacao',{
+    p_operacao_id: OPERACAO_CONCLUIR_ID,
+    p_horas_utilizadas: horas,
+    p_area_executada_m2: parseFloat(document.getElementById('concluir-area').value) || null,
+    p_combustivel_utilizado: parseFloat(document.getElementById('concluir-combustivel').value) || null,
+    p_observacoes: document.getElementById('concluir-obs').value.trim() || null,
+  })
+  if(error){ alert('Erro ao concluir operação: '+error.message); return }
+  fecharModal('modal-concluir-operacao'); OPERACAO_CONCLUIR_ID=null; await carregarTudo()
 }
 
 // ── utils ──

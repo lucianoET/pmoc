@@ -1,0 +1,33 @@
+﻿#,Descrição,UN,Preço Unit (R$),Intervalo (h),Vida Útil (h),Categoria,Essencial,Regular,Ótimo
+1,Lâmina de corte,un,107,25,200,corte,S,S,S
+2,Correia A-78,un,75,150,600,corte,S,S,S
+3,Parafuso fix. lâmina,un,15,25,200,corte,N,S,S
+4,Roda suporte deck,un,120,500,2000,corte,N,N,S
+5,Vela de ignição,un,47.4,100,400,motor,S,S,S
+6,Filtro de ar,un,55,50,150,motor,S,S,S
+7,Filtro combustível,un,48.67,150,450,motor,N,S,S
+8,Kit carburador,un,150,300,600,motor,N,N,S
+9,Mangueira comb.,m,20,500,1500,motor,N,N,S
+10,Pneu dianteiro,un,450,1500,4500,rodagem,S,S,S
+11,Pneu traseiro,un,668,2000,6000,rodagem,N,S,S
+12,Sensor de banco,un,120,2000,4000,eletrico,N,N,S
+13,Kit fusíveis,kit,40,fixo,—,eletrico,S,S,S
+14,Porca M12,cx,70,fixo,—,fixador,N,S,S
+15,Arruela M3,cx,35,fixo,—,fixador,N,N,S
+16,Arruela M4,cx,35,fixo,—,fixador,N,S,S
+17,Arruela M5,cx,35,fixo,—,fixador,N,S,S
+18,Arruela M6,cx,35,fixo,—,fixador,N,S,S
+19,Arruela M8,cx,35,fixo,—,fixador,N,S,S
+20,Arruela M10,cx,35,fixo,—,fixador,N,S,S
+21,Rodinha deck,un,35,800,3200,corte,N,N,S
+22,Porca nylon M8,cx,35,fixo,—,fixador,N,S,S
+23,Porca nylon M10,cx,35,fixo,—,fixador,N,S,S
+24,Porca nylon M11,cx,35,fixo,—,fixador,N,S,S
+25,Porca nylon M12,cx,35,fixo,—,fixador,N,S,S
+
+MATRIZ PERÍODO × NÍVEL
+Período,Horas/Máq,Horas Frota,Dias,Total Mínimo (R$),Total Regular (R$),Total Ótimo (R$),Custo/h Ótimo (R$)
+1 Semana,40,160,7,1823.8,4324.14,4909.14,30.6821
+1 Mês,160,640,30,4813.8,8045.15,9105.15,14.2268
+→ 30/Jun,548.6,2194.3,96,15063.8,21309.85,23799.85,10.8462
+→ 30/Dez,1594.3,6377.1,279,43100.6,57070.41,63370.41,9.9372

@@ -18,7 +18,8 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 |------|-----|----------|--------|
 | `/` | **Portal** | Índice dos sistemas | ✅ |
 | `/refrigeracao` | **PMOC Refrigeração** v2.8 | 171 unidades · ARP 04/2024 · fiscalização · QR · impressão | ✅ |
-| `/maquinas` | **PMOC Máquinas** v1.0 | 7 máquinas · 59 planos · 34 peças · consumo · ciclo de vida | ✅ |
+| `/maquinas` | **PMOC Máquinas** v1.1 | 28 máquinas · 59 planos · 34 peças · operações · consumo · ciclo de vida | ✅ |
+| `/transportes` | **PMOC Transportes** v1.0 | 9 ativos · 23 viagens importadas · manutenção de viaturas e embarcações | ✅ |
 
 ### Refrigeração
 Inventário de climatização com fluxo completo de contratação pública:
@@ -28,7 +29,13 @@ Identificação → Orçamento → Execução → Fiscalização → Composiçã
 ### Máquinas de corte
 Manutenção por horímetro de roçadeiras, motosserras, tratores e mini-tratores.
 Planos por modelo, baixa automática de estoque, combustível por operador,
-depreciação e **lista de compras** exportável em CSV para processo licitatório.
+operações por área com kanban e agenda, depreciação e **lista de compras**
+exportável em CSV para processo licitatório.
+
+### Transportes
+Frota mista de viaturas e embarcações com importação do mapa operacional VTR/EMB,
+programação de viagens, histórico de missões e controle de manutenção por km ou
+horas de motor.
 
 ---
 
@@ -40,9 +47,11 @@ depreciação e **lista de compras** exportável em CSV para processo licitatór
 | `arp_itens` | 19 (R$ 66.447,86 empenhados) |
 | `os_contratacao` | 2 (NE 334 e 335) |
 | `plano_tarefas` | 9 (NBR 17037) |
-| `maq_ativos` | 7 |
+| `maq_ativos` | 28 |
 | `maq_planos` | 59 |
 | `maq_materiais` | 34 (R$ 4.861,80 de estoque mínimo) |
+| `transp_ativos` | 9 |
+| `transp_viagens` | 23 |
 
 ---
 
@@ -56,15 +65,26 @@ pmoc/
 ├── refrigeracao/index.html    v2.8 — single-file, 436 KB
 ├── maquinas/
 │   ├── index.html
-│   └── app.js                 Supabase JS SDK via CDN
-├── shared/auth.js             Login por cargo (reutilizável)
+│   ├── app.js                 Aplicação e acesso ao Supabase
+│   └── operacoes.js           Regras testáveis de operações e agenda
+├── transportes/
+│   ├── index.html
+│   └── app.js                 Frota mista, viagens e manutenção
+├── shared/
+│   ├── auth.js                Login por cargo (reutilizável)
+│   └── supabase-config.js     Reuso da configuração Supabase
 ├── supabase/
 │   ├── 01_maquinas_schema.sql
 │   ├── 02_maquinas_seed.sql
 │   ├── 03_usuarios_cargos.sql
 │   ├── 04_refrigeracao_schema.sql
 │   ├── 05_refrigeracao_import_171.sql
-│   └── 06_arp_04_2024_import.sql
+│   ├── 06_arp_04_2024_import.sql
+│   ├── 09_importa_frota_28.sql
+│   ├── 10_transportes_schema.sql
+│   ├── 11_transportes_seed.sql
+│   ├── 12_maquinas_areas_operacoes.sql
+│   └── 13_corrige_permissao_rpc_operacoes.sql
 └── docs/
     ├── *.ods                  Planilhas-fonte
     ├── NE_*.pdf               Notas de empenho

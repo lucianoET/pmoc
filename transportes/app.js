@@ -1,0 +1,791 @@
+import { Auth } from '../shared/auth.js'
+import { criarClienteSupabase } from '../shared/supabase-config.js'
+
+let supa = null
+let auth = null
+let USUARIO = null
+
+let ATIVOS = []
+let VIAGENS = []
+let MANUTENCOES = []
+let ERRO_CARGA = null
+
+let ATIVO_EDIT_ID = null
+let VIAGEM_EDIT_ID = null
+
+const STATUS_ATIVO = {
+  disponivel: 'Disponível',
+  em_uso: 'Em uso',
+  manutencao: 'Manutenção',
+  sobreaviso: 'Sobreaviso',
+  indisponivel: 'Indisponível',
+}
+
+const STATUS_VIAGEM = {
+  agendada: 'Agendada',
+  em_andamento: 'Em andamento',
+  concluida: 'Concluída',
+  cancelada: 'Cancelada',
+}
+
+const STATUS_BADGE = {
+  disponivel: 'b-ok',
+  em_uso: 'b-blue',
+  manutencao: 'b-warn',
+  sobreaviso: 'b-cyan',
+  indisponivel: 'b-red',
+  agendada: 'b-blue',
+  em_andamento: 'b-warn',
+  concluida: 'b-ok',
+  cancelada: 'b-red',
+}
+
+const TIPO_MANUTENCAO = {
+  preventiva: 'Preventiva',
+  corretiva: 'Corretiva',
+  inspecao: 'Inspeção',
+}
+
+const ROLES_ESCRITA = ['admin', 'gestor', 'tecnico']
+
+function esc(valor) {
+  return String(valor ?? '').replace(/[&<>'"]/g, caractere => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  })[caractere])
+}
+
+function podeEditar() {
+  return ROLES_ESCRITA.includes(USUARIO?.role)
+}
+
+function fmtDate(valor) {
+  if (!valor) return '—'
+  const [ano, mes, dia] = String(valor).slice(0, 10).split('-')
+  if (!ano || !mes || !dia) return valor
+  return `${dia}/${mes}/${ano}`
+}
+
+function fmtDateTime(data, hora) {
+  return hora ? `${fmtDate(data)} ${String(hora).slice(0, 5)}` : fmtDate(data)
+}
+
+function badgeStatus(chave, mapa) {
+  return `<span class="badge ${STATUS_BADGE[chave] || 'b-blue'}">${esc((mapa || STATUS_ATIVO)[chave] || chave)}</span>`
+}
+
+function obterTripulacao(viagem) {
+  return [viagem.motorista_nome, viagem.patrao_nome, viagem.mo_nome].filter(Boolean).join(' · ') || '—'
+}
+
+function ordenarViagens(lista) {
+  return [...lista].sort((a, b) => {
+    const ka = `${a.data_saida || ''} ${a.hora_saida_prevista || ''}`
+    const kb = `${b.data_saida || ''} ${b.hora_saida_prevista || ''}`
+    return kb.localeCompare(ka)
+  })
+}
+
+function calcularAlertasManutencao() {
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+
+  return ATIVOS
+    .filter(ativo => ativo.ativo !== false && ativo.prox_manutencao)
+    .map(ativo => {
+      const alvo = new Date(`${ativo.prox_manutencao}T12:00:00`)
+      const dias = Math.ceil((alvo - hoje) / 86400000)
+      return { ativo, dias }
+    })
+    .sort((a, b) => a.dias - b.dias)
+}
+
+function obterResumoRelatorio() {
+  return {
+    viagens: VIAGENS.length,
+    passageiros: VIAGENS.reduce((total, viagem) => total + Number(viagem.passageiros || 0), 0),
+    cargaKg: VIAGENS.reduce((total, viagem) => total + Number(viagem.carga_kg || 0), 0),
+    uso: ATIVOS.reduce((total, ativo) => total + Number(ativo.uso_atual || 0), 0),
+  }
+}
+
+function mostrarLogin() {
+  document.getElementById('login-screen').style.display = 'flex'
+  document.getElementById('app').style.display = 'none'
+}
+
+function mostrarApp() {
+  document.getElementById('login-screen').style.display = 'none'
+  document.getElementById('app').style.display = 'block'
+  atualizarCabecalhoUsuario()
+  aplicarPermissoes()
+  carregarTudo()
+}
+
+function atualizarCabecalhoUsuario() {
+  const texto = USUARIO
+    ? `${USUARIO.funcao || USUARIO.posto_graduacao || USUARIO.nome || 'Usuário'} · ${USUARIO.role}`
+    : 'Livre · observador'
+  document.getElementById('user-chip').textContent = texto
+}
+
+function aplicarPermissoes() {
+  const esconder = !podeEditar()
+  document.getElementById('btn-novo-ativo').classList.toggle('hidden', esconder)
+  document.getElementById('btn-nova-viagem').classList.toggle('hidden', esconder)
+  document.getElementById('btn-nova-manut').classList.toggle('hidden', esconder)
+}
+
+function renderErroPainel() {
+  const el = document.getElementById('painel-erro')
+  if (!ERRO_CARGA) {
+    el.innerHTML = ''
+    return
+  }
+
+  el.innerHTML = `<div class="callout co-red">Não foi possível carregar as tabelas do módulo Transportes. Detalhe: ${esc(ERRO_CARGA)}. Execute as migrações [10_transportes_schema.sql](/home/luc/Downloads/pmoc-overlay/supabase/10_transportes_schema.sql) e [11_transportes_seed.sql](/home/luc/Downloads/pmoc-overlay/supabase/11_transportes_seed.sql) no Supabase.</div>`
+}
+
+async function carregarTudo() {
+  try {
+    const [ativosRes, viagensRes, manutRes] = await Promise.all([
+      supa.from('transp_ativos').select('*').order('codigo'),
+      supa.from('transp_viagens').select('*, transp_ativos(codigo,nome,tipo,unidade_uso)').order('data_saida', { ascending: false }).order('hora_saida_prevista', { ascending: false }),
+      supa.from('transp_manutencoes').select('*, transp_ativos(codigo,nome)').order('data_manutencao', { ascending: false }),
+    ])
+
+    const erro = ativosRes.error || viagensRes.error || manutRes.error
+    if (erro) throw erro
+
+    ERRO_CARGA = null
+    ATIVOS = ativosRes.data || []
+    VIAGENS = viagensRes.data || []
+    MANUTENCOES = manutRes.data || []
+  } catch (error) {
+    ERRO_CARGA = error.message || String(error)
+    ATIVOS = []
+    VIAGENS = []
+    MANUTENCOES = []
+  }
+
+  renderTudo()
+}
+
+function renderTudo() {
+  renderPainel()
+  renderAtivos()
+  renderViagens()
+  renderManutencoes()
+  renderRelatorios()
+}
+
+function trocarView(id, botao) {
+  document.querySelectorAll('.view').forEach(view => view.classList.remove('active'))
+  document.querySelectorAll('.nav-btn').forEach(item => item.classList.remove('active'))
+  document.getElementById(`view-${id}`).classList.add('active')
+  botao.classList.add('active')
+}
+
+function renderPainel() {
+  renderErroPainel()
+
+  const disponiveis = ATIVOS.filter(ativo => ativo.status === 'disponivel').length
+  const sobreaviso = ATIVOS.filter(ativo => ativo.status === 'sobreaviso').length
+  const alertas = calcularAlertasManutencao().filter(item => item.dias <= 30).length
+
+  document.getElementById('kpi-total').textContent = ATIVOS.length
+  document.getElementById('kpi-disponiveis').textContent = disponiveis
+  document.getElementById('kpi-sobreaviso').textContent = sobreaviso
+  document.getElementById('kpi-viagens').textContent = VIAGENS.length
+  document.getElementById('kpi-manut').textContent = alertas
+
+  const painelViagens = document.getElementById('painel-viagens')
+  const agoraChave = `${new Date().toISOString().slice(0, 10)} ${new Date().toTimeString().slice(0, 5)}`
+  const ordenadas = ordenarViagens(VIAGENS)
+  const proximas = ordenadas.filter(viagem => `${viagem.data_saida || ''} ${String(viagem.hora_saida_prevista || '').slice(0, 5)}` >= agoraChave).slice().reverse()
+  const basePainel = (proximas.length ? proximas : ordenadas).slice(0, 5)
+
+  if (!basePainel.length) {
+    painelViagens.innerHTML = '<div class="empty"><div class="empty-ico">🗺️</div><p>Nenhuma viagem cadastrada.</p></div>'
+  } else {
+    painelViagens.innerHTML = basePainel.map(viagem => `
+      <div class="mat-alert">
+        <div class="mat-info">
+          <div class="mat-nome">${esc(viagem.transp_ativos?.codigo || 'Sem ativo')} — ${esc(viagem.destino || '—')}</div>
+          <div class="mat-stock">${fmtDateTime(viagem.data_saida, viagem.hora_saida_prevista)} · ${esc(viagem.missao || '—')}</div>
+        </div>
+        ${badgeStatus(viagem.status, STATUS_VIAGEM)}
+      </div>
+    `).join('')
+  }
+
+  const painelAtivos = document.getElementById('painel-ativos-alerta')
+  const ativosAtencao = ATIVOS.filter(ativo => ativo.status !== 'disponivel')
+  const primeirosAlertas = calcularAlertasManutencao().slice(0, 3)
+
+  if (!ativosAtencao.length && !primeirosAlertas.length) {
+    painelAtivos.innerHTML = '<div class="empty"><div class="empty-ico">✅</div><p>Sem alertas no momento.</p></div>'
+    return
+  }
+
+  const blocos = []
+  for (const ativo of ativosAtencao.slice(0, 4)) {
+    blocos.push(`
+      <div class="mat-alert">
+        <div class="mat-info">
+          <div class="mat-nome">${esc(ativo.codigo)} — ${esc(ativo.nome)}</div>
+          <div class="mat-stock">${esc(STATUS_ATIVO[ativo.status] || ativo.status)}</div>
+        </div>
+        ${badgeStatus(ativo.status, STATUS_ATIVO)}
+      </div>
+    `)
+  }
+  for (const alerta of primeirosAlertas) {
+    const textoDias = alerta.dias < 0 ? `vencida há ${Math.abs(alerta.dias)} dia(s)` : `vence em ${alerta.dias} dia(s)`
+    blocos.push(`
+      <div class="mat-alert">
+        <div class="mat-info">
+          <div class="mat-nome">${esc(alerta.ativo.codigo)} — ${esc(alerta.ativo.nome)}</div>
+          <div class="mat-stock">Preventiva ${textoDias}</div>
+        </div>
+        <span class="badge ${alerta.dias < 0 ? 'b-red' : 'b-warn'}">${fmtDate(alerta.ativo.prox_manutencao)}</span>
+      </div>
+    `)
+  }
+  painelAtivos.innerHTML = blocos.join('')
+}
+
+function renderAtivos() {
+  const tipo = document.getElementById('filtro-ativo-tipo').value
+  const status = document.getElementById('filtro-ativo-status').value
+  const busca = document.getElementById('filtro-ativo-busca').value.trim().toLowerCase()
+  const tbody = document.getElementById('tb-ativos')
+
+  const lista = ATIVOS.filter(ativo => {
+    const texto = `${ativo.codigo || ''} ${ativo.nome || ''} ${ativo.identificacao || ''}`.toLowerCase()
+    return (!tipo || ativo.tipo === tipo)
+      && (!status || ativo.status === status)
+      && (!busca || texto.includes(busca))
+  })
+
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="tagline">Nenhum ativo encontrado.</td></tr>'
+    return
+  }
+
+  tbody.innerHTML = lista.map(ativo => `
+    <tr>
+      <td class="hi mono">${esc(ativo.codigo)}</td>
+      <td>
+        <div class="hi">${esc(ativo.nome)}</div>
+        <div class="tagline">${esc(ativo.subtipo || '—')}</div>
+      </td>
+      <td>${esc(ativo.tipo === 'embarcacao' ? 'Embarcação' : 'Viatura')}</td>
+      <td class="mono">${esc(ativo.identificacao || '—')}</td>
+      <td>${Number(ativo.uso_atual || 0).toLocaleString('pt-BR')} ${esc(ativo.unidade_uso || '')}</td>
+      <td>${badgeStatus(ativo.status, STATUS_ATIVO)}</td>
+      <td>${fmtDate(ativo.prox_manutencao)}</td>
+      <td>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalViagem(${ativo.id})">+ Viagem</button>` : ''}
+          ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalManutencao(${ativo.id})">+ Manut.</button>` : ''}
+          ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalAtivo(${ativo.id})">Editar</button>` : ''}
+        </div>
+      </td>
+    </tr>
+  `).join('')
+}
+
+function renderViagens() {
+  const status = document.getElementById('filtro-viagem-status').value
+  const busca = document.getElementById('filtro-viagem-busca').value.trim().toLowerCase()
+  const tbody = document.getElementById('tb-viagens')
+
+  const lista = ordenarViagens(VIAGENS).filter(viagem => {
+    const texto = `${viagem.destino || ''} ${viagem.missao || ''} ${viagem.motorista_nome || ''} ${viagem.patrao_nome || ''} ${viagem.mo_nome || ''} ${viagem.transp_ativos?.codigo || ''} ${viagem.transp_ativos?.nome || ''}`.toLowerCase()
+    return (!status || viagem.status === status)
+      && (!busca || texto.includes(busca))
+  })
+
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tagline">Nenhuma viagem encontrada.</td></tr>'
+    return
+  }
+
+  tbody.innerHTML = lista.slice(0, 200).map(viagem => `
+    <tr>
+      <td class="mono">${fmtDateTime(viagem.data_saida, viagem.hora_saida_prevista)}</td>
+      <td>
+        <div class="hi">${esc(viagem.transp_ativos?.codigo || 'Sem ativo')}</div>
+        <div class="tagline">${esc(viagem.transp_ativos?.nome || '—')}</div>
+      </td>
+      <td>${esc(viagem.destino || '—')}</td>
+      <td>${esc(viagem.missao || '—')}</td>
+      <td>${esc(obterTripulacao(viagem))}</td>
+      <td>${badgeStatus(viagem.status, STATUS_VIAGEM)}</td>
+      <td>${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalViagem(null,'${viagem.id}')">Editar</button>` : '—'}</td>
+    </tr>
+  `).join('')
+}
+
+function renderManutencoes() {
+  const alertas = calcularAlertasManutencao().filter(item => item.dias <= 30)
+  const divAlertas = document.getElementById('manut-alertas')
+  if (!alertas.length) {
+    divAlertas.innerHTML = '<div class="callout co-ok">Nenhum ativo com manutenção vencida ou próxima nos próximos 30 dias.</div>'
+  } else {
+    divAlertas.innerHTML = alertas.map(item => `
+      <div class="callout ${item.dias < 0 ? 'co-red' : 'co-warn'}">
+        <strong>${esc(item.ativo.codigo)} — ${esc(item.ativo.nome)}</strong>: manutenção ${item.dias < 0 ? `vencida há ${Math.abs(item.dias)} dia(s)` : `vence em ${item.dias} dia(s)`} (${fmtDate(item.ativo.prox_manutencao)}).
+      </div>
+    `).join('')
+  }
+
+  const tbody = document.getElementById('tb-manutencoes')
+  if (!MANUTENCOES.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tagline">Nenhuma manutenção registrada.</td></tr>'
+    return
+  }
+
+  tbody.innerHTML = MANUTENCOES.map(item => `
+    <tr>
+      <td class="mono">${fmtDate(item.data_manutencao)}</td>
+      <td>
+        <div class="hi">${esc(item.transp_ativos?.codigo || '—')}</div>
+        <div class="tagline">${esc(item.transp_ativos?.nome || '—')}</div>
+      </td>
+      <td>${badgeStatus(item.tipo, TIPO_MANUTENCAO)}</td>
+      <td>${esc(item.descricao || '—')}</td>
+      <td>${item.uso_referencia == null ? '—' : `${Number(item.uso_referencia).toLocaleString('pt-BR')} ${esc(ATIVOS.find(ativo => ativo.id === item.ativo_id)?.unidade_uso || '')}`}</td>
+      <td>${fmtDate(item.prox_manutencao)}</td>
+      <td>${esc(item.executado_por || item.fornecedor || '—')}</td>
+    </tr>
+  `).join('')
+}
+
+function renderRelatorios() {
+  const resumo = obterResumoRelatorio()
+  document.getElementById('rel-viagens').textContent = resumo.viagens
+  document.getElementById('rel-passageiros').textContent = resumo.passageiros
+  document.getElementById('rel-carga').textContent = resumo.cargaKg.toLocaleString('pt-BR')
+  document.getElementById('rel-uso').textContent = resumo.uso.toLocaleString('pt-BR')
+
+  const tbody = document.getElementById('tb-relatorio-ativos')
+  if (!ATIVOS.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tagline">Nenhum ativo disponível.</td></tr>'
+    return
+  }
+
+  tbody.innerHTML = ATIVOS.map(ativo => `
+    <tr>
+      <td class="mono">${esc(ativo.codigo)}</td>
+      <td class="hi">${esc(ativo.nome)}</td>
+      <td>${esc(ativo.tipo === 'embarcacao' ? 'Embarcação' : 'Viatura')}</td>
+      <td class="mono">${esc(ativo.identificacao || '—')}</td>
+      <td>${Number(ativo.uso_atual || 0).toLocaleString('pt-BR')} ${esc(ativo.unidade_uso || '')}</td>
+      <td>${badgeStatus(ativo.status, STATUS_ATIVO)}</td>
+      <td>${esc(ativo.responsavel_nome || '—')}</td>
+    </tr>
+  `).join('')
+}
+
+function fecharModal(chave) {
+  document.getElementById(`modal-${chave}`).classList.remove('open')
+}
+
+function limparModalAtivo() {
+  ATIVO_EDIT_ID = null
+  document.getElementById('titulo-modal-ativo').textContent = 'Novo ativo'
+  document.getElementById('at-codigo').value = ''
+  document.getElementById('at-nome').value = ''
+  document.getElementById('at-tipo').value = 'viatura'
+  document.getElementById('at-subtipo').value = ''
+  document.getElementById('at-tipo-modelo').value = ''
+  document.getElementById('at-identificacao').value = ''
+  document.getElementById('at-ano').value = ''
+  document.getElementById('at-local').value = 'CMASM'
+  document.getElementById('at-capacidade-pessoas').value = ''
+  document.getElementById('at-capacidade-carga').value = ''
+  document.getElementById('at-responsavel').value = ''
+  document.getElementById('at-uso-atual').value = 0
+  document.getElementById('at-unidade-uso').value = 'km'
+  document.getElementById('at-status').value = 'disponivel'
+  document.getElementById('at-prox-manut').value = ''
+  document.getElementById('at-ativo').value = 'true'
+  document.getElementById('at-observacoes').value = ''
+}
+
+function abrirModalAtivo(id = null) {
+  if (!podeEditar()) return
+  limparModalAtivo()
+  if (id != null) {
+    const ativo = ATIVOS.find(item => item.id === id)
+    if (!ativo) return
+    ATIVO_EDIT_ID = ativo.id
+    document.getElementById('titulo-modal-ativo').textContent = 'Editar ativo'
+    document.getElementById('at-codigo').value = ativo.codigo || ''
+    document.getElementById('at-nome').value = ativo.nome || ''
+    document.getElementById('at-tipo').value = ativo.tipo || 'viatura'
+    document.getElementById('at-subtipo').value = ativo.subtipo || ''
+    document.getElementById('at-tipo-modelo').value = ativo.tipo_modelo || ''
+    document.getElementById('at-identificacao').value = ativo.identificacao || ''
+    document.getElementById('at-ano').value = ativo.ano || ''
+    document.getElementById('at-local').value = ativo.local || ''
+    document.getElementById('at-capacidade-pessoas').value = ativo.capacidade_pessoas ?? ''
+    document.getElementById('at-capacidade-carga').value = ativo.capacidade_carga_kg ?? ''
+    document.getElementById('at-responsavel').value = ativo.responsavel_nome || ''
+    document.getElementById('at-uso-atual').value = ativo.uso_atual ?? 0
+    document.getElementById('at-unidade-uso').value = ativo.unidade_uso || 'km'
+    document.getElementById('at-status').value = ativo.status || 'disponivel'
+    document.getElementById('at-prox-manut').value = ativo.prox_manutencao || ''
+    document.getElementById('at-ativo').value = ativo.ativo === false ? 'false' : 'true'
+    document.getElementById('at-observacoes').value = ativo.observacoes || ''
+  }
+  document.getElementById('modal-ativo').classList.add('open')
+}
+
+async function salvarAtivo() {
+  if (!podeEditar()) return
+  const codigo = document.getElementById('at-codigo').value.trim()
+  const nome = document.getElementById('at-nome').value.trim()
+  if (!codigo || !nome) {
+    alert('Preencha código e nome do ativo.')
+    return
+  }
+
+  const payload = {
+    codigo,
+    nome,
+    tipo: document.getElementById('at-tipo').value,
+    subtipo: document.getElementById('at-subtipo').value.trim() || null,
+    tipo_modelo: document.getElementById('at-tipo-modelo').value.trim() || null,
+    identificacao: document.getElementById('at-identificacao').value.trim() || null,
+    ano: document.getElementById('at-ano').value ? Number(document.getElementById('at-ano').value) : null,
+    local: document.getElementById('at-local').value.trim() || null,
+    capacidade_pessoas: document.getElementById('at-capacidade-pessoas').value ? Number(document.getElementById('at-capacidade-pessoas').value) : null,
+    capacidade_carga_kg: document.getElementById('at-capacidade-carga').value ? Number(document.getElementById('at-capacidade-carga').value) : null,
+    responsavel_nome: document.getElementById('at-responsavel').value.trim() || null,
+    uso_atual: Number(document.getElementById('at-uso-atual').value || 0),
+    unidade_uso: document.getElementById('at-unidade-uso').value,
+    status: document.getElementById('at-status').value,
+    prox_manutencao: document.getElementById('at-prox-manut').value || null,
+    ativo: document.getElementById('at-ativo').value === 'true',
+    observacoes: document.getElementById('at-observacoes').value.trim() || null,
+  }
+
+  const resposta = ATIVO_EDIT_ID == null
+    ? await supa.from('transp_ativos').insert(payload)
+    : await supa.from('transp_ativos').update(payload).eq('id', ATIVO_EDIT_ID)
+
+  if (resposta.error) {
+    alert(`Erro: ${resposta.error.message}`)
+    return
+  }
+
+  fecharModal('ativo')
+  await carregarTudo()
+}
+
+function popularSelectAtivos(id, selecionado = null) {
+  const select = document.getElementById(id)
+  select.innerHTML = ATIVOS.filter(ativo => ativo.ativo !== false).map(ativo => `
+    <option value="${ativo.id}" ${Number(selecionado) === Number(ativo.id) ? 'selected' : ''}>${esc(ativo.codigo)} — ${esc(ativo.nome)}</option>
+  `).join('')
+}
+
+function limparModalViagem(ativoId = null) {
+  VIAGEM_EDIT_ID = null
+  document.getElementById('titulo-modal-viagem').textContent = 'Nova viagem'
+  popularSelectAtivos('vg-ativo', ativoId ?? ATIVOS[0]?.id)
+  document.getElementById('vg-data').value = new Date().toISOString().slice(0, 10)
+  document.getElementById('vg-saida-prevista').value = ''
+  document.getElementById('vg-chegada-prevista').value = ''
+  document.getElementById('vg-status').value = 'agendada'
+  document.getElementById('vg-classificacao').value = 'programada'
+  document.getElementById('vg-tipo-uso').value = 'servico'
+  document.getElementById('vg-origem').value = 'CMASM'
+  document.getElementById('vg-destino').value = ''
+  document.getElementById('vg-missao').value = ''
+  document.getElementById('vg-uso-saida').value = ''
+  document.getElementById('vg-uso-chegada').value = ''
+  document.getElementById('vg-passageiros').value = 0
+  document.getElementById('vg-carga-kg').value = 0
+  document.getElementById('vg-motorista').value = ''
+  document.getElementById('vg-responsavel').value = ''
+  document.getElementById('vg-patrao').value = ''
+  document.getElementById('vg-mo').value = ''
+  document.getElementById('vg-carga-desc').value = ''
+  document.getElementById('vg-observacoes').value = ''
+}
+
+function abrirModalViagem(ativoId = null, viagemId = null) {
+  if (!podeEditar()) return
+  limparModalViagem(ativoId)
+  if (viagemId) {
+    const viagem = VIAGENS.find(item => item.id === viagemId)
+    if (!viagem) return
+    VIAGEM_EDIT_ID = viagem.id
+    document.getElementById('titulo-modal-viagem').textContent = 'Editar viagem'
+    popularSelectAtivos('vg-ativo', viagem.ativo_id)
+    document.getElementById('vg-data').value = viagem.data_saida || ''
+    document.getElementById('vg-saida-prevista').value = viagem.hora_saida_prevista ? String(viagem.hora_saida_prevista).slice(0, 5) : ''
+    document.getElementById('vg-chegada-prevista').value = viagem.hora_chegada_prevista ? String(viagem.hora_chegada_prevista).slice(0, 5) : ''
+    document.getElementById('vg-status').value = viagem.status || 'agendada'
+    document.getElementById('vg-classificacao').value = viagem.classificacao || 'programada'
+    document.getElementById('vg-tipo-uso').value = viagem.tipo_uso || 'servico'
+    document.getElementById('vg-origem').value = viagem.origem || 'CMASM'
+    document.getElementById('vg-destino').value = viagem.destino || ''
+    document.getElementById('vg-missao').value = viagem.missao || ''
+    document.getElementById('vg-uso-saida').value = viagem.uso_saida ?? ''
+    document.getElementById('vg-uso-chegada').value = viagem.uso_chegada ?? ''
+    document.getElementById('vg-passageiros').value = viagem.passageiros ?? 0
+    document.getElementById('vg-carga-kg').value = viagem.carga_kg ?? 0
+    document.getElementById('vg-motorista').value = viagem.motorista_nome || ''
+    document.getElementById('vg-responsavel').value = viagem.responsavel_nome || ''
+    document.getElementById('vg-patrao').value = viagem.patrao_nome || ''
+    document.getElementById('vg-mo').value = viagem.mo_nome || ''
+    document.getElementById('vg-carga-desc').value = viagem.carga_descricao || ''
+    document.getElementById('vg-observacoes').value = viagem.observacoes || ''
+  }
+  document.getElementById('modal-viagem').classList.add('open')
+}
+
+async function salvarViagem() {
+  if (!podeEditar()) return
+
+  const ativoId = Number(document.getElementById('vg-ativo').value)
+  const destino = document.getElementById('vg-destino').value.trim()
+  const missao = document.getElementById('vg-missao').value.trim()
+  const dataSaida = document.getElementById('vg-data').value
+  const usoSaidaTexto = document.getElementById('vg-uso-saida').value
+  const usoChegadaTexto = document.getElementById('vg-uso-chegada').value
+
+  if (!ativoId || !destino || !missao || !dataSaida) {
+    alert('Preencha ativo, data, destino e missão.')
+    return
+  }
+
+  const usoSaida = usoSaidaTexto === '' ? null : Number(usoSaidaTexto)
+  const usoChegada = usoChegadaTexto === '' ? null : Number(usoChegadaTexto)
+  if (usoSaida != null && usoChegada != null && usoChegada < usoSaida) {
+    alert('O uso na chegada não pode ser menor que o uso na saída.')
+    return
+  }
+
+  const payload = {
+    ativo_id: ativoId,
+    classificacao: document.getElementById('vg-classificacao').value,
+    tipo_uso: document.getElementById('vg-tipo-uso').value,
+    origem: document.getElementById('vg-origem').value.trim() || 'CMASM',
+    destino,
+    missao,
+    data_saida: dataSaida,
+    hora_saida_prevista: document.getElementById('vg-saida-prevista').value || null,
+    hora_chegada_prevista: document.getElementById('vg-chegada-prevista').value || null,
+    uso_saida: usoSaida,
+    uso_chegada: usoChegada,
+    motorista_nome: document.getElementById('vg-motorista').value.trim() || null,
+    patrao_nome: document.getElementById('vg-patrao').value.trim() || null,
+    mo_nome: document.getElementById('vg-mo').value.trim() || null,
+    responsavel_nome: document.getElementById('vg-responsavel').value.trim() || null,
+    passageiros: Number(document.getElementById('vg-passageiros').value || 0),
+    carga_kg: Number(document.getElementById('vg-carga-kg').value || 0),
+    carga_descricao: document.getElementById('vg-carga-desc').value.trim() || null,
+    status: document.getElementById('vg-status').value,
+    observacoes: document.getElementById('vg-observacoes').value.trim() || null,
+  }
+
+  const resposta = VIAGEM_EDIT_ID == null
+    ? await supa.from('transp_viagens').insert(payload)
+    : await supa.from('transp_viagens').update(payload).eq('id', VIAGEM_EDIT_ID)
+
+  if (resposta.error) {
+    alert(`Erro: ${resposta.error.message}`)
+    return
+  }
+
+  const ativoAtual = ATIVOS.find(item => Number(item.id) === ativoId)
+  const ajusteAtivo = {}
+  if (payload.status === 'em_andamento') {
+    ajusteAtivo.status = 'em_uso'
+  }
+  if (payload.status === 'concluida' && usoChegada != null && ativoAtual && usoChegada > Number(ativoAtual.uso_atual || 0)) {
+    ajusteAtivo.uso_atual = usoChegada
+  }
+  if (payload.status === 'concluida' && ativoAtual?.status === 'em_uso') {
+    ajusteAtivo.status = 'disponivel'
+  }
+
+  if (Object.keys(ajusteAtivo).length) {
+    const updateRes = await supa.from('transp_ativos').update(ajusteAtivo).eq('id', ativoId)
+    if (updateRes.error) {
+      alert(`Viagem salva, mas o ativo não foi atualizado: ${updateRes.error.message}`)
+    }
+  }
+
+  fecharModal('viagem')
+  await carregarTudo()
+}
+
+function abrirModalManutencao(ativoId = null) {
+  if (!podeEditar()) return
+  popularSelectAtivos('mn-ativo', ativoId ?? ATIVOS[0]?.id)
+  document.getElementById('mn-data').value = new Date().toISOString().slice(0, 10)
+  document.getElementById('mn-tipo').value = 'preventiva'
+  document.getElementById('mn-uso').value = ''
+  document.getElementById('mn-novo-status').value = ''
+  document.getElementById('mn-executado').value = ''
+  document.getElementById('mn-fornecedor').value = ''
+  document.getElementById('mn-descricao').value = ''
+  document.getElementById('mn-prox').value = ''
+  document.getElementById('mn-observacoes').value = ''
+  document.getElementById('modal-manutencao').classList.add('open')
+}
+
+async function salvarManutencao() {
+  if (!podeEditar()) return
+  const ativoId = Number(document.getElementById('mn-ativo').value)
+  const descricao = document.getElementById('mn-descricao').value.trim()
+  const data = document.getElementById('mn-data').value
+  if (!ativoId || !descricao || !data) {
+    alert('Preencha ativo, data e descrição.')
+    return
+  }
+
+  const usoTexto = document.getElementById('mn-uso').value
+  const payload = {
+    ativo_id: ativoId,
+    tipo: document.getElementById('mn-tipo').value,
+    data_manutencao: data,
+    descricao,
+    uso_referencia: usoTexto === '' ? null : Number(usoTexto),
+    executado_por: document.getElementById('mn-executado').value.trim() || null,
+    fornecedor: document.getElementById('mn-fornecedor').value.trim() || null,
+    prox_manutencao: document.getElementById('mn-prox').value || null,
+    novo_status: document.getElementById('mn-novo-status').value || null,
+    observacoes: document.getElementById('mn-observacoes').value.trim() || null,
+  }
+
+  const insertRes = await supa.from('transp_manutencoes').insert(payload)
+  if (insertRes.error) {
+    alert(`Erro: ${insertRes.error.message}`)
+    return
+  }
+
+  const ativoAtual = ATIVOS.find(item => Number(item.id) === ativoId)
+  const updatePayload = {}
+  if (payload.prox_manutencao) updatePayload.prox_manutencao = payload.prox_manutencao
+  if (payload.novo_status) updatePayload.status = payload.novo_status
+  if (payload.uso_referencia != null && ativoAtual && payload.uso_referencia > Number(ativoAtual.uso_atual || 0)) {
+    updatePayload.uso_atual = payload.uso_referencia
+  }
+
+  if (Object.keys(updatePayload).length) {
+    const updateRes = await supa.from('transp_ativos').update(updatePayload).eq('id', ativoId)
+    if (updateRes.error) {
+      alert(`Manutenção salva, mas o ativo não foi atualizado: ${updateRes.error.message}`)
+    }
+  }
+
+  fecharModal('manutencao')
+  await carregarTudo()
+}
+
+function csvEscape(valor) {
+  const texto = String(valor ?? '')
+  return `"${texto.replace(/"/g, '""')}"`
+}
+
+function exportarViagensCsv() {
+  const cabecalho = ['data_saida', 'hora_saida_prevista', 'ativo_codigo', 'ativo_nome', 'destino', 'missao', 'status', 'tripulacao', 'passageiros', 'carga_kg']
+  const linhas = ordenarViagens(VIAGENS).map(viagem => [
+    viagem.data_saida || '',
+    viagem.hora_saida_prevista || '',
+    viagem.transp_ativos?.codigo || '',
+    viagem.transp_ativos?.nome || '',
+    viagem.destino || '',
+    viagem.missao || '',
+    STATUS_VIAGEM[viagem.status] || viagem.status,
+    obterTripulacao(viagem),
+    viagem.passageiros || 0,
+    viagem.carga_kg || 0,
+  ])
+
+  const csv = [cabecalho, ...linhas].map(colunas => colunas.map(csvEscape).join(';')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `transportes-viagens-${new Date().toISOString().slice(0, 10)}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+async function sair() {
+  try {
+    if (auth?.sair) await auth.sair()
+  } finally {
+    window.location.reload()
+  }
+}
+
+function fecharAoClicarFora() {
+  document.querySelectorAll('.overlay').forEach(overlay => {
+    overlay.addEventListener('click', evento => {
+      if (evento.target === overlay) overlay.classList.remove('open')
+    })
+  })
+}
+
+function exporNoWindow() {
+  Object.assign(window, {
+    abrirModalAtivo,
+    abrirModalViagem,
+    abrirModalManutencao,
+    exportarViagensCsv,
+    fecharModal,
+    renderAtivos,
+    renderViagens,
+    sair,
+    salvarAtivo,
+    salvarViagem,
+    salvarManutencao,
+    trocarView,
+  })
+}
+
+function mostrarErroBoot(error) {
+  document.getElementById('login-screen').innerHTML = `
+    <div class="callout co-red" style="max-width:560px">
+      <strong>Falha ao iniciar o módulo Transportes.</strong><br>
+      ${esc(error.message || String(error))}
+    </div>
+  `
+}
+
+async function boot() {
+  exporNoWindow()
+  fecharAoClicarFora()
+
+  try {
+    supa = await criarClienteSupabase()
+  } catch (error) {
+    mostrarErroBoot(error)
+    return
+  }
+
+  auth = new Auth(supa, { appNome: 'Transportes', appIcone: '🚚' })
+  auth.onLogin(usuario => {
+    USUARIO = usuario
+    mostrarApp()
+  })
+  auth.mount('#login-screen')
+
+  const { data: { session } } = await supa.auth.getSession()
+  if (!session) mostrarLogin()
+}
+
+boot()

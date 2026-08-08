@@ -1,3 +1,5 @@
+_
+
 # Setup — passo a passo
 
 ## 1 · Push do código
@@ -14,23 +16,30 @@ git push -u origin main
 
 ## 2 · Supabase — ✅ JÁ FEITO
 
-| | |
-|---|---|
-| Projeto | **pmoc** |
-| Ref | `thoaqipyhfmromsgzmjs` |
-| Região | sa-east-1 |
-| Org | Luctronics (integração Vercel) |
+|           |                                                             |
+| --------- | ----------------------------------------------------------- |
+| Projeto   | **pmoc**                                              |
+| Ref       | `thoaqipyhfmromsgzmjs`                                    |
+| Região   | sa-east-1                                                   |
+| Org       | Luctronics (integração Vercel)                            |
 | Dashboard | https://supabase.com/dashboard/project/thoaqipyhfmromsgzmjs |
 
 **20 tabelas criadas**, dados de máquinas populados, credenciais já
 coladas em `maquinas/app.js` e `refrigeracao/index.html`.
 
-| SQL | Status |
-|-----|--------|
-| `01_maquinas_schema.sql` | ✅ 7 tabelas + RLS + trigger |
-| `02_maquinas_seed.sql` | ✅ 7 máquinas · 59 planos · 34 peças · 49 vínculos |
-| `03_usuarios_cargos.sql` | ✅ 3 cargos |
-| `04_refrigeracao_schema.sql` | ✅ 11 tabelas + 9 tarefas NBR |
+| SQL                            | Status                                                   |
+| ------------------------------ | -------------------------------------------------------- |
+| `01_maquinas_schema.sql`     | ✅ 7 tabelas + RLS + trigger                             |
+| `02_maquinas_seed.sql`       | ✅ 7 máquinas · 59 planos · 34 peças · 49 vínculos |
+| `03_usuarios_cargos.sql`     | ✅ 3 cargos                                              |
+| `04_refrigeracao_schema.sql` | ✅ 11 tabelas + 9 tarefas NBR                            |
+| `09_importa_frota_28.sql`    | ✅ frota ampliada para 28 máquinas                       |
+| `12_maquinas_areas_operacoes.sql` | ✅ áreas, operações, RLS e RPC transacional |
+| `13_corrige_permissao_rpc_operacoes.sql` | ✅ execução anônima da RPC bloqueada |
+
+As abas **Operações** e **Agenda** estão habilitadas. A migração não criou áreas
+ou operações fictícias; esses registros começam vazios e devem ser cadastrados
+pela interface.
 
 ⚠️ **Senha do banco Postgres:** guardada fora do repo. Se precisar
 (conexão direta / pg_dump), redefina em Settings → Database.
@@ -59,12 +68,12 @@ Perdidos: 171 equipamentos · 19 itens ARP · 2 OS de contratação · 12 usuár
 **Inventário reimportado** de `docs/Mapeamento_da_Refrigeração_ATU_em_29_DE_ABRIL_2026.ods`
 via `05_refrigeracao_import_171.sql` — números batem com o sistema original:
 
-| | |
-|---|---|
-| Total | **171** ✅ |
-| Operantes | **136** ✅ |
-| Inoperantes | **35** ✅ |
-| Permanentes 24×7 | 18 |
+|                   |                  |
+| ----------------- | ---------------- |
+| Total             | **171** ✅ |
+| Operantes         | **136** ✅ |
+| Inoperantes       | **35** ✅  |
+| Permanentes 24×7 | 18               |
 
 Por tipo: SPLIT 105 · SELF CONTAINED 32 · PISO/TETO 22 · JANELA 11 · CHILLER 1
 Por área: AZUL 84 · VERMELHA 87
@@ -76,11 +85,11 @@ Importados via `06_arp_04_2024_import.sql` das planilhas MCP + NEs (em `docs/`):
 
 **ARP nº 04/2024** · PE 90026/2024 — CMRJ (UASG 160292) · Processo 63099.002208/2025-06
 
-| NE | Fornecedor | Itens | Qtd | Valor NE |
-|----|-----------|-------|-----|----------|
-| 2026NE000334 | RLP COMÉRCIO E SERVIÇOS | 12 | 232 | R$ 39.926,11 |
-| 2026NE000335 | W I N S MARQUES DISTRIBUIDORA | 7 | 50 | R$ 26.521,75 |
-| | **TOTAL** | **19** | **282** | **R$ 66.447,86** |
+| NE           | Fornecedor                    | Itens        | Qtd           | Valor NE               |
+| ------------ | ----------------------------- | ------------ | ------------- | ---------------------- |
+| 2026NE000334 | RLP COMÉRCIO E SERVIÇOS     | 12           | 232           | R$ 39.926,11           |
+| 2026NE000335 | W I N S MARQUES DISTRIBUIDORA | 7            | 50            | R$ 26.521,75           |
+|              | **TOTAL**               | **19** | **282** | **R$ 66.447,86** |
 
 Nada executado até 04/08/2026 — saldo = 100% do empenhado.
 
