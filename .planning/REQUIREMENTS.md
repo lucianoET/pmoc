@@ -63,4 +63,31 @@
 
 ## Traceability
 
-(Preenchido pelo roadmap)
+Cobertura: 24/24 requisitos v1 mapeados, cada um em exatamente uma fase.
+
+| Requisito | Fase | Status |
+|-----------|------|--------|
+| TRANSP-01 | Phase 1 | Pending |
+| TRANSP-02 | Phase 1 | Pending |
+| TRANSP-03 | Phase 1 | Pending |
+| TRANSP-04 | Phase 1 | Pending |
+| TRANSP-05 | Phase 2 | Pending |
+| TRANSP-06 | Phase 2 | Pending |
+| TRANSP-07 | Phase 1 | Pending |
+| TRANSP-08 | Phase 2 | Pending |
+| TRANSP-09 | Phase 1 | Pending |
+| ELET-01 | Phase 3 | Pending |
+| ELET-02 | Phase 3 | Pending |
+| ELET-03 | Phase 3 | Pending |
+| ELET-04 | Phase 3 | Pending |
+| ELET-05 | Phase 3 | Pending |
+| ELET-06 | Phase 3 | Pending |
+| FONO-01 | Phase 4 | Pending |
+| FONO-02 | Phase 4 | Pending |
+| FONO-03 | Phase 4 | Pending |
+| FONO-04 | Phase 4 | Pending |
+| FONO-05 | Phase 4 | Pending |
+| INTEG-01 | Phase 4 | Pending |
+| INTEG-02 | Phase 1 | Pending |
+| INTEG-03 | Phase 1 | Pending |
+| INTEG-04 | Phase 1 | Pending |
