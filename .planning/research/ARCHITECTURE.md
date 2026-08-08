@@ -51,14 +51,14 @@
 
 ### Responsabilidades dos Componentes
 
-| Componente | Responsabilidade | Implementação típica no projeto |
-|-----------|-------------------|----------------------------------|
-| Portal (`/index.html`) | Índice, navegação, status de cada módulo (produção/planejado) | HTML+CSS estático, cards com link `href="/modulo"` |
-| App de módulo (`/transportes`, `/eletrica`, `/fonoclama`) | UI completa do domínio: CRUD, dashboards, alertas, exportação | 1 arquivo `index.html` (estilo refrigeração) ou `index.html` + `app.js` (estilo máquinas) |
-| Auth (por app, hoje duplicado) | Login por cargo, sessão, perfil | Inline em cada app hoje; `/shared/auth.js` existe mas não é usado — **oportunidade real de reuso para os 3 módulos novos** |
-| Supabase SDK | Cliente REST/Auth/Realtime | `createClient(SUPABASE_URL, ANON_KEY)` — chave anônima embutida no JS, protegida por RLS |
-| PostgreSQL + RLS | Persistência + controle de acesso real | Tabelas prefixadas por módulo + policies `select/insert/update/delete to authenticated using (true)` |
-| Migrações SQL | Versionamento de schema | Arquivos numerados sequenciais em `/supabase/`, sempre aditivos (nunca `DROP`) |
+| Componente                                                       | Responsabilidade                                                    | Implementação típica no projeto                                                                                                    |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Portal (`/index.html`)                                         | Índice, navegação, status de cada módulo (produção/planejado) | HTML+CSS estático, cards com link`href="/modulo"`                                                                                  |
+| App de módulo (`/transportes`, `/eletrica`, `/fonoclama`) | UI completa do domínio: CRUD, dashboards, alertas, exportação    | 1 arquivo`index.html` (estilo refrigeração) ou `index.html` + `app.js` (estilo máquinas)                                     |
+| Auth (por app, hoje duplicado)                                   | Login por cargo, sessão, perfil                                    | Inline em cada app hoje;`/shared/auth.js` existe mas não é usado — **oportunidade real de reuso para os 3 módulos novos** |
+| Supabase SDK                                                     | Cliente REST/Auth/Realtime                                          | `createClient(SUPABASE_URL, ANON_KEY)` — chave anônima embutida no JS, protegida por RLS                                          |
+| PostgreSQL + RLS                                                 | Persistência + controle de acesso real                             | Tabelas prefixadas por módulo + policies`select/insert/update/delete to authenticated using (true)`                                |
+| Migrações SQL                                                  | Versionamento de schema                                             | Arquivos numerados sequenciais em`/supabase/`, sempre aditivos (nunca `DROP`)                                                     |
 
 ## Estrutura de Projeto Recomendada (extensão da estrutura atual)
 
@@ -200,11 +200,11 @@ Esse é exatamente o padrão de `maq_ativos`/`carregarTudo()` documentado em `.p
 
 Não é uma preocupação real neste domínio (uso interno, dezenas a poucas centenas de ativos por módulo — ex.: 171 na refrigeração é o maior volume existente). A tabela abaixo é ilustrativa, não prescritiva:
 
-| Escala | Ajuste de arquitetura |
-|-------|------------------------|
-| Volume atual (dezenas–centenas de ativos por módulo, handful de usuários simultâneos) | Padrão atual (refetch completo, sem paginação) é suficiente — não otimizar prematuramente |
+| Escala                                                                                                         | Ajuste de arquitetura                                                                                                                                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Volume atual (dezenas–centenas de ativos por módulo, handful de usuários simultâneos)                      | Padrão atual (refetch completo, sem paginação) é suficiente — não otimizar prematuramente                                                                                                                                          |
 | Se um módulo crescer muito (ex.: Transportes com centenas de viaturas + histórico de abastecimento por anos) | `carregarTudo()` com refetch total de tabelas de log (`transp_uso_registros`, `transp_abastecimentos`) pode ficar lento — considerar paginação ou filtro por período apenas quando/se isso for observado, não antecipadamente |
-| Múltiplos módulos abertos simultaneamente no mesmo navegador (abas) | Cada app tem sua própria sessão Supabase JS em memória de aba — sem conflito, já é o comportamento atual com máquinas+refrigeração |
+| Múltiplos módulos abertos simultaneamente no mesmo navegador (abas)                                          | Cada app tem sua própria sessão Supabase JS em memória de aba — sem conflito, já é o comportamento atual com máquinas+refrigeração                                                                                              |
 
 ### Prioridades de Escala
 
@@ -235,10 +235,10 @@ Não é uma preocupação real neste domínio (uso interno, dezenas a poucas cen
 
 ### Serviços Externos
 
-| Serviço | Padrão de integração | Observações |
-|---------|------------------------|-------|
-| Supabase (mesmo projeto `pmoc`, `thoaqipyhfmromsgzmjs`, sa-east-1) | `createClient(SUPABASE_URL, ANON_KEY)` — mesma URL/key em todos os apps, hardcoded no JS (padrão aceito do projeto, RLS é a segurança real) | Nenhum projeto/schema Supabase novo — os 3 módulos entram no mesmo backend |
-| Vercel (deploy estático) | `vercel.json` → adicionar 3 entradas em `rewrites` | Sem build step; cada módulo é só HTML/JS servido diretamente |
+| Serviço                                                              | Padrão de integração                                                                                                                           | Observações                                                                |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Supabase (mesmo projeto`pmoc`, `thoaqipyhfmromsgzmjs`, sa-east-1) | `createClient(SUPABASE_URL, ANON_KEY)` — mesma URL/key em todos os apps, hardcoded no JS (padrão aceito do projeto, RLS é a segurança real) | Nenhum projeto/schema Supabase novo — os 3 módulos entram no mesmo backend |
+| Vercel (deploy estático)                                             | `vercel.json` → adicionar 3 entradas em `rewrites`                                                                                           | Sem build step; cada módulo é só HTML/JS servido diretamente              |
 
 ```json
 {
@@ -256,18 +256,19 @@ Não é uma preocupação real neste domínio (uso interno, dezenas a poucas cen
 
 ### Fronteiras Internas
 
-| Fronteira | Comunicação | Observações |
-|----------|---------------|-------|
-| Portal ↔ cada módulo | Link HTML puro (`<a href="/transportes">`), sem estado compartilhado | Portal só precisa saber se o módulo está "em produção" ou "planejado" para trocar o card de seção e a tag de status |
-| Módulo novo ↔ módulo existente (máquinas/refrigeração) | Nenhuma — sem chamadas cruzadas, sem tabelas compartilhadas além de `usuarios` | Isolamento total por design; um módulo nunca lê tabela de outro (só `usuarios` é lida por todos para auth/perfil) |
-| Módulo novo ↔ `usuarios` (tabela compartilhada) | Leitura via `.from('usuarios').select('*').eq('auth_id', uid).single()` — mesmo padrão de máquinas | Se um módulo novo precisar de um cargo que não existe ainda no `check` constraint de `role` (ex.: "condutor" para Transportes), é migração aditiva em `usuarios`, não tabela nova |
-| Migrações SQL novas ↔ migrações existentes (01-09) | Estritamente aditivo — `create table if not exists`, nunca `alter`/`drop` em tabelas de produção | Restrição dura do projeto: módulos em produção não podem quebrar |
+| Fronteira                                                    | Comunicação                                                                                            | Observações                                                                                                                                                                                |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Portal ↔ cada módulo                                       | Link HTML puro (`<a href="/transportes">`), sem estado compartilhado                                   | Portal só precisa saber se o módulo está "em produção" ou "planejado" para trocar o card de seção e a tag de status                                                                   |
+| Módulo novo ↔ módulo existente (máquinas/refrigeração) | Nenhuma — sem chamadas cruzadas, sem tabelas compartilhadas além de`usuarios`                        | Isolamento total por design; um módulo nunca lê tabela de outro (só`usuarios` é lida por todos para auth/perfil)                                                                       |
+| Módulo novo ↔`usuarios` (tabela compartilhada)           | Leitura via`.from('usuarios').select('*').eq('auth_id', uid).single()` — mesmo padrão de máquinas   | Se um módulo novo precisar de um cargo que não existe ainda no`check` constraint de `role` (ex.: "condutor" para Transportes), é migração aditiva em `usuarios`, não tabela nova |
+| Migrações SQL novas ↔ migrações existentes (01-09)      | Estritamente aditivo —`create table if not exists`, nunca `alter`/`drop` em tabelas de produção | Restrição dura do projeto: módulos em produção não podem quebrar                                                                                                                       |
 
 ## Ordem de Build Sugerida
 
 A ordem de prioridade já está decidida no PROJECT.md (**Transportes → Elétrica → Fonoclama**), por decisão do usuário — não há dependência técnica forçando essa ordem (os 3 módulos são isolados entre si). A análise de arquitetura abaixo é sobre **por que essa ordem funciona bem tecnicamente** e como sequenciar as fases dentro de cada módulo.
 
 **Sequência por módulo (repete-se 3x, uma vez por módulo):**
+
 1. **Análise dos dados legados** (bloqueante — depende do usuário fornecer os arquivos) → informa o schema
 2. **Schema + RLS** (`NN_<modulo>_schema.sql`) — copia o padrão de máquinas (Transportes) ou refrigeração-prefixado (Elétrica/Fonoclama)
 3. **Seed de dados consolidados** (`NN_<modulo>_seed.sql`) — mesmo padrão do import das 171 unidades
@@ -275,10 +276,12 @@ A ordem de prioridade já está decidida no PROJECT.md (**Transportes → Elétr
 5. **Rota + portal** — `vercel.json` + card do portal movido de "Planejado" para "Em produção"
 
 **Por que Transportes primeiro:**
+
 - É o módulo mais complexo dos 3 (viaturas **e** embarcações no mesmo módulo, planos por km/horímetro, documentação com vencimento — um conceito genuinamente novo no sistema, abastecimento por condutor). Construir primeiro o mais complexo estabelece os padrões (schema de documentos com vencimento, por exemplo) que os módulos seguintes não precisam.
 - Reaproveita quase diretamente o schema/UI de máquinas (já validado em produção), reduzindo risco apesar da complexidade de domínio.
 
 **Por que Elétrica antes de Fonoclama:**
+
 - Ambos seguem o mesmo estilo (refrigeração-simplificado: inspeções/tarefas periódicas), então o segundo dos dois é consideravelmente mais rápido — o schema e a UI de Elétrica servem de gabarito quase copy-paste para Fonoclama (troca de vocabulário de domínio: quadros/geradores vs. amplificadores/sirenes).
 - Elétrica é infraestrutura crítica (energia) — priorizar sobre Fonoclama (sistema de alarme sonoro) faz sentido tanto tecnicamente (estabelece o gabarito) quanto operacionalmente.
 
@@ -294,5 +297,6 @@ A ordem de prioridade já está decidida no PROJECT.md (**Transportes → Elétr
 - `vercel.json`, `index.html` (portal) — configuração de rotas e navegação lidas diretamente
 
 ---
+
 *Pesquisa de arquitetura para: expansão de módulos PMOC (Transportes, Elétrica, Fonoclama)*
 *Pesquisado em: 2026-08-08*
