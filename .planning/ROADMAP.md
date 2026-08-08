@@ -34,8 +34,16 @@ Fases decimais aparecem entre suas inteiras vizinhas, em ordem numérica.
   3. Usuário registra uso (km rodado / horas de motor) e o sistema passa a mostrar quais manutenções estão vencidas e quais estão próximas do vencimento
   4. Técnico abre e conclui OS vinculada a ativo + plano + peças, com baixa automática de estoque e atualização do uso do ativo; gestor vê alerta de estoque mínimo e exporta a lista de compras em CSV
   5. Refrigeração e Máquinas continuam funcionando normalmente após as migrações do módulo novo (aditivas, sem DROP e sem alterar tabelas existentes)
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Planos de manutenção por `tipo_modelo` (km/h) e detecção de vencimento por uso (TRANSP-02, TRANSP-04)
+- [ ] 01-02-PLAN.md — Estoque de peças do módulo com alerta de mínimo e colunas de OS (TRANSP-07)
+- [ ] 01-03-PLAN.md — Peças do plano, lista de compras CSV e OS com baixa automática de estoque (TRANSP-07, TRANSP-03)
+- [ ] 01-04-PLAN.md — Conferência do import, RLS por cargo e não regressão da produção (TRANSP-01, TRANSP-09, INTEG-02, INTEG-03, INTEG-04)
+
 **Bloqueio inicial**: apps legados de transportes fornecidos pelo usuário; primeiro trabalho da fase é mapa de campos, reconciliação entre versões e conferência pós-import (seed idempotente com ON CONFLICT)
+**Nota de estado real**: o módulo `/transportes` já está em produção (walking skeleton comprovado — ver `phases/01-transportes-frota-sob-manuten-o/SKELETON.md`). TRANSP-01, INTEG-02 e o import de TRANSP-09 já foram entregues fora do fluxo GSD; os planos acima cobrem os gaps e a conferência formal pendente.
 **UI hint**: yes
 
 ### Phase 2: Transportes — Abastecimento, documentação e painel da frota
@@ -88,7 +96,7 @@ Fases executam em ordem numérica: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Transportes — Frota sob manutenção | 0/TBD | Not started | - |
+| 1. Transportes — Frota sob manutenção | 0/4 | Planned | - |
 | 2. Transportes — Abastecimento, documentação e painel | 0/TBD | Not started | - |
 | 3. Elétrica — Inspeções da infraestrutura elétrica | 0/TBD | Not started | - |
 | 4. Fonoclama — Testes das zonas e portal integrado | 0/TBD | Not started | - |
