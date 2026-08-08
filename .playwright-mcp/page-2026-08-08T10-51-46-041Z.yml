@@ -1,0 +1,32 @@
+- generic [active] [ref=f13e1]:
+  - text:           
+  - generic [ref=f13e3]:
+    - generic [ref=f13e4]: PMOC.Refrigeração
+    - generic [ref=f13e5]: CMASM · DME · UASG 744030
+    - generic [ref=f13e6]:
+      - generic [ref=f13e7]:
+        - generic [ref=f13e8]: Entrar como
+        - generic [ref=f13e9]:
+          - generic [ref=f13e10] [cursor=pointer]:
+            - generic [ref=f13e11]: 
+            - generic [ref=f13e12]: Gestor
+          - generic [ref=f13e13] [cursor=pointer]:
+            - generic [ref=f13e14]: 
+            - generic [ref=f13e15]: Fiscal
+          - generic [ref=f13e16] [cursor=pointer]:
+            - generic [ref=f13e17]: 
+            - generic [ref=f13e18]: Técnico
+          - generic [ref=f13e19] [cursor=pointer]:
+            - generic [ref=f13e20]: 
+            - generic [ref=f13e21]: Empresa RLP
+          - generic [ref=f13e22] [cursor=pointer]:
+            - generic [ref=f13e23]: 
+            - generic [ref=f13e24]: Empresa WINS
+      - generic [ref=f13e25]:
+        - button " Entrar com e-mail (admin)" [ref=f13e26] [cursor=pointer]:
+          - generic [ref=f13e27]: 
+          - text: Entrar com e-mail (admin)
+        - button " Visualizar sem login" [ref=f13e28] [cursor=pointer]:
+          - generic [ref=f13e29]: 
+          - text: Visualizar sem login
+    - button "" [ref=f13e30] [cursor=pointer]

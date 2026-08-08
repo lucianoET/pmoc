@@ -1,0 +1,4 @@
+[   21426ms] Uncaught (in promise) Error: cannot add `postgres_changes` callbacks for realtime:ct-contratacao after `subscribe()`.
+    at on (https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js:7:23699)
+    at ctSetupRealtime (https://pmoc-orcin.vercel.app/refrigeracao:1528:5)
+    at <anonymous> (https://pmoc-orcin.vercel.app/refrigeracao:2111:56)

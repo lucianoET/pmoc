@@ -1,0 +1,101 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - heading "Evite Multas e Interdição" [level=1] [ref=e8]
+        - paragraph [ref=e9]: Sua empresa precisa do PMOC assinado por engenheiro. Estamos aqui para regularizar você rapidamente.
+        - link [ref=e11] [cursor=pointer]:
+          - /url: /formulario
+          - button "Solicitar Meu Plano" [ref=e12]
+      - generic [ref=e14]:
+        - img "PMOC Serviço" [ref=e16]
+        - img "PMOC Serviço" [ref=e18]
+    - generic [ref=e22]:
+      - generic [ref=e23] [cursor=pointer]: Seu navegador não suporta vídeos HTML5.
+      - generic [ref=e24] [cursor=pointer]: Assistir Agora
+      - generic [ref=e29]:
+        - button "Reproduzir" [ref=e30] [cursor=pointer]
+        - button "Ativar som" [ref=e33] [cursor=pointer]
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - heading "Por que sua empresa precisa do PMOC?" [level=2] [ref=e39]
+        - paragraph [ref=e40]: O Plano de Manutenção, Operação e Controle é obrigatório por lei e essencial para garantir a saúde e segurança nos ambientes climatizados.
+      - generic [ref=e41]:
+        - generic [ref=e42]:
+          - paragraph [ref=e47]: Atende à legislação federal
+          - paragraph [ref=e52]: Evita multas de até R$ 200.000
+          - paragraph [ref=e57]: Evita processos trabalhistas
+        - img "Ilustração sobre PMOC" [ref=e59]
+        - generic [ref=e60]:
+          - paragraph [ref=e65]: Protege a saúde dos colaboradores
+          - paragraph [ref=e70]: Melhora a qualidade do ar interno
+          - paragraph [ref=e75]: Aumenta a vida útil dos equipamentos
+    - generic [ref=e77]:
+      - heading "O que você recebe conosco" [level=2] [ref=e79]
+      - generic [ref=e80]:
+        - generic [ref=e81]:
+          - heading "PMOC completo e personalizado" [level=3] [ref=e86]
+          - paragraph [ref=e87]: Documento elaborado especificamente para sua empresa e instalações.
+        - generic [ref=e88]:
+          - heading "Assinado por engenheiro registrado no CREA" [level=3] [ref=e93]
+          - paragraph [ref=e94]: Garantia de conformidade técnica e legal para seu documento.
+        - generic [ref=e95]:
+          - heading "Documento enviado em PDF" [level=3] [ref=e100]
+          - paragraph [ref=e101]: Receba seu documento em formato digital para fácil armazenamento.
+        - generic [ref=e102]:
+          - heading "Entrega rápida" [level=3] [ref=e107]
+          - paragraph [ref=e108]: Regularize sua empresa com agilidade e sem complicações.
+    - generic [ref=e110]:
+      - heading "Veja o que nossos clientes dizem" [level=3] [ref=e111]
+      - paragraph [ref=e112]: Empresas de todos os portes confiam em nossa expertise para suas solicitações PMOC
+      - generic [ref=e113]:
+        - generic [ref=e115]:
+          - iframe [ref=e117]:
+            
+          - generic [ref=e121]:
+            - heading "Depoimento - Empresa Aérea Alpha" [level=4] [ref=e122]
+            - paragraph [ref=e123]: Como o PMOC transformou nossa operação
+        - generic [ref=e125]:
+          - iframe [ref=e127]:
+            - generic "YouTube Video Player" [ref=f5e3]
+          - generic [ref=e131]:
+            - heading "Depoimento - Companhia Beta Aviation" [level=4] [ref=e132]
+            - paragraph [ref=e133]: Eficiência e segurança em primeiro lugar
+        - generic [ref=e135]:
+          - iframe [ref=e137]
+          - generic [ref=e141]:
+            - heading "Depoimento - Grupo Gamma Airlines" [level=4] [ref=e142]
+            - paragraph [ref=e143]: Resultados excepcionais com PMOC
+    - generic [ref=e147]:
+      - heading "Pronto para simplificar sua solicitação PMOC?" [level=3] [ref=e148]
+      - paragraph [ref=e149]: Junte-se a centenas de empresas que já otimizaram seus processos. Solicite uma demonstração gratuita hoje mesmo.
+      - generic [ref=e150]:
+        - link [ref=e152] [cursor=pointer]:
+          - /url: /formulario
+          - button "Solicitar Meu Pmoc" [ref=e153]
+        - button "Falar com Especialista" [ref=e155] [cursor=pointer]
+    - generic [ref=e157]:
+      - heading "FAQ – Dúvidas Frequentes" [level=2] [ref=e159]
+      - generic [ref=e160]:
+        - generic [ref=e161]:
+          - heading [level=3] [ref=e164]:
+            - button "O que é o PMOC?" [ref=e165] [cursor=pointer]
+          - heading [level=3] [ref=e170]:
+            - button "Por que é obrigatório?" [ref=e171] [cursor=pointer]
+          - heading [level=3] [ref=e176]:
+            - button "Quem deve ter o PMOC?" [ref=e177] [cursor=pointer]
+          - heading [level=3] [ref=e182]:
+            - button "Como funciona o processo com vocês?" [ref=e183] [cursor=pointer]
+          - heading [level=3] [ref=e188]:
+            - button "Como faço para solicitar?" [ref=e189] [cursor=pointer]
+        - link [ref=e193] [cursor=pointer]:
+          - /url: /formulario
+          - button "Solicitar Meu Plano" [ref=e194]
+    - contentinfo [ref=e196]:
+      - generic [ref=e197]:
+        - paragraph [ref=e199]: © 2026 Todos os direitos reservados.
+        - generic [ref=e200]:
+          - paragraph [ref=e201]: "desenvolvido por:"
+          - link "Vexio" [ref=e202] [cursor=pointer]:
+            - /url: https://www.vexio.com.br/
+  - alert [ref=e203]
