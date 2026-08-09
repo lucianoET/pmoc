@@ -20,6 +20,8 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 | `/refrigeracao` | **PMOC Refrigeração** v2.8 | 171 unidades · ARP 04/2024 · fiscalização · QR · impressão | ✅ |
 | `/maquinas` | **PMOC Máquinas** v1.1 | 28 máquinas · 59 planos · 34 peças · operações · consumo · ciclo de vida | ✅ |
 | `/transportes` | **PMOC Transportes** v1.0 | 9 ativos · 23 viagens importadas · manutenção de viaturas e embarcações | ✅ |
+| `/eletrica` | **PMOC Elétrica** v1.0 | 13 ativos · 9 planos · 11 peças · geradores, QGBT, nobreaks, iluminação | ⏳ migração pendente |
+| `/fonoclama` | **PMOC Fonoclama** v1.0 | 10 ativos · 7 planos · 10 peças · PA 70V | ⏳ migração pendente |
 
 ### Refrigeração
 Inventário de climatização com fluxo completo de contratação pública:
@@ -36,6 +38,18 @@ exportável em CSV para processo licitatório.
 Frota mista de viaturas e embarcações com importação do mapa operacional VTR/EMB,
 programação de viagens, histórico de missões e controle de manutenção por km ou
 horas de motor.
+
+### Elétrica e Fonoclama
+Portados dos apps legados em `localStorage` (`ref/eletrica.html` e o
+`fonoclama.html` do DEV_ERP). Mesmo modelo: ativo com horímetro, plano de
+manutenção por tipo de ativo, OS com registro de não conformidade e baixa
+automática das peças previstas, alerta de estoque mínimo e lista de compras
+em CSV.
+
+Os dois compartilham o motor `shared/modulo-manutencao.js` — cada módulo é
+só um arquivo de configuração (tipos de ativo, cor, prefixo das tabelas).
+Refrigeração, Máquinas e Transportes **não** usam esse motor e seguem como
+estavam.
 
 ---
 
@@ -70,9 +84,18 @@ pmoc/
 ├── transportes/
 │   ├── index.html
 │   └── app.js                 Frota mista, viagens e manutenção
+├── eletrica/
+│   ├── index.html
+│   └── app.js                 Configuração do módulo (tabelas elet_)
+├── fonoclama/
+│   ├── index.html
+│   └── app.js                 Configuração do módulo (tabelas fono_)
 ├── shared/
 │   ├── auth.js                Login por cargo (reutilizável)
-│   └── supabase-config.js     Reuso da configuração Supabase
+│   ├── supabase-config.js     Reuso da configuração Supabase
+│   ├── pmoc.css               Estilo comum dos módulos novos
+│   ├── vencimento.js          Regra de vencimento por horímetro (testada)
+│   └── modulo-manutencao.js   Motor de elétrica/fonoclama
 ├── supabase/
 │   ├── 01_maquinas_schema.sql
 │   ├── 02_maquinas_seed.sql
@@ -84,7 +107,10 @@ pmoc/
 │   ├── 10_transportes_schema.sql
 │   ├── 11_transportes_seed.sql
 │   ├── 12_maquinas_areas_operacoes.sql
-│   └── 13_corrige_permissao_rpc_operacoes.sql
+│   ├── 13_corrige_permissao_rpc_operacoes.sql
+│   ├── 14_eletrica_fonoclama_schema.sql
+│   ├── 15_eletrica_seed.sql
+│   └── 16_fonoclama_seed.sql
 └── docs/
     ├── *.ods                  Planilhas-fonte
     ├── NE_*.pdf               Notas de empenho

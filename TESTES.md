@@ -110,3 +110,38 @@ Resultado esperado: **9 testes aprovados**.
 - [ ] Registrar uma manutenção preventiva com `prox_manutencao` e confirmar exibição do alerta no painel.
 - [ ] Editar uma viagem importada e confirmar persistência no histórico.
 - [ ] Exportar o CSV de viagens e confirmar colunas `ativo_codigo`, `destino`, `missao` e `status`.
+
+## Elétrica e Fonoclama — implementação 09/08/2026
+
+### Preparação
+
+- [ ] Executar `supabase/14_eletrica_fonoclama_schema.sql` no SQL Editor.
+- [ ] Executar `supabase/15_eletrica_seed.sql` e `supabase/16_fonoclama_seed.sql`.
+- [ ] Conferir contagens: `elet_ativos` 13, `elet_planos` 9, `elet_materiais` 11, `elet_plano_materiais` 14.
+- [ ] Conferir contagens: `fono_ativos` 10, `fono_planos` 7, `fono_materiais` 10, `fono_plano_materiais` 13.
+- [ ] Reexecutar os dois seeds e confirmar que as contagens não mudam (idempotência).
+- [ ] Confirmar leitura anônima e bloqueio de escrita anônima nas tabelas `elet_*` e `fono_*`.
+
+### Não regressão da produção
+
+- [ ] Abrir `/refrigeracao` e `/maquinas` após as migrações e confirmar carga normal dos dados.
+- [ ] Abrir `/transportes` e confirmar a frota e as viagens intactas.
+
+### Fluxo manual (repetir nos dois módulos)
+
+- [ ] Abrir `/eletrica` e `/fonoclama` por servidor local e confirmar o login por cargo.
+- [ ] Entrar como Observador e confirmar que todos os botões de escrita estão desabilitados.
+- [ ] Entrar como Gestor ou Técnico e cadastrar um ativo novo.
+- [ ] Registrar uso e confirmar o incremento do horímetro no ativo e a linha em `*_uso_registros`.
+- [ ] Confirmar que a aba Vencimentos passa a apontar a próxima manutenção do plano do tipo.
+- [ ] Abrir OS a partir de um vencimento, concluí-la e confirmar a baixa das peças previstas
+      em `*_materiais.estoque_atual` e o movimento em `*_estoque_movimentos`.
+- [ ] Confirmar `custo_pecas` preenchido na OS concluída.
+- [ ] Registrar uma OS com não conformidade e ação corretiva e conferir o histórico.
+- [ ] Exportar a lista de compras em CSV e conferir as colunas `comprar` e `total`.
+
+### Testes automatizados
+
+```bash
+node --test tests/vencimento-modulos.test.js
+```

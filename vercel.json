@@ -4,6 +4,8 @@
   "rewrites": [
     { "source": "/refrigeracao", "destination": "/refrigeracao/index.html" },
     { "source": "/maquinas",     "destination": "/maquinas/index.html" },
-    { "source": "/transportes",  "destination": "/transportes/index.html" }
+    { "source": "/transportes",  "destination": "/transportes/index.html" },
+    { "source": "/eletrica",     "destination": "/eletrica/index.html" },
+    { "source": "/fonoclama",    "destination": "/fonoclama/index.html" }
   ]
 }

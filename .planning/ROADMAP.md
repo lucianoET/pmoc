@@ -94,6 +94,11 @@ Plans:
 **Plans**: TBD
 **Bloqueio inicial**: apps legados de elétrica fornecidos pelo usuário; consolidar versões e validar a periodicidade real de inspeção antes do schema
 **UI hint**: yes
+**Nota de estado real (09/08/2026)**: módulo `/eletrica` portado do app legado
+`ref/eletrica.html` fora do fluxo GSD — frontend, rota, migração `14` e seed `15`
+prontos no repositório. Falta o usuário rodar as migrações no Supabase e a
+conferência formal (ELET-05 QR em campo ainda não implementado; a inspeção usa
+periodicidade por horas de operação, não por calendário — validar com o usuário).
 
 ### Phase 4: Fonoclama — Testes das zonas de áudio e portal integrado
 
@@ -112,6 +117,10 @@ Plans:
 **Plans**: TBD
 **Bloqueio inicial**: app legado do fonoclama fornecido pelo usuário; consolidar zonas/linhas e regime de teste antes do schema
 **UI hint**: yes
+**Nota de estado real (09/08/2026)**: módulo `/fonoclama` portado do app legado
+`DEV_ERP/cmms-fonoclama/fonoclama.html` fora do fluxo GSD — frontend, rota,
+migração `14` e seed `16` prontos no repositório. O portal (INTEG-01) já lista os
+cinco módulos. Falta rodar as migrações no Supabase e a conferência formal.
 
 ## Progress
 

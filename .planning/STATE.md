@@ -7,8 +7,8 @@ current_phase_name: Transportes — Frota sob manutenção
 status: executing
 stopped_at: Phase 1 context gathered
 last_updated: "2026-08-08T12:07:26.441Z"
-last_activity: 2026-08-08
-last_activity_desc: Roadmap criado (4 fases, 24/24 requisitos mapeados)
+last_activity: 2026-08-09
+last_activity_desc: Módulos /eletrica e /fonoclama portados dos apps legados (migrações 14–16 pendentes de execução no Supabase)
 progress:
   total_phases: 1
   completed_phases: 0
@@ -61,7 +61,11 @@ Progress: [░░░░░░░░░░] 0%
 
 Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 
-- Novos módulos copiam o padrão atual — sem núcleo compartilhado / sem refatorar refrigeração e máquinas
+- Novos módulos copiam o padrão atual — sem refatorar refrigeração e máquinas
+- **Revisto em 09/08/2026:** elétrica e fonoclama têm modelo de manutenção idêntico,
+  então compartilham o motor `shared/modulo-manutencao.js` em vez de duplicar ~700
+  linhas duas vezes. Cada módulo é só um arquivo de configuração. Os módulos em
+  produção continuam intocados — o núcleo comum vale só para os módulos novos.
 - Transportes = estilo máquinas (`index.html` + `app.js`); Elétrica/Fonoclama = estilo refrigeração (arquivo único)
 - Ordem: Transportes → Elétrica → Fonoclama (prioridade do usuário)
 - Dados legados: analisar → consolidar → importar via SQL seed (bloqueante antes do schema)
@@ -69,7 +73,9 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 
 ### Pending Todos
 
-Nenhum.
+- Rodar `supabase/14_eletrica_fonoclama_schema.sql`, `15_eletrica_seed.sql` e
+  `16_fonoclama_seed.sql` no SQL Editor (não há permissão de MCP para aplicar).
+- Depois disso, seguir a seção "Elétrica e Fonoclama" do `TESTES.md`.
 
 ### Blockers/Concerns
 

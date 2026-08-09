@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#1a1a18"/>
+<title>PMOC Fonoclama</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
+<style>:root{--accent:#4a7fa0}</style>
+</head>
+<body>
+<div id="login-screen"></div>
+<div id="app"></div>
+<script type="module">
+// resolve app.js tanto em /fonoclama (rewrite do Vercel) quanto em /fonoclama/index.html
+const base = location.pathname.replace(/\/[^/]*\.[^/]*$/, '').replace(/\/$/, '')
+import(`${base}/app.js`)
+</script>
+</body>
+</html>
