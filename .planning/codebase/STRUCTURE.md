@@ -8,7 +8,7 @@
 pmoc-overlay/
 ├── index.html                       # Portal — app index and navigation
 ├── vercel.json                      # Vercel rewrites + build config
-├── SETUP.md                         # Deployment and initial setup guide
+├── docs/historico/                 # Registros de setup e incidentes resolvidos
 ├── README.md                        # Project overview
 │
 ├── maquinas/                        # Cutting equipment maintenance app (v1.0)

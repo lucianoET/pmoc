@@ -23,7 +23,7 @@ There is no build, no npm, no lint, no automated tests. Zero-build static site.
 - **Run locally:** open any `index.html` directly in a browser, or `python -m http.server` from the repo root.
 - **Deploy:** push to GitHub (`luctronics-ET/pmoc` — this is what `git remote origin` points to and what triggers the deploy; the old `pmoc-overlay` name and the `luctronicserp/pmoc` reference are stale). Vercel serves the repo statically at `https://pmoc-orcin.vercel.app` (`vercel.json` rewrites `/refrigeracao`, `/maquinas`, `/transportes`, `/eletrica` and `/fonoclama` to their `index.html`; framework "Other", no build command).
 - **Database changes:** write a new numbered SQL file in `supabase/` (e.g. `10_*.sql`) and run it in the Supabase SQL editor. Migrations are **additive only — never `DROP`**; archive rows with `ativo = false` instead of deleting.
-- **Testing:** manual only, checklist in `TESTES.md`. Verify against the live Supabase data (currently 171 `equipamentos`, 7 `maq_ativos`, etc.).
+- **Testing:** manual only, checklist in `TESTES.md`. Verify against the live Supabase data (currently 171 `equipamentos`, 28 `maq_ativos`, 43 `transp_ativos`, etc.).
 
 ## Architecture
 
