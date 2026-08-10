@@ -37,6 +37,39 @@ test('local com pai inexistente vira raiz em vez de sumir', async () => {
   assert.deepEqual(arvore.map(local => local.nome).sort(), ['CMASM', 'Órfão'])
 })
 
+const ARVORE = [
+  { id: 1, parent_id: null, nome: 'CMASM' },
+  { id: 2, parent_id: 1, nome: 'Paiol 01' },
+  { id: 3, parent_id: 2, nome: 'Sala de carga' },
+  { id: 4, parent_id: 3, nome: 'Bancada' },
+  { id: 5, parent_id: 1, nome: 'Zoficina' },
+]
+
+test('colapsada, a árvore mostra só as raízes', async () => {
+  const { linhasVisiveis } = await dominio
+  const linhas = await linhasVisiveis(ARVORE, new Set())
+  assert.deepEqual(linhas.map(l => l.nome), ['CMASM'])
+  assert.equal(linhas[0].filhos, 2)
+  assert.equal(linhas[0].descendentes, 4)
+})
+
+test('expandir um nó revela só os filhos diretos', async () => {
+  const { linhasVisiveis } = await dominio
+  const linhas = await linhasVisiveis(ARVORE, new Set([1]))
+  assert.deepEqual(linhas.map(l => l.nome), ['CMASM', 'Paiol 01', 'Zoficina'])
+  assert.equal(linhas.find(l => l.nome === 'Paiol 01').descendentes, 2)
+  assert.equal(linhas.find(l => l.nome === 'Zoficina').filhos, 0)
+})
+
+test('neto só aparece com pai e avô expandidos', async () => {
+  const { linhasVisiveis } = await dominio
+  // avô fechado: expandir o pai não basta
+  assert.equal((await linhasVisiveis(ARVORE, new Set([2]))).length, 1)
+  const abertos = await linhasVisiveis(ARVORE, new Set([1, 2]))
+  assert.deepEqual(abertos.map(l => l.nome), ['CMASM', 'Paiol 01', 'Sala de carga', 'Zoficina'])
+  assert.equal(abertos.find(l => l.nome === 'Sala de carga').nivel, 2)
+})
+
 test('ciclo entre pais não derruba a montagem', async () => {
   const { montarArvore } = await dominio
   const arvore = await montarArvore([

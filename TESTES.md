@@ -186,3 +186,32 @@ node --test tests/vencimento-modulos.test.js
 ```bash
 node --test tests/predial-dominio.test.js
 ```
+
+## Locais compartilhados — implementação 10/08/2026
+
+### Preparação (nesta ordem)
+
+- [ ] Executar `supabase/19_cmasm_locais_unificado.sql` (renomeia, separa organograma, cria local_id).
+- [ ] Conferir: `select count(*) from cmasm_estrutura;` deve dar **78**.
+- [ ] Conferir: `select count(*) from cmasm_locais where ativo;` deve dar **72**.
+- [ ] Executar `supabase/20_cmasm_locais_predios.sql` (deriva prédios e salas da Refrigeração).
+- [ ] Conferir: 29 `edificacao`, 132 `sala`, e `select count(*) from equipamentos where local_id is null;` = **0**.
+- [ ] Executar `supabase/21_vincula_locais_modulos.sql`.
+- [ ] Rodar a query de conferência no rodapé da 21 e anotar os locais de Elétrica/Fonoclama
+      que ficaram sem vínculo — são textos dos apps de demonstração, resolver pela tela.
+
+### Não regressão
+
+- [ ] Abrir `/refrigeracao` e confirmar as 171 unidades carregando normalmente após o ALTER TABLE.
+- [ ] Abrir `/maquinas` e `/transportes` e confirmar as listas intactas.
+
+### Fluxo manual
+
+- [ ] `/predial` → Locais: a árvore abre fechada, com a raiz CMASM e o total de descendentes.
+- [ ] Expandir a raiz e conferir os prédios da Refrigeração (ACADEMIA, COMANDO, GARAGEM…).
+- [ ] Expandir um prédio e ver as salas, com a contagem de ativos na coluna Ativos.
+- [ ] "Expandir tudo" / "Recolher tudo" e conferir a contagem total.
+- [ ] Digitar no filtro e confirmar que o resultado aparece mesmo com o pai fechado.
+- [ ] Confirmar que nenhum cargo (encarregado, chefe, direção) aparece mais na árvore.
+- [ ] `/eletrica` → editar um ativo: o campo Local agora é uma lista da árvore, não texto livre.
+- [ ] Salvar e conferir que o ativo passou a contar na coluna Ativos daquele local no Predial.

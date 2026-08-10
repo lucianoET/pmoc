@@ -16,46 +16,6 @@ export function classificarGut(total) {
   return 'ok'
 }
 
-/**
- * Ordena os locais em profundidade a partir das raízes e anota o nível de
- * cada um, para desenhar a árvore como lista indentada.
- * Locais órfãos (pai inexistente ou ciclo) entram no fim, no nível 0, em vez
- * de sumirem da tela.
- * @param {Array<{id:number, parent_id:number|null, nome:string}>} locais
- * @returns {Array<object>} mesmos objetos com `nivel` adicionado
- */
-export function montarArvore(locais) {
-  const porPai = new Map()
-  const ids = new Set(locais.map(local => local.id))
-
-  for (const local of locais) {
-    const pai = local.parent_id != null && ids.has(local.parent_id) ? local.parent_id : null
-    if (!porPai.has(pai)) porPai.set(pai, [])
-    porPai.get(pai).push(local)
-  }
-
-  for (const filhos of porPai.values()) {
-    filhos.sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
-  }
-
-  const saida = []
-  const visitados = new Set()
-
-  const descer = (pai, nivel) => {
-    for (const local of porPai.get(pai) || []) {
-      if (visitados.has(local.id)) continue
-      visitados.add(local.id)
-      saida.push({ ...local, nivel })
-      descer(local.id, nivel + 1)
-    }
-  }
-
-  descer(null, 0)
-
-  // sobrou algo? é ciclo entre pais — mostra no nível 0 para não sumir
-  for (const local of locais) {
-    if (!visitados.has(local.id)) saida.push({ ...local, nivel: 0 })
-  }
-
-  return saida
-}
+// A árvore de locais virou registro compartilhado; as funções vivem em
+// shared/arvore.js e são reexportadas aqui para quem já importava daqui.
+export { montarArvore, linhasVisiveis } from '../shared/arvore.js'

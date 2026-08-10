@@ -13,6 +13,9 @@
 --     acerta a sequência no final
 -- Executar no SQL Editor do Supabase.
 -- ═══════════════════════════════════════════════════════════════════
+-- NOTA (migração 19): a tabela `pred_locais` criada aqui foi renomeada para
+-- `cmasm_locais`, por ter virado o registro de locais compartilhado entre os
+-- módulos. Este arquivo é mantido como está por já ter sido executado.
 
 -- ── normas de referência ──
 create table if not exists pred_normas (

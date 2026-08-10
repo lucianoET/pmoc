@@ -5,6 +5,9 @@ Fontes (DEV_ERP, read-only):
   database/seed_locais_cmasm.sql  -> pred_locais
   create_db.py TEMPLATES / ITEMS  -> pred_checklist_templates / pred_checklist_itens
 """
+# NOTA (migração 19): a tabela `pred_locais` criada aqui foi renomeada para
+# `cmasm_locais`, por ter virado o registro de locais compartilhado entre os
+# módulos. Este arquivo é mantido como está por já ter sido executado.
 import ast
 import pathlib
 import re

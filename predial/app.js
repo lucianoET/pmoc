@@ -5,7 +5,7 @@
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { gravar } from '../shared/persistencia.js'
-import { GUT_ESCALA, classificarGut, montarArvore } from './dominio.js'
+import { GUT_ESCALA, classificarGut, linhasVisiveis, montarArvore } from './dominio.js'
 
 let supa = null
 let auth = null
@@ -18,7 +18,15 @@ let INSPECOES = []
 let ITENS = []
 let LAUDOS = []
 let NORMAS = []
+let ATIVOS_POR_LOCAL = new Map()
 let ERRO_CARGA = null
+
+// Nós abertos na árvore de locais. Começa fechada: são ~230 locais.
+const EXPANDIDOS = new Set()
+
+// Definido em carregarLocais(): 'cmasm_locais' depois da migração 19,
+// 'pred_locais' enquanto ela não roda.
+let TABELA_LOCAIS = 'cmasm_locais'
 
 let LOCAL_EDIT_ID = null
 let TEMPLATE_EDIT_ID = null
@@ -146,14 +154,15 @@ function caminhoLocal(id) {
 // ── carga de dados ──
 async function carregarTudo() {
   ERRO_CARGA = null
-  const [locais, templates, templateItens, inspecoes, itens, laudos, normas] = await Promise.all([
-    supa.from('pred_locais').select('*').eq('ativo', true).order('nome'),
+  const [locais, templates, templateItens, inspecoes, itens, laudos, normas, ocupacao] = await Promise.all([
+    carregarLocais(),
     supa.from('pred_checklist_templates').select('*').eq('ativo', true).order('id'),
     supa.from('pred_checklist_itens').select('*').order('sistema').order('ordem'),
     supa.from('pred_inspecoes').select('*').order('data_vistoria', { ascending: false, nullsFirst: false }),
     supa.from('pred_inspecao_itens').select('*').order('gut_total', { ascending: false }),
     supa.from('pred_laudos').select('*').order('data_emissao', { ascending: false, nullsFirst: false }),
     supa.from('pred_normas').select('*').eq('ativo', true).order('codigo'),
+    carregarOcupacao(),
   ])
 
   const falha = [locais, templates, templateItens, inspecoes, itens, laudos, normas].find(r => r.error)
@@ -162,6 +171,8 @@ async function carregarTudo() {
     return
   }
 
+  ATIVOS_POR_LOCAL = ocupacao
+
   LOCAIS = locais.data || []
   TEMPLATES = templates.data || []
   TEMPLATE_ITENS = templateItens.data || []
@@ -169,6 +180,69 @@ async function carregarTudo() {
   ITENS = itens.data || []
   LAUDOS = laudos.data || []
   NORMAS = normas.data || []
+}
+
+// A migração 19 renomeia pred_locais para cmasm_locais. O deploy do frontend e
+// a execução da migração não são simultâneos, então aceita os dois nomes.
+async function carregarLocais() {
+  const nova = await supa.from('cmasm_locais').select('*').eq('ativo', true).order('nome')
+  if (!nova.error) {
+    TABELA_LOCAIS = 'cmasm_locais'
+    return nova
+  }
+  TABELA_LOCAIS = 'pred_locais'
+  return supa.from('pred_locais').select('*').eq('ativo', true).order('nome')
+}
+
+// Quantos ativos de cada módulo estão em cada local.
+// Um módulo que ainda não tenha a coluna local_id simplesmente não conta.
+async function carregarOcupacao() {
+  const modulos = [
+    ['refrigeracao', 'equipamentos'],
+    ['eletrica', 'elet_ativos'],
+    ['fonoclama', 'fono_ativos'],
+    ['maquinas', 'maq_ativos'],
+    ['transportes', 'transp_ativos'],
+  ]
+
+  const respostas = await Promise.all(
+    modulos.map(([, tabela]) => supa.from(tabela).select('local_id').not('local_id', 'is', null)),
+  )
+
+  const mapa = new Map()
+  respostas.forEach((resposta, indice) => {
+    if (resposta.error) return
+    const modulo = modulos[indice][0]
+    for (const linha of resposta.data || []) {
+      const atual = mapa.get(linha.local_id) || { total: 0, porModulo: {} }
+      atual.total += 1
+      atual.porModulo[modulo] = (atual.porModulo[modulo] || 0) + 1
+      mapa.set(linha.local_id, atual)
+    }
+  })
+  return mapa
+}
+
+// Soma os ativos do local e de tudo que está abaixo dele na árvore.
+function ativosNaSubarvore(localId) {
+  const filhosPorPai = new Map()
+  for (const local of LOCAIS) {
+    if (local.parent_id == null) continue
+    if (!filhosPorPai.has(local.parent_id)) filhosPorPai.set(local.parent_id, [])
+    filhosPorPai.get(local.parent_id).push(local.id)
+  }
+
+  let total = 0
+  const fila = [localId]
+  const vistos = new Set()
+  while (fila.length) {
+    const id = fila.pop()
+    if (vistos.has(id)) continue
+    vistos.add(id)
+    total += ATIVOS_POR_LOCAL.get(id)?.total || 0
+    fila.push(...(filhosPorPai.get(id) || []))
+  }
+  return total
 }
 
 async function recarregar() {
@@ -289,35 +363,82 @@ function renderPainel() {
 
 function renderLocais() {
   const filtro = (el('filtro-local')?.value || '').toLowerCase()
-  const arvore = montarArvore(LOCAIS)
-  const visiveis = filtro
-    ? arvore.filter(local => `${local.nome} ${local.codigo || ''} ${local.tipo || ''}`.toLowerCase().includes(filtro))
-    : arvore
 
-  const linhas = visiveis.map(local => `
-    <tr>
-      <td class="hi">${'&nbsp;'.repeat(local.nivel * 4)}${local.nivel ? '└ ' : ''}${esc(local.nome)}</td>
-      <td class="mono">${esc(local.codigo || '—')}</td>
-      <td>${esc(local.tipo || '—')}</td>
-      <td>${esc(AREAS[local.area] || '—')}</td>
-      <td><span class="badge ${local.restricao === 'civil' ? 'b-ok' : 'b-warn'}">${esc(local.restricao)}</span></td>
-      <td>${botaoEscrita('Editar', `abrirModalLocal(${local.id})`, 'btn-s')}</td>
-    </tr>`).join('')
+  // Com filtro a árvore vira lista plana: esconder um resultado atrás de um
+  // pai fechado faria a busca parecer quebrada.
+  const linhasArvore = filtro
+    ? montarArvore(LOCAIS)
+        .filter(local => `${local.nome} ${local.codigo || ''} ${local.tipo || ''}`.toLowerCase().includes(filtro))
+        .map(local => ({ ...local, nivel: 0, filhos: 0, descendentes: 0, expandido: false }))
+    : linhasVisiveis(LOCAIS, EXPANDIDOS)
+
+  const linhas = linhasArvore.map(local => {
+    const ocupacao = ATIVOS_POR_LOCAL.get(local.id)
+    const aqui = ocupacao?.total || 0
+    const abaixo = ativosNaSubarvore(local.id)
+    const detalhe = Object.entries(ocupacao?.porModulo || {})
+      .map(([modulo, quantidade]) => `${modulo}: ${quantidade}`).join(' · ')
+
+    const alternador = local.filhos
+      ? `<button class="btn btn-s btn-sm" style="padding:1px 7px;margin-right:6px"
+           onclick="alternarLocal(${local.id})" title="${local.expandido ? 'Recolher' : 'Expandir'}">${local.expandido ? '▾' : '▸'}</button>`
+      : '<span style="display:inline-block;width:28px"></span>'
+
+    return `
+      <tr>
+        <td class="hi" style="padding-left:${14 + local.nivel * 22}px;white-space:nowrap">
+          ${alternador}${esc(local.nome)}
+          ${local.filhos ? `<span class="tagline"> (${local.descendentes})</span>` : ''}
+        </td>
+        <td class="mono">${esc(local.codigo || '—')}</td>
+        <td>${esc(local.tipo || '—')}</td>
+        <td>${esc(AREAS[local.area] || '—')}</td>
+        <td><span class="badge ${local.restricao === 'civil' ? 'b-ok' : 'b-warn'}">${esc(local.restricao)}</span></td>
+        <td class="num" title="${esc(detalhe || 'sem ativos')}">${aqui || '—'}${abaixo > aqui ? ` <span class="tagline">(${abaixo})</span>` : ''}</td>
+        <td>${botaoEscrita('Editar', `abrirModalLocal(${local.id})`, 'btn-s')}</td>
+      </tr>`
+  }).join('')
+
+  const comAtivos = [...ATIVOS_POR_LOCAL.values()].reduce((total, o) => total + o.total, 0)
 
   el('view-locais').innerHTML = `
     <div class="view-head">
-      <div><div class="view-title">Locais</div><div class="view-sub">${LOCAIS.length} locais na árvore do CMASM</div></div>
+      <div>
+        <div class="view-title">Locais</div>
+        <div class="view-sub">
+          ${LOCAIS.length} locais físicos do CMASM · ${comAtivos} ativo(s) vinculado(s)
+          ${filtro ? ` · ${linhasArvore.length} resultado(s)` : ''}
+        </div>
+      </div>
       ${botaoEscrita('+ Novo local', 'abrirModalLocal()')}
     </div>
     <div class="filters-inline">
       <input class="control-search" id="filtro-local" placeholder="Filtrar por nome, código ou tipo" value="${esc(filtro)}" oninput="renderLocais()"/>
+      <button class="btn btn-s btn-sm" onclick="expandirTudo(true)">Expandir tudo</button>
+      <button class="btn btn-s btn-sm" onclick="expandirTudo(false)">Recolher tudo</button>
     </div>
     <div class="tbl-wrap"><table class="tbl">
-      <thead><tr><th>Local</th><th>Código</th><th>Tipo</th><th>Área</th><th>Restrição</th><th></th></tr></thead>
-      <tbody>${linhas || '<tr><td colspan="6"><div class="empty"><div class="empty-ico">🏛️</div>Nenhum local encontrado.</div></td></tr>'}</tbody>
+      <thead><tr><th>Local</th><th>Código</th><th>Tipo</th><th>Área</th><th>Restrição</th><th title="Ativos neste local; entre parênteses, incluindo os locais abaixo">Ativos</th><th></th></tr></thead>
+      <tbody>${linhas || '<tr><td colspan="7"><div class="empty"><div class="empty-ico">🏛️</div>Nenhum local encontrado.</div></td></tr>'}</tbody>
     </table></div>
   `
-  if (filtro) el('filtro-local').focus()
+  if (filtro) {
+    const campo = el('filtro-local')
+    campo.focus()
+    campo.setSelectionRange(campo.value.length, campo.value.length)
+  }
+}
+
+function alternarLocal(id) {
+  if (EXPANDIDOS.has(id)) EXPANDIDOS.delete(id)
+  else EXPANDIDOS.add(id)
+  renderLocais()
+}
+
+function expandirTudo(abrir) {
+  EXPANDIDOS.clear()
+  if (abrir) LOCAIS.forEach(local => EXPANDIDOS.add(local.id))
+  renderLocais()
 }
 
 function renderInspecoes() {
@@ -626,8 +747,8 @@ async function salvarLocal() {
   }
 
   const consulta = LOCAL_EDIT_ID
-    ? supa.from('pred_locais').update(registro).eq('id', LOCAL_EDIT_ID)
-    : supa.from('pred_locais').insert(registro)
+    ? supa.from(TABELA_LOCAIS).update(registro).eq('id', LOCAL_EDIT_ID)
+    : supa.from(TABELA_LOCAIS).insert(registro)
 
   const salvo = await gravarERecarregar(
     consulta,
@@ -942,7 +1063,8 @@ function exporNoWindow() {
   Object.assign(window, {
     abrirChecklist, abrirModalInspecao, abrirModalLaudo, abrirModalLocal,
     abrirModalTemplate, adicionarItemManual, adicionarItemTemplate,
-    associarTemplate, carregarItensDoTemplate, exportarItensCsv, fecharModal,
+    alternarLocal, associarTemplate, carregarItensDoTemplate,
+    expandirTudo, exportarItensCsv, fecharModal,
     marcarPresente, mudarStatus, removerItemTemplate, renderLocais, sair,
     salvarCampoItem, salvarGut, salvarInspecao, salvarLaudo, salvarLocal,
     salvarTemplate, trocarView,

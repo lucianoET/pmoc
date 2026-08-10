@@ -13,6 +13,7 @@
 
 import { Auth } from './auth.js'
 import { criarClienteSupabase } from './supabase-config.js'
+import { montarArvore } from './arvore.js'
 import { gravar } from './persistencia.js'
 import { calcularOcorrencia } from './vencimento.js'
 
@@ -65,6 +66,7 @@ let MATERIAIS = []
 let PLANO_MATERIAIS = []
 let OS_LIST = []
 let USOS = []
+let LOCAIS = []
 let ERRO_CARGA = null
 
 let ATIVO_EDIT_ID = null
@@ -174,13 +176,15 @@ function materiaisEmFalta() {
 // ── carga de dados ──
 async function carregarTudo() {
   ERRO_CARGA = null
-  const [ativos, planos, materiais, planoMateriais, ordens, usos] = await Promise.all([
+  const [ativos, planos, materiais, planoMateriais, ordens, usos, locais] = await Promise.all([
     supa.from(tabela('ativos')).select('*').order('codigo'),
     supa.from(tabela('planos')).select('*').order('tipo').order('ordem'),
     supa.from(tabela('materiais')).select('*').order('nome'),
     supa.from(tabela('plano_materiais')).select('*'),
     supa.from(tabela('os')).select('*').order('data_abertura', { ascending: false }),
     supa.from(tabela('uso_registros')).select('*').order('data', { ascending: false }).limit(200),
+    // registro de locais do CMASM, compartilhado entre os módulos
+    supa.from('cmasm_locais').select('id, nome, codigo, parent_id').eq('ativo', true),
   ])
 
   const falha = [ativos, planos, materiais, planoMateriais, ordens, usos].find(r => r.error)
@@ -195,6 +199,21 @@ async function carregarTudo() {
   PLANO_MATERIAIS = planoMateriais.data || []
   OS_LIST = ordens.data || []
   USOS = usos.data || []
+  // se a migração 19 ainda não rodou, o módulo segue com o local em texto
+  LOCAIS = locais.error ? [] : (locais.data || [])
+}
+
+// Nome do local do ativo: prefere o vínculo com a árvore, cai no texto antigo.
+function nomeDoLocal(ativo) {
+  const local = LOCAIS.find(item => item.id === ativo.local_id)
+  return local?.nome || ativo.local || '—'
+}
+
+function opcoesLocais(selecionado = null) {
+  if (!LOCAIS.length) return '<option value="">— sem árvore de locais —</option>'
+  return '<option value="">Sem local definido</option>' + montarArvore(LOCAIS)
+    .map(local => `<option value="${local.id}" ${local.id === selecionado ? 'selected' : ''}>${'— '.repeat(local.nivel)}${esc(local.nome)}</option>`)
+    .join('')
 }
 
 async function recarregar() {
@@ -266,7 +285,8 @@ function montarModais() {
       </div>
       <div class="fgrid">
         <div class="frow"><label>Patrimônio</label><input id="at-patrimonio"/></div>
-        <div class="frow"><label>Local</label><input id="at-local"/></div>
+        <div class="frow"><label>Local</label><select id="at-local"></select>
+          <div class="help">Árvore de locais do CMASM, compartilhada com os outros módulos.</div></div>
       </div>
       <div class="frow"><label>Observações</label><textarea id="at-obs"></textarea></div>
     </div>
@@ -511,7 +531,7 @@ function renderAtivos() {
       <tr>
         <td class="hi">${esc(ativo.codigo)}</td>
         <td>${emojiTipo(ativo.tipo)} ${esc(rotuloTipo(ativo.tipo))}</td>
-        <td>${esc(ativo.local || '—')}</td>
+        <td>${esc(nomeDoLocal(ativo))}</td>
         <td class="num">${fmtNum(ativo.uso_atual)} ${esc(ativo.unidade_uso)}</td>
         <td><span class="badge ${BADGE_ATIVO[ativo.status]}">${STATUS_ATIVO[ativo.status]}</span></td>
         <td>${pendentes ? `<span class="badge b-warn">${pendentes}</span>` : '<span class="badge b-ok">0</span>'}</td>
@@ -668,7 +688,7 @@ function abrirModalAtivo(id = null) {
   el('at-status').value = ativo?.status || 'operante'
   el('at-uso').value = ativo?.uso_atual ?? 0
   el('at-patrimonio').value = ativo?.patrimonio || ''
-  el('at-local').value = ativo?.local || ''
+  el('at-local').innerHTML = opcoesLocais(ativo?.local_id ?? null)
   el('at-obs').value = ativo?.obs || ''
   abrirModal('ativo')
 }
@@ -683,8 +703,14 @@ async function salvarAtivo() {
     uso_atual: num('at-uso') ?? 0,
     unidade_uso: CFG.unidadeUso,
     patrimonio: val('at-patrimonio') || null,
-    local: val('at-local') || null,
     obs: val('at-obs') || null,
+  }
+
+  // grava o vínculo e mantém o texto em dia, para quem lê a tabela direto
+  if (LOCAIS.length) {
+    const localId = val('at-local') ? Number(val('at-local')) : null
+    registro.local_id = localId
+    registro.local = LOCAIS.find(local => local.id === localId)?.nome || null
   }
   if (!registro.codigo || !registro.nome) return alert('Código e nome são obrigatórios.')
 
