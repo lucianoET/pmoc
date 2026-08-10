@@ -139,12 +139,20 @@ _Nenhuma tarefa desta plan usa TDD — não há commits test→feat→refactor s
 - **Issue:** O seed `11_transportes_seed.sql` (de plano anterior a este, fora do escopo desta fase) importou apenas os 9 ativos que apareciam em viagens de um único dia (30JAN) no CSV `ref/Mapa de VTR e EMB ATU 20FEV26.csv`, tratando-os como se fossem o inventário completo da frota. O inventário real, conforme `Mapa de VTR e EMB ATU 20FEV26.pdf`, tem 43 ativos — mais de quatro vezes o volume importado. Esta é uma divergência de dado, não um bug de código, mas afeta diretamente o must-have "o inventário importado contém 9 ativos... conforme o mapa VTR/EMB", que estava fundamentado numa premissa factualmente incorreta.
 - **Fix:** Migração `supabase/24_transportes_inventario_completo.sql`, criada e aplicada fora da execução direta deste plano (por decisão e ação do usuário/coordenador, via MCP do Supabase), corrigindo os 9 ativos já importados e acrescentando os 34 ausentes, com placas, estado operacional, `subtipo` e `tipo_modelo` extraídos do PDF.
 - **Files modified:** `supabase/24_transportes_inventario_completo.sql` (fora desta sessão); `.planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md` (reescrito por este executor para refletir a correção)
-- **Verification:** Contagens pós-aplicação relatadas pelo coordenador (total 43, viaturas 33, embarcações 10, sem placa 16, sem tipo_modelo 0, viagens 23 preservadas, INOP 25/43); reconciliação independente linha a linha de todos os 43 ativos contra o PDF, feita por este executor durante a reescrita do relatório.
+- **Verification:** Contagens pós-aplicação relatadas pelo coordenador (total 43, viaturas 33, embarcações 10, sem placa 16, sem tipo_modelo 0, viagens 23 preservadas, INOP 25/43 no momento do relato — passou para 26/43 após a correção do VTR-012, commit `33fc6db`, ver deviation 2 abaixo); reconciliação independente linha a linha de todos os 43 ativos contra o PDF, feita por este executor durante a reescrita do relatório.
 - **Committed in:** `c7c9c2c` (migração, fora desta sessão) e `89234e3` (reescrita do relatório, por este executor)
+
+**2. [Rule 1 aplicada pelo usuário — Correção de dado divergente da própria fonte] VTR-012 (FIAT DUCATO) marcado INOP apesar de o mapa dizer "P"**
+- **Found during:** Reescrita do relatório de conferência (Seção 5) — a linha do VTR-012 no mapa traz simultaneamente o código "P" (disponível) e uma restrição textual dizendo que a viatura está na oficina JOMAP para delineamento, uma contradição na própria fonte primária
+- **Issue:** A migração 24, na sua primeira versão, seguiu literalmente a coluna de estado operacional ("P") e importou `status = 'disponivel'`, apesar da restrição textual indicar que o ativo está indisponível na prática
+- **Fix:** O usuário confirmou em 10/08/2026 que a viatura está inoperante; `status` corrigido para `'indisponivel'` tanto no `insert` quanto num `update` próprio na migração 24 (necessário porque o `insert` usa `on conflict do nothing` e não alcançaria uma linha já existente numa reexecução)
+- **Files modified:** `supabase/24_transportes_inventario_completo.sql`; `.planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md` (Seção 2 e Seção 5 atualizadas para refletir a correção e o novo total de 26 INOP)
+- **Verification:** Commit `33fc6db` aplicado sobre a migração; relatório de conferência atualizado com o precedente registrado ("onde a restrição contradiz o 'P', a restrição tende a ser a informação mais atual")
+- **Committed in:** `33fc6db` (fora desta sessão de execução direta)
 
 ---
 
-**Total deviations:** 1 (correção de dado de escopo arquitetural — must-have original substituído por descoberta desta própria conferência, conduzida com aprovação explícita do usuário)
+**Total deviations:** 2 (1 correção de dado de escopo arquitetural — must-have original substituído por descoberta desta própria conferência; 1 correção pontual de estado operacional de um único ativo cuja própria fonte se contradizia — ambas conduzidas com aprovação/confirmação explícita do usuário)
 **Impact on plan:** O objetivo da Task 2/D-02 — comprovar a correspondência entre inventário importado e mapa legado antes de fechar TRANSP-09 — funcionou exatamente como desenhado: a conferência humana pegou um erro real que a Task 1 automatizada não tinha como detectar sozinha (comparar contra a fonte errada não gera divergência aparente). Sem scope creep além do necessário para corrigir o dado incorreto; nenhum código de aplicação foi alterado.
 
 ## Issues Encountered
