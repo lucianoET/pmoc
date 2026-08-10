@@ -43,6 +43,12 @@ update transp_ativos set status = 'indisponivel',
   observacoes = 'INOP no mapa de 20FEV2026: NEC de manutenção corretiva no braço hidráulico. VRF com SG José Rodrigo em 14/05/25.'
   where codigo = 'VTR-001';
 
+-- O mapa marca o FIAT DUCATO como "P", mas a própria restrição diz que ele está
+-- na oficina. O usuário confirmou INOP em 10/08/2026. Como os inserts abaixo usam
+-- "on conflict do nothing", a correção precisa deste update para valer também numa
+-- reexecução sobre um banco que já tenha a linha.
+update transp_ativos set status = 'indisponivel' where codigo = 'VTR-012' and status = 'disponivel';
+
 -- Classificação e família dos 9 já existentes.
 update transp_ativos set subtipo = 'VTR INT', tipo_modelo = 'CAMINHAO MUNCK IVECO VERTIS' where codigo = 'VTR-001';
 update transp_ativos set subtipo = 'VTR EXT', tipo_modelo = 'CAMIONETE'                    where codigo = 'VTR-002';
@@ -72,7 +78,7 @@ insert into transp_ativos (codigo, nome, tipo, subtipo, identificacao, tipo_mode
   ('VTR-009', 'MICRO-ÔNIBUS',               'viatura', 'VTR EXT', 'LBO 8418', 'ONIBUS',                      'km', 'indisponivel', 'INOP no mapa de 20FEV2026: LVAD.'),
   ('VTR-010', 'CAMINHÃO IVECO DAILY',       'viatura', 'VTR EXT', 'LLV 6081', 'CAMINHAO',                    'km', 'indisponivel', 'INOP no mapa de 20FEV2026: NEC MNT no sistema de combustível.'),
   ('VTR-011', 'CAMINHÃO MUNCK IVECO VERTIS','viatura', 'VTR EXT', 'KPJ 8382', 'CAMINHAO MUNCK IVECO VERTIS', 'km', 'indisponivel', 'INOP no mapa de 20FEV2026: NEC MNT sistema de freio e carroceria.'),
-  ('VTR-012', 'FIAT DUCATO',                'viatura', 'VTR EXT', 'JKH 9973', 'FURGAO',                      'km', 'disponivel',   'P no mapa de 20FEV2026, com ressalva: NEC manutenção corretiva e preventiva de motor, suspensão e ar-condicionado. A VTR está na empresa JOMAP (oficina) para delineamento. Retorno ASD.')
+  ('VTR-012', 'FIAT DUCATO',                'viatura', 'VTR EXT', 'JKH 9973', 'FURGAO',                      'km', 'indisponivel', 'INOP (confirmado pelo usuário em 10/08/2026, divergindo do "P" no mapa de 20FEV2026): NEC manutenção corretiva e preventiva de motor, suspensão e ar-condicionado. A VTR está na empresa JOMAP (oficina) para delineamento. Retorno ASD.')
 on conflict (codigo) do nothing;
 
 -- ── 4. Viaturas internas ausentes (21) ──
