@@ -7,6 +7,7 @@
     { "source": "/transportes",  "destination": "/transportes/index.html" },
     { "source": "/eletrica",     "destination": "/eletrica/index.html" },
     { "source": "/fonoclama",    "destination": "/fonoclama/index.html" },
-    { "source": "/predial",      "destination": "/predial/index.html" }
+    { "source": "/predial",      "destination": "/predial/index.html" },
+    { "source": "/mapa",         "destination": "/mapa/index.html" }
   ]
 }
