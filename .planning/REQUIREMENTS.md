@@ -35,7 +35,7 @@
 
 - [ ] **INTEG-01**: Portal em `/` exibe links e status dos novos módulos
 - [x] **INTEG-02**: Rotas `/transportes`, `/eletrica`, `/fonoclama` configuradas em `vercel.json`
-- [x] **INTEG-03**: Login por cargo (admin/gestor/tecnico/observador) funciona nos três módulos novos via tabela `usuarios` compartilhada, com RLS
+- [ ] **INTEG-03**: Login por cargo (admin/gestor/tecnico/observador) funciona nos três módulos novos via tabela `usuarios` compartilhada, com RLS — **parcial**: a camada de banco está verificada (policies de `transp_planos`/`transp_materiais` conferidas ao vivo, escrita restrita a `authenticated` com predicado `transp_pode_escrever()`, que exige `usuarios.ativo = true` e cargo em admin/gestor/tecnico); falta a verificação de ponta a ponta pela tela — login por cargo sem exibir e-mails, observador sem controles de escrita, e tentativa de escrita direta pelo console como observador (Parte B do checkpoint do Plano 01-04, não executada)
 - [x] **INTEG-04**: Módulos em produção (refrigeração, máquinas) continuam funcionando sem alteração — migrações apenas aditivas
 
 ## v2 Requirements (deferred)
@@ -89,5 +89,5 @@ Cobertura: 24/24 requisitos v1 mapeados, cada um em exatamente uma fase.
 | FONO-05 | Phase 4 | Pending |
 | INTEG-01 | Phase 4 | Pending |
 | INTEG-02 | Phase 1 | Complete |
-| INTEG-03 | Phase 1 | Complete |
+| INTEG-03 | Phase 1 | Partial — falta UAT da Parte B (login por cargo e bloqueio de escrita do observador) |
 | INTEG-04 | Phase 1 | Complete |
