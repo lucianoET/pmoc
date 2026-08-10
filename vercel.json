@@ -6,6 +6,7 @@
     { "source": "/maquinas",     "destination": "/maquinas/index.html" },
     { "source": "/transportes",  "destination": "/transportes/index.html" },
     { "source": "/eletrica",     "destination": "/eletrica/index.html" },
-    { "source": "/fonoclama",    "destination": "/fonoclama/index.html" }
+    { "source": "/fonoclama",    "destination": "/fonoclama/index.html" },
+    { "source": "/predial",      "destination": "/predial/index.html" }
   ]
 }

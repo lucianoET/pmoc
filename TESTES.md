@@ -145,3 +145,38 @@ Resultado esperado: **9 testes aprovados**.
 ```bash
 node --test tests/vencimento-modulos.test.js
 ```
+
+## Predial — implementação 09/08/2026
+
+### Preparação
+
+- [ ] Executar `supabase/17_predial_schema.sql` no SQL Editor.
+- [ ] Executar `supabase/18_predial_seed.sql` no SQL Editor.
+- [ ] Conferir contagens: `pred_normas` 10, `pred_locais` 150, `pred_checklist_templates` 3, `pred_checklist_itens` 206.
+- [ ] Reexecutar o seed e confirmar que as contagens não mudam (idempotência).
+- [ ] Conferir que a raiz da árvore é o local 151 (CMASM) e que nenhum local ficou órfão:
+      `select count(*) from pred_locais f where f.parent_id is not null and not exists (select 1 from pred_locais p where p.id = f.parent_id);` deve dar 0.
+- [ ] Abrir `/refrigeracao`, `/maquinas`, `/transportes`, `/eletrica` e `/fonoclama` e confirmar que nada regrediu.
+
+### Fluxo manual
+
+- [ ] Abrir `/predial`, logar por cargo e conferir a árvore de locais indentada na aba Locais.
+- [ ] Entrar como Observador e confirmar que os botões de escrita ficam desabilitados.
+- [ ] Criar inspeção escolhendo local e o template "Inspeção Predial Completa".
+- [ ] Clicar em "Carregar itens do template" e confirmar que os 206 itens entram como `item_origem = 'template'`.
+- [ ] Clicar de novo e confirmar que nada duplica.
+- [ ] Pontuar um item com G=10, U=10, T=6 e confirmar `gut_total = 600` e faixa **Crítico**
+      (coluna gerada no banco — o app não grava `gut_total`).
+- [ ] Marcar "presente", preencher local e observação e recarregar a página para conferir a persistência.
+- [ ] Avançar o status planejada → em execução → aguardando aprovação → aprovada → concluída
+      e confirmar uma linha por transição em `pred_eventos`.
+- [ ] Tentar uma transição inválida e confirmar o bloqueio com aviso.
+- [ ] Reprovar uma inspeção e confirmar que o motivo foi gravado em `pred_eventos.motivo`.
+- [ ] Emitir laudo a partir da inspeção e conferir o rascunho com as anomalias ordenadas por GUT.
+- [ ] Exportar o CSV de anomalias e conferir as colunas `gut` e `faixa`.
+
+### Testes automatizados
+
+```bash
+node --test tests/predial-dominio.test.js
+```

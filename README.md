@@ -20,8 +20,9 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 | `/refrigeracao` | **PMOC Refrigeração** v2.8 | 171 unidades · ARP 04/2024 · fiscalização · QR · impressão | ✅ |
 | `/maquinas` | **PMOC Máquinas** v1.1 | 28 máquinas · 59 planos · 34 peças · operações · consumo · ciclo de vida | ✅ |
 | `/transportes` | **PMOC Transportes** v1.0 | 9 ativos · 23 viagens importadas · manutenção de viaturas e embarcações | ✅ |
-| `/eletrica` | **PMOC Elétrica** v1.0 | 13 ativos · 9 planos · 11 peças · geradores, QGBT, nobreaks, iluminação | ⏳ migração pendente |
-| `/fonoclama` | **PMOC Fonoclama** v1.0 | 10 ativos · 7 planos · 10 peças · PA 70V | ⏳ migração pendente |
+| `/eletrica` | **PMOC Elétrica** v1.0 | 13 ativos · 9 planos · 11 peças · geradores, QGBT, nobreaks, iluminação | ✅ |
+| `/fonoclama` | **PMOC Fonoclama** v1.0 | 10 ativos · 7 planos · 10 peças · PA 70V | ✅ |
+| `/predial` | **PMOC Predial** v1.0 | 150 locais · 3 templates · 206 itens de checklist · GUT · laudos | ⏳ migração pendente |
 
 ### Refrigeração
 Inventário de climatização com fluxo completo de contratação pública:
@@ -50,6 +51,23 @@ Os dois compartilham o motor `shared/modulo-manutencao.js` — cada módulo é
 só um arquivo de configuração (tipos de ativo, cor, prefixo das tabelas).
 Refrigeração, Máquinas e Transportes **não** usam esse motor e seguem como
 estavam.
+
+### Predial
+Portado do xPredial do DEV_ERP (SQLite + Flask). Não usa o motor de horímetro —
+o ciclo aqui é inspeção, não manutenção por uso: árvore de locais do CMASM →
+template de checklist → inspeção → itens pontuados na **matriz GUT** → laudo,
+com trilha de auditoria das mudanças de status.
+
+GUT segue a escala do legado: cada dimensão vale 0, 1, 3, 6, 8 ou 10 (total até
+1000); até 100 é baixo, 101–400 atenção, acima de 400 crítico. `gut_total` e
+`condicao` são colunas geradas no Postgres (no SQLite eram triggers).
+
+O seed é **gerado**, não escrito à mão — `supabase/gerar_18_predial_seed.py` lê
+os arquivos do legado e emite o SQL:
+
+```bash
+python3 supabase/gerar_18_predial_seed.py
+```
 
 ---
 
@@ -90,6 +108,10 @@ pmoc/
 ├── fonoclama/
 │   ├── index.html
 │   └── app.js                 Configuração do módulo (tabelas fono_)
+├── predial/
+│   ├── index.html
+│   ├── app.js                 Inspeção, checklist GUT e laudos (tabelas pred_)
+│   └── dominio.js             Regras testáveis: faixas GUT e árvore de locais
 ├── shared/
 │   ├── auth.js                Login por cargo (reutilizável)
 │   ├── supabase-config.js     Reuso da configuração Supabase
@@ -110,7 +132,10 @@ pmoc/
 │   ├── 13_corrige_permissao_rpc_operacoes.sql
 │   ├── 14_eletrica_fonoclama_schema.sql
 │   ├── 15_eletrica_seed.sql
-│   └── 16_fonoclama_seed.sql
+│   ├── 16_fonoclama_seed.sql
+│   ├── 17_predial_schema.sql
+│   ├── 18_predial_seed.sql          (gerado)
+│   └── gerar_18_predial_seed.py     Gerador do seed a partir do legado
 └── docs/
     ├── *.ods                  Planilhas-fonte
     ├── NE_*.pdf               Notas de empenho

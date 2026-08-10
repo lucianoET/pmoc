@@ -8,7 +8,7 @@ status: executing
 stopped_at: Phase 1 context gathered
 last_updated: "2026-08-08T12:07:26.441Z"
 last_activity: 2026-08-09
-last_activity_desc: Módulos /eletrica e /fonoclama portados dos apps legados (migrações 14–16 pendentes de execução no Supabase)
+last_activity_desc: /eletrica e /fonoclama no ar; /predial portado do xPredial (migrações 17–18 pendentes de execução no Supabase)
 progress:
   total_phases: 1
   completed_phases: 0
@@ -73,9 +73,18 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 
 ### Pending Todos
 
-- Rodar `supabase/14_eletrica_fonoclama_schema.sql`, `15_eletrica_seed.sql` e
-  `16_fonoclama_seed.sql` no SQL Editor (não há permissão de MCP para aplicar).
-- Depois disso, seguir a seção "Elétrica e Fonoclama" do `TESTES.md`.
+- ✅ Migrações 14–16 executadas pelo usuário; `/eletrica` e `/fonoclama` no ar
+  (contagens conferidas via REST: 13/9/11/14 e 10/7/10/13).
+- Rodar `supabase/17_predial_schema.sql` e `supabase/18_predial_seed.sql` no SQL
+  Editor (não há permissão de MCP para aplicar daqui).
+- Depois disso, seguir as seções "Elétrica e Fonoclama" e "Predial" do `TESTES.md`.
+
+### Módulos fora do roadmap original
+
+Predial não estava no roadmap v1 (que previa Transportes, Elétrica e Fonoclama).
+Entrou por decisão do usuário em 09/08/2026, por ser o legado com schema e seed
+de dados reais já prontos. A Fase 2 (Transportes — abastecimento, documentação e
+painel) segue pendente.
 
 ### Blockers/Concerns
 

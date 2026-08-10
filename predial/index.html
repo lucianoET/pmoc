@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#1a1a18"/>
+<title>PMOC Predial</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
+<style>:root{--accent:#8a7f5c}</style>
+</head>
+<body>
+<div id="login-screen"></div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="logo"><div class="logo-dot"></div> PMOC <span class="logo-accent">Predial</span></div>
+    <div class="topbar-right">
+      <a class="topbar-back" href="/">← Portal</a>
+      <span class="user-chip" id="user-chip">—</span>
+      <button class="btn btn-s btn-sm" onclick="sair()">Sair</button>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button class="nav-btn active" onclick="trocarView('painel',this)">📊 Painel</button>
+    <button class="nav-btn" onclick="trocarView('locais',this)">🏛️ Locais</button>
+    <button class="nav-btn" onclick="trocarView('inspecoes',this)">📋 Inspeções</button>
+    <button class="nav-btn" onclick="trocarView('checklist',this)">📝 Checklist</button>
+    <button class="nav-btn" onclick="trocarView('laudos',this)">🧾 Laudos</button>
+  </div>
+
+  <div class="main">
+    <div id="alerta-carga"></div>
+    <div class="view active" id="view-painel"></div>
+    <div class="view" id="view-locais"></div>
+    <div class="view" id="view-inspecoes"></div>
+    <div class="view" id="view-checklist"></div>
+    <div class="view" id="view-laudos"></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-local"><div class="modal">
+  <div class="modal-hd"><h3 id="local-titulo">Novo local</h3><button class="btn btn-s btn-sm" onclick="fecharModal('local')">Fechar</button></div>
+  <div class="modal-body">
+    <div class="frow"><label>Nome *</label><input id="lo-nome"/></div>
+    <div class="fgrid3">
+      <div class="frow"><label>Código</label><input id="lo-codigo"/></div>
+      <div class="frow"><label>NEO</label><input id="lo-neo"/></div>
+      <div class="frow"><label>Tipo</label><input id="lo-tipo" placeholder="edificacao, paiol, oficina…"/></div>
+    </div>
+    <div class="fgrid3">
+      <div class="frow"><label>Área funcional</label><select id="lo-area">
+        <option value="">—</option><option value="ADM">Administrativa</option>
+        <option value="OPE">Operacional</option><option value="APA">Apoio</option></select></div>
+      <div class="frow"><label>Restrição</label><select id="lo-restricao">
+        <option value="civil">civil</option><option value="militar">militar</option>
+        <option value="reservado">reservado</option><option value="secreto">secreto</option>
+        <option value="proibido">proibido</option></select></div>
+      <div class="frow"><label>Local pai</label><select id="lo-parent"></select></div>
+    </div>
+    <div class="frow"><label>Descrição</label><textarea id="lo-descricao"></textarea></div>
+  </div>
+  <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('local')">Cancelar</button><button class="btn btn-p" onclick="salvarLocal()">Salvar</button></div>
+</div></div>
+
+<div class="overlay" id="modal-inspecao"><div class="modal">
+  <div class="modal-hd"><h3>Nova inspeção</h3><button class="btn btn-s btn-sm" onclick="fecharModal('inspecao')">Fechar</button></div>
+  <div class="modal-body">
+    <div class="frow"><label>Título *</label><input id="in-titulo" placeholder="Ex: Inspeção anual — Paiol 01"/></div>
+    <div class="fgrid">
+      <div class="frow"><label>Local</label><select id="in-local"></select></div>
+      <div class="frow"><label>Template de checklist</label><select id="in-template"></select></div>
+    </div>
+    <div class="fgrid3">
+      <div class="frow"><label>Data da vistoria</label><input id="in-data" type="date"/></div>
+      <div class="frow"><label>Nível</label><select id="in-nivel">
+        <option value="1">1 — simplificada</option><option value="2">2 — intermediária</option>
+        <option value="3">3 — completa</option></select></div>
+      <div class="frow"><label>Tipo</label><select id="in-tipo">
+        <option value="extrinseca">Extrínseca</option><option value="intrinseca">Intrínseca</option>
+        <option value="ambas">Ambas</option></select></div>
+    </div>
+    <div class="frow"><label>Responsável técnico</label><input id="in-responsavel"/></div>
+    <div class="frow"><label>Observações</label><textarea id="in-observacoes"></textarea></div>
+  </div>
+  <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('inspecao')">Cancelar</button><button class="btn btn-p" onclick="salvarInspecao()">Salvar</button></div>
+</div></div>
+
+<div class="overlay" id="modal-laudo"><div class="modal">
+  <div class="modal-hd"><h3>Laudo</h3><button class="btn btn-s btn-sm" onclick="fecharModal('laudo')">Fechar</button></div>
+  <div class="modal-body">
+    <div class="frow"><label>Título *</label><input id="la-titulo"/></div>
+    <div class="fgrid">
+      <div class="frow"><label>Inspeção</label><select id="la-inspecao"></select></div>
+      <div class="frow"><label>Local</label><select id="la-local"></select></div>
+    </div>
+    <div class="fgrid3">
+      <div class="frow"><label>Tipo</label><select id="la-tipo">
+        <option value="laudo_inspecao">Laudo de inspeção</option><option value="art">ART</option>
+        <option value="rrt">RRT</option><option value="relatorio_fotog">Relatório fotográfico</option>
+        <option value="plano_manutencao">Plano de manutenção</option><option value="outro">Outro</option></select></div>
+      <div class="frow"><label>Nº ART / RRT</label><input id="la-art"/></div>
+      <div class="frow"><label>Status</label><select id="la-status">
+        <option value="rascunho">Rascunho</option><option value="emitido">Emitido</option>
+        <option value="arquivado">Arquivado</option></select></div>
+    </div>
+    <div class="fgrid3">
+      <div class="frow"><label>Responsável</label><input id="la-responsavel"/></div>
+      <div class="frow"><label>Emissão</label><input id="la-emissao" type="date"/></div>
+      <div class="frow"><label>Validade</label><input id="la-validade" type="date"/></div>
+    </div>
+    <div class="frow"><label>Conteúdo</label><textarea id="la-conteudo" style="min-height:180px"></textarea></div>
+  </div>
+  <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('laudo')">Cancelar</button><button class="btn btn-p" onclick="salvarLaudo()">Salvar</button></div>
+</div></div>
+
+<script type="module">
+// resolve app.js tanto em /predial (rewrite do Vercel) quanto em /predial/index.html
+const base = location.pathname.replace(/\/[^/]*\.[^/]*$/, '').replace(/\/$/, '')
+import(`${base}/app.js`)
+</script>
+</body>
+</html>
