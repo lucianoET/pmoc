@@ -53,7 +53,7 @@ Plans:
 - [ ] 05-07-PLAN.md — Auditoria da fase, roteiro em `TESTES.md` e conferência isolada de não regressão da refrigeração (PLAT-15, PLAT-16)
 
 **Baseline da fase**: commit `b53505c` (19 testes passando em `node --test`); os gates de não regressão comparam contra ele
-**Decisões travadas**: D-01 rótulo do observador preservado · D-02 cor de destaque do Máquinas `#5a9e6f` · D-03 rodapé com nome, versão e link do portal
+**Decisões travadas**: D-01 rótulo do observador preservado · D-02 cor de destaque do Máquinas `#c9a84c` (a que o módulo já usa hoje na aba ativa, botão primário, foco e nome no logo — corrigida após conferência no código; o verde `#5a9e6f` é token semântico, não de marca) · D-03 rodapé com nome, versão e link do portal
 **UI hint**: yes
 
 ### Phase 6: Tema claro/escuro
