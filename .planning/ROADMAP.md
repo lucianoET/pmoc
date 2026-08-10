@@ -38,7 +38,7 @@ Fases decimais aparecem entre suas inteiras vizinhas, em ordem numérica.
   4. Técnico abre e conclui OS vinculada a ativo + plano + peças, com baixa automática de estoque e atualização do uso do ativo; gestor vê alerta de estoque mínimo e exporta a lista de compras em CSV
   5. Refrigeração e Máquinas continuam funcionando normalmente após as migrações do módulo novo (aditivas, sem DROP e sem alterar tabelas existentes)
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -47,7 +47,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Estoque de peças do módulo com alerta de mínimo e colunas de OS (TRANSP-07)
+- [x] 01-02-PLAN.md — Estoque de peças do módulo com alerta de mínimo e colunas de OS (TRANSP-07)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -129,7 +129,7 @@ Fases executam em ordem numérica: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Transportes — Frota sob manutenção | 1/4 | In Progress|  |
+| 1. Transportes — Frota sob manutenção | 2/4 | In Progress|  |
 | 2. Transportes — Abastecimento, documentação e painel | 0/TBD | Not started | - |
 | 3. Elétrica — Inspeções da infraestrutura elétrica | 0/TBD | Not started | - |
 | 4. Fonoclama — Testes das zonas e portal integrado | 0/TBD | Not started | - |

@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: transportes-frota-sob-manuten-o
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-08-10T15:45:10.621Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-08-10T15:55:22.086Z"
 last_activity: 2026-08-10
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 01 (transportes-frota-sob-manuten-o) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-08-10 — Phase 01 execution started
 
-Progress: [███░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [███░░░░░░░] 25%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 01 P01 | 17min | 3 tasks | 3 files |
+| Phase 01 P02 | 10min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - Contratação pública (ARP/empenho) fora dos módulos novos
 - [Phase ?]: transp_pode_escrever() exige usuarios.ativo=true além do cargo, alinhado com 12_maquinas_areas_operacoes.sql
 - [Phase ?]: Leitura de transp_planos permanece pública (using(true)); apenas escrita passa por RBAC, preservando acesso do observador
+- [Phase ?]: transp_pode_escrever() não foi redefinida na migração 23 — reutiliza a função já corrigida na migração 22 (ativo=true + cargo)
+- [Phase ?]: Policies herdadas de transp_manutencoes (migração 10, sem distinção de cargo) permanecem inalteradas — risco residual T-02-05 (accept)
 
 ### Pending Todos
 
@@ -121,6 +124,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-10T15:45:10.591Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-08-10T15:55:22.053Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
