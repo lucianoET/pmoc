@@ -1,8 +1,13 @@
 # Correção do deploy — pmoc-orcin.vercel.app dando 404
 
+> **Documento histórico.** O problema abaixo já foi resolvido: o portal está no ar
+> em `https://pmoc-orcin.vercel.app` e o `APLICAR.sh` citado aqui não existe mais.
+> O repositório também foi renomeado — hoje é `luctronics-ET/pmoc`. Mantido só
+> como registro do que foi feito.
+
 ## Causa
 
-O repo `luctronicserp/pmoc` recebeu a pasta **DEV inteira**, mas sem
+O repo (hoje `luctronics-ET/pmoc`) recebeu a pasta **DEV inteira**, mas sem
 `index.html` na raiz. O Vercel publica um site estático — sem `index.html`
 na raiz, a URL retorna 404.
 
@@ -10,7 +15,7 @@ na raiz, a URL retorna 404.
 
 ```bash
 # 1. clone (ou entre na sua cópia local do repo)
-git clone https://github.com/luctronicserp/pmoc.git
+git clone https://github.com/luctronics-ET/pmoc.git
 cd ..
 
 # 2. rode o script apontando para o repo

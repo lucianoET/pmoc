@@ -9,7 +9,7 @@ cd pmoc-monorepo
 git init
 git add .
 git commit -m "PMOC monorepo — portal + refrigeração v2.8 + máquinas v1.0"
-git remote add origin https://github.com/luctronicserp/pmoc.git
+git remote add origin https://github.com/luctronics-ET/pmoc.git
 git branch -M main
 git push -u origin main
 ```
@@ -46,16 +46,18 @@ pela interface.
 
 ## 3 · Vercel
 
-vercel.com/new → Import Git Repository → `luctronicserp/pmoc`
+vercel.com/new → Import Git Repository → `luctronics-ET/pmoc`
 
 - Framework Preset: **Other**
 - Build Command: *(vazio)*
 - Output Directory: *(vazio)*
 - Project Name: **pmoc**
 
-Deploy. As rotas `/refrigeracao` e `/maquinas` já funcionam pelo `vercel.json`.
+Deploy. As rotas `/refrigeracao`, `/maquinas`, `/transportes`, `/eletrica` e
+`/fonoclama` já funcionam pelo `vercel.json`.
 
-Depois: Supabase → Auth → URL Configuration → Site URL = `https://pmoc.vercel.app`
+Depois: Supabase → Auth → URL Configuration → Site URL = `https://pmoc-orcin.vercel.app`
+(o nome `pmoc.vercel.app` já estava em uso na conta — ver `LEIA-ME-PRIMEIRO.md`)
 
 ## 4 · Dados do refrigeração — ✅ RECUPERADOS
 

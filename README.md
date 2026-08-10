@@ -8,7 +8,7 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 ![Stack](https://img.shields.io/badge/stack-HTML%20%2B%20vanilla%20JS-f7df1e)
 ![Build](https://img.shields.io/badge/build-nenhum-lightgrey)
 
-**Nomes espelhados:** GitHub `luctronicserp/pmoc` · Supabase `pmoc` · Vercel `pmoc`
+**Nomes:** GitHub `luctronics-ET/pmoc` · Supabase `pmoc` · Vercel `pmoc` (produção em `https://pmoc-orcin.vercel.app`)
 
 ---
 

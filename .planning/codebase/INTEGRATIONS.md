@@ -102,7 +102,7 @@
 
 **Hosting:**
 - **Platform:** Vercel (static hosting)
-- **Repository:** GitHub (`luctronicserp/pmoc`)
+- **Repository:** GitHub (`luctronics-ET/pmoc`)
 - **Deployment:** Git push to main → automatic Vercel build
 - **Build Command:** None (configured as "Other" with empty build command)
 - **Output Directory:** `.` (current directory)
