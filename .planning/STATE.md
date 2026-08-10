@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: transportes-frota-sob-manuten-o
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-08-10T15:55:22.086Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-08-10T16:10:22.416Z"
 last_activity: 2026-08-10
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 01 (transportes-frota-sob-manuten-o) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-08-10 — Phase 01 execution started
 
-Progress: [█████░░░░░] 50%
+Progress: [████████░░] 75%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [█████░░░░░] 50%
 |------|----------|-------|-------|
 | Phase 01 P01 | 17min | 3 tasks | 3 files |
 | Phase 01 P02 | 10min | 3 tasks | 3 files |
+| Phase 01 P03 | 14min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: Leitura de transp_planos permanece pública (using(true)); apenas escrita passa por RBAC, preservando acesso do observador
 - [Phase ?]: transp_pode_escrever() não foi redefinida na migração 23 — reutiliza a função já corrigida na migração 22 (ativo=true + cargo)
 - [Phase ?]: Policies herdadas de transp_manutencoes (migração 10, sem distinção de cargo) permanecem inalteradas — risco residual T-02-05 (accept)
+- [Phase ?]: baixarPecasDoPlano() centraliza todo débito de estoque por OS (salvarOS + concluirOS), guardada por idempotência via manutencao_id em transp_estoque_movimentos
+- [Phase ?]: popularPlanosOS() reforça a coerência km/h (D-04) também no seletor de plano da OS, filtrando por tipo_modelo e unidade_uso do ativo
 
 ### Pending Todos
 
@@ -124,6 +127,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-10T15:55:22.053Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-08-10T16:10:22.373Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None

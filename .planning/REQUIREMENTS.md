@@ -6,11 +6,11 @@
 
 - [ ] **TRANSP-01**: Gestor pode cadastrar viaturas e embarcações num inventário único, com categoria (viatura/embarcação) e unidade de medida de uso (km ou horas de motor)
 - [x] **TRANSP-02**: Gestor pode definir planos de manutenção por `tipo_modelo` com intervalos em km ou horas
-- [ ] **TRANSP-03**: Técnico pode abrir e concluir OS vinculada a ativo + plano + peças, com baixa automática de estoque e atualização do uso do ativo
+- [x] **TRANSP-03**: Técnico pode abrir e concluir OS vinculada a ativo + plano + peças, com baixa automática de estoque e atualização do uso do ativo
 - [x] **TRANSP-04**: Usuário pode registrar uso (km rodado / horas de motor) e o sistema detecta manutenção vencida/próxima
 - [ ] **TRANSP-05**: Usuário pode registrar abastecimento por veículo/condutor e ver consumo médio (km/l ou l/h)
 - [ ] **TRANSP-06**: Gestor pode cadastrar documentos por ativo (licenciamento, seguro, vistoria) com data de vencimento e receber alertas com antecedência
-- [ ] **TRANSP-07**: Gestor pode controlar estoque de peças com alerta de mínimo e lista de compras CSV
+- [x] **TRANSP-07**: Gestor pode controlar estoque de peças com alerta de mínimo e lista de compras CSV
 - [ ] **TRANSP-08**: Gestor vê dashboard de frota (KPIs, disponibilidade operacional, alertas)
 - [ ] **TRANSP-09**: Dados legados de transportes são analisados, consolidados e importados via SQL seed
 
@@ -69,11 +69,11 @@ Cobertura: 24/24 requisitos v1 mapeados, cada um em exatamente uma fase.
 |-----------|------|--------|
 | TRANSP-01 | Phase 1 | Pending |
 | TRANSP-02 | Phase 1 | Complete |
-| TRANSP-03 | Phase 1 | Pending |
+| TRANSP-03 | Phase 1 | Complete |
 | TRANSP-04 | Phase 1 | Complete |
 | TRANSP-05 | Phase 2 | Pending |
 | TRANSP-06 | Phase 2 | Pending |
-| TRANSP-07 | Phase 1 | Pending |
+| TRANSP-07 | Phase 1 | Complete |
 | TRANSP-08 | Phase 2 | Pending |
 | TRANSP-09 | Phase 1 | Pending |
 | ELET-01 | Phase 3 | Pending |
