@@ -17,43 +17,83 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
 
 ### Detalhamento das fases do v2.0
 
-#### Phase 5: Base unificada
+### Phase 5: Base unificada
 
 **Goal**: Os 6 módulos no escopo compartilham tokens visuais, login e shell de layout — nenhum define paleta própria nem duplica o fluxo de autenticação
-**Requisitos**: PLAT-01, PLAT-02, PLAT-03
-**Ponto de atenção**: `maquinas/app.js` duplica o fluxo de login inline (anti-padrão registrado no `CLAUDE.md`); é o módulo de maior risco desta fase, porque está em produção e tem 1771 linhas. `refrigeracao` não é tocado (PLAT-15).
+**Depends on**: Nothing (primeira fase do v2.0)
+**Requirements**: PLAT-01, PLAT-02, PLAT-03, PLAT-15, PLAT-16
+**Success Criteria** (what must be TRUE):
 
-#### Phase 6: Tema claro/escuro
+  1. Os 6 módulos (`maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`) carregam `shared/pmoc.css` e nenhum deles define cor, fonte ou espaçamento fora das variáveis dele
+  2. Os 6 módulos autenticam por `shared/auth.js`; `maquinas/app.js` não tem mais fluxo de login inline
+  3. Cabeçalho, navegação por abas e rodapé vêm de um shell comum — mudar o shell muda os 6 módulos de uma vez
+  4. `refrigeracao` continua idêntico: não carrega `pmoc.css`, não carrega o shell, e abre normalmente em produção
+  5. Nenhuma funcionalidade existente foi perdida — cada módulo faz depois tudo o que fazia antes, e os testes em `tests/` continuam passando
+
+### Phase 6: Tema claro/escuro
 
 **Goal**: Usuário alterna claro/escuro em qualquer módulo e a escolha o acompanha entre módulos e sessões
-**Requisitos**: PLAT-04, PLAT-05
-**Depende de**: Fase 5 — sem tokens únicos, seriam 6 implementações divergentes
+**Depends on**: Phase 5 (sem tokens únicos, seriam 6 implementações divergentes)
+**Requirements**: PLAT-04, PLAT-05, PLAT-15, PLAT-16
+**Success Criteria** (what must be TRUE):
 
-#### Phase 7: UI/UX mobile
+  1. Existe um controle de tema visível nos 6 módulos e ele alterna claro/escuro sem recarregar a página
+  2. A alternância é uma implementação só, apoiada nas variáveis de `shared/pmoc.css` — não há CSS de tema por módulo
+  3. A preferência persiste ao fechar e reabrir o navegador, e vale ao navegar de um módulo para outro
+  4. Na primeira visita, sem preferência salva, o tema segue `prefers-color-scheme` do sistema
+  5. Todo texto permanece legível nos dois temas, inclusive os estados de alerta (vencido, estoque baixo, INOP)
+
+### Phase 7: UI/UX mobile
 
 **Goal**: Os 4 módulos sem tratamento responsivo ficam utilizáveis em tela de celular
-**Requisitos**: PLAT-06, PLAT-07
-**Depende de**: Fase 5
-**Contexto**: `maquinas`, `transportes` e `shared/pmoc.css` já têm `@media`; faltam `eletrica`, `fonoclama`, `predial` e `mapa`
+**Depends on**: Phase 5
+**Requirements**: PLAT-06, PLAT-07, PLAT-15, PLAT-16
+**Success Criteria** (what must be TRUE):
 
-#### Phase 8: Kanban e calendário compartilhados
+  1. `eletrica`, `fonoclama`, `predial` e `mapa` abrem em tela de 375 px sem rolagem horizontal da página
+  2. Tabelas largas rolam dentro do próprio contêiner, não empurrando a página
+  3. Modais e formulários cabem na tela e permitem preencher e salvar sem zoom
+  4. A navegação principal é alcançável com o polegar, sem depender de precisão de mouse
+  5. `maquinas` e `transportes`, que já tinham `@media`, não regridem
+
+### Phase 8: Kanban e calendário compartilhados
 
 **Goal**: Kanban e calendário deixam de ser exclusivos do módulo de máquinas e passam a ser componentes reutilizáveis
-**Requisitos**: PLAT-08, PLAT-09
-**Ponto de atenção**: `maquinas/operacoes.js` tem testes (`tests/operacoes-maquinas.test.js`, `tests/integracao-operacoes-maquinas.test.js`) que precisam continuar passando após a extração
+**Depends on**: Phase 5
+**Requirements**: PLAT-08, PLAT-09, PLAT-16
+**Success Criteria** (what must be TRUE):
 
-#### Phase 9: Documentos
+  1. O kanban vive em `shared/` e o módulo de máquinas o consome de lá, sem cópia local
+  2. `tests/operacoes-maquinas.test.js` e `tests/integracao-operacoes-maquinas.test.js` continuam passando após a extração
+  3. O calendário vive em `shared/` e o módulo de máquinas o consome de lá
+  4. Ao menos um módulo além de máquinas usa o kanban, e ao menos um usa o calendário, com dados próprios
+  5. O comportamento no módulo de máquinas é o mesmo de antes — arrastar, mudar de coluna e agendar seguem funcionando
+
+### Phase 9: Documentos
 
 **Goal**: Exportar, importar e imprimir deixa de ser reimplementado por módulo
-**Requisitos**: PLAT-10, PLAT-11, PLAT-12
-**Contexto**: exportação CSV existe hoje em 5 implementações independentes, com separador e escape divergentes. `transportes/app.js` é a mais completa (usa `;` e passa cada campo por `csvSeguro()`, protegendo contra injeção de fórmula em planilha) — é a candidata natural a virar o utilitário compartilhado.
-**Escopo a definir no discuss-phase**: "exportar e importar docs e pdf" é o item mais vago do pedido original — pode ir de exportar a tabela atual em PDF até gerar formulário de OS impresso como o refrigeração faz.
+**Depends on**: Phase 5
+**Requirements**: PLAT-10, PLAT-11, PLAT-12, PLAT-16
+**Success Criteria** (what must be TRUE):
 
-#### Phase 10: Mapa integrado
+  1. Existe um utilitário de CSV em `shared/` e os módulos exportam por ele — as 5 implementações independentes deixam de existir
+  2. O CSV exportado protege contra injeção de fórmula em planilha, como já fazia `transportes/app.js` com `csvSeguro()`
+  3. Usuário importa um CSV, vê a pré-visualização do que será gravado e confirma antes de qualquer escrita no banco
+  4. Importar o mesmo arquivo duas vezes não duplica registros
+  5. Usuário gera PDF do que está vendo, a partir de uma implementação compartilhada
+
+### Phase 10: Mapa integrado
 
 **Goal**: O mapa deixa de ser uma planta isolada e passa a mostrar onde estão os ativos de cada módulo
-**Requisitos**: PLAT-13, PLAT-14
-**Contexto**: `cmasm_locais` tem 311 locais e os módulos já gravam `local_id` — o vínculo existe, falta a visualização
+**Depends on**: Phase 5
+**Requirements**: PLAT-13, PLAT-14, PLAT-16
+**Success Criteria** (what must be TRUE):
+
+  1. O `/mapa` mostra ativos dos módulos sobre a planta do CMASM, posicionados pelo vínculo `cmasm_locais.local_id` já existente
+  2. Usuário filtra o que aparece no mapa por módulo de origem
+  3. Clicar num ativo leva ao registro dele no módulo de origem
+  4. Ativo sem `local_id` preenchido não quebra o mapa — some ou aparece numa lista de não localizados, de forma explícita
+  5. O mapa continua funcionando para quem só tem acesso de observador
 
 ---
 
