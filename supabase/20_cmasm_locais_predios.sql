@@ -10,10 +10,10 @@
 -- equipamentos em prédios novos cria só o que faltava.
 --
 -- Códigos seguem o padrão do ERP de referência: REFRI-<PRÉDIO>-<SALA>.
+-- Sem `begin`/`commit`: o SQL Editor do Supabase executa statement a statement
+-- com autocommit. Cada comando abaixo é idempotente e pode rodar sozinho.
 -- Executar depois da migração 19.
 -- ═══════════════════════════════════════════════════════════════════
-
-begin;
 
 -- ── prédios (filhos diretos da raiz CMASM) ──
 insert into cmasm_locais (codigo, nome, tipo, parent_id, restricao, descricao)
@@ -57,8 +57,6 @@ from cmasm_locais p
 where e.local_id is null
   and e.predio is not null
   and p.codigo = 'REFRI-' || e.predio;
-
-commit;
 
 -- Conferência:
 --   select count(*) from cmasm_locais where tipo = 'edificacao';        -- 29

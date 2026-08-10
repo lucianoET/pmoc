@@ -11,27 +11,32 @@
 -- O resto fica com local_id nulo e o texto preservado, para ser resolvido na
 -- tela — chutar o vínculo seria pior que deixar em branco.
 --
+-- Sem `begin`/`commit` e sem tabela temporária: o SQL Editor do Supabase
+-- executa statement a statement com autocommit, e uma tabela temporária
+-- `on commit drop` deixa de existir antes do statement seguinte. Cada comando
+-- abaixo é idempotente e pode rodar sozinho.
+--
 -- Executar depois das migrações 19 e 20.
 -- ═══════════════════════════════════════════════════════════════════
 
-begin;
-
 -- ── correspondências explícitas, conferidas uma a uma ──
-create temporary table mapa_locais (texto text, codigo_local text) on commit drop;
-
-insert into mapa_locais (texto, codigo_local) values
-  ('Área do cais',     'CMASM-LOC-02'),   -- Cais Administrativo
-  ('Paiol de Munição', 'CMASM-PAIOIS');   -- Complexo de Paióis de Armamento
-
+--   'Área do cais'     → Cais Administrativo
+--   'Paiol de Munição' → Complexo de Paióis de Armamento
 update elet_ativos a
 set local_id = l.id
-from mapa_locais m
+from (values
+        ('Área do cais',     'CMASM-LOC-02'),
+        ('Paiol de Munição', 'CMASM-PAIOIS')
+     ) as m (texto, codigo_local)
 join cmasm_locais l on l.codigo = m.codigo_local
 where a.local_id is null and a.local = m.texto;
 
 update fono_ativos a
 set local_id = l.id
-from mapa_locais m
+from (values
+        ('Área do cais',     'CMASM-LOC-02'),
+        ('Paiol de Munição', 'CMASM-PAIOIS')
+     ) as m (texto, codigo_local)
 join cmasm_locais l on l.codigo = m.codigo_local
 where a.local_id is null and a.local = m.texto;
 
@@ -52,8 +57,6 @@ where a.local_id is null and a.local is not null and l.ativo
 update transp_ativos a
 set local_id = 151
 where a.local_id is null and upper(btrim(coalesce(a.local, ''))) = 'CMASM';
-
-commit;
 
 -- Conferência — o que ficou sem vínculo, para resolver pela tela:
 --   select 'eletrica' modulo, local, count(*) from elet_ativos
