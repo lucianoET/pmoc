@@ -1,0 +1,20 @@
+# Artefatos de depuração do MCP do Playwright (diretório de saída configurado
+# em .vscode/mcp.json — os arquivos continuam em disco, só não são versionados)
+.playwright-mcp/
+
+# Workspaces do editor: são preferência de cada pessoa e costumam apontar para
+# caminhos fora do repositório (ex.: ../../DEV_ERP), que não existem para outros
+*.code-workspace
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Segredos: nenhum arquivo de credencial deve entrar no repositório.
+# O acesso ao Supabase é por OAuth via .mcp.json (que não guarda segredo) e a
+# anon key nos frontends é pública por design — a proteção real é RLS.
+.env
+.env.*
+*.pem
