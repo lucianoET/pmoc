@@ -12,7 +12,7 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 
 - **Tech stack**: HTML + vanilla JS + Supabase SDK via CDN, zero-build — padrão estabelecido, novos módulos copiam
 - **Compatibilidade**: módulos em produção (refrigeração, máquinas) não podem quebrar — migrações aditivas, sem alterar tabelas existentes
-- **Deploy**: Vercel estático via push no GitHub `luctronicserp/pmoc` — sem build command
+- **Deploy**: Vercel estático via push no GitHub `luctronics-ET/pmoc` (URL de produção `https://pmoc-orcin.vercel.app`) — sem build command
 - **Idioma**: português em código, commits, UI e docs
 - **Dependência**: apps legados e planilhas fornecidos pelo usuário por módulo — análise/consolidação precede implementação
 
