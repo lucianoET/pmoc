@@ -39,7 +39,7 @@ O must-have original do plano ("O inventário importado contém 9 ativos, sendo 
 | Viagens históricas importadas | 23 | **23** (inalterado) | ✅ Continua conferido — o CSV é, e sempre foi, a fonte correta das viagens |
 | Ativos sem placa (`identificacao is null`) | 3 (tratadas como lacuna documental) | **16** (tratadas como "sem placa no próprio mapa", não lacuna documental — ver Seção 5) | ⚠️ Corrigido — natureza da lacuna também mudou |
 | Ativos sem `tipo_modelo` | não avaliado antes | **0** | ✅ Conferido |
-| Ativos INOP (`status = 'indisponivel'`) | não avaliado antes | **25 de 43** | ✅ Registrado nesta conferência |
+| Ativos INOP (`status = 'indisponivel'`) | não avaliado antes | **26 de 43** (25 pelo mapa + VTR-012, corrigido pelo usuário — ver Seção 5) | ✅ Registrado nesta conferência |
 
 As 23 viagens permanecem corretas e não foram tocadas pela migração 24 — o CSV nunca deixou de ser a fonte certa **para viagens**, só estava sendo usado incorretamente como fonte **do inventário**.
 
@@ -101,7 +101,7 @@ Refs. 2, 4 e 7 do mapa não existem — não há embarcação com esses números
 | VTR-009 | MICRO-ÔNIBUS | LBO 8418 | VTR EXT 6 | indisponivel | LVAD |
 | VTR-010 | CAMINHÃO IVECO DAILY | LLV 6081 | VTR EXT 7 | indisponivel | NEC MNT no sistema de combustível |
 | VTR-011 | CAMINHÃO MUNCK IVECO VERTIS | KPJ 8382 | VTR EXT 8 | indisponivel | NEC MNT sistema de freio e carroceria |
-| VTR-012 | FIAT DUCATO | JKH 9973 | VTR EXT 9 | disponivel | **P no mapa, com ressalva — ver Seção 5 (pendência aberta)** |
+| VTR-012 | FIAT DUCATO | JKH 9973 | VTR EXT 9 | indisponivel | **"P" no mapa, mas INOP na realidade — resolvido pelo usuário, ver Seção 5** |
 
 **Nota de desambiguação:** VTR-011 (KPJ 8382) e VTR-001 (KPJ8385) são dois "Caminhão Munck – Iveco Vertis" **diferentes**, distinguidos pela placa. Não são o mesmo ativo duplicado.
 
@@ -151,7 +151,11 @@ Nenhum identificador foi inventado para esses 16 — `identificacao` fica `null`
 
 **Pendência aberta, registrada sem resolução (por decisão explícita do coordenador):**
 
-> **VTR-012 (FIAT DUCATO, placa JKH 9973)** está marcado **"P"** (disponível) no mapa, mas a mesma linha traz a restrição: *"NEC manutenção corretiva e preventiva de motor, suspensão e ar-condicionado. A VTR está na Empresa JOMAP (Oficina) para delineamento. Retorno ASD."* — ou seja, o mapa diz "disponível" e "na oficina" ao mesmo tempo. A migração 24 importou como `status = 'disponivel'`, seguindo literalmente o mapa (coluna de estado operacional), com a ressalva completa preservada em `observacoes`. **Este relatório não resolve a contradição** — fica para o usuário decidir se `status` deveria ser `'manutencao'` em vez de `'disponivel'` enquanto o ativo estiver na JOMAP.
+> **VTR-012 (FIAT DUCATO, placa JKH 9973)** está marcado **"P"** (disponível) no mapa, mas a mesma linha traz a restrição: *"NEC manutenção corretiva e preventiva de motor, suspensão e ar-condicionado. A VTR está na Empresa JOMAP (Oficina) para delineamento. Retorno ASD."* — ou seja, o mapa diz "disponível" e "na oficina" ao mesmo tempo. A migração 24 importou inicialmente como `status = 'disponivel'`, seguindo literalmente a coluna de estado operacional.
+>
+> **RESOLVIDO em 10/08/2026.** O usuário confirmou que a viatura está **inoperante**. `status` corrigido para `'indisponivel'` no banco e na migração 24 (commit `33fc6db`), com a origem da divergência registrada em `observacoes`. A correção foi feita tanto no `insert` quanto num `update` próprio, porque o `insert` usa `on conflict do nothing` e sozinho não alcançaria um banco que já tem a linha.
+>
+> Vale como precedente: **o mapa não é infalível na coluna de estado operacional.** Onde a coluna de restrições contradiz o "P", a restrição tende a ser a informação mais atual.
 
 ## 6. Idempotência das migrações de import
 
@@ -169,7 +173,7 @@ Reexecutar tanto o seed 11 quanto a migração 24, em qualquer ordem relativa en
 
 **Divergência grave encontrada e corrigida nesta conferência:** o inventário importado pelo seed 11 media apenas 21% da frota real (9 de 43 ativos) porque foi construído a partir de um registro de viagens, não do inventário. A migração 24 corrigiu isso — aplicada e conferida em produção antes deste relatório ser reescrito.
 
-**Após a correção, zero divergência restante** entre `transp_ativos` (43 linhas) e o PDF do mapa: todos os códigos, nomes, placas, estados operacionais e restrições batem linha a linha, com uma única contradição já presente na própria fonte (VTR-012, Seção 5, registrada como pendência aberta, não resolvida por este relatório).
+**Após a correção, zero divergência restante** entre `transp_ativos` (43 linhas) e o PDF do mapa: todos os códigos, nomes, placas, estados operacionais e restrições batem linha a linha. A única contradição presente na própria fonte (VTR-012) foi resolvida pelo usuário em 10/08/2026 — ver Seção 5. O banco diverge do mapa nesse único ponto, deliberadamente, porque o mapa está desatualizado ali.
 
 **Ainda não afirmado:** este documento **não declara TRANSP-09 nem TRANSP-01 concluídos**. A conclusão depende de nova validação humana — agora sobre os 43 ativos, não mais sobre os 9 do relatório anterior. Ver `01-04-SUMMARY.md` para o registro completo desta correção como desvio do plano original.
 

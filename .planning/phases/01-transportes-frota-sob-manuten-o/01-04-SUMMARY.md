@@ -37,7 +37,7 @@ key-decisions:
   - "O CSV ref/Mapa de VTR e EMB ATU 20FEV26.csv NÃO é o inventário — é um registro de viagens de um único dia (30JAN). O inventário real está no PDF de mesmo nome, com 43 ativos, não 9. O nome quase idêntico dos dois arquivos causou a confusão original no seed 11."
   - "Migração 24 corrige o achado sem alterar transportes/app.js nem transportes/index.html — é puramente dado (DML sobre transp_ativos), sem mudança de schema, RLS ou frontend"
   - "Equipamentos como empilhadeira, trator e guindaste são tipo='viatura' no schema mas unidade_uso='h' (horímetro), não 'km' — o must-have original ('toda viatura = km') foi substituído por essa regra mais precisa"
-  - "VTR-012 (FIAT DUCATO) permanece com status='disponivel' apesar da restrição no mapa mencionar que está na oficina JOMAP — pendência registrada, não resolvida, por decisão explícita do usuário/coordenador"
+  - "VTR-012 (FIAT DUCATO) foi importado como status='disponivel' seguindo o mapa; o usuário confirmou em 10/08/2026 que está inoperante e o status foi corrigido para 'indisponivel' no banco e na migração 24 (commit 33fc6db)"
 
 requirements-completed: [TRANSP-01, TRANSP-09, INTEG-02, INTEG-03, INTEG-04]
 
@@ -128,7 +128,7 @@ _Nenhuma tarefa desta plan usa TDD — não há commits test→feat→refactor s
 - O CSV `ref/Mapa de VTR e EMB ATU 20FEV26.csv` continua sendo a fonte correta das 23 viagens históricas — o erro estava em usá-lo também como fonte do inventário, não em tê-lo usado para as viagens
 - `unidade_uso` é definido pela natureza operacional do equipamento (horímetro vs. hodômetro), não pela categoria de schema (`tipo = 'viatura'` vs. `'embarcacao'`) — empilhadeira, trator e guindaste são `'viatura'` no schema mas `'h'` na unidade de uso
 - Ativos sem placa no próprio mapa (`XXX`) recebem `identificacao = null`, nunca a string literal `'XXX'` nem um valor inventado
-- VTR-012 permanece `status = 'disponivel'` (seguindo literalmente o mapa), com a contradição sobre a oficina JOMAP preservada em `observacoes` e registrada como pendência aberta, sem resolução automática
+- VTR-012 foi importado como `status = 'disponivel'` seguindo literalmente o mapa; a contradição sobre a oficina JOMAP foi levada ao usuário, que confirmou INOP em 10/08/2026 — corrigido para `'indisponivel'` no banco e na migração 24 (commit `33fc6db`)
 
 ## Deviations from Plan
 
@@ -157,7 +157,7 @@ None - a migração 24 já foi aplicada e conferida em produção pelo usuário 
 
 ## Next Phase Readiness
 - O módulo Transportes está com o inventário real (43 ativos) refletido no banco de produção; a Fase 2 (abastecimento, documentação e painel) pode assumir esse volume real de frota, não os 9 ativos do seed original
-- **Pendência aberta, não bloqueante, herdada para o usuário:** VTR-012 (FIAT DUCATO) tem contradição não resolvida entre status "P" e a restrição de estar na oficina JOMAP — decidir se `status` deveria virar `'manutencao'`
+- ✅ **Resolvido em 10/08/2026:** a contradição do VTR-012 (FIAT DUCATO) entre o "P" do mapa e a restrição de estar na oficina JOMAP foi levada ao usuário, que confirmou INOP. Status corrigido para `'indisponivel'`. Precedente registrado: onde a coluna de restrições contradiz o "P", a restrição é a informação mais atual
 - **Pendência aberta, não bloqueante:** checagem de console de navegador real para Refrigeração/Máquinas (INTEG-04) e a transcrição completa da Parte B do checkpoint (INTEG-03) não foram diretamente observadas por este executor — recomenda-se confirmação humana explícita antes de considerar a fase 100% fechada, mesmo que o coordenador tenha direcionado a finalização da documentação
 - Nenhum bloqueio para a Fase 2
 
