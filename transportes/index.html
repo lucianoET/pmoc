@@ -225,9 +225,9 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Data</th><th>Ativo</th><th>Tipo</th><th>Descrição</th><th>Uso ref.</th><th>Próx. manutenção</th><th>Executado por</th>
+            <th>Data</th><th>Ativo</th><th>Tipo</th><th>Descrição</th><th>Uso ref.</th><th>Próx. manutenção</th><th>Executado por</th><th>Status</th><th>Ações</th>
           </tr></thead>
-          <tbody id="tb-manutencoes"><tr><td colspan="7" class="tagline">Carregando...</td></tr></tbody>
+          <tbody id="tb-manutencoes"><tr><td colspan="9" class="tagline">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -410,12 +410,17 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
 
 <div class="overlay" id="modal-manutencao">
   <div class="modal">
-    <div class="modal-hd"><h3>Registrar manutenção</h3><button class="btn btn-s btn-sm" onclick="fecharModal('manutencao')">Fechar</button></div>
+    <div class="modal-hd"><h3>Registrar OS de manutenção</h3><button class="btn btn-s btn-sm" onclick="fecharModal('manutencao')">Fechar</button></div>
     <div class="modal-body">
       <div class="fgrid">
         <div class="frow"><label>Ativo</label><select id="mn-ativo"></select></div>
         <div class="frow"><label>Data</label><input id="mn-data" type="date"/></div>
       </div>
+      <div class="fgrid">
+        <div class="frow"><label>Plano vinculado</label><select id="mn-plano"><option value="">Sem plano</option></select></div>
+        <div class="frow"><label>Status da OS</label><select id="mn-status"><option value="pendente">Pendente</option><option value="em_andamento">Em andamento</option><option value="concluida">Concluída</option><option value="cancelada">Cancelada</option></select></div>
+      </div>
+      <div class="frow"><label>Peças previstas pelo plano</label><div id="mn-pecas"></div></div>
       <div class="fgrid3">
         <div class="frow"><label>Tipo</label><select id="mn-tipo"><option value="preventiva">Preventiva</option><option value="corretiva">Corretiva</option><option value="inspecao">Inspeção</option></select></div>
         <div class="frow"><label>Uso de referência</label><input id="mn-uso" type="number" min="0" step="0.1"/></div>
@@ -431,7 +436,7 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
         <div class="frow"><label>Observações</label><textarea id="mn-observacoes"></textarea></div>
       </div>
     </div>
-    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('manutencao')">Cancelar</button><button class="btn btn-p" onclick="salvarManutencao()">Salvar</button></div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('manutencao')">Cancelar</button><button class="btn btn-p" onclick="salvarOS()">Salvar</button></div>
   </div>
 </div>
 

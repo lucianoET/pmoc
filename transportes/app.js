@@ -48,12 +48,20 @@ const STATUS_BADGE = {
   em_andamento: 'b-warn',
   concluida: 'b-ok',
   cancelada: 'b-red',
+  pendente: 'b-warn',
 }
 
 const TIPO_MANUTENCAO = {
   preventiva: 'Preventiva',
   corretiva: 'Corretiva',
   inspecao: 'Inspeção',
+}
+
+const STATUS_OS = {
+  pendente: 'Pendente',
+  em_andamento: 'Em andamento',
+  concluida: 'Concluída',
+  cancelada: 'Cancelada',
 }
 
 const ROLES_ESCRITA = ['admin', 'gestor', 'tecnico']
@@ -377,7 +385,7 @@ function renderManutencoes() {
 
   const tbody = document.getElementById('tb-manutencoes')
   if (!MANUTENCOES.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="tagline">Nenhuma manutenção registrada.</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="9" class="tagline">Nenhuma manutenção registrada.</td></tr>'
     return
   }
 
@@ -393,6 +401,8 @@ function renderManutencoes() {
       <td>${item.uso_referencia == null ? '—' : `${Number(item.uso_referencia).toLocaleString('pt-BR')} ${esc(ATIVOS.find(ativo => ativo.id === item.ativo_id)?.unidade_uso || '')}`}</td>
       <td>${fmtDate(item.prox_manutencao)}</td>
       <td>${esc(item.executado_por || item.fornecedor || '—')}</td>
+      <td>${badgeStatus(item.status || 'concluida', STATUS_OS)}</td>
+      <td>${podeEditar() && item.status !== 'concluida' ? `<button class="btn btn-s btn-sm" onclick="concluirOS('${item.id}')">Concluir OS</button>` : '—'}</td>
     </tr>
   `).join('')
 }
@@ -1213,8 +1223,84 @@ async function salvarViagem() {
   await carregarTudo()
 }
 
+function popularPlanosOS(ativoId) {
+  const ativo = ATIVOS.find(item => Number(item.id) === Number(ativoId))
+  const select = document.getElementById('mn-plano')
+  const planosCompativeis = ativo
+    ? PLANOS.filter(plano => plano.ativo !== false && plano.tipo_modelo === ativo.tipo_modelo && plano.unidade === ativo.unidade_uso)
+    : []
+  select.innerHTML = '<option value="">Sem plano</option>' + planosCompativeis.map(plano => `
+    <option value="${plano.id}">${esc(plano.nome)} (a cada ${plano.intervalo} ${esc(plano.unidade)})</option>
+  `).join('')
+}
+
+function mostrarMateriaisPlano(planoId) {
+  const container = document.getElementById('mn-pecas')
+  if (!planoId) {
+    container.innerHTML = ''
+    return
+  }
+
+  const itens = PLANO_MATS.filter(item => item.plano_id === planoId)
+  if (!itens.length) {
+    container.innerHTML = '<div class="tagline">Nenhuma peça vinculada a este plano.</div>'
+    return
+  }
+
+  container.innerHTML = itens.map(item => {
+    const material = MATERIAIS.find(mat => mat.id === item.material_id)
+    const saldo = Number(material?.estoque_atual || 0)
+    const prevista = Number(item.quantidade)
+    const insuficiente = saldo < prevista
+    return `
+      <div class="mat-alert">
+        <div class="mat-info">
+          <div class="mat-nome">${esc(material?.nome || 'Peça removida')}</div>
+          <div class="mat-stock">Prevista: ${prevista.toLocaleString('pt-BR')} ${esc(material?.unidade || 'un')} · saldo: ${saldo.toLocaleString('pt-BR')} ${esc(material?.unidade || 'un')}</div>
+        </div>
+        ${insuficiente ? '<span class="badge b-red">Saldo insuficiente</span>' : '<span class="badge b-ok">OK</span>'}
+      </div>
+    `
+  }).join('')
+}
+
+async function baixarPecasDoPlano(manutencaoId, planoId) {
+  if (ESTOQUE_MOV.some(mov => mov.manutencao_id === manutencaoId)) return
+  if (!planoId) return
+
+  let custoTotal = 0
+  const plano = PLANOS.find(item => item.id === planoId)
+
+  for (const item of PLANO_MATS.filter(pm => pm.plano_id === planoId)) {
+    const material = MATERIAIS.find(mat => mat.id === item.material_id)
+    if (!material) continue
+
+    const novoSaldo = Math.max(0, Number(material.estoque_atual || 0) - Number(item.quantidade))
+    const updateRes = await supa.from('transp_materiais').update({ estoque_atual: novoSaldo }).eq('id', material.id)
+    if (updateRes.error) {
+      alert(`Erro ao baixar estoque de ${material.nome}: ${updateRes.error.message}`)
+    }
+
+    const insertRes = await supa.from('transp_estoque_movimentos').insert({
+      material_id: material.id,
+      manutencao_id: manutencaoId,
+      tipo: 'saida',
+      quantidade: item.quantidade,
+      motivo: `OS de manutenção — plano "${plano?.nome || ''}"`,
+    })
+    if (insertRes.error) {
+      alert(`Erro ao registrar movimento de ${material.nome}: ${insertRes.error.message}`)
+    }
+
+    if (material.preco != null) custoTotal += Number(material.preco) * Number(item.quantidade)
+  }
+
+  return custoTotal
+}
+
 function abrirModalManutencao(ativoId = null) {
   if (!podeEditar()) return
+  const selectAtivo = document.getElementById('mn-ativo')
   popularSelectAtivos('mn-ativo', ativoId ?? ATIVOS[0]?.id)
   document.getElementById('mn-data').value = new Date().toISOString().slice(0, 10)
   document.getElementById('mn-tipo').value = 'preventiva'
@@ -1225,10 +1311,23 @@ function abrirModalManutencao(ativoId = null) {
   document.getElementById('mn-descricao').value = ''
   document.getElementById('mn-prox').value = ''
   document.getElementById('mn-observacoes').value = ''
+  document.getElementById('mn-status').value = 'concluida'
+
+  popularPlanosOS(selectAtivo.value)
+  document.getElementById('mn-pecas').innerHTML = ''
+
+  selectAtivo.onchange = () => {
+    popularPlanosOS(selectAtivo.value)
+    document.getElementById('mn-pecas').innerHTML = ''
+  }
+  document.getElementById('mn-plano').onchange = evento => {
+    mostrarMateriaisPlano(Number(evento.target.value) || null)
+  }
+
   document.getElementById('modal-manutencao').classList.add('open')
 }
 
-async function salvarManutencao() {
+async function salvarOS() {
   if (!podeEditar()) return
   const ativoId = Number(document.getElementById('mn-ativo').value)
   const descricao = document.getElementById('mn-descricao').value.trim()
@@ -1236,6 +1335,17 @@ async function salvarManutencao() {
   if (!ativoId || !descricao || !data) {
     alert('Preencha ativo, data e descrição.')
     return
+  }
+
+  const planoId = Number(document.getElementById('mn-plano').value) || null
+  const status = document.getElementById('mn-status').value
+
+  let custoPecas = 0
+  if (planoId) {
+    for (const item of PLANO_MATS.filter(pm => pm.plano_id === planoId)) {
+      const material = MATERIAIS.find(mat => mat.id === item.material_id)
+      if (material?.preco != null) custoPecas += Number(material.preco) * Number(item.quantidade)
+    }
   }
 
   const usoTexto = document.getElementById('mn-uso').value
@@ -1250,13 +1360,18 @@ async function salvarManutencao() {
     prox_manutencao: document.getElementById('mn-prox').value || null,
     novo_status: document.getElementById('mn-novo-status').value || null,
     observacoes: document.getElementById('mn-observacoes').value.trim() || null,
+    plano_id: planoId,
+    status,
+    custo_pecas: custoPecas,
   }
 
-  const insertRes = await supa.from('transp_manutencoes').insert(payload)
+  const insertRes = await supa.from('transp_manutencoes').insert(payload).select().single()
   if (insertRes.error) {
     alert(`Erro: ${insertRes.error.message}`)
     return
   }
+
+  const manutencaoId = insertRes.data?.id
 
   const ativoAtual = ATIVOS.find(item => Number(item.id) === ativoId)
   const updatePayload = {}
@@ -1269,11 +1384,42 @@ async function salvarManutencao() {
   if (Object.keys(updatePayload).length) {
     const updateRes = await supa.from('transp_ativos').update(updatePayload).eq('id', ativoId)
     if (updateRes.error) {
-      alert(`Manutenção salva, mas o ativo não foi atualizado: ${updateRes.error.message}`)
+      alert(`OS salva, mas o ativo não foi atualizado: ${updateRes.error.message}`)
     }
   }
 
+  if (status === 'concluida' && planoId && manutencaoId) {
+    await baixarPecasDoPlano(manutencaoId, planoId)
+  }
+
   fecharModal('manutencao')
+  await carregarTudo()
+}
+
+async function concluirOS(id) {
+  if (!podeEditar()) return
+  const manutencao = MANUTENCOES.find(item => item.id === id)
+  if (!manutencao) return
+  if (manutencao.status === 'concluida') return
+
+  const updateRes = await supa.from('transp_manutencoes').update({ status: 'concluida' }).eq('id', id)
+  if (updateRes.error) {
+    alert(`Erro: ${updateRes.error.message}`)
+    return
+  }
+
+  if (manutencao.plano_id) {
+    await baixarPecasDoPlano(id, manutencao.plano_id)
+  }
+
+  const ativoAtual = ATIVOS.find(item => Number(item.id) === Number(manutencao.ativo_id))
+  if (manutencao.uso_referencia != null && ativoAtual && Number(manutencao.uso_referencia) > Number(ativoAtual.uso_atual || 0)) {
+    const updateAtivoRes = await supa.from('transp_ativos').update({ uso_atual: manutencao.uso_referencia }).eq('id', manutencao.ativo_id)
+    if (updateAtivoRes.error) {
+      alert(`OS concluída, mas o ativo não foi atualizado: ${updateAtivoRes.error.message}`)
+    }
+  }
+
   await carregarTudo()
 }
 
@@ -1342,7 +1488,8 @@ function exporNoWindow() {
     sair,
     salvarAtivo,
     salvarViagem,
-    salvarManutencao,
+    salvarOS,
+    concluirOS,
     salvarPlano,
     salvarMaterial,
     salvarMovimento,
