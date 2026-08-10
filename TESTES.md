@@ -215,3 +215,42 @@ node --test tests/predial-dominio.test.js
 - [ ] Confirmar que nenhum cargo (encarregado, chefe, direção) aparece mais na árvore.
 - [ ] `/eletrica` → editar um ativo: o campo Local agora é uma lista da árvore, não texto livre.
 - [ ] Salvar e conferir que o ativo passou a contar na coluna Ativos daquele local no Predial.
+
+## Validação local das migrações (sem tocar na produção)
+
+Antes de rodar qualquer migração no Supabase, dá para ensaiar tudo num Postgres
+descartável. Foi assim que o erro `55006: cannot ALTER TABLE ... because it has
+pending trigger events` da migração 19 foi encontrado e corrigido.
+
+```bash
+docker run -d --name pmoc-teste -e POSTGRES_PASSWORD=teste -e POSTGRES_DB=pmoc -p 55432:5432 postgres:16-alpine
+```
+
+```bash
+export SUPABASE_DB_URL='postgresql://postgres:teste@localhost:55432/pmoc'
+```
+
+O fixture `tests/fixtures/banco-teste.sql` cria os papéis `anon`/`authenticated`
+e as tabelas de produção como stub, com os 171 equipamentos reais. Depois é só
+tocar as migrações na ordem:
+
+```bash
+uv run --with "psycopg[binary]" python supabase/aplicar.py ../tests/fixtures/banco-teste.sql 14_eletrica_fonoclama_schema.sql 15_eletrica_seed.sql 16_fonoclama_seed.sql 17_predial_schema.sql 18_predial_seed.sql 19_cmasm_locais_unificado.sql 20_cmasm_locais_predios.sql 21_vincula_locais_modulos.sql
+```
+
+Resultado esperado ao fim: `cmasm_locais` 311, `cmasm_estrutura` 78,
+`pred_checklist_itens` 206. E as conferências:
+
+| Conferência | Esperado |
+|---|---|
+| edificações | 29 |
+| salas | 132 |
+| locais ativos | 233 |
+| locais arquivados (organograma) | 78 |
+| equipamentos sem `local_id` | 0 |
+| locais órfãos | 0 |
+| nós de estrutura órfãos | 0 |
+
+Rodar 19, 20 e 21 uma segunda vez deve manter as contagens idênticas.
+
+Ao terminar: `docker rm -f pmoc-teste`.

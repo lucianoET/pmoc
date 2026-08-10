@@ -31,7 +31,9 @@ begin
     execute 'alter table pred_locais rename to cmasm_locais';
 
     for politica in
-      select policyname from pg_policies where schemaname = 'public' and tablename = 'cmasm_locais'
+      select policyname from pg_policies
+       where schemaname = 'public' and tablename = 'cmasm_locais'
+         and policyname like '%pred_locais%'
     loop
       execute format('alter policy %I on cmasm_locais rename to %I',
                      politica, replace(politica, 'pred_locais', 'cmasm_locais'));
@@ -84,6 +86,13 @@ update cmasm_locais
 set ativo = false
 where ativo
   and id in (select id from cmasm_estrutura);
+
+-- A FK própria de cmasm_estrutura é `deferrable initially deferred`, então os
+-- inserts acima deixam checagens pendentes até o fim da transação. O SQL Editor
+-- roda o arquivo inteiro numa transação só, e ALTER TABLE numa tabela com
+-- eventos de trigger pendentes falha com 55006. Força a checagem agora — a
+-- essa altura todo parent_id já aponta para um nó existente.
+set constraints all immediate;
 
 -- ── 3. local_id nas tabelas de ativos de cada módulo ──
 -- Aditivo e nullable: os módulos em produção seguem funcionando sem preencher.
