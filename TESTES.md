@@ -254,3 +254,54 @@ Resultado esperado ao fim: `cmasm_locais` 311, `cmasm_estrutura` 78,
 Rodar 19, 20 e 21 uma segunda vez deve manter as contagens idênticas.
 
 Ao terminar: `docker rm -f pmoc-teste`.
+
+## Módulo Mapa (/mapa) — implementação 10/08/2026
+
+### Preparação
+
+- [ ] Servir o repositório por HTTP a partir da raiz (`python -m http.server`) —
+      abrir via `file://` quebra a descoberta de credenciais do
+      `shared/supabase-config.js`.
+
+### Fluxo manual
+
+- [ ] Abrir `/mapa`.
+- [ ] Entrar por cargo (qualquer um, inclusive "Livre").
+- [ ] Confirmar que o mapa Leaflet renderiza centrado no CMASM.
+- [ ] Alternar os botões Mapa/Satélite e confirmar a troca de basemap sem recarregar a página.
+- [ ] Ativar e desativar cada um dos três módulos da barra lateral (Aguada, Grama, Elétrica)
+      e verificar que o painel de filtros do xMap acompanha (mostra/oculta as camadas).
+- [ ] Confirmar no console do navegador que não há erro de rede nem de conteúdo misto.
+- [ ] Clicar em Sair e confirmar que a tela de login volta.
+
+### Não regressão
+
+- [ ] `/transportes`, `/maquinas`, `/refrigeracao`, `/eletrica`, `/fonoclama` e `/predial`
+      continuam abrindo normalmente.
+- [ ] O card **Mapa** no portal (`/`) leva a `/mapa`.
+
+## Conferência do import do CSV de VTR/EMB (Transportes)
+
+A importação da programação de VTR/EMB já foi aplicada por
+`supabase/11_transportes_seed.sql` e conferida linha a linha em
+`.planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md`
+(9/9 ativos e 23/23 viagens reconciliados, seed idempotente por `codigo` e por
+`chave_importacao`). Para confirmar o estado em produção, rodar no SQL Editor
+do Supabase:
+
+```sql
+-- esperado: 9
+select count(*) from transp_ativos;
+
+-- esperado: 23
+select count(*) from transp_viagens
+where importado_de = 'Mapa de VTR e EMB ATU 20FEV26.csv';
+
+-- esperado: igual ao total de linhas acima (nenhuma chave duplicada)
+select count(distinct chave_importacao) from transp_viagens
+where importado_de = 'Mapa de VTR e EMB ATU 20FEV26.csv';
+```
+
+Se os números vierem menores que o esperado, a correção é reexecutar
+`11_transportes_seed.sql` — o seed é idempotente (`on conflict do update`).
+**Não** criar migração nova para reimportar o CSV.

@@ -1,6 +1,129 @@
-# Roadmap: PMOC · CMASM — Transportes, Elétrica e Fonoclama
+# Roadmap: PMOC · CMASM
 
-## Visão Geral
+## Milestone corrente: v2.0 — Consolidação da plataforma
+
+Unificar a base visual e de código dos módulos e entregar as capacidades transversais sobre essa base, em vez de implementá-las seis vezes. Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial` e `mapa`. O `refrigeracao` fica **congelado** por decisão do usuário — é o app mais valioso em produção e migrá-lo seria metade do esforço com o maior risco; vira milestone próprio depois, com o padrão já provado.
+
+A ordem das três primeiras fases não é negociável: a base unificada (Fase 5) é pré-requisito de tema (6) e mobile (7). Feitas antes, seriam refeitas depois. Da Fase 8 em diante a ordem é flexível.
+
+As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de elétrica, testes de fonoclama) ficam **para depois do v2.0**, para serem construídas uma vez só, já sobre a base unificada.
+
+- [ ] **Phase 5: Base unificada** - Os 6 módulos passam a carregar `shared/pmoc.css` como fonte única de tokens e `shared/auth.js` para login, com shell de layout comum
+- [ ] **Phase 6: Tema claro/escuro** - Alternância de tema em qualquer módulo, numa implementação só, com preferência persistida entre módulos
+- [ ] **Phase 7: UI/UX mobile** - `eletrica`, `fonoclama`, `predial` e `mapa` utilizáveis em celular, sem rolagem horizontal da página
+- [ ] **Phase 8: Kanban e calendário compartilhados** - Componentes extraídos de `maquinas/` para `shared/`, com os testes preservados, e adotados por outros módulos
+- [ ] **Phase 9: Documentos** - Exportação CSV unificada, importação de arquivo com conferência e geração de PDF
+- [ ] **Phase 10: Mapa integrado** - Ativos dos módulos plotados sobre a planta do CMASM via `cmasm_locais.local_id`, com navegação para o módulo de origem
+
+### Detalhamento das fases do v2.0
+
+### Phase 5: Base unificada
+
+**Goal**: Os 6 módulos no escopo compartilham tokens visuais, login e shell de layout — nenhum define paleta própria nem duplica o fluxo de autenticação
+**Depends on**: Nothing (primeira fase do v2.0)
+**Requirements**: PLAT-01, PLAT-02, PLAT-03, PLAT-15, PLAT-16
+**Success Criteria** (what must be TRUE):
+
+  1. Os 6 módulos (`maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`) carregam `shared/pmoc.css` e nenhum deles define cor, fonte ou espaçamento fora das variáveis dele
+  2. Os 6 módulos autenticam por `shared/auth.js`; `maquinas/app.js` não tem mais fluxo de login inline
+  3. Cabeçalho, navegação por abas e rodapé vêm de um shell comum — mudar o shell muda os 6 módulos de uma vez
+  4. `refrigeracao` continua idêntico: não carrega `pmoc.css`, não carrega o shell, e abre normalmente em produção
+  5. Nenhuma funcionalidade existente foi perdida — cada módulo faz depois tudo o que fazia antes, e os testes em `tests/` continuam passando
+
+**Plans**: 7 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Base compartilhada: `shared/shell.js` extraído com teste, folha comum estendida e rótulo do observador (PLAT-01, PLAT-02, PLAT-03)
+
+**Wave 2** *(blocked on Wave 1 completion — quatro planos em paralelo, sem sobreposição de arquivos)*
+
+- [ ] 05-02-PLAN.md — Motor de manutenção consome o shell; elétrica e fonoclama saem junto (PLAT-03, PLAT-16)
+- [ ] 05-03-PLAN.md — Predial monta cabeçalho, abas e rodapé pelo shell comum (PLAT-03, PLAT-16)
+- [ ] 05-04-PLAN.md — Mapa adota a folha comum e o shell sem abas (PLAT-01, PLAT-03, PLAT-16)
+- [ ] 05-05-PLAN.md — Transportes adota a folha comum, aposenta a classe de marca própria e monta o shell (PLAT-01, PLAT-03, PLAT-16)
+
+**Wave 3** *(blocked on Wave 2 completion — módulo de maior risco, por último)*
+
+- [ ] 05-06-PLAN.md — Máquinas: folha comum, login compartilhado, shell e migração para módulo ES com handlers publicados (PLAT-01, PLAT-02, PLAT-03, PLAT-16)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 05-07-PLAN.md — Auditoria da fase, roteiro em `TESTES.md` e conferência isolada de não regressão da refrigeração (PLAT-15, PLAT-16)
+
+**Baseline da fase**: commit `b53505c` (19 testes passando em `node --test`); os gates de não regressão comparam contra ele
+**Decisões travadas**: D-01 rótulo do observador preservado · D-02 cor de destaque do Máquinas `#c9a84c` (a que o módulo já usa hoje na aba ativa, botão primário, foco e nome no logo — corrigida após conferência no código; o verde `#5a9e6f` é token semântico, não de marca) · D-03 rodapé com nome, versão e link do portal
+**UI hint**: yes
+
+### Phase 6: Tema claro/escuro
+
+**Goal**: Usuário alterna claro/escuro em qualquer módulo e a escolha o acompanha entre módulos e sessões
+**Depends on**: Phase 5 (sem tokens únicos, seriam 6 implementações divergentes)
+**Requirements**: PLAT-04, PLAT-05, PLAT-15, PLAT-16
+**Success Criteria** (what must be TRUE):
+
+  1. Existe um controle de tema visível nos 6 módulos e ele alterna claro/escuro sem recarregar a página
+  2. A alternância é uma implementação só, apoiada nas variáveis de `shared/pmoc.css` — não há CSS de tema por módulo
+  3. A preferência persiste ao fechar e reabrir o navegador, e vale ao navegar de um módulo para outro
+  4. Na primeira visita, sem preferência salva, o tema segue `prefers-color-scheme` do sistema
+  5. Todo texto permanece legível nos dois temas, inclusive os estados de alerta (vencido, estoque baixo, INOP)
+
+### Phase 7: UI/UX mobile
+
+**Goal**: Os 4 módulos sem tratamento responsivo ficam utilizáveis em tela de celular
+**Depends on**: Phase 5
+**Requirements**: PLAT-06, PLAT-07, PLAT-15, PLAT-16
+**Success Criteria** (what must be TRUE):
+
+  1. `eletrica`, `fonoclama`, `predial` e `mapa` abrem em tela de 375 px sem rolagem horizontal da página
+  2. Tabelas largas rolam dentro do próprio contêiner, não empurrando a página
+  3. Modais e formulários cabem na tela e permitem preencher e salvar sem zoom
+  4. A navegação principal é alcançável com o polegar, sem depender de precisão de mouse
+  5. `maquinas` e `transportes`, que já tinham `@media`, não regridem
+
+### Phase 8: Kanban e calendário compartilhados
+
+**Goal**: Kanban e calendário deixam de ser exclusivos do módulo de máquinas e passam a ser componentes reutilizáveis
+**Depends on**: Phase 5
+**Requirements**: PLAT-08, PLAT-09, PLAT-16
+**Success Criteria** (what must be TRUE):
+
+  1. O kanban vive em `shared/` e o módulo de máquinas o consome de lá, sem cópia local
+  2. `tests/operacoes-maquinas.test.js` e `tests/integracao-operacoes-maquinas.test.js` continuam passando após a extração
+  3. O calendário vive em `shared/` e o módulo de máquinas o consome de lá
+  4. Ao menos um módulo além de máquinas usa o kanban, e ao menos um usa o calendário, com dados próprios
+  5. O comportamento no módulo de máquinas é o mesmo de antes — arrastar, mudar de coluna e agendar seguem funcionando
+
+### Phase 9: Documentos
+
+**Goal**: Exportar, importar e imprimir deixa de ser reimplementado por módulo
+**Depends on**: Phase 5
+**Requirements**: PLAT-10, PLAT-11, PLAT-12, PLAT-16
+**Success Criteria** (what must be TRUE):
+
+  1. Existe um utilitário de CSV em `shared/` e os módulos exportam por ele — as 5 implementações independentes deixam de existir
+  2. O CSV exportado protege contra injeção de fórmula em planilha, como já fazia `transportes/app.js` com `csvSeguro()`
+  3. Usuário importa um CSV, vê a pré-visualização do que será gravado e confirma antes de qualquer escrita no banco
+  4. Importar o mesmo arquivo duas vezes não duplica registros
+  5. Usuário gera PDF do que está vendo, a partir de uma implementação compartilhada
+
+### Phase 10: Mapa integrado
+
+**Goal**: O mapa deixa de ser uma planta isolada e passa a mostrar onde estão os ativos de cada módulo
+**Depends on**: Phase 5
+**Requirements**: PLAT-13, PLAT-14, PLAT-16
+**Success Criteria** (what must be TRUE):
+
+  1. O `/mapa` mostra ativos dos módulos sobre a planta do CMASM, posicionados pelo vínculo `cmasm_locais.local_id` já existente
+  2. Usuário filtra o que aparece no mapa por módulo de origem
+  3. Clicar num ativo leva ao registro dele no módulo de origem
+  4. Ativo sem `local_id` preenchido não quebra o mapa — some ou aparece numa lista de não localizados, de forma explícita
+  5. O mapa continua funcionando para quem só tem acesso de observador
+
+---
+
+## Milestone v1.0 (fases 1 a 4) — Visão Geral
 
 Este ciclo adiciona três módulos novos à plataforma PMOC, um de cada vez, na ordem de prioridade definida (Transportes → Elétrica → Fonoclama). Cada fase entrega uma fatia vertical completa: dados legados analisados e importados, schema Postgres com RLS, frontend zero-build e rota publicada no Vercel — ou seja, ao fim de cada fase existe um módulo que o usuário consegue abrir, autenticar e usar de verdade. Transportes é dividido em duas fases (manutenção por uso primeiro; abastecimento, documentação e painel depois) porque é o módulo mais denso e o primeiro a estabelecer o padrão de integração (rota, login por cargo, migração aditiva) que os demais reaproveitam. Elétrica e Fonoclama seguem o estilo refrigeração (inspeções/testes periódicos com checklist) e cada um entrega seu módulo completo numa fase. A última fase fecha o ciclo publicando o portal com os cinco módulos e seus status.
 
@@ -17,10 +140,10 @@ Este ciclo adiciona três módulos novos à plataforma PMOC, um de cada vez, na 
 
 Fases decimais aparecem entre suas inteiras vizinhas, em ordem numérica.
 
-- [ ] **Phase 1: Transportes — Frota sob manutenção** - Módulo `/transportes` no ar com inventário legado importado, planos por modelo, OS com baixa de estoque e alerta de manutenção por km/horas
-- [ ] **Phase 2: Transportes — Abastecimento, documentação e painel da frota** - Consumo médio por veículo/condutor, alertas de vencimento documental e dashboard de disponibilidade
-- [ ] **Phase 3: Elétrica — Inspeções da infraestrutura elétrica** - Módulo `/eletrica` no ar com ativos por local, planos de inspeção periódica, checklist com não conformidade e QR em campo
-- [ ] **Phase 4: Fonoclama — Testes das zonas de áudio e portal integrado** - Módulo `/fonoclama` no ar com zonas e testes periódicos do PA 70V, e portal listando os cinco módulos com status
+- [x] **Phase 1: Transportes — Frota sob manutenção** ✅ concluída em 10/08/2026 — Módulo `/transportes` no ar com inventário legado importado, planos por modelo, OS com baixa de estoque e alerta de manutenção por km/horas
+- [ ] **Phase 2: Transportes — Abastecimento, documentação e painel da frota** ⏸️ adiada para depois do v2.0 — Consumo médio por veículo/condutor, alertas de vencimento documental e dashboard de disponibilidade
+- [ ] **Phase 3: Elétrica — Inspeções da infraestrutura elétrica** ⏸️ adiada para depois do v2.0 — Módulo `/eletrica` no ar com ativos por local, planos de inspeção periódica, checklist com não conformidade e QR em campo
+- [ ] **Phase 4: Fonoclama — Testes das zonas de áudio e portal integrado** ⏸️ adiada para depois do v2.0 — Módulo `/fonoclama` no ar com zonas e testes periódicos do PA 70V, e portal listando os cinco módulos com status
 
 ## Phase Details
 
@@ -38,24 +161,24 @@ Fases decimais aparecem entre suas inteiras vizinhas, em ordem numérica.
   4. Técnico abre e conclui OS vinculada a ativo + plano + peças, com baixa automática de estoque e atualização do uso do ativo; gestor vê alerta de estoque mínimo e exporta a lista de compras em CSV
   5. Refrigeração e Máquinas continuam funcionando normalmente após as migrações do módulo novo (aditivas, sem DROP e sem alterar tabelas existentes)
 
-**Plans**: 4 plans
+**Plans**: 4/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Planos de manutenção por `tipo_modelo` (km/h) e detecção de vencimento por uso (TRANSP-02, TRANSP-04)
+- [x] 01-01-PLAN.md — Planos de manutenção por `tipo_modelo` (km/h) e detecção de vencimento por uso (TRANSP-02, TRANSP-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Estoque de peças do módulo com alerta de mínimo e colunas de OS (TRANSP-07)
+- [x] 01-02-PLAN.md — Estoque de peças do módulo com alerta de mínimo e colunas de OS (TRANSP-07)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — Peças do plano, lista de compras CSV e OS com baixa automática de estoque (TRANSP-07, TRANSP-03)
+- [x] 01-03-PLAN.md — Peças do plano, lista de compras CSV e OS com baixa automática de estoque (TRANSP-07, TRANSP-03)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-04-PLAN.md — Conferência do import, RLS por cargo e não regressão da produção (TRANSP-01, TRANSP-09, INTEG-02, INTEG-03, INTEG-04)
+- [x] 01-04-PLAN.md — Conferência do import, RLS por cargo e não regressão da produção (TRANSP-01, TRANSP-09, INTEG-02, INTEG-03, INTEG-04)
 
 **Bloqueio inicial**: apps legados de transportes fornecidos pelo usuário; primeiro trabalho da fase é mapa de campos, reconciliação entre versões e conferência pós-import (seed idempotente com ON CONFLICT)
 **Nota de estado real**: o módulo `/transportes` já está em produção (walking skeleton comprovado — ver `phases/01-transportes-frota-sob-manuten-o/SKELETON.md`). TRANSP-01, INTEG-02 e o import de TRANSP-09 já foram entregues fora do fluxo GSD; os planos acima cobrem os gaps e a conferência formal pendente.
@@ -129,7 +252,7 @@ Fases executam em ordem numérica: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Transportes — Frota sob manutenção | 0/4 | Planned | - |
+| 1. Transportes — Frota sob manutenção | 4/4 | In Progress|  |
 | 2. Transportes — Abastecimento, documentação e painel | 0/TBD | Not started | - |
 | 3. Elétrica — Inspeções da infraestrutura elétrica | 0/TBD | Not started | - |
 | 4. Fonoclama — Testes das zonas e portal integrado | 0/TBD | Not started | - |

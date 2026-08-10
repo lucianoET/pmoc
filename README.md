@@ -19,10 +19,11 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 | `/` | **Portal** | Índice dos sistemas | ✅ |
 | `/refrigeracao` | **PMOC Refrigeração** v2.8 | 171 unidades · ARP 04/2024 · fiscalização · QR · impressão | ✅ |
 | `/maquinas` | **PMOC Máquinas** v1.1 | 28 máquinas · 59 planos · 34 peças · operações · consumo · ciclo de vida | ✅ |
-| `/transportes` | **PMOC Transportes** v1.0 | 9 ativos · 23 viagens importadas · manutenção de viaturas e embarcações | ✅ |
+| `/transportes` | **PMOC Transportes** v1.0 | 43 ativos · 23 viagens · planos, estoque, OS e lista de compras | ✅ |
 | `/eletrica` | **PMOC Elétrica** v1.0 | 13 ativos · 9 planos · 11 peças · geradores, QGBT, nobreaks, iluminação | ✅ |
 | `/fonoclama` | **PMOC Fonoclama** v1.0 | 10 ativos · 7 planos · 10 peças · PA 70V | ✅ |
 | `/predial` | **PMOC Predial** v1.0 | 233 locais · 3 templates · 206 itens de checklist · GUT · laudos | ✅ |
+| `/mapa` | **Mapa CMASM** v1.0 | Planta do centro em Leaflet, portada do legado xMap | ✅ |
 
 ### Refrigeração
 Inventário de climatização com fluxo completo de contratação pública:
@@ -36,9 +37,16 @@ operações por área com kanban e agenda, depreciação e **lista de compras**
 exportável em CSV para processo licitatório.
 
 ### Transportes
-Frota mista de viaturas e embarcações com importação do mapa operacional VTR/EMB,
-programação de viagens, histórico de missões e controle de manutenção por km ou
-horas de motor.
+Frota mista de 43 ativos — 33 viaturas (rodoviárias, empilhadeiras, tratores,
+guindastes, semi-reboques) e 10 embarcações — importada do mapa operacional
+VTR/EMB. Manutenção por km ou horas de motor conforme o ativo, planos por
+`tipo_modelo`, estoque de peças com baixa automática na OS e lista de compras
+em CSV. Escrita restrita por RBAC (`transp_pode_escrever()`); leitura pública.
+
+O inventário anterior tinha 9 ativos porque o seed original usou a "Programação
+de Viaturas de Rotina" (um registro de viagens de um dia) no lugar do mapa da
+frota. Corrigido na migração 24 — ver
+`.planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md`.
 
 ### Elétrica e Fonoclama
 Portados dos apps legados em `localStorage` (`ref/eletrica.html` e o
@@ -82,12 +90,14 @@ python3 supabase/gerar_18_predial_seed.py
 | `maq_ativos` | 28 |
 | `maq_planos` | 59 |
 | `maq_materiais` | 34 (R$ 4.861,80 de estoque mínimo) |
-| `transp_ativos` | 9 |
-| `cmasm_locais` | 233 físicos (29 edificações · 132 salas) |
+| `transp_ativos` | 43 (33 viaturas · 10 embarcações · 26 INOP) |
+| `cmasm_locais` | 311 |
 | `cmasm_estrutura` | 78 |
 | `elet_ativos` | 13 |
 | `fono_ativos` | 10 |
 | `transp_viagens` | 23 |
+| `transp_planos` | 0 (aguardando cadastro) |
+| `transp_materiais` | 0 (aguardando cadastro) |
 
 ---
 
@@ -96,8 +106,7 @@ python3 supabase/gerar_18_predial_seed.py
 ```
 pmoc/
 ├── index.html                 Portal
-├── vercel.json                Rewrites de rota
-├── push.sh                    Script de push inicial
+├── vercel.json                Rewrites de rota (7 módulos)
 ├── refrigeracao/index.html    v2.8 — single-file, 436 KB
 ├── maquinas/
 │   ├── index.html
@@ -105,45 +114,30 @@ pmoc/
 │   └── operacoes.js           Regras testáveis de operações e agenda
 ├── transportes/
 │   ├── index.html
-│   └── app.js                 Frota mista, viagens e manutenção
-├── eletrica/
-│   ├── index.html
-│   └── app.js                 Configuração do módulo (tabelas elet_)
-├── fonoclama/
-│   ├── index.html
-│   └── app.js                 Configuração do módulo (tabelas fono_)
+│   └── app.js                 Frota mista, viagens, planos, estoque e OS
+├── eletrica/    index.html + app.js    Configuração do módulo (tabelas elet_)
+├── fonoclama/   index.html + app.js    Configuração do módulo (tabelas fono_)
 ├── predial/
 │   ├── index.html
 │   ├── app.js                 Inspeção, checklist GUT e laudos (tabelas pred_)
 │   └── dominio.js             Regras testáveis: faixas GUT e árvore de locais
+├── mapa/                      Planta do CMASM em Leaflet (portado do xMap)
 ├── shared/
 │   ├── auth.js                Login por cargo (reutilizável)
 │   ├── supabase-config.js     Reuso da configuração Supabase
 │   ├── pmoc.css               Estilo comum dos módulos novos
 │   ├── vencimento.js          Regra de vencimento por horímetro (testada)
 │   └── modulo-manutencao.js   Motor de elétrica/fonoclama
-├── supabase/
-│   ├── 01_maquinas_schema.sql
-│   ├── 02_maquinas_seed.sql
-│   ├── 03_usuarios_cargos.sql
-│   ├── 04_refrigeracao_schema.sql
-│   ├── 05_refrigeracao_import_171.sql
-│   ├── 06_arp_04_2024_import.sql
-│   ├── 09_importa_frota_28.sql
-│   ├── 10_transportes_schema.sql
-│   ├── 11_transportes_seed.sql
-│   ├── 12_maquinas_areas_operacoes.sql
-│   ├── 13_corrige_permissao_rpc_operacoes.sql
-│   ├── 14_eletrica_fonoclama_schema.sql
-│   ├── 15_eletrica_seed.sql
-│   ├── 16_fonoclama_seed.sql
-│   ├── 17_predial_schema.sql
-│   ├── 18_predial_seed.sql          (gerado)
-│   └── gerar_18_predial_seed.py     Gerador do seed a partir do legado
-└── docs/
-    ├── *.ods                  Planilhas-fonte
-    ├── NE_*.pdf               Notas de empenho
-    └── legado/                HTMLs originais (localStorage)
+├── supabase/                  24 migrações numeradas, aplicadas em ordem
+│   ├── 01–09  máquinas, usuários, refrigeração, ARP, frota
+│   ├── 10–13  transportes (schema e seed), áreas e operações de máquinas
+│   ├── 14–16  elétrica e fonoclama
+│   ├── 17–18  predial (18 é gerado por gerar_18_predial_seed.py)
+│   ├── 19–21  cmasm_locais unificado e vínculo com os módulos
+│   └── 22–24  transportes: planos e RBAC, estoque e OS, inventário completo
+├── tests/                     Testes de regra de negócio (node <arquivo>.test.js)
+├── ref/                       Fontes legadas: planilhas, PDFs, HTMLs originais
+└── docs/historico/            Registros de setup e incidentes já resolvidos
 ```
 
 ---
@@ -179,10 +173,21 @@ Novos cargos: editar o array `CARGOS` no topo de `maquinas/app.js`.
 
 ## Setup
 
-Ver **[SETUP.md](SETUP.md)** para o passo a passo completo.
+Não há build. Para rodar local, abra qualquer `index.html` no navegador ou sirva a raiz:
 
-O Supabase já está configurado — as credenciais estão embutidas nos apps.
-Basta importar o repo no Vercel (Framework: *Other*, sem build command).
+```bash
+python -m http.server
+```
+
+O Supabase já está configurado (projeto `pmoc`, ref `thoaqipyhfmromsgzmjs`, sa-east-1) e as
+credenciais estão embutidas nos apps. O deploy é automático: push em `luctronics-ET/pmoc`
+publica em `https://pmoc-orcin.vercel.app` (Framework *Other*, sem build command).
+
+**Migrações:** escreva um arquivo numerado novo em `supabase/` e execute-o no SQL Editor.
+Sempre aditivas — nunca `DROP`.
+
+O histórico do setup inicial, da recuperação dos dados do refrigeração e da correção do
+404 do deploy está em [`docs/historico/`](docs/historico/).
 
 ---
 

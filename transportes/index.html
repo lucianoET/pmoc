@@ -115,6 +115,8 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
     <button class="nav-btn" onclick="trocarView('ativos',this)">🚚 Frota</button>
     <button class="nav-btn" onclick="trocarView('viagens',this)">🗺️ Viagens</button>
     <button class="nav-btn" onclick="trocarView('manutencao',this)">🔧 Manutenção</button>
+    <button class="nav-btn" onclick="trocarView('planos',this)">🗓️ Planos</button>
+    <button class="nav-btn" onclick="trocarView('estoque',this)">📦 Estoque</button>
     <button class="nav-btn" onclick="trocarView('relatorios',this)">🧾 Relatórios</button>
   </div>
 
@@ -129,6 +131,8 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
         <div class="kpi kc-blue"><div class="kpi-n" id="kpi-sobreaviso">—</div><div class="kpi-l">Sobreaviso</div></div>
         <div class="kpi kc-cyan"><div class="kpi-n" id="kpi-viagens">—</div><div class="kpi-l">Viagens</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-manut">—</div><div class="kpi-l">Manutenções próximas</div></div>
+        <div class="kpi kc-red"><div class="kpi-n" id="kpi-vencidas">—</div><div class="kpi-l">Manutenções vencidas (uso)</div></div>
+        <div class="kpi kc-warn"><div class="kpi-n" id="kpi-estoque-baixo">—</div><div class="kpi-l">Peças abaixo do mínimo</div></div>
       </div>
       <div class="section-split">
         <div class="stack">
@@ -217,12 +221,82 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
         <button class="btn btn-p btn-sm" id="btn-nova-manut" onclick="abrirModalManutencao()">+ Registrar</button>
       </div>
       <div id="manut-alertas"></div>
+      <div id="venc-lista-manut"></div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Data</th><th>Ativo</th><th>Tipo</th><th>Descrição</th><th>Uso ref.</th><th>Próx. manutenção</th><th>Executado por</th>
+            <th>Data</th><th>Ativo</th><th>Tipo</th><th>Descrição</th><th>Uso ref.</th><th>Próx. manutenção</th><th>Executado por</th><th>Status</th><th>Ações</th>
           </tr></thead>
-          <tbody id="tb-manutencoes"><tr><td colspan="7" class="tagline">Carregando...</td></tr></tbody>
+          <tbody id="tb-manutencoes"><tr><td colspan="9" class="tagline">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="view" id="view-planos">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Planos de manutenção</div>
+          <div class="view-sub">Intervalo por tipo/modelo, em km ou horas conforme o modelo do ativo.</div>
+        </div>
+        <button class="btn btn-p btn-sm" id="btn-novo-plano" onclick="abrirModalPlano()">+ Plano</button>
+      </div>
+      <div id="venc-lista"></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Modelo</th><th>Plano</th><th>Intervalo</th><th>Unidade</th><th>Ordem</th><th>Situação</th><th>Ações</th>
+          </tr></thead>
+          <tbody id="tb-planos"><tr><td colspan="7" class="tagline">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="view" id="view-estoque">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Estoque de peças</div>
+          <div class="view-sub">Peças e consumíveis próprios do módulo, com alerta de estoque mínimo e histórico de movimentos.</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-p btn-sm" id="btn-novo-material" onclick="abrirModalMaterial()">+ Peça</button>
+          <button class="btn btn-s btn-sm" id="btn-novo-movimento" onclick="abrirModalMovimento()">+ Movimento</button>
+        </div>
+      </div>
+      <div id="estoque-alertas"></div>
+      <div class="tbl-wrap" style="margin-bottom:20px">
+        <table class="tbl">
+          <thead><tr>
+            <th>Código</th><th>Peça</th><th>Tipo</th><th>Saldo</th><th>Mínimo</th><th>Preço</th><th>Situação</th><th>Ações</th>
+          </tr></thead>
+          <tbody id="tb-materiais"><tr><td colspan="8" class="tagline">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+      <div class="view-head" style="margin-bottom:10px">
+        <div>
+          <h3 style="margin:0 0 4px">Lista de compras</h3>
+          <div class="view-sub" style="margin:0">Peças abaixo do estoque mínimo e peças de planos com uso acima de 70% do intervalo.</div>
+        </div>
+        <button class="btn btn-s btn-sm" id="btn-exportar-compras" onclick="exportarComprasCsv()">⬇ Exportar CSV</button>
+      </div>
+      <div id="compras-vazio"></div>
+      <div class="tbl-wrap" style="margin-bottom:20px">
+        <table class="tbl">
+          <thead><tr>
+            <th>Código</th><th>Peça</th><th>Quantidade</th><th>Unidade</th><th>Preço unit.</th><th>Total</th><th>Motivo</th>
+          </tr></thead>
+          <tbody id="tb-compras"><tr><td colspan="7" class="tagline">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="panel-card" style="padding:0;background:none;border:none">
+        <h3 style="margin:0 0 10px">Histórico de movimentos</h3>
+      </div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Data</th><th>Peça</th><th>Tipo</th><th>Quantidade</th><th>Motivo</th>
+          </tr></thead>
+          <tbody id="tb-movimentos"><tr><td colspan="5" class="tagline">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -336,12 +410,17 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
 
 <div class="overlay" id="modal-manutencao">
   <div class="modal">
-    <div class="modal-hd"><h3>Registrar manutenção</h3><button class="btn btn-s btn-sm" onclick="fecharModal('manutencao')">Fechar</button></div>
+    <div class="modal-hd"><h3>Registrar OS de manutenção</h3><button class="btn btn-s btn-sm" onclick="fecharModal('manutencao')">Fechar</button></div>
     <div class="modal-body">
       <div class="fgrid">
         <div class="frow"><label>Ativo</label><select id="mn-ativo"></select></div>
         <div class="frow"><label>Data</label><input id="mn-data" type="date"/></div>
       </div>
+      <div class="fgrid">
+        <div class="frow"><label>Plano vinculado</label><select id="mn-plano"><option value="">Sem plano</option></select></div>
+        <div class="frow"><label>Status da OS</label><select id="mn-status"><option value="pendente">Pendente</option><option value="em_andamento">Em andamento</option><option value="concluida">Concluída</option><option value="cancelada">Cancelada</option></select></div>
+      </div>
+      <div class="frow"><label>Peças previstas pelo plano</label><div id="mn-pecas"></div></div>
       <div class="fgrid3">
         <div class="frow"><label>Tipo</label><select id="mn-tipo"><option value="preventiva">Preventiva</option><option value="corretiva">Corretiva</option><option value="inspecao">Inspeção</option></select></div>
         <div class="frow"><label>Uso de referência</label><input id="mn-uso" type="number" min="0" step="0.1"/></div>
@@ -357,7 +436,79 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
         <div class="frow"><label>Observações</label><textarea id="mn-observacoes"></textarea></div>
       </div>
     </div>
-    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('manutencao')">Cancelar</button><button class="btn btn-p" onclick="salvarManutencao()">Salvar</button></div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('manutencao')">Cancelar</button><button class="btn btn-p" onclick="salvarOS()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-plano">
+  <div class="modal">
+    <div class="modal-hd"><h3 id="titulo-modal-plano">Novo plano</h3><button class="btn btn-s btn-sm" onclick="fecharModal('plano')">Fechar</button></div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Tipo / modelo</label><select id="pl-tipo-modelo"></select></div>
+        <div class="frow"><label>Nome do plano</label><input id="pl-nome" placeholder="Troca de óleo, revisão geral..."/></div>
+      </div>
+      <div class="fgrid3">
+        <div class="frow"><label>Intervalo</label><input id="pl-intervalo" type="number" min="1" step="0.1"/></div>
+        <div class="frow"><label>Unidade</label><select id="pl-unidade" disabled><option value="km">km</option><option value="h">h</option></select><div class="help">Herdada automaticamente do modelo (D-04).</div></div>
+        <div class="frow"><label>Ordem</label><input id="pl-ordem" type="number" min="0"/></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Ativo</label><select id="pl-ativo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+      </div>
+      <div class="frow"><label>Descrição</label><textarea id="pl-descricao"></textarea></div>
+      <div class="frow">
+        <label>Peças previstas</label>
+        <p id="pl-materiais-aviso" class="help"></p>
+        <div class="fgrid3">
+          <div class="frow"><label>Peça</label><select id="pl-material-add"></select></div>
+          <div class="frow"><label>Quantidade prevista</label><input id="pl-material-qtd" type="number" min="0.01" step="0.01" value="1"/></div>
+          <div class="frow"><label>&nbsp;</label><button class="btn btn-s btn-sm" id="btn-add-peca" onclick="adicionarPecaAoPlano()">+ Vincular peça</button></div>
+        </div>
+        <div id="pl-materiais"></div>
+      </div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('plano')">Cancelar</button><button class="btn btn-p" onclick="salvarPlano()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-material">
+  <div class="modal">
+    <div class="modal-hd"><h3 id="titulo-modal-material">Nova peça</h3><button class="btn btn-s btn-sm" onclick="fecharModal('material')">Fechar</button></div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Código</label><input id="mat-codigo"/></div>
+        <div class="frow"><label>Nome</label><input id="mat-nome"/></div>
+      </div>
+      <div class="fgrid3">
+        <div class="frow"><label>Tipo</label><select id="mat-tipo"><option value="consumivel">Consumível</option><option value="peca">Peça</option></select></div>
+        <div class="frow"><label>Unidade</label><input id="mat-unidade" placeholder="un, l, kg..."/></div>
+        <div class="frow"><label>Preço unitário (R$)</label><input id="mat-preco" type="number" min="0" step="0.01"/></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Estoque mínimo</label><input id="mat-minimo" type="number" min="0" step="0.01"/></div>
+        <div class="frow"><label>Ativo</label><select id="mat-ativo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+      </div>
+      <div class="frow"><label>Observações</label><textarea id="mat-obs"></textarea></div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('material')">Cancelar</button><button class="btn btn-p" onclick="salvarMaterial()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-movimento">
+  <div class="modal">
+    <div class="modal-hd"><h3>Registrar movimento de estoque</h3><button class="btn btn-s btn-sm" onclick="fecharModal('movimento')">Fechar</button></div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Peça</label><select id="mv-material"></select></div>
+        <div class="frow"><label>Tipo</label><select id="mv-tipo"><option value="entrada">Entrada</option><option value="saida">Saída</option></select></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Quantidade</label><input id="mv-quantidade" type="number" min="0" step="0.01"/></div>
+        <div class="frow"><label>Motivo</label><input id="mv-motivo" placeholder="Compra, uso em OS, ajuste de inventário..."/></div>
+      </div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('movimento')">Cancelar</button><button class="btn btn-p" onclick="salvarMovimento()">Salvar</button></div>
   </div>
 </div>
 
