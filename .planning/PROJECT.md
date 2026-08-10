@@ -8,6 +8,22 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 
 Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supabase + login por cargo), com os dados legados consolidados e importados — sem quebrar os módulos em produção.
 
+## Current Milestone: v2.0 — Consolidação da plataforma
+
+**Goal:** Unificar a base visual e de código dos módulos e entregar as capacidades transversais sobre essa base, em vez de implementá-las seis vezes.
+
+**Target features:**
+- Base unificada: `shared/pmoc.css` como fonte única de tokens e `shared/auth.js` em todos os módulos
+- Tema claro/escuro em uma implementação só
+- UI/UX mobile nos módulos que ainda não têm tratamento responsivo
+- Kanban e calendário extraídos de `maquinas/` para `shared/` e adotados nos demais
+- Documentos: exportação CSV unificada, importação de arquivo e geração de PDF
+- Mapa integrado aos ativos dos módulos via `cmasm_locais.local_id`
+
+**Fora do escopo, por decisão do usuário (10/08/2026):** o módulo `refrigeracao/` fica congelado. São 2663 linhas em arquivo único de 436 KB e é o app mais valioso em produção (contratação pública completa) — migrá-lo seria metade do esforço com o maior risco. Milestone próprio depois, com o padrão já provado.
+
+**Sequência obrigatória:** a fase de base é pré-requisito das de tema e mobile. Feitas antes da unificação, seriam refeitas depois.
+
 ## Requirements
 
 ### Validated

@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-current_phase: 01
-current_phase_name: transportes-frota-sob-manuten-o
-status: verifying
-stopped_at: Completed 01-04-PLAN.md (com correcao pos-checkpoint do inventario)
+milestone: v2.0
+milestone_name: consolidacao-da-plataforma
+current_phase: 5
+current_phase_name: base-unificada
+status: planning
+stopped_at: Milestone v2.0 criado — aguardando /gsd-plan-phase 5
 last_updated: "2026-08-10T21:16:40.024Z"
 last_activity: 2026-08-10
-last_activity_desc: "Quick task 260810-k0q concluída: módulo /mapa portado + conferência import CSV VTR/EMB"
+last_activity_desc: "Milestone v2.0 (Consolidação da plataforma) criado: 6 fases, 16 requisitos PLAT"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supabase + login por cargo), com os dados legados consolidados e importados — sem quebrar os módulos em produção.
-**Current focus:** Phase 01 — transportes-frota-sob-manuten-o
+**Current focus:** Milestone v2.0 — Fase 5 (Base unificada)
 
 ## Current Position
 
-Phase: 01 (transportes-frota-sob-manuten-o) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-08-10 — Quick task 260810-k0q concluída: módulo /mapa portado + conferência import CSV VTR/EMB
+Phase: 5 (Base unificada) — PLANEJAMENTO
+Plan: 0 de TBD
+Status: Milestone v2.0 criado; fase 5 ainda não planejada
+Last activity: 2026-08-10 — Milestone v2.0 criado (6 fases, 16 requisitos PLAT)
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0% (v2.0)
 
 ## Performance Metrics
 
