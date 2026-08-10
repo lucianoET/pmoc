@@ -27,6 +27,7 @@
     <button class="nav-btn" onclick="trocarView('locais',this)">🏛️ Locais</button>
     <button class="nav-btn" onclick="trocarView('inspecoes',this)">📋 Inspeções</button>
     <button class="nav-btn" onclick="trocarView('checklist',this)">📝 Checklist</button>
+    <button class="nav-btn" onclick="trocarView('templates',this)">🗂️ Templates</button>
     <button class="nav-btn" onclick="trocarView('laudos',this)">🧾 Laudos</button>
   </div>
 
@@ -36,6 +37,7 @@
     <div class="view" id="view-locais"></div>
     <div class="view" id="view-inspecoes"></div>
     <div class="view" id="view-checklist"></div>
+    <div class="view" id="view-templates"></div>
     <div class="view" id="view-laudos"></div>
   </div>
 </div>
@@ -85,6 +87,21 @@
     <div class="frow"><label>Observações</label><textarea id="in-observacoes"></textarea></div>
   </div>
   <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('inspecao')">Cancelar</button><button class="btn btn-p" onclick="salvarInspecao()">Salvar</button></div>
+</div></div>
+
+<div class="overlay" id="modal-template"><div class="modal">
+  <div class="modal-hd"><h3 id="template-titulo">Novo template</h3><button class="btn btn-s btn-sm" onclick="fecharModal('template')">Fechar</button></div>
+  <div class="modal-body">
+    <div class="frow"><label>Nome *</label><input id="tp-nome" placeholder="Ex: Inspeção de subestação"/></div>
+    <div class="fgrid">
+      <div class="frow"><label>Tipo de local</label><input id="tp-tipo-local" placeholder="paiol, area_externa… (vazio = qualquer)"/>
+        <div class="help">Serve para lembrar onde o template se aplica; não restringe a escolha.</div></div>
+      <div class="frow"><label>Normas de referência</label><input id="tp-norma" placeholder="NBR 5674:2012 · NR-19"/></div>
+    </div>
+    <div class="frow"><label>Descrição</label><textarea id="tp-descricao"></textarea></div>
+    <div class="callout co-blue">Depois de salvar, use <strong>+ Item</strong> no cartão do template para cadastrar os itens de verificação, agrupados por sistema.</div>
+  </div>
+  <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('template')">Cancelar</button><button class="btn btn-p" onclick="salvarTemplate()">Salvar</button></div>
 </div></div>
 
 <div class="overlay" id="modal-laudo"><div class="modal">

@@ -162,6 +162,12 @@ node --test tests/vencimento-modulos.test.js
 
 - [ ] Abrir `/predial`, logar por cargo e conferir a árvore de locais indentada na aba Locais.
 - [ ] Entrar como Observador e confirmar que os botões de escrita ficam desabilitados.
+- [ ] Editar um local e confirmar o aviso verde "Local ... atualizado" **e** a linha
+      já alterada na tabela, sem precisar recarregar a página.
+- [ ] Abrir a aba Templates e conferir os 3 templates com os itens agrupados por sistema.
+- [ ] Criar um template novo, adicionar um item e removê-lo.
+- [ ] Criar uma inspeção **sem** escolher template, abrir o checklist e usar
+      "Associar e carregar" para vincular o template depois.
 - [ ] Criar inspeção escolhendo local e o template "Inspeção Predial Completa".
 - [ ] Clicar em "Carregar itens do template" e confirmar que os 206 itens entram como `item_origem = 'template'`.
 - [ ] Clicar de novo e confirmar que nada duplica.

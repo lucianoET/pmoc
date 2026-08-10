@@ -4,6 +4,7 @@
 
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
+import { gravar } from '../shared/persistencia.js'
 import { GUT_ESCALA, classificarGut, montarArvore } from './dominio.js'
 
 let supa = null
@@ -20,7 +21,9 @@ let NORMAS = []
 let ERRO_CARGA = null
 
 let LOCAL_EDIT_ID = null
+let TEMPLATE_EDIT_ID = null
 let INSPECAO_ABERTA_ID = null
+let TOAST_TIMER = null
 
 const ROLES_ESCRITA = ['admin', 'gestor', 'tecnico']
 
@@ -87,12 +90,37 @@ function podeEscrever() {
 
 function exigirEscrita() {
   if (podeEscrever()) return true
-  alert('Seu cargo tem acesso somente de leitura.')
+  avisar('Seu cargo tem acesso somente de leitura.', 'erro')
   return false
 }
 
-function erroSupabase(error) {
-  alert(`Erro: ${error.message}`)
+// Aviso curto no rodapé — dá retorno visível de que a gravação foi (ou não) feita.
+function avisar(mensagem, tipo = 'ok') {
+  let toast = el('toast')
+  if (!toast) {
+    toast = document.createElement('div')
+    toast.id = 'toast'
+    document.body.appendChild(toast)
+  }
+  toast.className = `toast ${tipo}`
+  toast.textContent = mensagem
+  clearTimeout(TOAST_TIMER)
+  TOAST_TIMER = setTimeout(() => toast.remove(), tipo === 'erro' ? 8000 : 3500)
+}
+
+/**
+ * Executa uma escrita e, se der certo, recarrega tudo e avisa.
+ * Devolve as linhas gravadas, ou null se falhou.
+ */
+async function gravarERecarregar(consulta, acao, mensagemOk) {
+  const { ok, dados, erro } = await gravar(consulta, acao)
+  if (!ok) {
+    avisar(erro, 'erro')
+    return null
+  }
+  await recarregar()
+  avisar(mensagemOk)
+  return dados
 }
 
 function botaoEscrita(rotulo, acao, classe = 'btn-p') {
@@ -161,15 +189,31 @@ function fecharModal(id) {
 }
 
 // ── render ──
+// Cada painel é renderizado isolado: se um quebrar, os outros continuam
+// atualizando em vez de a tela inteira congelar sem explicação.
 function renderTudo() {
-  el('alerta-carga').innerHTML = ERRO_CARGA
-    ? `<div class="callout co-red"><strong>Falha ao carregar dados.</strong> ${esc(ERRO_CARGA)}</div>`
-    : ''
-  renderPainel()
-  renderLocais()
-  renderInspecoes()
-  renderChecklist()
-  renderLaudos()
+  const falhas = []
+
+  for (const [nome, render] of [
+    ['Painel', renderPainel],
+    ['Locais', renderLocais],
+    ['Inspeções', renderInspecoes],
+    ['Checklist', renderChecklist],
+    ['Templates', renderTemplates],
+    ['Laudos', renderLaudos],
+  ]) {
+    try {
+      render()
+    } catch (error) {
+      console.error(`Falha ao renderizar ${nome}:`, error)
+      falhas.push(`${nome}: ${error.message}`)
+    }
+  }
+
+  const avisos = []
+  if (ERRO_CARGA) avisos.push(`<div class="callout co-red"><strong>Falha ao carregar dados.</strong> ${esc(ERRO_CARGA)}</div>`)
+  if (falhas.length) avisos.push(`<div class="callout co-red"><strong>Falha ao desenhar a tela.</strong> ${esc(falhas.join(' · '))}</div>`)
+  el('alerta-carga').innerHTML = avisos.join('')
 }
 
 function renderPainel() {
@@ -350,11 +394,26 @@ function renderChecklist() {
       </div>
     </div>
 
-    <div class="section-row">
-      ${botaoEscrita('Carregar itens do template', `carregarItensDoTemplate(${inspecao.id})`, 'btn-s')}
-      ${botaoEscrita('+ Item avulso', `adicionarItemManual(${inspecao.id})`, 'btn-s')}
-      ${botaoEscrita('Emitir laudo', `abrirModalLaudo(${inspecao.id})`, 'btn-s')}
-    </div>
+    ${inspecao.template_id ? `
+      <div class="section-row">
+        <span class="tagline">Template: <strong>${esc(TEMPLATES.find(t => t.id === inspecao.template_id)?.nome || `#${inspecao.template_id}`)}</strong></span>
+        ${botaoEscrita('Carregar itens do template', `carregarItensDoTemplate(${inspecao.id})`, 'btn-s')}
+        ${botaoEscrita('+ Item avulso', `adicionarItemManual(${inspecao.id})`, 'btn-s')}
+        ${botaoEscrita('Emitir laudo', `abrirModalLaudo(${inspecao.id})`, 'btn-s')}
+      </div>` : `
+      <div class="callout co-warn">
+        Esta inspeção não tem template. Escolha um abaixo para puxar o checklist pronto,
+        ou vá em <strong>Templates</strong> para criar o seu.
+      </div>
+      <div class="section-row">
+        <select class="control-auto" id="checklist-template" ${podeEscrever() ? '' : 'disabled'}>
+          <option value="">Escolher template…</option>
+          ${TEMPLATES.map(t => `<option value="${t.id}">${esc(t.nome)} (${TEMPLATE_ITENS.filter(i => i.template_id === t.id).length} itens)</option>`).join('')}
+        </select>
+        ${botaoEscrita('Associar e carregar', `associarTemplate(${inspecao.id}, document.getElementById('checklist-template').value)`)}
+        ${botaoEscrita('+ Item avulso', `adicionarItemManual(${inspecao.id})`, 'btn-s')}
+        ${botaoEscrita('Emitir laudo', `abrirModalLaudo(${inspecao.id})`, 'btn-s')}
+      </div>`}
 
     <div class="callout co-blue">
       Matriz GUT — cada dimensão vale 0, 1, 3, 6, 8 ou 10.
@@ -375,6 +434,129 @@ function selectGut(dim, item, editavel) {
     .join('')
   return `<select class="control-auto" ${editavel ? '' : 'disabled'}
     onchange="salvarGut(${item.id}, '${dim}', Number(this.value))">${opcoes}</select>`
+}
+
+// ── templates de checklist ──
+function renderTemplates() {
+  const cartoes = TEMPLATES.map(template => {
+    const itens = TEMPLATE_ITENS.filter(item => item.template_id === template.id)
+    const porSistema = itens.reduce((mapa, item) => {
+      (mapa[item.sistema] = mapa[item.sistema] || []).push(item)
+      return mapa
+    }, {})
+
+    return `
+      <div class="panel-card" style="margin-bottom:16px">
+        <div class="view-head">
+          <div>
+            <h3>${esc(template.nome)}</h3>
+            <div class="tagline">
+              ${itens.length} item(ns) · ${Object.keys(porSistema).length} sistema(s)
+              ${template.tipo_local ? ` · aplica a locais do tipo <strong>${esc(template.tipo_local)}</strong>` : ' · aplica a qualquer local'}
+              ${template.norma_ref ? `<br>${esc(template.norma_ref)}` : ''}
+            </div>
+          </div>
+          <div class="section-row">
+            ${botaoEscrita('Editar', `abrirModalTemplate(${template.id})`, 'btn-s')}
+            ${botaoEscrita('+ Item', `adicionarItemTemplate(${template.id})`, 'btn-s')}
+          </div>
+        </div>
+        ${Object.entries(porSistema).map(([sistema, doSistema]) => `
+          <details style="margin-top:8px">
+            <summary style="cursor:pointer;font-size:13px;color:var(--text2)">
+              ${esc(sistema)} — ${doSistema.length} item(ns)
+            </summary>
+            <div class="stack" style="margin-top:8px">
+              ${doSistema.map(item => `
+                <div class="mat-alert">
+                  <div class="mat-info"><div class="mat-nome">${esc(item.descricao)}</div>
+                    ${item.subsistema ? `<div class="mat-stock">${esc(item.subsistema)}</div>` : ''}</div>
+                  ${botaoEscrita('Remover', `removerItemTemplate(${item.id})`, 'btn-d')}
+                </div>`).join('')}
+            </div>
+          </details>`).join('') || '<div class="tagline">Template ainda sem itens.</div>'}
+      </div>`
+  }).join('')
+
+  el('view-templates').innerHTML = `
+    <div class="view-head">
+      <div>
+        <div class="view-title">Templates de checklist</div>
+        <div class="view-sub">${TEMPLATES.length} template(s) · ${TEMPLATE_ITENS.length} itens no total</div>
+      </div>
+      ${botaoEscrita('+ Novo template', 'abrirModalTemplate()')}
+    </div>
+    ${cartoes || '<div class="empty"><div class="empty-ico">🗂️</div>Nenhum template cadastrado.</div>'}
+  `
+}
+
+function abrirModalTemplate(id = null) {
+  if (!exigirEscrita()) return
+  TEMPLATE_EDIT_ID = id
+  const template = TEMPLATES.find(t => t.id === id)
+  el('template-titulo').textContent = template ? `Editar ${template.nome}` : 'Novo template'
+  el('tp-nome').value = template?.nome || ''
+  el('tp-tipo-local').value = template?.tipo_local || ''
+  el('tp-norma').value = template?.norma_ref || ''
+  el('tp-descricao').value = template?.descricao || ''
+  el('modal-template').classList.add('open')
+}
+
+async function salvarTemplate() {
+  if (!exigirEscrita()) return
+  const nome = val('tp-nome')
+  if (!nome) return avisar('Informe o nome do template.', 'erro')
+
+  const registro = {
+    nome,
+    tipo_local: val('tp-tipo-local') || null,
+    norma_ref: val('tp-norma') || null,
+    descricao: val('tp-descricao') || null,
+  }
+
+  const consulta = TEMPLATE_EDIT_ID
+    ? supa.from('pred_checklist_templates').update(registro).eq('id', TEMPLATE_EDIT_ID)
+    : supa.from('pred_checklist_templates').insert(registro)
+
+  const salvo = await gravarERecarregar(
+    consulta,
+    TEMPLATE_EDIT_ID ? 'salvar o template' : 'criar o template',
+    TEMPLATE_EDIT_ID ? `Template "${nome}" atualizado.` : `Template "${nome}" criado.`,
+  )
+  if (salvo) fecharModal('template')
+}
+
+async function adicionarItemTemplate(templateId) {
+  if (!exigirEscrita()) return
+  const sistema = prompt('Sistema (ex: estrutura, cobertura, eletrica):')
+  if (!sistema?.trim()) return
+  const descricao = prompt('Descrição do item de verificação:')
+  if (!descricao?.trim()) return
+
+  const doSistema = TEMPLATE_ITENS.filter(i => i.template_id === templateId && i.sistema === sistema.trim())
+
+  await gravarERecarregar(
+    supa.from('pred_checklist_itens').insert({
+      template_id: templateId,
+      sistema: sistema.trim(),
+      descricao: descricao.trim(),
+      ordem: doSistema.length + 1,
+    }),
+    'adicionar o item ao template',
+    'Item adicionado ao template.',
+  )
+}
+
+async function removerItemTemplate(itemId) {
+  if (!exigirEscrita()) return
+  const item = TEMPLATE_ITENS.find(i => i.id === itemId)
+  if (!item || !confirm(`Remover "${item.descricao}" do template?`)) return
+
+  await gravarERecarregar(
+    supa.from('pred_checklist_itens').delete().eq('id', itemId),
+    'remover o item',
+    'Item removido do template.',
+  )
 }
 
 function renderLaudos() {
@@ -443,13 +625,16 @@ async function salvarLocal() {
     descricao: val('lo-descricao') || null,
   }
 
-  const { error } = LOCAL_EDIT_ID
-    ? await supa.from('pred_locais').update(registro).eq('id', LOCAL_EDIT_ID)
-    : await supa.from('pred_locais').insert(registro)
-  if (error) return erroSupabase(error)
+  const consulta = LOCAL_EDIT_ID
+    ? supa.from('pred_locais').update(registro).eq('id', LOCAL_EDIT_ID)
+    : supa.from('pred_locais').insert(registro)
 
-  fecharModal('local')
-  await recarregar()
+  const salvo = await gravarERecarregar(
+    consulta,
+    LOCAL_EDIT_ID ? 'salvar o local' : 'criar o local',
+    LOCAL_EDIT_ID ? `Local "${nome}" atualizado.` : `Local "${nome}" criado.`,
+  )
+  if (salvo) fecharModal('local')
 }
 
 // ── inspeções ──
@@ -472,22 +657,25 @@ async function salvarInspecao() {
   const titulo = val('in-titulo')
   if (!titulo) return alert('Informe o título da inspeção.')
 
-  const { data, error } = await supa.from('pred_inspecoes').insert({
-    titulo,
-    local_id: val('in-local') ? Number(val('in-local')) : null,
-    template_id: val('in-template') ? Number(val('in-template')) : null,
-    responsavel_tecnico: val('in-responsavel') || null,
-    data_vistoria: val('in-data') || null,
-    nivel: val('in-nivel'),
-    tipo_inspecao: val('in-tipo'),
-    observacoes: val('in-observacoes') || null,
-  }).select().single()
-  if (error) return erroSupabase(error)
+  const criada = await gravarERecarregar(
+    supa.from('pred_inspecoes').insert({
+      titulo,
+      local_id: val('in-local') ? Number(val('in-local')) : null,
+      template_id: val('in-template') ? Number(val('in-template')) : null,
+      responsavel_tecnico: val('in-responsavel') || null,
+      data_vistoria: val('in-data') || null,
+      nivel: val('in-nivel'),
+      tipo_inspecao: val('in-tipo'),
+      observacoes: val('in-observacoes') || null,
+    }),
+    'criar a inspeção',
+    `Inspeção "${titulo}" criada.`,
+  )
+  if (!criada) return
 
-  await registrarEvento(data.id, null, 'planejada', 'inspeção criada')
+  await registrarEvento(criada[0].id, null, 'planejada', 'inspeção criada')
   fecharModal('inspecao')
-  await recarregar()
-  abrirChecklist(data.id)
+  abrirChecklist(criada[0].id)
 }
 
 function abrirChecklist(id) {
@@ -518,23 +706,44 @@ async function mudarStatus(inspecaoId, novoStatus) {
   const motivo = novoStatus === 'reprovada' ? prompt('Motivo da reprovação:') : null
   if (novoStatus === 'reprovada' && !motivo) return
 
-  const { error } = await supa.from('pred_inspecoes')
-    .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
-    .eq('id', inspecaoId)
-  if (error) return erroSupabase(error)
+  const atualizada = await gravarERecarregar(
+    supa.from('pred_inspecoes')
+      .update({ status: novoStatus, atualizado_em: new Date().toISOString() })
+      .eq('id', inspecaoId),
+    'mudar o status',
+    `Inspeção agora está "${STATUS_INSPECAO[novoStatus]}".`,
+  )
+  if (!atualizada) return
 
   await registrarEvento(inspecaoId, inspecao.status, novoStatus, motivo)
-  await recarregar()
 }
 
 // ── itens do checklist ──
+// Associa um template à inspeção já criada — antes só dava para escolher na
+// criação, e quem esquecia ficava travado sem saber o que fazer.
+async function associarTemplate(inspecaoId, templateId) {
+  if (!exigirEscrita()) return
+  if (!templateId) return
+
+  const atualizada = await gravarERecarregar(
+    supa.from('pred_inspecoes').update({ template_id: Number(templateId) }).eq('id', inspecaoId),
+    'associar o template',
+    'Template associado à inspeção.',
+  )
+  if (atualizada) await carregarItensDoTemplate(inspecaoId)
+}
+
 async function carregarItensDoTemplate(inspecaoId) {
   if (!exigirEscrita()) return
   const inspecao = INSPECOES.find(i => i.id === inspecaoId)
-  if (!inspecao?.template_id) return alert('Esta inspeção não tem template associado.')
+  if (!inspecao?.template_id) {
+    return avisar('Esta inspeção ainda não tem template. Escolha um na barra acima da tabela.', 'erro')
+  }
 
   const doTemplate = TEMPLATE_ITENS.filter(item => item.template_id === inspecao.template_id)
-  if (!doTemplate.length) return alert('Template sem itens cadastrados.')
+  if (!doTemplate.length) {
+    return avisar('Este template não tem itens. Cadastre os itens na aba Templates.', 'erro')
+  }
 
   const jaExistem = new Set(itensDaInspecao(inspecaoId).map(item => item.descricao))
   const novos = doTemplate
@@ -546,11 +755,13 @@ async function carregarItensDoTemplate(inspecaoId) {
       item_origem: 'template',
     }))
 
-  if (!novos.length) return alert('Todos os itens do template já estão na inspeção.')
+  if (!novos.length) return avisar('Todos os itens do template já estão nesta inspeção.')
 
-  const { error } = await supa.from('pred_inspecao_itens').insert(novos)
-  if (error) return erroSupabase(error)
-  await recarregar()
+  await gravarERecarregar(
+    supa.from('pred_inspecao_itens').insert(novos),
+    'carregar os itens',
+    `${novos.length} item(ns) carregado(s) do template.`,
+  )
 }
 
 async function adicionarItemManual(inspecaoId) {
@@ -558,48 +769,53 @@ async function adicionarItemManual(inspecaoId) {
   const descricao = prompt('Descrição da anomalia:')
   if (!descricao?.trim()) return
 
-  const { error } = await supa.from('pred_inspecao_itens').insert({
-    inspecao_id: inspecaoId,
-    descricao: descricao.trim(),
-    categoria: prompt('Sistema / categoria (opcional):')?.trim() || null,
-    item_origem: 'manual',
-  })
-  if (error) return erroSupabase(error)
-  await recarregar()
+  await gravarERecarregar(
+    supa.from('pred_inspecao_itens').insert({
+      inspecao_id: inspecaoId,
+      descricao: descricao.trim(),
+      categoria: prompt('Sistema / categoria (opcional):')?.trim() || null,
+      item_origem: 'manual',
+    }),
+    'adicionar o item',
+    'Item adicionado.',
+  )
 }
 
 // gut_total e condicao são colunas geradas no banco — só gravamos g, u e t.
 async function salvarGut(itemId, dimensao, valor) {
   if (!exigirEscrita()) return
-  const { error } = await supa.from('pred_inspecao_itens')
-    .update({ [dimensao]: valor }).eq('id', itemId)
-  if (error) return erroSupabase(error)
+  const { ok, dados, erro } = await gravar(
+    supa.from('pred_inspecao_itens').update({ [dimensao]: valor }).eq('id', itemId),
+    'salvar a pontuação',
+  )
+  if (!ok) return avisar(erro, 'erro')
 
+  // usa o que o banco devolveu: gut_total e condicao são colunas geradas
   const item = ITENS.find(i => i.id === itemId)
-  if (item) {
-    item[dimensao] = valor
-    item.gut_total = item.g * item.u * item.t
-    item.condicao = classificarGut(item.gut_total)
-  }
+  if (item) Object.assign(item, dados[0])
   renderChecklist()
 }
 
 async function marcarPresente(itemId, presente) {
   if (!exigirEscrita()) return
-  const { error } = await supa.from('pred_inspecao_itens')
-    .update({ presente }).eq('id', itemId)
-  if (error) return erroSupabase(error)
+  const { ok, dados, erro } = await gravar(
+    supa.from('pred_inspecao_itens').update({ presente }).eq('id', itemId),
+    'marcar o item',
+  )
+  if (!ok) return avisar(erro, 'erro')
   const item = ITENS.find(i => i.id === itemId)
-  if (item) item.presente = presente
+  if (item) Object.assign(item, dados[0])
 }
 
 async function salvarCampoItem(itemId, campo, valor) {
   if (!exigirEscrita()) return
-  const { error } = await supa.from('pred_inspecao_itens')
-    .update({ [campo]: valor.trim() || null }).eq('id', itemId)
-  if (error) return erroSupabase(error)
+  const { ok, dados, erro } = await gravar(
+    supa.from('pred_inspecao_itens').update({ [campo]: valor.trim() || null }).eq('id', itemId),
+    'salvar o campo',
+  )
+  if (!ok) return avisar(erro, 'erro')
   const item = ITENS.find(i => i.id === itemId)
-  if (item) item[campo] = valor.trim() || null
+  if (item) Object.assign(item, dados[0])
 }
 
 // ── laudos ──
@@ -644,22 +860,23 @@ async function salvarLaudo() {
   const titulo = val('la-titulo')
   if (!titulo) return alert('Informe o título do laudo.')
 
-  const { error } = await supa.from('pred_laudos').insert({
-    titulo,
-    inspecao_id: val('la-inspecao') ? Number(val('la-inspecao')) : null,
-    local_id: val('la-local') ? Number(val('la-local')) : null,
-    tipo: val('la-tipo'),
-    numero_art: val('la-art') || null,
-    responsavel: val('la-responsavel') || null,
-    data_emissao: val('la-emissao') || null,
-    data_validade: val('la-validade') || null,
-    conteudo: val('la-conteudo') || null,
-    status: val('la-status'),
-  })
-  if (error) return erroSupabase(error)
-
-  fecharModal('laudo')
-  await recarregar()
+  const salvo = await gravarERecarregar(
+    supa.from('pred_laudos').insert({
+      titulo,
+      inspecao_id: val('la-inspecao') ? Number(val('la-inspecao')) : null,
+      local_id: val('la-local') ? Number(val('la-local')) : null,
+      tipo: val('la-tipo'),
+      numero_art: val('la-art') || null,
+      responsavel: val('la-responsavel') || null,
+      data_emissao: val('la-emissao') || null,
+      data_validade: val('la-validade') || null,
+      conteudo: val('la-conteudo') || null,
+      status: val('la-status'),
+    }),
+    'salvar o laudo',
+    `Laudo "${titulo}" salvo.`,
+  )
+  if (salvo) fecharModal('laudo')
 }
 
 // ── exportação ──
@@ -724,9 +941,11 @@ function mostrarErroBoot(error) {
 function exporNoWindow() {
   Object.assign(window, {
     abrirChecklist, abrirModalInspecao, abrirModalLaudo, abrirModalLocal,
-    adicionarItemManual, carregarItensDoTemplate, exportarItensCsv, fecharModal,
-    marcarPresente, mudarStatus, renderLocais, sair, salvarCampoItem, salvarGut,
-    salvarInspecao, salvarLaudo, salvarLocal, trocarView,
+    abrirModalTemplate, adicionarItemManual, adicionarItemTemplate,
+    associarTemplate, carregarItensDoTemplate, exportarItensCsv, fecharModal,
+    marcarPresente, mudarStatus, removerItemTemplate, renderLocais, sair,
+    salvarCampoItem, salvarGut, salvarInspecao, salvarLaudo, salvarLocal,
+    salvarTemplate, trocarView,
   })
 }
 

@@ -13,6 +13,7 @@
 
 import { Auth } from './auth.js'
 import { criarClienteSupabase } from './supabase-config.js'
+import { gravar } from './persistencia.js'
 import { calcularOcorrencia } from './vencimento.js'
 
 const ROLES_ESCRITA = ['admin', 'gestor', 'tecnico']
@@ -97,12 +98,39 @@ function podeEscrever() {
 
 function exigirEscrita() {
   if (podeEscrever()) return true
-  alert('Seu cargo tem acesso somente de leitura.')
+  avisar('Seu cargo tem acesso somente de leitura.', 'erro')
   return false
 }
 
-function erroSupabase(error) {
-  alert(`Erro: ${error.message}`)
+let TOAST_TIMER = null
+
+// Aviso curto no rodapé — dá retorno visível de que a gravação foi (ou não) feita.
+function avisar(mensagem, tipo = 'ok') {
+  let toast = el('toast')
+  if (!toast) {
+    toast = document.createElement('div')
+    toast.id = 'toast'
+    document.body.appendChild(toast)
+  }
+  toast.className = `toast ${tipo}`
+  toast.textContent = mensagem
+  clearTimeout(TOAST_TIMER)
+  TOAST_TIMER = setTimeout(() => toast.remove(), tipo === 'erro' ? 8000 : 3500)
+}
+
+/**
+ * Executa uma escrita exigindo que ela tenha afetado alguma linha; recarrega e
+ * avisa em caso de sucesso. Devolve as linhas gravadas, ou null se falhou.
+ */
+async function gravarERecarregar(consulta, acao, mensagemOk) {
+  const { ok, dados, erro } = await gravar(consulta, acao)
+  if (!ok) {
+    avisar(erro, 'erro')
+    return null
+  }
+  await recarregar()
+  avisar(mensagemOk)
+  return dados
 }
 
 // ── cálculo de vencimento por uso ──
@@ -360,16 +388,31 @@ function abrirModal(id) {
 }
 
 // ── render ──
+// Cada painel é renderizado isolado: se um quebrar, os outros continuam
+// atualizando em vez de a tela inteira congelar sem explicação.
 function renderTudo() {
-  el('alerta-carga').innerHTML = ERRO_CARGA
-    ? `<div class="callout co-red"><strong>Falha ao carregar dados.</strong> ${esc(ERRO_CARGA)}</div>`
-    : ''
-  renderPainel()
-  renderAtivos()
-  renderVencimentos()
-  renderOS()
-  renderPlanos()
-  renderEstoque()
+  const falhas = []
+
+  for (const [nome, render] of [
+    ['Painel', renderPainel],
+    ['Ativos', renderAtivos],
+    ['Vencimentos', renderVencimentos],
+    ['OS', renderOS],
+    ['Planos', renderPlanos],
+    ['Estoque', renderEstoque],
+  ]) {
+    try {
+      render()
+    } catch (error) {
+      console.error(`Falha ao renderizar ${nome}:`, error)
+      falhas.push(`${nome}: ${error.message}`)
+    }
+  }
+
+  const avisos = []
+  if (ERRO_CARGA) avisos.push(`<div class="callout co-red"><strong>Falha ao carregar dados.</strong> ${esc(ERRO_CARGA)}</div>`)
+  if (falhas.length) avisos.push(`<div class="callout co-red"><strong>Falha ao desenhar a tela.</strong> ${esc(falhas.join(' · '))}</div>`)
+  el('alerta-carga').innerHTML = avisos.join('')
 }
 
 function botaoEscrita(rotulo, acao, classe = 'btn-p') {
@@ -645,13 +688,16 @@ async function salvarAtivo() {
   }
   if (!registro.codigo || !registro.nome) return alert('Código e nome são obrigatórios.')
 
-  const { error } = ATIVO_EDIT_ID
-    ? await supa.from(tabela('ativos')).update(registro).eq('id', ATIVO_EDIT_ID)
-    : await supa.from(tabela('ativos')).insert(registro)
-  if (error) return erroSupabase(error)
+  const consulta = ATIVO_EDIT_ID
+    ? supa.from(tabela('ativos')).update(registro).eq('id', ATIVO_EDIT_ID)
+    : supa.from(tabela('ativos')).insert(registro)
 
-  fecharModal('ativo')
-  await recarregar()
+  const salvo = await gravarERecarregar(
+    consulta,
+    ATIVO_EDIT_ID ? 'salvar o ativo' : 'criar o ativo',
+    `Ativo ${registro.codigo} ${ATIVO_EDIT_ID ? 'atualizado' : 'criado'}.`,
+  )
+  if (salvo) fecharModal('ativo')
 }
 
 // ── modais: uso ──
@@ -677,22 +723,25 @@ async function salvarUso() {
 
   const usoTotal = Number(ativo.uso_atual) + delta
 
-  const { error } = await supa.from(tabela('uso_registros')).insert({
-    ativo_id: ativoId,
-    delta,
-    uso_total: usoTotal,
-    data: val('us-data') || hoje(),
-    operador: val('us-operador') || null,
-    obs: val('us-obs') || null,
-  })
-  if (error) return erroSupabase(error)
+  const registrado = await gravar(
+    supa.from(tabela('uso_registros')).insert({
+      ativo_id: ativoId,
+      delta,
+      uso_total: usoTotal,
+      data: val('us-data') || hoje(),
+      operador: val('us-operador') || null,
+      obs: val('us-obs') || null,
+    }),
+    'registrar o uso',
+  )
+  if (!registrado.ok) return avisar(registrado.erro, 'erro')
 
-  const { error: erroAtivo } = await supa.from(tabela('ativos'))
-    .update({ uso_atual: usoTotal }).eq('id', ativoId)
-  if (erroAtivo) return erroSupabase(erroAtivo)
-
-  fecharModal('uso')
-  await recarregar()
+  const atualizado = await gravarERecarregar(
+    supa.from(tabela('ativos')).update({ uso_atual: usoTotal }).eq('id', ativoId),
+    'atualizar o horímetro',
+    `${ativo.codigo} agora com ${fmtNum(usoTotal)} ${CFG.unidadeUso}.`,
+  )
+  if (atualizado) fecharModal('uso')
 }
 
 // ── modais: OS ──
@@ -768,13 +817,14 @@ async function salvarOS() {
     data_conclusao: status === 'concluida' ? dataOS : null,
   }
 
-  const { data, error } = await supa.from(tabela('os')).insert(registro).select().single()
-  if (error) return erroSupabase(error)
+  const { ok, dados, erro } = await gravar(supa.from(tabela('os')).insert(registro), 'salvar a OS')
+  if (!ok) return avisar(erro, 'erro')
 
-  if (status === 'concluida') await baixarPecasDaOS(data)
+  if (status === 'concluida') await baixarPecasDaOS(dados[0])
 
   fecharModal('os')
   await recarregar()
+  avisar('OS registrada.')
 }
 
 async function concluirOS(id) {
@@ -783,12 +833,15 @@ async function concluirOS(id) {
   if (!os) return
   if (!confirm('Concluir esta OS e dar baixa nas peças previstas?')) return
 
-  const { error } = await supa.from(tabela('os'))
-    .update({ status: 'concluida', data_conclusao: hoje() }).eq('id', id)
-  if (error) return erroSupabase(error)
+  const { ok, erro } = await gravar(
+    supa.from(tabela('os')).update({ status: 'concluida', data_conclusao: hoje() }).eq('id', id),
+    'concluir a OS',
+  )
+  if (!ok) return avisar(erro, 'erro')
 
   await baixarPecasDaOS(os)
   await recarregar()
+  avisar('OS concluída e estoque atualizado.')
 }
 
 // Baixa as peças previstas no plano da OS e grava o custo consumido.
@@ -803,9 +856,11 @@ async function baixarPecasDaOS(os) {
     const novoSaldo = Math.max(0, Number(material.estoque_atual) - quantidade)
     custo += quantidade * Number(material.preco || 0)
 
-    const { error } = await supa.from(tabela('materiais'))
-      .update({ estoque_atual: novoSaldo }).eq('id', material.id)
-    if (error) return erroSupabase(error)
+    const { ok, erro } = await gravar(
+      supa.from(tabela('materiais')).update({ estoque_atual: novoSaldo }).eq('id', material.id),
+      'dar baixa no estoque',
+    )
+    if (!ok) return avisar(erro, 'erro')
 
     await supa.from(tabela('estoque_movimentos')).insert({
       material_id: material.id,
@@ -850,13 +905,16 @@ async function salvarPlano() {
   if (!registro.codigo || !registro.nome) return alert('Código e nome são obrigatórios.')
   if (!registro.intervalo || registro.intervalo <= 0) return alert('Informe um intervalo maior que zero.')
 
-  const { error } = PLANO_EDIT_ID
-    ? await supa.from(tabela('planos')).update(registro).eq('id', PLANO_EDIT_ID)
-    : await supa.from(tabela('planos')).insert(registro)
-  if (error) return erroSupabase(error)
+  const consulta = PLANO_EDIT_ID
+    ? supa.from(tabela('planos')).update(registro).eq('id', PLANO_EDIT_ID)
+    : supa.from(tabela('planos')).insert(registro)
 
-  fecharModal('plano')
-  await recarregar()
+  const salvo = await gravarERecarregar(
+    consulta,
+    PLANO_EDIT_ID ? 'salvar o plano' : 'criar o plano',
+    `Plano ${registro.codigo} ${PLANO_EDIT_ID ? 'atualizado' : 'criado'}.`,
+  )
+  if (salvo) fecharModal('plano')
 }
 
 // ── modais: material ──
@@ -890,13 +948,16 @@ async function salvarMaterial() {
   }
   if (!registro.codigo || !registro.nome) return alert('Código e nome são obrigatórios.')
 
-  const { error } = MATERIAL_EDIT_ID
-    ? await supa.from(tabela('materiais')).update(registro).eq('id', MATERIAL_EDIT_ID)
-    : await supa.from(tabela('materiais')).insert(registro)
-  if (error) return erroSupabase(error)
+  const consulta = MATERIAL_EDIT_ID
+    ? supa.from(tabela('materiais')).update(registro).eq('id', MATERIAL_EDIT_ID)
+    : supa.from(tabela('materiais')).insert(registro)
 
-  fecharModal('material')
-  await recarregar()
+  const salvo = await gravarERecarregar(
+    consulta,
+    MATERIAL_EDIT_ID ? 'salvar a peça' : 'criar a peça',
+    `Peça ${registro.nome} ${MATERIAL_EDIT_ID ? 'atualizada' : 'criada'}.`,
+  )
+  if (salvo) fecharModal('material')
 }
 
 // ── modais: movimento de estoque ──
@@ -923,20 +984,23 @@ async function salvarMovimento() {
     ? Number(material.estoque_atual) + quantidade
     : Math.max(0, Number(material.estoque_atual) - quantidade)
 
-  const { error } = await supa.from(tabela('estoque_movimentos')).insert({
-    material_id: materialId,
-    tipo,
-    quantidade,
-    motivo: val('mv-motivo') || null,
-  })
-  if (error) return erroSupabase(error)
+  const movimento = await gravar(
+    supa.from(tabela('estoque_movimentos')).insert({
+      material_id: materialId,
+      tipo,
+      quantidade,
+      motivo: val('mv-motivo') || null,
+    }),
+    'registrar o movimento',
+  )
+  if (!movimento.ok) return avisar(movimento.erro, 'erro')
 
-  const { error: erroSaldo } = await supa.from(tabela('materiais'))
-    .update({ estoque_atual: saldo }).eq('id', materialId)
-  if (erroSaldo) return erroSupabase(erroSaldo)
-
-  fecharModal('movimento')
-  await recarregar()
+  const atualizado = await gravarERecarregar(
+    supa.from(tabela('materiais')).update({ estoque_atual: saldo }).eq('id', materialId),
+    'atualizar o saldo',
+    `${material.nome}: saldo agora é ${fmtNum(saldo)} ${material.unidade}.`,
+  )
+  if (atualizado) fecharModal('movimento')
 }
 
 // ── exportações ──
