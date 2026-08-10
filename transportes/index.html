@@ -115,6 +115,7 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
     <button class="nav-btn" onclick="trocarView('ativos',this)">🚚 Frota</button>
     <button class="nav-btn" onclick="trocarView('viagens',this)">🗺️ Viagens</button>
     <button class="nav-btn" onclick="trocarView('manutencao',this)">🔧 Manutenção</button>
+    <button class="nav-btn" onclick="trocarView('planos',this)">🗓️ Planos</button>
     <button class="nav-btn" onclick="trocarView('relatorios',this)">🧾 Relatórios</button>
   </div>
 
@@ -129,6 +130,7 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
         <div class="kpi kc-blue"><div class="kpi-n" id="kpi-sobreaviso">—</div><div class="kpi-l">Sobreaviso</div></div>
         <div class="kpi kc-cyan"><div class="kpi-n" id="kpi-viagens">—</div><div class="kpi-l">Viagens</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-manut">—</div><div class="kpi-l">Manutenções próximas</div></div>
+        <div class="kpi kc-red"><div class="kpi-n" id="kpi-vencidas">—</div><div class="kpi-l">Manutenções vencidas (uso)</div></div>
       </div>
       <div class="section-split">
         <div class="stack">
@@ -217,12 +219,32 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
         <button class="btn btn-p btn-sm" id="btn-nova-manut" onclick="abrirModalManutencao()">+ Registrar</button>
       </div>
       <div id="manut-alertas"></div>
+      <div id="venc-lista-manut"></div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
             <th>Data</th><th>Ativo</th><th>Tipo</th><th>Descrição</th><th>Uso ref.</th><th>Próx. manutenção</th><th>Executado por</th>
           </tr></thead>
           <tbody id="tb-manutencoes"><tr><td colspan="7" class="tagline">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="view" id="view-planos">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Planos de manutenção</div>
+          <div class="view-sub">Intervalo por tipo/modelo, em km ou horas conforme o modelo do ativo.</div>
+        </div>
+        <button class="btn btn-p btn-sm" id="btn-novo-plano" onclick="abrirModalPlano()">+ Plano</button>
+      </div>
+      <div id="venc-lista"></div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Modelo</th><th>Plano</th><th>Intervalo</th><th>Unidade</th><th>Ordem</th><th>Situação</th><th>Ações</th>
+          </tr></thead>
+          <tbody id="tb-planos"><tr><td colspan="7" class="tagline">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -358,6 +380,28 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
       </div>
     </div>
     <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('manutencao')">Cancelar</button><button class="btn btn-p" onclick="salvarManutencao()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-plano">
+  <div class="modal">
+    <div class="modal-hd"><h3 id="titulo-modal-plano">Novo plano</h3><button class="btn btn-s btn-sm" onclick="fecharModal('plano')">Fechar</button></div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Tipo / modelo</label><select id="pl-tipo-modelo"></select></div>
+        <div class="frow"><label>Nome do plano</label><input id="pl-nome" placeholder="Troca de óleo, revisão geral..."/></div>
+      </div>
+      <div class="fgrid3">
+        <div class="frow"><label>Intervalo</label><input id="pl-intervalo" type="number" min="1" step="0.1"/></div>
+        <div class="frow"><label>Unidade</label><select id="pl-unidade" disabled><option value="km">km</option><option value="h">h</option></select><div class="help">Herdada automaticamente do modelo (D-04).</div></div>
+        <div class="frow"><label>Ordem</label><input id="pl-ordem" type="number" min="0"/></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Ativo</label><select id="pl-ativo"><option value="true">Sim</option><option value="false">Não</option></select></div>
+      </div>
+      <div class="frow"><label>Descrição</label><textarea id="pl-descricao"></textarea></div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('plano')">Cancelar</button><button class="btn btn-p" onclick="salvarPlano()">Salvar</button></div>
   </div>
 </div>
 

@@ -8,10 +8,14 @@ let USUARIO = null
 let ATIVOS = []
 let VIAGENS = []
 let MANUTENCOES = []
+let PLANOS = []
 let ERRO_CARGA = null
 
 let ATIVO_EDIT_ID = null
 let VIAGEM_EDIT_ID = null
+let PLANO_EDIT_ID = null
+
+const LIMIAR_PROXIMO = 80
 
 const STATUS_ATIVO = {
   disponivel: 'Disponível',
@@ -137,6 +141,7 @@ function aplicarPermissoes() {
   document.getElementById('btn-novo-ativo').classList.toggle('hidden', esconder)
   document.getElementById('btn-nova-viagem').classList.toggle('hidden', esconder)
   document.getElementById('btn-nova-manut').classList.toggle('hidden', esconder)
+  document.getElementById('btn-novo-plano').classList.toggle('hidden', esconder)
 }
 
 function renderErroPainel() {
@@ -151,24 +156,27 @@ function renderErroPainel() {
 
 async function carregarTudo() {
   try {
-    const [ativosRes, viagensRes, manutRes] = await Promise.all([
+    const [ativosRes, viagensRes, manutRes, planosRes] = await Promise.all([
       supa.from('transp_ativos').select('*').order('codigo'),
       supa.from('transp_viagens').select('*, transp_ativos(codigo,nome,tipo,unidade_uso)').order('data_saida', { ascending: false }).order('hora_saida_prevista', { ascending: false }),
       supa.from('transp_manutencoes').select('*, transp_ativos(codigo,nome)').order('data_manutencao', { ascending: false }),
+      supa.from('transp_planos').select('*').order('ordem'),
     ])
 
-    const erro = ativosRes.error || viagensRes.error || manutRes.error
+    const erro = ativosRes.error || viagensRes.error || manutRes.error || planosRes.error
     if (erro) throw erro
 
     ERRO_CARGA = null
     ATIVOS = ativosRes.data || []
     VIAGENS = viagensRes.data || []
     MANUTENCOES = manutRes.data || []
+    PLANOS = planosRes.data || []
   } catch (error) {
     ERRO_CARGA = error.message || String(error)
     ATIVOS = []
     VIAGENS = []
     MANUTENCOES = []
+    PLANOS = []
   }
 
   renderTudo()
@@ -179,6 +187,8 @@ function renderTudo() {
   renderAtivos()
   renderViagens()
   renderManutencoes()
+  renderPlanos()
+  renderVencimentos()
   renderRelatorios()
 }
 
@@ -201,6 +211,7 @@ function renderPainel() {
   document.getElementById('kpi-sobreaviso').textContent = sobreaviso
   document.getElementById('kpi-viagens').textContent = VIAGENS.length
   document.getElementById('kpi-manut').textContent = alertas
+  document.getElementById('kpi-vencidas').textContent = calcVencimentos().filter(item => item.falta <= 0).length
 
   const painelViagens = document.getElementById('painel-viagens')
   const agoraChave = `${new Date().toISOString().slice(0, 10)} ${new Date().toTimeString().slice(0, 5)}`
@@ -364,6 +375,173 @@ function renderManutencoes() {
       <td>${esc(item.executado_por || item.fornecedor || '—')}</td>
     </tr>
   `).join('')
+}
+
+// ── planos e vencimento por uso ──
+
+function unidadeDoModelo(tipoModelo) {
+  const ativo = ATIVOS.find(item => item.ativo !== false && item.tipo_modelo === tipoModelo)
+  return ativo ? ativo.unidade_uso : null
+}
+
+function modelosDisponiveis() {
+  const modelos = new Set(ATIVOS.filter(ativo => ativo.ativo !== false && ativo.tipo_modelo).map(ativo => ativo.tipo_modelo))
+  return [...modelos].sort((a, b) => a.localeCompare(b))
+}
+
+function calcVencimentos() {
+  const items = []
+  for (const ativo of ATIVOS) {
+    if (ativo.ativo === false || !ativo.tipo_modelo) continue
+    const planosAtivo = PLANOS.filter(plano => plano.ativo !== false && plano.tipo_modelo === ativo.tipo_modelo)
+    for (const plano of planosAtivo) {
+      if (plano.unidade !== ativo.unidade_uso) continue
+
+      const ultimaManutencao = MANUTENCOES.find(item =>
+        item.ativo_id === ativo.id
+        && item.plano_id === plano.id
+        && (item.status == null || item.status === 'concluida'))
+      const base = ultimaManutencao ? Number(ultimaManutencao.uso_referencia || 0) : 0
+      const proxUso = base + Number(plano.intervalo)
+      const falta = proxUso - Number(ativo.uso_atual || 0)
+      const pct = Math.min(100, Math.max(0, Math.round(((Number(ativo.uso_atual || 0) - base) / Number(plano.intervalo)) * 100)))
+      items.push({ ativo, plano, proxUso, falta, pct })
+    }
+  }
+  return items.sort((a, b) => b.pct - a.pct)
+}
+
+function renderVencimentos() {
+  const items = calcVencimentos().filter(item => item.falta <= 0 || item.pct >= LIMIAR_PROXIMO)
+  const html = !items.length
+    ? '<div class="callout co-ok">Nenhuma manutenção vencida ou próxima por uso no momento.</div>'
+    : items.map(item => {
+      const vencida = item.falta <= 0
+      const textoFalta = vencida
+        ? `vencida há ${Math.abs(item.falta).toFixed(1)} ${esc(item.plano.unidade)}`
+        : `faltam ${item.falta.toFixed(1)} ${esc(item.plano.unidade)}`
+      return `
+        <div class="mat-alert">
+          <div class="mat-info">
+            <div class="mat-nome">${esc(item.ativo.codigo)} — ${esc(item.ativo.nome)}</div>
+            <div class="mat-stock">${esc(item.plano.nome)} · a cada ${item.plano.intervalo} ${esc(item.plano.unidade)} · ${textoFalta} · ${item.pct}% do intervalo</div>
+          </div>
+          <span class="badge ${vencida ? 'b-red' : 'b-warn'}">${vencida ? 'VENCIDA' : 'PRÓXIMA'}</span>
+        </div>
+      `
+    }).join('')
+
+  const vencLista = document.getElementById('venc-lista')
+  if (vencLista) vencLista.innerHTML = html
+  const vencListaManut = document.getElementById('venc-lista-manut')
+  if (vencListaManut) vencListaManut.innerHTML = html
+
+  const kpiVencidas = document.getElementById('kpi-vencidas')
+  if (kpiVencidas) kpiVencidas.textContent = items.filter(item => item.falta <= 0).length
+}
+
+function renderPlanos() {
+  const tbody = document.getElementById('tb-planos')
+
+  if (!PLANOS.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="tagline">Nenhum plano cadastrado.</td></tr>'
+    return
+  }
+
+  tbody.innerHTML = PLANOS.map(plano => `
+    <tr>
+      <td class="hi">${esc(plano.tipo_modelo)}</td>
+      <td>${esc(plano.nome)}</td>
+      <td>${Number(plano.intervalo).toLocaleString('pt-BR')}</td>
+      <td>${esc(plano.unidade)}</td>
+      <td>${esc(plano.ordem ?? 0)}</td>
+      <td>${plano.ativo === false ? '<span class="badge b-red">Inativo</span>' : '<span class="badge b-ok">Ativo</span>'}</td>
+      <td>${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalPlano(${plano.id})">Editar</button>` : '—'}</td>
+    </tr>
+  `).join('')
+}
+
+function abrirModalPlano(id = null) {
+  if (!podeEditar()) return
+
+  PLANO_EDIT_ID = null
+  document.getElementById('titulo-modal-plano').textContent = 'Novo plano'
+
+  const selectModelo = document.getElementById('pl-tipo-modelo')
+  const modelos = modelosDisponiveis()
+  selectModelo.innerHTML = modelos.map(modelo => `<option value="${esc(modelo)}">${esc(modelo)}</option>`).join('')
+
+  const atualizarUnidade = () => {
+    document.getElementById('pl-unidade').value = unidadeDoModelo(selectModelo.value) || 'km'
+  }
+  selectModelo.onchange = atualizarUnidade
+
+  document.getElementById('pl-nome').value = ''
+  document.getElementById('pl-intervalo').value = ''
+  document.getElementById('pl-ordem').value = 0
+  document.getElementById('pl-ativo').value = 'true'
+  document.getElementById('pl-descricao').value = ''
+
+  if (id != null) {
+    const plano = PLANOS.find(item => item.id === id)
+    if (!plano) return
+    PLANO_EDIT_ID = plano.id
+    document.getElementById('titulo-modal-plano').textContent = 'Editar plano'
+    selectModelo.value = plano.tipo_modelo
+    document.getElementById('pl-nome').value = plano.nome || ''
+    document.getElementById('pl-intervalo').value = plano.intervalo ?? ''
+    document.getElementById('pl-ordem').value = plano.ordem ?? 0
+    document.getElementById('pl-ativo').value = plano.ativo === false ? 'false' : 'true'
+    document.getElementById('pl-descricao').value = plano.descricao || ''
+  }
+
+  atualizarUnidade()
+  document.getElementById('modal-plano').classList.add('open')
+}
+
+async function salvarPlano() {
+  if (!podeEditar()) return
+
+  const tipoModelo = document.getElementById('pl-tipo-modelo').value
+  const nome = document.getElementById('pl-nome').value.trim()
+  const intervalo = Number(document.getElementById('pl-intervalo').value)
+
+  if (!tipoModelo || !nome) {
+    alert('Selecione o modelo e informe o nome do plano.')
+    return
+  }
+  if (!intervalo || intervalo <= 0) {
+    alert('Informe um intervalo maior que zero.')
+    return
+  }
+
+  const unidade = unidadeDoModelo(tipoModelo)
+  if (!unidade) {
+    alert('Nenhum ativo ativo encontrado para este modelo — cadastre o ativo antes do plano.')
+    return
+  }
+
+  const payload = {
+    tipo_modelo: tipoModelo,
+    nome,
+    intervalo,
+    unidade,
+    ordem: Number(document.getElementById('pl-ordem').value || 0),
+    ativo: document.getElementById('pl-ativo').value === 'true',
+    descricao: document.getElementById('pl-descricao').value.trim() || null,
+  }
+
+  const resposta = PLANO_EDIT_ID == null
+    ? await supa.from('transp_planos').insert(payload)
+    : await supa.from('transp_planos').update(payload).eq('id', PLANO_EDIT_ID)
+
+  if (resposta.error) {
+    alert(`Erro: ${resposta.error.message}`)
+    return
+  }
+
+  fecharModal('plano')
+  await carregarTudo()
 }
 
 function renderRelatorios() {
@@ -745,14 +923,17 @@ function exporNoWindow() {
     abrirModalAtivo,
     abrirModalViagem,
     abrirModalManutencao,
+    abrirModalPlano,
     exportarViagensCsv,
     fecharModal,
     renderAtivos,
     renderViagens,
+    renderPlanos,
     sair,
     salvarAtivo,
     salvarViagem,
     salvarManutencao,
+    salvarPlano,
     trocarView,
   })
 }
