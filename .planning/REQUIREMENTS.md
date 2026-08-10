@@ -4,7 +4,7 @@
 
 ### Transportes (TRANSP)
 
-- [ ] **TRANSP-01**: Gestor pode cadastrar viaturas e embarcações num inventário único, com categoria (viatura/embarcação) e unidade de medida de uso (km ou horas de motor)
+- [x] **TRANSP-01**: Gestor pode cadastrar viaturas e embarcações num inventário único, com categoria (viatura/embarcação) e unidade de medida de uso (km ou horas de motor)
 - [x] **TRANSP-02**: Gestor pode definir planos de manutenção por `tipo_modelo` com intervalos em km ou horas
 - [x] **TRANSP-03**: Técnico pode abrir e concluir OS vinculada a ativo + plano + peças, com baixa automática de estoque e atualização do uso do ativo
 - [x] **TRANSP-04**: Usuário pode registrar uso (km rodado / horas de motor) e o sistema detecta manutenção vencida/próxima
@@ -12,7 +12,7 @@
 - [ ] **TRANSP-06**: Gestor pode cadastrar documentos por ativo (licenciamento, seguro, vistoria) com data de vencimento e receber alertas com antecedência
 - [x] **TRANSP-07**: Gestor pode controlar estoque de peças com alerta de mínimo e lista de compras CSV
 - [ ] **TRANSP-08**: Gestor vê dashboard de frota (KPIs, disponibilidade operacional, alertas)
-- [ ] **TRANSP-09**: Dados legados de transportes são analisados, consolidados e importados via SQL seed
+- [x] **TRANSP-09**: Dados legados de transportes são analisados, consolidados e importados via SQL seed
 
 ### Elétrica (ELET)
 
@@ -34,9 +34,9 @@
 ### Integração (INTEG)
 
 - [ ] **INTEG-01**: Portal em `/` exibe links e status dos novos módulos
-- [ ] **INTEG-02**: Rotas `/transportes`, `/eletrica`, `/fonoclama` configuradas em `vercel.json`
-- [ ] **INTEG-03**: Login por cargo (admin/gestor/tecnico/observador) funciona nos três módulos novos via tabela `usuarios` compartilhada, com RLS
-- [ ] **INTEG-04**: Módulos em produção (refrigeração, máquinas) continuam funcionando sem alteração — migrações apenas aditivas
+- [x] **INTEG-02**: Rotas `/transportes`, `/eletrica`, `/fonoclama` configuradas em `vercel.json`
+- [x] **INTEG-03**: Login por cargo (admin/gestor/tecnico/observador) funciona nos três módulos novos via tabela `usuarios` compartilhada, com RLS
+- [x] **INTEG-04**: Módulos em produção (refrigeração, máquinas) continuam funcionando sem alteração — migrações apenas aditivas
 
 ## v2 Requirements (deferred)
 
@@ -67,7 +67,7 @@ Cobertura: 24/24 requisitos v1 mapeados, cada um em exatamente uma fase.
 
 | Requisito | Fase | Status |
 |-----------|------|--------|
-| TRANSP-01 | Phase 1 | Pending |
+| TRANSP-01 | Phase 1 | Complete |
 | TRANSP-02 | Phase 1 | Complete |
 | TRANSP-03 | Phase 1 | Complete |
 | TRANSP-04 | Phase 1 | Complete |
@@ -75,7 +75,7 @@ Cobertura: 24/24 requisitos v1 mapeados, cada um em exatamente uma fase.
 | TRANSP-06 | Phase 2 | Pending |
 | TRANSP-07 | Phase 1 | Complete |
 | TRANSP-08 | Phase 2 | Pending |
-| TRANSP-09 | Phase 1 | Pending |
+| TRANSP-09 | Phase 1 | Complete |
 | ELET-01 | Phase 3 | Pending |
 | ELET-02 | Phase 3 | Pending |
 | ELET-03 | Phase 3 | Pending |
@@ -88,6 +88,6 @@ Cobertura: 24/24 requisitos v1 mapeados, cada um em exatamente uma fase.
 | FONO-04 | Phase 4 | Pending |
 | FONO-05 | Phase 4 | Pending |
 | INTEG-01 | Phase 4 | Pending |
-| INTEG-02 | Phase 1 | Pending |
-| INTEG-03 | Phase 1 | Pending |
-| INTEG-04 | Phase 1 | Pending |
+| INTEG-02 | Phase 1 | Complete |
+| INTEG-03 | Phase 1 | Complete |
+| INTEG-04 | Phase 1 | Complete |

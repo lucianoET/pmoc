@@ -38,7 +38,7 @@ Fases decimais aparecem entre suas inteiras vizinhas, em ordem numérica.
   4. Técnico abre e conclui OS vinculada a ativo + plano + peças, com baixa automática de estoque e atualização do uso do ativo; gestor vê alerta de estoque mínimo e exporta a lista de compras em CSV
   5. Refrigeração e Máquinas continuam funcionando normalmente após as migrações do módulo novo (aditivas, sem DROP e sem alterar tabelas existentes)
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -55,7 +55,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-04-PLAN.md — Conferência do import, RLS por cargo e não regressão da produção (TRANSP-01, TRANSP-09, INTEG-02, INTEG-03, INTEG-04)
+- [x] 01-04-PLAN.md — Conferência do import, RLS por cargo e não regressão da produção (TRANSP-01, TRANSP-09, INTEG-02, INTEG-03, INTEG-04)
 
 **Bloqueio inicial**: apps legados de transportes fornecidos pelo usuário; primeiro trabalho da fase é mapa de campos, reconciliação entre versões e conferência pós-import (seed idempotente com ON CONFLICT)
 **Nota de estado real**: o módulo `/transportes` já está em produção (walking skeleton comprovado — ver `phases/01-transportes-frota-sob-manuten-o/SKELETON.md`). TRANSP-01, INTEG-02 e o import de TRANSP-09 já foram entregues fora do fluxo GSD; os planos acima cobrem os gaps e a conferência formal pendente.
@@ -129,7 +129,7 @@ Fases executam em ordem numérica: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Transportes — Frota sob manutenção | 3/4 | In Progress|  |
+| 1. Transportes — Frota sob manutenção | 4/4 | In Progress|  |
 | 2. Transportes — Abastecimento, documentação e painel | 0/TBD | Not started | - |
 | 3. Elétrica — Inspeções da infraestrutura elétrica | 0/TBD | Not started | - |
 | 4. Fonoclama — Testes das zonas e portal integrado | 0/TBD | Not started | - |

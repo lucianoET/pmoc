@@ -4,16 +4,16 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 current_phase_name: transportes-frota-sob-manuten-o
-status: executing
-stopped_at: Completed 260810-k0q quick task (módulo /mapa)
-last_updated: "2026-08-10T17:41:28.434Z"
+status: verifying
+stopped_at: Completed 01-04-PLAN.md (com correcao pos-checkpoint do inventario)
+last_updated: "2026-08-10T21:16:40.024Z"
 last_activity: 2026-08-10
-last_activity_desc: Phase 01 execution started
+last_activity_desc: "Quick task 260810-k0q concluída: módulo /mapa portado + conferência import CSV VTR/EMB"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 01 (transportes-frota-sob-manuten-o) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-10 — Quick task 260810-k0q concluída: módulo /mapa portado + conferência import CSV VTR/EMB
 
-Progress: [████████░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Progress: [████████░░] 75%
 | Phase 01 P02 | 10min | 3 tasks | 3 files |
 | Phase 01 P03 | 14min | 2 tasks | 2 files |
 | Phase quick-260810-k0q P01 | 55min | 3 tasks | 10 files |
+| Phase 01 P04 | 50min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: baixarPecasDoPlano() centraliza todo débito de estoque por OS (salvarOS + concluirOS), guardada por idempotência via manutencao_id em transp_estoque_movimentos
 - [Phase ?]: popularPlanosOS() reforça a coerência km/h (D-04) também no seletor de plano da OS, filtrando por tipo_modelo e unidade_uso do ativo
 - [Phase ?]: Nenhuma migração SQL nova criada para reimportar o CSV de VTR/EMB — import já concluído em 11_transportes_seed.sql (Fase 01 Plano 04); apenas a consulta de conferência foi documentada em TESTES.md
+- [Phase ?]: 01-04: o CSV ref/Mapa de VTR e EMB ATU 20FEV26.csv NAO e o inventario — e registro de viagens de um dia; o inventario real (PDF de mesmo nome) tem 43 ativos (33 viaturas + 10 embarcacoes), corrigido pela migracao 24
+- [Phase ?]: 01-04: unidade_uso segue a natureza operacional do equipamento (horimetro vs hodometro), nao a categoria de schema — empilhadeira/trator/guindaste sao tipo=viatura mas unidade_uso=h
 
 ### Pending Todos
 
@@ -114,6 +117,8 @@ painel) segue pendente.
 - **Decisão pendente na Fase 1:** RLS — corrigir o padrão permissivo herdado ou replicá-lo. Mínimo esperado: `observador` somente leitura.
 - **Decisão pendente na Fase 1:** reutilizar `shared/auth.js` por caminho absoluto em vez de duplicar o fluxo de login inline (hoje `maquinas/app.js` duplica).
 - **Risco recorrente:** Supabase é compartilhado com produção — revisar cada migração e fazer smoke test em Refrigeração e Máquinas após aplicá-la.
+- 01-04: VTR-012 (FIAT DUCATO) importado como status=disponivel seguindo o mapa, mas a restricao registrada diz que a VTR esta na oficina JOMAP — contradicao na propria fonte, nao resolvida, decisao pendente do usuario
+- 01-04: Parte B do checkpoint da Task 2 (teste RBAC como observador contra transp_planos, tela de login sem e-mails, gravacao como Gestor, sessao reaproveitada entre modulos) e a checagem de console de navegador de Refrigeracao/Maquinas (INTEG-04) nao foram diretamente observadas por este executor — coordenador direcionou a finalizacao sem reportar falha, mas recomenda-se confirmacao humana explicita
 
 ## Deferred Items
 
@@ -130,6 +135,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-10T17:41:28.395Z
-Stopped at: Completed 260810-k0q quick task (módulo /mapa)
+Last session: 2026-08-10T21:16:39.991Z
+Stopped at: Completed 01-04-PLAN.md (com correcao pos-checkpoint do inventario)
 Resume file: None
