@@ -271,6 +271,23 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
           <tbody id="tb-materiais"><tr><td colspan="8" class="tagline">Carregando...</td></tr></tbody>
         </table>
       </div>
+      <div class="view-head" style="margin-bottom:10px">
+        <div>
+          <h3 style="margin:0 0 4px">Lista de compras</h3>
+          <div class="view-sub" style="margin:0">Peças abaixo do estoque mínimo e peças de planos com uso acima de 70% do intervalo.</div>
+        </div>
+        <button class="btn btn-s btn-sm" id="btn-exportar-compras" onclick="exportarComprasCsv()">⬇ Exportar CSV</button>
+      </div>
+      <div id="compras-vazio"></div>
+      <div class="tbl-wrap" style="margin-bottom:20px">
+        <table class="tbl">
+          <thead><tr>
+            <th>Código</th><th>Peça</th><th>Quantidade</th><th>Unidade</th><th>Preço unit.</th><th>Total</th><th>Motivo</th>
+          </tr></thead>
+          <tbody id="tb-compras"><tr><td colspan="7" class="tagline">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+
       <div class="panel-card" style="padding:0;background:none;border:none">
         <h3 style="margin:0 0 10px">Histórico de movimentos</h3>
       </div>
@@ -435,6 +452,16 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
         <div class="frow"><label>Ativo</label><select id="pl-ativo"><option value="true">Sim</option><option value="false">Não</option></select></div>
       </div>
       <div class="frow"><label>Descrição</label><textarea id="pl-descricao"></textarea></div>
+      <div class="frow">
+        <label>Peças previstas</label>
+        <p id="pl-materiais-aviso" class="help"></p>
+        <div class="fgrid3">
+          <div class="frow"><label>Peça</label><select id="pl-material-add"></select></div>
+          <div class="frow"><label>Quantidade prevista</label><input id="pl-material-qtd" type="number" min="0.01" step="0.01" value="1"/></div>
+          <div class="frow"><label>&nbsp;</label><button class="btn btn-s btn-sm" id="btn-add-peca" onclick="adicionarPecaAoPlano()">+ Vincular peça</button></div>
+        </div>
+        <div id="pl-materiais"></div>
+      </div>
     </div>
     <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('plano')">Cancelar</button><button class="btn btn-p" onclick="salvarPlano()">Salvar</button></div>
   </div>

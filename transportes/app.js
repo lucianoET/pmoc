@@ -12,6 +12,7 @@ let PLANOS = []
 let PLANO_MATS = []
 let MATERIAIS = []
 let ESTOQUE_MOV = []
+let COMPRAS = []
 let ERRO_CARGA = null
 
 let ATIVO_EDIT_ID = null
@@ -20,6 +21,7 @@ let PLANO_EDIT_ID = null
 let MATERIAL_EDIT_ID = null
 
 const LIMIAR_PROXIMO = 80
+const LIMIAR_COMPRAS = 70
 
 const STATUS_ATIVO = {
   disponivel: 'Disponível',
@@ -206,6 +208,7 @@ function renderTudo() {
   renderVencimentos()
   renderMateriais()
   renderMovimentos()
+  renderCompras()
   renderRelatorios()
 }
 
@@ -514,6 +517,96 @@ function abrirModalPlano(id = null) {
 
   atualizarUnidade()
   document.getElementById('modal-plano').classList.add('open')
+  renderPecasDoPlano()
+}
+
+function renderPecasDoPlano() {
+  const aviso = document.getElementById('pl-materiais-aviso')
+  const selectAdd = document.getElementById('pl-material-add')
+  const qtdInput = document.getElementById('pl-material-qtd')
+  const btnAdd = document.getElementById('btn-add-peca')
+  const container = document.getElementById('pl-materiais')
+
+  if (PLANO_EDIT_ID == null) {
+    aviso.textContent = 'Salve o plano antes de vincular peças.'
+    selectAdd.disabled = true
+    qtdInput.disabled = true
+    btnAdd.disabled = true
+    container.innerHTML = ''
+    return
+  }
+
+  aviso.textContent = ''
+  selectAdd.disabled = false
+  qtdInput.disabled = false
+  btnAdd.disabled = false
+
+  const disponiveis = MATERIAIS.filter(material => material.ativo !== false)
+  selectAdd.innerHTML = disponiveis.map(material => `<option value="${material.id}">${esc(material.nome)}</option>`).join('')
+
+  const vinculadas = PLANO_MATS.filter(item => item.plano_id === PLANO_EDIT_ID)
+
+  if (!vinculadas.length) {
+    container.innerHTML = '<div class="tagline">Nenhuma peça vinculada a este plano.</div>'
+    return
+  }
+
+  container.innerHTML = vinculadas.map(item => {
+    const material = MATERIAIS.find(mat => mat.id === item.material_id)
+    return `
+      <div class="mat-alert">
+        <div class="mat-info">
+          <div class="mat-nome">${esc(material?.nome || 'Peça removida')}</div>
+          <div class="mat-stock">Quantidade prevista: ${Number(item.quantidade).toLocaleString('pt-BR')} ${esc(material?.unidade || 'un')}</div>
+        </div>
+        ${podeEditar() ? `<button class="btn btn-d btn-sm" onclick="removerPecaDoPlano(${item.id})">Remover</button>` : ''}
+      </div>
+    `
+  }).join('')
+}
+
+async function adicionarPecaAoPlano() {
+  if (!podeEditar()) return
+  if (PLANO_EDIT_ID == null) {
+    alert('Salve o plano antes de vincular peças.')
+    return
+  }
+
+  const materialId = Number(document.getElementById('pl-material-add').value)
+  const quantidade = Number(document.getElementById('pl-material-qtd').value)
+
+  if (!materialId) {
+    alert('Selecione uma peça.')
+    return
+  }
+  if (!quantidade || quantidade <= 0) {
+    alert('Informe uma quantidade maior que zero.')
+    return
+  }
+
+  const resposta = await supa.from('transp_plano_materiais')
+    .upsert({ plano_id: PLANO_EDIT_ID, material_id: materialId, quantidade }, { onConflict: 'plano_id,material_id' })
+
+  if (resposta.error) {
+    alert(`Erro: ${resposta.error.message}`)
+    return
+  }
+
+  await carregarTudo()
+  renderPecasDoPlano()
+}
+
+async function removerPecaDoPlano(id) {
+  if (!podeEditar()) return
+
+  const resposta = await supa.from('transp_plano_materiais').delete().eq('id', id)
+  if (resposta.error) {
+    alert(`Erro: ${resposta.error.message}`)
+    return
+  }
+
+  await carregarTudo()
+  renderPecasDoPlano()
 }
 
 async function salvarPlano() {
@@ -633,6 +726,98 @@ function renderMovimentos() {
       <td>${esc(mov.motivo || '—')}</td>
     </tr>
   `).join('')
+}
+
+function csvSeguro(valor) {
+  const texto = String(valor ?? '')
+  return /^[=+\-@]/.test(texto) ? `'${texto}` : texto
+}
+
+function renderCompras() {
+  COMPRAS = []
+
+  for (const material of materiaisAbaixoDoMinimo()) {
+    const quantidade = Number(material.estoque_minimo || 0) - Number(material.estoque_atual || 0)
+    COMPRAS.push({
+      codigo: material.codigo || '',
+      nome: material.nome,
+      unidade: material.unidade || 'un',
+      quantidade,
+      preco: material.preco,
+      motivo: `Reposição de estoque mínimo (saldo ${Number(material.estoque_atual || 0).toLocaleString('pt-BR')}, mínimo ${Number(material.estoque_minimo || 0).toLocaleString('pt-BR')})`,
+    })
+  }
+
+  for (const item of calcVencimentos().filter(venc => venc.pct >= LIMIAR_COMPRAS)) {
+    const itensPlano = PLANO_MATS.filter(pm => pm.plano_id === item.plano.id)
+    for (const itemPlano of itensPlano) {
+      const material = MATERIAIS.find(mat => mat.id === itemPlano.material_id)
+      if (!material) continue
+      const saldo = Number(material.estoque_atual || 0)
+      const prevista = Number(itemPlano.quantidade)
+      if (saldo >= prevista) continue
+      COMPRAS.push({
+        codigo: material.codigo || '',
+        nome: material.nome,
+        unidade: material.unidade || 'un',
+        quantidade: prevista,
+        preco: material.preco,
+        motivo: `Plano "${item.plano.nome}" em ${item.ativo.codigo} (${item.pct}% do intervalo)`,
+      })
+    }
+  }
+
+  const tbody = document.getElementById('tb-compras')
+  const vazio = document.getElementById('compras-vazio')
+  if (!tbody) return
+
+  if (!COMPRAS.length) {
+    tbody.innerHTML = ''
+    if (vazio) vazio.innerHTML = '<div class="callout co-ok">Nenhuma compra necessária no momento.</div>'
+    return
+  }
+
+  if (vazio) vazio.innerHTML = ''
+
+  tbody.innerHTML = COMPRAS.map(item => {
+    const total = item.preco != null ? Number(item.preco) * Number(item.quantidade) : null
+    return `
+      <tr>
+        <td class="mono">${esc(item.codigo || '—')}</td>
+        <td>${esc(item.nome)}</td>
+        <td>${Number(item.quantidade).toLocaleString('pt-BR')}</td>
+        <td>${esc(item.unidade)}</td>
+        <td>${item.preco != null ? `R$ ${Number(item.preco).toFixed(2)}` : '—'}</td>
+        <td>${total != null ? `R$ ${total.toFixed(2)}` : '—'}</td>
+        <td>${esc(item.motivo)}</td>
+      </tr>
+    `
+  }).join('')
+}
+
+function exportarComprasCsv() {
+  const cabecalho = ['Codigo', 'Peca', 'Quantidade', 'Unidade', 'PrecoUnit', 'Total', 'Motivo']
+  const linhas = COMPRAS.map(item => {
+    const total = item.preco != null ? Number(item.preco) * Number(item.quantidade) : ''
+    return [
+      item.codigo || '',
+      item.nome,
+      item.quantidade,
+      item.unidade,
+      item.preco != null ? Number(item.preco).toFixed(2) : '',
+      total !== '' ? total.toFixed(2) : '',
+      item.motivo,
+    ]
+  })
+
+  const csv = [cabecalho, ...linhas].map(colunas => colunas.map(valor => csvEscape(csvSeguro(valor))).join(';')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `transportes-lista-compras-${new Date().toISOString().slice(0, 10)}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 function abrirModalMaterial(id = null) {
@@ -1146,7 +1331,10 @@ function exporNoWindow() {
     abrirModalPlano,
     abrirModalMaterial,
     abrirModalMovimento,
+    adicionarPecaAoPlano,
+    removerPecaDoPlano,
     exportarViagensCsv,
+    exportarComprasCsv,
     fecharModal,
     renderAtivos,
     renderViagens,
