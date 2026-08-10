@@ -10,9 +10,9 @@
 |---|---|---|---|---|
 | `transportes/app.js` (estender: +PLANOS, +PLANO_MATS, +MATERIAIS, +ESTOQUE_MOV, +calcVencimentos, +renderPlanos, +renderMateriais, +renderCompras, +exportarComprasCSV, +salvarOS) | componente de app (single-file client state manager) | CRUD + batch (baixa de estoque em sequência) | `maquinas/app.js` | exact — mesmo domínio de problema (planos por tipo_modelo, vencimento por uso, OS com baixa de estoque, CSV de compras), já resolvido em produção |
 | `transportes/index.html` (adicionar abas "Planos" e "Estoque" + modais) | view/template | request-response (render client-side) | `maquinas/index.html` | role-match — estrutura de abas/nav e modais equivalente; adaptar rótulos para transp_ |
-| `supabase/14_transportes_planos_estoque_os.sql` (migração nova) | migration | batch (DDL + grants + policies) | `supabase/01_maquinas_schema.sql` (estrutura de tabelas planos/materiais/os) + `supabase/10_transportes_schema.sql` (estilo de policy loop e grants já em uso no módulo transportes) | role-match — combinar o schema de referência (01) com o estilo/prefixo já estabelecido em transportes (10) |
-| `transp_manutencoes` — `ALTER TABLE` (não novo arquivo, dentro da migração 14) | migration (alteração aditiva) | CRUD | `maq_os` (colunas `plano_id`, `status`, `custo_pecas`) em `supabase/01_maquinas_schema.sql` | role-match — replicar colunas equivalentes via `ADD COLUMN IF NOT EXISTS` |
-| `transp_pode_escrever()` (função SQL, dentro da migração 14) | middleware (RLS/RBAC) | request-response | nenhum analog direto em produção (schemas atuais usam `using(true)`) — usar o padrão documentado em `01-RESEARCH.md` Pattern 3 | sem analog — ver seção "Sem Analog" |
+| `supabase/22_transportes_planos_estoque_os.sql` (migração nova) | migration | batch (DDL + grants + policies) | `supabase/01_maquinas_schema.sql` (estrutura de tabelas planos/materiais/os) + `supabase/10_transportes_schema.sql` (estilo de policy loop e grants já em uso no módulo transportes) | role-match — combinar o schema de referência (01) com o estilo/prefixo já estabelecido em transportes (10) |
+| `transp_manutencoes` — `ALTER TABLE` (não novo arquivo, dentro da migração 22) | migration (alteração aditiva) | CRUD | `maq_os` (colunas `plano_id`, `status`, `custo_pecas`) em `supabase/01_maquinas_schema.sql` | role-match — replicar colunas equivalentes via `ADD COLUMN IF NOT EXISTS` |
+| `transp_pode_escrever()` (função SQL, dentro da migração 22) | middleware (RLS/RBAC) | request-response | nenhum analog direto em produção (schemas atuais usam `using(true)`) — usar o padrão documentado em `01-RESEARCH.md` Pattern 3 | sem analog — ver seção "Sem Analog" |
 | `shared/auth.js`, `shared/supabase-config.js` (só leitura, sem alteração) | provider/utility | request-response | já em uso correto por `transportes/app.js` | exact — não modificar, apenas confirmar import |
 
 ## Atribuições de Padrão
@@ -208,7 +208,7 @@ async function salvarMaterial(){
 
 ---
 
-### `supabase/14_transportes_planos_estoque_os.sql` — migração aditiva
+### `supabase/22_transportes_planos_estoque_os.sql` — migração aditiva
 
 **Analog:** `supabase/01_maquinas_schema.sql` (estrutura de tabelas) + `supabase/10_transportes_schema.sql` (estilo de policy/grant já usado neste módulo)
 

@@ -55,7 +55,7 @@ O módulo `/transportes` já está em produção com um subconjunto funcional (F
 
 A investigação de código confirmou que o comportamento "sessão Gestor abriu sem login" relatado no teste de produção **não é um bug de RLS** — é o comportamento padrão e documentado do Supabase JS SDK: sessões ficam em `localStorage`, que é compartilhado entre todos os *paths* de uma mesma origem (`pmoc-overlay.vercel.app` ou domínio customizado). Um login prévio em `/maquinas` como Gestor é automaticamente reaproveitado ao abrir `/transportes`, porque `Auth.mount()` chama `supa.auth.getSession()` e reidrata a sessão existente sem mostrar a tela de login. Isso é single-sign-on implícito entre módulos do mesmo projeto Supabase — não uma falha de autenticação de Transportes especificamente. O que de fato precisa de atenção (RLS real) é: hoje qualquer cargo autenticado (admin/gestor/tecnico) tem CRUD idêntico e irrestrito nas tabelas `transp_*`, porque as policies usam `to authenticated using (true)`/`with check (true)` sem checagem de `role`. `observador` ("Livre") já não tem sessão Supabase real (não chama `signInWithPassword`), então já está de fato bloqueado de escrever no banco mesmo com policies permissivas — mas isso nunca foi testado formalmente. A fase deve (a) confirmar isso com um smoke test explícito e (b) aplicar RBAC mínimo nas tabelas **novas** desta fase (planos/estoque/movimentos + colunas novas de `transp_manutencoes`) sem tocar nas policies das tabelas já em produção de outros módulos.
 
-**Recomendação primária:** portar o padrão `maquinas/app.js` (planos → vencimentos → OS → estoque → compras) para `transportes/app.js`, estendendo `transp_manutencoes` em vez de criar uma tabela `transp_os` paralela, e aplicar RBAC mínimo (insert/update/delete restrito a `admin/gestor/tecnico` via função `SECURITY DEFINER` que consulta `usuarios.role`) apenas nas tabelas novas desta fase, numa migração `14_transportes_planos_estoque_os.sql` estritamente aditiva.
+**Recomendação primária:** portar o padrão `maquinas/app.js` (planos → vencimentos → OS → estoque → compras) para `transportes/app.js`, estendendo `transp_manutencoes` em vez de criar uma tabela `transp_os` paralela, e aplicar RBAC mínimo (insert/update/delete restrito a `admin/gestor/tecnico` via função `SECURITY DEFINER` que consulta `usuarios.role`) apenas nas tabelas novas desta fase, numa migração `22_transportes_planos_estoque_os.sql` estritamente aditiva.
 
 ## Architectural Responsibility Map
 
@@ -153,7 +153,7 @@ transportes/
                      # calcVencimentos(), renderVencimentos(), renderPlanos(), renderMateriais(),
                      # renderCompras(), exportarComprasCSV(); estender salvarManutencao() → salvarOS()
 supabase/
-└── 14_transportes_planos_estoque_os.sql   # migração aditiva única desta fase (ver §Common Pitfalls)
+└── 22_transportes_planos_estoque_os.sql   # migração aditiva única desta fase (ver §Common Pitfalls)
 ```
 
 ### Pattern 1: Planos por `tipo_modelo` com unidade herdada do ativo
@@ -331,7 +331,7 @@ grant usage, select on sequence transp_materiais_id_seq to anon, authenticated;
 
 **O que dá errado:** Qualquer `CREATE OR REPLACE FUNCTION`/`CREATE POLICY` com nome genérico (não prefixado `transp_`) pode colidir com objeto homônimo já usado por Refrigeração/Máquinas (ex.: uma função chamada `pode_escrever()` sem prefixo colidiria em potencial com qualquer coisa análoga criada depois em outro módulo).
 
-**Como evitar:** Sempre prefixar funções/policies novas com `transp_` (`transp_pode_escrever()`, `ins_transp_planos`, etc.), como já é o padrão observado nas policies de `10_transportes_schema.sql` (`sel_anon_transp_ativos`, etc.). Após aplicar a migração 14, fazer smoke test manual: login em `/maquinas` e `/refrigeracao`, confirmar que carregam sem erro.
+**Como evitar:** Sempre prefixar funções/policies novas com `transp_` (`transp_pode_escrever()`, `ins_transp_planos`, etc.), como já é o padrão observado nas policies de `10_transportes_schema.sql` (`sel_anon_transp_ativos`, etc.). Após aplicar a migração 22, fazer smoke test manual: login em `/maquinas` e `/refrigeracao`, confirmar que carregam sem erro.
 
 **Sinais de alerta:** Nome de função/policy sem prefixo de módulo na migração nova.
 
@@ -375,7 +375,7 @@ function renderCompras(){
 ### Migração aditiva completa (esqueleto)
 
 ```sql
--- 14_transportes_planos_estoque_os.sql
+-- 22_transportes_planos_estoque_os.sql
 create table if not exists transp_planos (
   id bigint generated always as identity primary key,
   tipo_modelo text not null,
@@ -486,7 +486,7 @@ end $$;
 | `python3` (servidor local opcional) | Rodar `python -m http.server` para testar localmente | ✓ | 3.14.4 [VERIFIED] | Abrir `index.html` direto no browser também funciona (zero-build) |
 | `git` | Deploy via push | ✓ | 2.53.0 [VERIFIED] | — |
 | Supabase (projeto `pmoc`, cloud) | Toda a persistência | ✓ (já em uso pelos módulos existentes) | Postgres 15+ gerenciado | — |
-| Acesso ao SQL Editor do Supabase (dashboard) | Rodar a migração 14 | Não verificável nesta sessão (requer login no dashboard) | — | Nenhum — é o único canal de migração documentado no CLAUDE.md (`supabase/` + SQL Editor, sem CLI/Docker local configurado neste repo) |
+| Acesso ao SQL Editor do Supabase (dashboard) | Rodar a migração 22 | Não verificável nesta sessão (requer login no dashboard) | — | Nenhum — é o único canal de migração documentado no CLAUDE.md (`supabase/` + SQL Editor, sem CLI/Docker local configurado neste repo) |
 | Painel Vercel conectado ao remote correto | Deploy do módulo | Não verificável nesta sessão (ver Pitfall 7 / Assumption A1) | — | Confirmar manualmente no painel antes de considerar a fase "em produção" |
 
 **Dependências ausentes sem fallback:** nenhuma que bloqueie o planejamento — os dois itens "não verificáveis nesta sessão" (SQL Editor, painel Vercel) exigem acesso interativo ao dashboard que não está disponível nesta pesquisa; devem ser confirmados manualmente pelo usuário durante a execução, não são bloqueio para o plano em si.
