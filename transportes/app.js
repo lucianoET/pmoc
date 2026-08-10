@@ -9,11 +9,15 @@ let ATIVOS = []
 let VIAGENS = []
 let MANUTENCOES = []
 let PLANOS = []
+let PLANO_MATS = []
+let MATERIAIS = []
+let ESTOQUE_MOV = []
 let ERRO_CARGA = null
 
 let ATIVO_EDIT_ID = null
 let VIAGEM_EDIT_ID = null
 let PLANO_EDIT_ID = null
+let MATERIAL_EDIT_ID = null
 
 const LIMIAR_PROXIMO = 80
 
@@ -142,6 +146,8 @@ function aplicarPermissoes() {
   document.getElementById('btn-nova-viagem').classList.toggle('hidden', esconder)
   document.getElementById('btn-nova-manut').classList.toggle('hidden', esconder)
   document.getElementById('btn-novo-plano').classList.toggle('hidden', esconder)
+  document.getElementById('btn-novo-material').classList.toggle('hidden', esconder)
+  document.getElementById('btn-novo-movimento').classList.toggle('hidden', esconder)
 }
 
 function renderErroPainel() {
@@ -156,14 +162,17 @@ function renderErroPainel() {
 
 async function carregarTudo() {
   try {
-    const [ativosRes, viagensRes, manutRes, planosRes] = await Promise.all([
+    const [ativosRes, viagensRes, manutRes, planosRes, planoMatsRes, materiaisRes, movRes] = await Promise.all([
       supa.from('transp_ativos').select('*').order('codigo'),
       supa.from('transp_viagens').select('*, transp_ativos(codigo,nome,tipo,unidade_uso)').order('data_saida', { ascending: false }).order('hora_saida_prevista', { ascending: false }),
       supa.from('transp_manutencoes').select('*, transp_ativos(codigo,nome)').order('data_manutencao', { ascending: false }),
       supa.from('transp_planos').select('*').order('ordem'),
+      supa.from('transp_plano_materiais').select('*'),
+      supa.from('transp_materiais').select('*').order('nome'),
+      supa.from('transp_estoque_movimentos').select('*, transp_materiais(nome,unidade)').order('registrado_em', { ascending: false }).limit(200),
     ])
 
-    const erro = ativosRes.error || viagensRes.error || manutRes.error || planosRes.error
+    const erro = ativosRes.error || viagensRes.error || manutRes.error || planosRes.error || planoMatsRes.error || materiaisRes.error || movRes.error
     if (erro) throw erro
 
     ERRO_CARGA = null
@@ -171,12 +180,18 @@ async function carregarTudo() {
     VIAGENS = viagensRes.data || []
     MANUTENCOES = manutRes.data || []
     PLANOS = planosRes.data || []
+    PLANO_MATS = planoMatsRes.data || []
+    MATERIAIS = materiaisRes.data || []
+    ESTOQUE_MOV = movRes.data || []
   } catch (error) {
     ERRO_CARGA = error.message || String(error)
     ATIVOS = []
     VIAGENS = []
     MANUTENCOES = []
     PLANOS = []
+    PLANO_MATS = []
+    MATERIAIS = []
+    ESTOQUE_MOV = []
   }
 
   renderTudo()
@@ -189,6 +204,8 @@ function renderTudo() {
   renderManutencoes()
   renderPlanos()
   renderVencimentos()
+  renderMateriais()
+  renderMovimentos()
   renderRelatorios()
 }
 
@@ -541,6 +558,209 @@ async function salvarPlano() {
   }
 
   fecharModal('plano')
+  await carregarTudo()
+}
+
+// ── estoque de peças ──
+
+function materiaisAbaixoDoMinimo() {
+  return MATERIAIS.filter(material =>
+    material.ativo !== false
+    && Number(material.estoque_minimo || 0) > 0
+    && Number(material.estoque_atual || 0) < Number(material.estoque_minimo || 0))
+}
+
+function renderMateriais() {
+  const tbody = document.getElementById('tb-materiais')
+  const divAlertas = document.getElementById('estoque-alertas')
+  const kpiEstoqueBaixo = document.getElementById('kpi-estoque-baixo')
+  const abaixoDoMinimo = materiaisAbaixoDoMinimo()
+
+  if (kpiEstoqueBaixo) kpiEstoqueBaixo.textContent = abaixoDoMinimo.length
+
+  if (divAlertas) {
+    divAlertas.innerHTML = !abaixoDoMinimo.length
+      ? '<div class="callout co-ok">Nenhuma peça abaixo do estoque mínimo no momento.</div>'
+      : abaixoDoMinimo.map(material => `
+        <div class="callout co-warn">
+          <strong>${esc(material.nome)}</strong>: saldo ${Number(material.estoque_atual || 0).toLocaleString('pt-BR')} ${esc(material.unidade || 'un')}, mínimo ${Number(material.estoque_minimo || 0).toLocaleString('pt-BR')} ${esc(material.unidade || 'un')}.
+        </div>
+      `).join('')
+  }
+
+  if (!MATERIAIS.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="tagline">Nenhuma peça cadastrada.</td></tr>'
+    return
+  }
+
+  tbody.innerHTML = MATERIAIS.map(material => {
+    const arquivado = material.ativo === false
+    const abaixo = !arquivado
+      && Number(material.estoque_minimo || 0) > 0
+      && Number(material.estoque_atual || 0) < Number(material.estoque_minimo || 0)
+    const badge = arquivado
+      ? '<span class="badge b-blue">Arquivada</span>'
+      : abaixo
+        ? '<span class="badge b-red">Baixo</span>'
+        : '<span class="badge b-ok">OK</span>'
+    return `
+    <tr>
+      <td class="hi mono">${esc(material.codigo || '—')}</td>
+      <td>${esc(material.nome)}</td>
+      <td>${esc(material.tipo === 'peca' ? 'Peça' : 'Consumível')}</td>
+      <td>${Number(material.estoque_atual || 0).toLocaleString('pt-BR')} ${esc(material.unidade || 'un')}</td>
+      <td>${Number(material.estoque_minimo || 0).toLocaleString('pt-BR')} ${esc(material.unidade || 'un')}</td>
+      <td>${material.preco != null ? `R$ ${Number(material.preco).toFixed(2)}` : '—'}</td>
+      <td>${badge}</td>
+      <td>${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalMaterial(${material.id})">Editar</button>` : '—'}</td>
+    </tr>
+  `}).join('')
+}
+
+function renderMovimentos() {
+  const tbody = document.getElementById('tb-movimentos')
+  if (!ESTOQUE_MOV.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="tagline">Nenhum movimento registrado.</td></tr>'
+    return
+  }
+
+  tbody.innerHTML = ESTOQUE_MOV.map(mov => `
+    <tr>
+      <td class="mono">${fmtDate(mov.registrado_em)}</td>
+      <td>${esc(mov.transp_materiais?.nome || '—')}</td>
+      <td>${esc(mov.tipo === 'saida' ? 'Saída' : 'Entrada')}</td>
+      <td>${Number(mov.quantidade || 0).toLocaleString('pt-BR')} ${esc(mov.transp_materiais?.unidade || '')}</td>
+      <td>${esc(mov.motivo || '—')}</td>
+    </tr>
+  `).join('')
+}
+
+function abrirModalMaterial(id = null) {
+  if (!podeEditar()) return
+
+  MATERIAL_EDIT_ID = null
+  document.getElementById('titulo-modal-material').textContent = 'Nova peça'
+  document.getElementById('mat-codigo').value = ''
+  document.getElementById('mat-nome').value = ''
+  document.getElementById('mat-tipo').value = 'consumivel'
+  document.getElementById('mat-unidade').value = 'un'
+  document.getElementById('mat-minimo').value = 0
+  document.getElementById('mat-preco').value = ''
+  document.getElementById('mat-ativo').value = 'true'
+  document.getElementById('mat-obs').value = ''
+
+  if (id != null) {
+    const material = MATERIAIS.find(item => item.id === id)
+    if (!material) return
+    MATERIAL_EDIT_ID = material.id
+    document.getElementById('titulo-modal-material').textContent = 'Editar peça'
+    document.getElementById('mat-codigo').value = material.codigo || ''
+    document.getElementById('mat-nome').value = material.nome || ''
+    document.getElementById('mat-tipo').value = material.tipo || 'consumivel'
+    document.getElementById('mat-unidade').value = material.unidade || 'un'
+    document.getElementById('mat-minimo').value = material.estoque_minimo ?? 0
+    document.getElementById('mat-preco').value = material.preco ?? ''
+    document.getElementById('mat-ativo').value = material.ativo === false ? 'false' : 'true'
+    document.getElementById('mat-obs').value = material.obs || ''
+  }
+
+  document.getElementById('modal-material').classList.add('open')
+}
+
+async function salvarMaterial() {
+  if (!podeEditar()) return
+
+  const nome = document.getElementById('mat-nome').value.trim()
+  if (!nome) {
+    alert('Nome obrigatório.')
+    return
+  }
+
+  const precoTexto = document.getElementById('mat-preco').value
+  const payload = {
+    codigo: document.getElementById('mat-codigo').value.trim().toUpperCase() || null,
+    nome,
+    tipo: document.getElementById('mat-tipo').value,
+    unidade: document.getElementById('mat-unidade').value.trim() || 'un',
+    estoque_minimo: Number(document.getElementById('mat-minimo').value || 0),
+    preco: precoTexto === '' ? null : Number(precoTexto),
+    ativo: document.getElementById('mat-ativo').value === 'true',
+    obs: document.getElementById('mat-obs').value.trim() || null,
+  }
+
+  // estoque_atual nunca é enviado por aqui — o saldo só muda por movimento (salvarMovimento).
+  const resposta = MATERIAL_EDIT_ID == null
+    ? await supa.from('transp_materiais').insert(payload)
+    : await supa.from('transp_materiais').update(payload).eq('id', MATERIAL_EDIT_ID)
+
+  if (resposta.error) {
+    alert(`Erro: ${resposta.error.message}`)
+    return
+  }
+
+  fecharModal('material')
+  await carregarTudo()
+}
+
+function abrirModalMovimento() {
+  if (!podeEditar()) return
+
+  const select = document.getElementById('mv-material')
+  const disponiveis = MATERIAIS.filter(material => material.ativo !== false)
+  select.innerHTML = disponiveis.map(material => `
+    <option value="${material.id}">${esc(material.nome)} (${Number(material.estoque_atual || 0).toLocaleString('pt-BR')} ${esc(material.unidade || 'un')})</option>
+  `).join('')
+
+  document.getElementById('mv-tipo').value = 'entrada'
+  document.getElementById('mv-quantidade').value = ''
+  document.getElementById('mv-motivo').value = ''
+  document.getElementById('modal-movimento').classList.add('open')
+}
+
+async function salvarMovimento() {
+  if (!podeEditar()) return
+
+  const materialId = Number(document.getElementById('mv-material').value)
+  const tipo = document.getElementById('mv-tipo').value
+  const quantidade = Number(document.getElementById('mv-quantidade').value)
+  const motivo = document.getElementById('mv-motivo').value.trim() || null
+
+  if (!materialId || !quantidade || quantidade <= 0) {
+    alert('Selecione a peça e informe uma quantidade maior que zero.')
+    return
+  }
+
+  const material = MATERIAIS.find(item => item.id === materialId)
+  if (!material) {
+    alert('Peça não encontrada.')
+    return
+  }
+
+  const saldoAtual = Number(material.estoque_atual || 0)
+  const novoSaldo = tipo === 'saida' ? saldoAtual - quantidade : saldoAtual + quantidade
+
+  if (novoSaldo < 0) {
+    alert('Operação recusada: essa saída deixaria o saldo negativo.')
+    return
+  }
+
+  const insertRes = await supa.from('transp_estoque_movimentos').insert({
+    material_id: materialId,
+    tipo,
+    quantidade,
+    motivo,
+  })
+  if (insertRes.error) {
+    alert(`Erro: ${insertRes.error.message}`)
+    return
+  }
+
+  const updateRes = await supa.from('transp_materiais').update({ estoque_atual: novoSaldo }).eq('id', materialId)
+  if (updateRes.error) {
+    alert(`Movimento registrado, mas o saldo não foi atualizado: ${updateRes.error.message}`)
+  }
+
+  fecharModal('movimento')
   await carregarTudo()
 }
 
@@ -924,6 +1144,8 @@ function exporNoWindow() {
     abrirModalViagem,
     abrirModalManutencao,
     abrirModalPlano,
+    abrirModalMaterial,
+    abrirModalMovimento,
     exportarViagensCsv,
     fecharModal,
     renderAtivos,
@@ -934,6 +1156,8 @@ function exporNoWindow() {
     salvarViagem,
     salvarManutencao,
     salvarPlano,
+    salvarMaterial,
+    salvarMovimento,
     trocarView,
   })
 }
