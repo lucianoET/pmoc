@@ -7,8 +7,8 @@ current_phase_name: Transportes — Frota sob manutenção
 status: executing
 stopped_at: Phase 1 context gathered
 last_updated: "2026-08-08T12:07:26.441Z"
-last_activity: 2026-08-09
-last_activity_desc: /eletrica e /fonoclama no ar; /predial portado do xPredial (migrações 17–18 pendentes de execução no Supabase)
+last_activity: 2026-08-10
+last_activity_desc: Migrações 17–21 aplicadas; locais unificados em cmasm_locais (233 físicos, 29 prédios, 132 salas) e 5 módulos no ar
 progress:
   total_phases: 1
   completed_phases: 0
@@ -75,9 +75,12 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 
 - ✅ Migrações 14–16 executadas pelo usuário; `/eletrica` e `/fonoclama` no ar
   (contagens conferidas via REST: 13/9/11/14 e 10/7/10/13).
-- Rodar `supabase/17_predial_schema.sql` e `supabase/18_predial_seed.sql` no SQL
-  Editor (não há permissão de MCP para aplicar daqui).
-- Depois disso, seguir as seções "Elétrica e Fonoclama" e "Predial" do `TESTES.md`.
+- ✅ Migrações 17–21 aplicadas e conferidas em produção (10/08/2026): 233 locais
+  físicos, 29 edificações, 132 salas, 78 nós de organograma em `cmasm_estrutura`,
+  171 equipamentos ligados por `local_id`, zero órfão na árvore.
+- Resolver pela tela os locais de Elétrica e Fonoclama que ficaram sem vínculo
+  (textos dos apps de demonstração; query de conferência no rodapé da migração 21).
+- Seguir o fluxo manual das seções "Predial" e "Locais compartilhados" do `TESTES.md`.
 
 ### Módulos fora do roadmap original
 

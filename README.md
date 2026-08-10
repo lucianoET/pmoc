@@ -22,7 +22,7 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 | `/transportes` | **PMOC Transportes** v1.0 | 9 ativos · 23 viagens importadas · manutenção de viaturas e embarcações | ✅ |
 | `/eletrica` | **PMOC Elétrica** v1.0 | 13 ativos · 9 planos · 11 peças · geradores, QGBT, nobreaks, iluminação | ✅ |
 | `/fonoclama` | **PMOC Fonoclama** v1.0 | 10 ativos · 7 planos · 10 peças · PA 70V | ✅ |
-| `/predial` | **PMOC Predial** v1.0 | 150 locais · 3 templates · 206 itens de checklist · GUT · laudos | ⏳ migração pendente |
+| `/predial` | **PMOC Predial** v1.0 | 233 locais · 3 templates · 206 itens de checklist · GUT · laudos | ✅ |
 
 ### Refrigeração
 Inventário de climatização com fluxo completo de contratação pública:
@@ -83,6 +83,10 @@ python3 supabase/gerar_18_predial_seed.py
 | `maq_planos` | 59 |
 | `maq_materiais` | 34 (R$ 4.861,80 de estoque mínimo) |
 | `transp_ativos` | 9 |
+| `cmasm_locais` | 233 físicos (29 edificações · 132 salas) |
+| `cmasm_estrutura` | 78 |
+| `elet_ativos` | 13 |
+| `fono_ativos` | 10 |
 | `transp_viagens` | 23 |
 
 ---
