@@ -34,6 +34,7 @@ as $$
   select exists (
     select 1 from usuarios u
     where u.auth_id = (select auth.uid())
+      and u.ativo = true
       and u.role in ('admin', 'gestor', 'tecnico')
   )
 $$;
