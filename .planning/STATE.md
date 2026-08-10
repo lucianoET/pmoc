@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: Transportes — Frota sob manutenção
+current_phase: 01
+current_phase_name: transportes-frota-sob-manuten-o
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-08-08T12:07:26.441Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-08-10T15:45:10.621Z"
 last_activity: 2026-08-10
-last_activity_desc: Migrações 17–21 aplicadas; locais unificados em cmasm_locais (233 físicos, 29 prédios, 132 salas) e 5 módulos no ar
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 4
+  completed_plans: 1
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supabase + login por cargo), com os dados legados consolidados e importados — sem quebrar os módulos em produção.
-**Current focus:** Fase 1 — Transportes — Frota sob manutenção
+**Current focus:** Phase 01 — transportes-frota-sob-manuten-o
 
 ## Current Position
 
-Phase: 1 of 4 (Transportes — Frota sob manutenção)
-Plan: 0 of TBD in current phase
+Phase: 01 (transportes-frota-sob-manuten-o) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-08-08 — Roadmap criado (4 fases, 24/24 requisitos mapeados)
+Last activity: 2026-08-10 — Phase 01 execution started
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -54,6 +54,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 17min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -66,20 +71,26 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
   então compartilham o motor `shared/modulo-manutencao.js` em vez de duplicar ~700
   linhas duas vezes. Cada módulo é só um arquivo de configuração. Os módulos em
   produção continuam intocados — o núcleo comum vale só para os módulos novos.
+
 - Transportes = estilo máquinas (`index.html` + `app.js`); Elétrica/Fonoclama = estilo refrigeração (arquivo único)
 - Ordem: Transportes → Elétrica → Fonoclama (prioridade do usuário)
 - Dados legados: analisar → consolidar → importar via SQL seed (bloqueante antes do schema)
 - Contratação pública (ARP/empenho) fora dos módulos novos
+- [Phase ?]: transp_pode_escrever() exige usuarios.ativo=true além do cargo, alinhado com 12_maquinas_areas_operacoes.sql
+- [Phase ?]: Leitura de transp_planos permanece pública (using(true)); apenas escrita passa por RBAC, preservando acesso do observador
 
 ### Pending Todos
 
 - ✅ Migrações 14–16 executadas pelo usuário; `/eletrica` e `/fonoclama` no ar
   (contagens conferidas via REST: 13/9/11/14 e 10/7/10/13).
+
 - ✅ Migrações 17–21 aplicadas e conferidas em produção (10/08/2026): 233 locais
   físicos, 29 edificações, 132 salas, 78 nós de organograma em `cmasm_estrutura`,
   171 equipamentos ligados por `local_id`, zero órfão na árvore.
+
 - Resolver pela tela os locais de Elétrica e Fonoclama que ficaram sem vínculo
   (textos dos apps de demonstração; query de conferência no rodapé da migração 21).
+
 - Seguir o fluxo manual das seções "Predial" e "Locais compartilhados" do `TESTES.md`.
 
 ### Módulos fora do roadmap original
@@ -110,6 +121,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-10
-Stopped at: Planos da Fase 1 prontos; migrações renumeradas para 22/23
-Resume file: .planning/phases/01-transportes-frota-sob-manuten-o/01-01-PLAN.md
+Last session: 2026-08-10T15:45:10.591Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
