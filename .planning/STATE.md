@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 5
 current_phase_name: base-unificada
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-08-11T00:38:11.210Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-08-11T00:43:40.977Z"
 last_activity: 2026-08-10
-last_activity_desc: Executado 05-04-PLAN.md
+last_activity_desc: Executado 05-05-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 5 (Base unificada) — EXECUTANDO
-Plan: 4 de 7
-Status: 05-04-PLAN.md concluído (mapa consumindo shared/shell.js — cabeçalho e rodapé pelo shell comum, com navItems vazio e sem faixa de abas); aguardando 05-05
-Last activity: 2026-08-10 — Executado 05-04-PLAN.md
+Plan: 5 de 7
+Status: 05-05-PLAN.md concluído (transportes consumindo shared/shell.js e shared/pmoc.css — família de marca própria --cyan/kc-cyan/b-cyan aposentada, cabeçalho/abas/rodapé pelo shell comum); aguardando 05-06
+Last activity: 2026-08-10 — Executado 05-05-PLAN.md
 
-Progress: [██████░░░░] 57% (v2.0)
+Progress: [███████░░░] 71% (v2.0)
 
 ## Performance Metrics
 
@@ -68,6 +68,7 @@ Progress: [██████░░░░] 57% (v2.0)
 | Phase 05-base-unificada P02 | 10min | 2 tasks | 3 files |
 | Phase 05 P03 | 12min | 1 tasks | 2 files |
 | Phase 05 P04 | 8min | 2 tasks | 2 files |
+| Phase 05 P05 | 20min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,7 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: D-03 aplicado: eletrica/app.js e fonoclama/app.js declaram versao: '1.0' no rodapé, repetindo a versão já exibida no cartão do portal
 - [Phase 05-03]: predial passa a chamar aplicarShell() diretamente no boot() (padrao distinto do motor modulo-manutencao.js), servindo de referencia para mapa e transportes
 - [Phase 05-04]: mapa e o primeiro modulo de producao a usar aplicarShell() com navItems: [] (sem faixa de abas), provando o caso de tela cheia do shell comum
+- [Phase 05-05]: transportes e o primeiro caso da fase de aposentadoria completa de uma familia de marca propria (--cyan/kc-cyan/b-cyan) em favor de --accent/kc-accent/b-accent da folha comum; shared/pmoc.css ganhou .b-accent com fundo tintado via color-mix, sem afetar os modulos ja migrados (nenhum usava a classe antes)
 
 ### Pending Todos
 

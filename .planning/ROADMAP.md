@@ -30,7 +30,7 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
   4. `refrigeracao` continua idêntico: não carrega `pmoc.css`, não carrega o shell, e abre normalmente em produção
   5. Nenhuma funcionalidade existente foi perdida — cada módulo faz depois tudo o que fazia antes, e os testes em `tests/` continuam passando
 
-**Plans**: 4/7 plans executed
+**Plans**: 5/7 plans executed
 
 Plans:
 **Wave 1**
@@ -42,7 +42,7 @@ Plans:
 - [x] 05-02-PLAN.md — Motor de manutenção consome o shell; elétrica e fonoclama saem junto (PLAT-03, PLAT-16)
 - [x] 05-03-PLAN.md — Predial monta cabeçalho, abas e rodapé pelo shell comum (PLAT-03, PLAT-16)
 - [x] 05-04-PLAN.md — Mapa adota a folha comum e o shell sem abas (PLAT-01, PLAT-03, PLAT-16)
-- [ ] 05-05-PLAN.md — Transportes adota a folha comum, aposenta a classe de marca própria e monta o shell (PLAT-01, PLAT-03, PLAT-16)
+- [x] 05-05-PLAN.md — Transportes adota a folha comum, aposenta a classe de marca própria e monta o shell (PLAT-01, PLAT-03, PLAT-16)
 
 **Wave 3** *(blocked on Wave 2 completion — módulo de maior risco, por último)*
 
