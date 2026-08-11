@@ -83,25 +83,6 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 
 <!-- APP -->
 <div id="app">
-  <div class="topbar">
-    <div class="logo"><div class="logo-dot"></div> PMOC <span style="color:var(--yellow)">Máquinas</span></div>
-    <div class="topbar-right">
-      <span class="user-chip" id="user-chip">—</span>
-      <button class="btn btn-s btn-sm" onclick="sair()">Sair</button>
-    </div>
-  </div>
-  <div class="nav">
-    <button class="nav-btn active" data-view="painel" onclick="trocarView('painel',this)">📊 Painel</button>
-    <button class="nav-btn" data-view="ativos" onclick="trocarView('ativos',this)">🔧 Máquinas</button>
-    <button class="nav-btn" data-view="vencimentos" onclick="trocarView('vencimentos',this)">📅 Vencimentos</button>
-    <button class="nav-btn" data-view="os" onclick="trocarView('os',this)">📋 OS</button>
-    <button class="nav-btn" data-view="operacoes" onclick="trocarView('operacoes',this)">▶ Operações</button>
-    <button class="nav-btn" data-view="agenda" onclick="trocarView('agenda',this)">▦ Agenda</button>
-    <button class="nav-btn" data-view="materiais" onclick="trocarView('materiais',this)">📦 Estoque</button>
-    <button class="nav-btn" data-view="consumo" onclick="trocarView('consumo',this)">⛽ Consumo</button>
-    <button class="nav-btn" data-view="ciclo" onclick="trocarView('ciclo',this)">📈 Ciclo de vida</button>
-    <button class="nav-btn" data-view="compras" onclick="trocarView('compras',this)">🛒 Lista de compras</button>
-  </div>
   <div class="main">
 
     <!-- PAINEL -->
@@ -535,6 +516,6 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 </div>
 
 <script src="/maquinas/operacoes.js"></script>
-<script src="/maquinas/app.js"></script>
+<script type="module" src="/maquinas/app.js"></script>
 </body>
 </html>

@@ -1,10 +1,17 @@
+import { Auth } from '../shared/auth.js'
+import { criarClienteSupabase } from '../shared/supabase-config.js'
+import { aplicarShell } from '../shared/shell.js'
 
-// ── CONFIG: substitua pela URL e anon key do seu projeto Supabase ──
+// ── CONFIG: shared/supabase-config.js descobre a configuração dos outros
+// cinco módulos lendo este arquivo por expressão regular — as duas
+// constantes abaixo continuam declaradas por isso, mesmo que o cliente
+// Supabase deste módulo seja criado por criarClienteSupabase().
 const SUPA_URL = 'https://thoaqipyhfmromsgzmjs.supabase.co'
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRob2FxaXB5aGZtcm9tc2d6bWpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjk5NTksImV4cCI6MjEwMTY0NTk1OX0.1Ig6ijb6SKgeQRgGwM54MyzlVr-n_feSAxaFTwbHRGY'
 // ─────────────────────────────────────────────────────────────────
 
-const supa = supabase.createClient(SUPA_URL, SUPA_KEY)
+let supa = null
+let auth = null
 
 // ── estado global ──
 let ATIVOS = [], OS_LIST = [], MATERIAIS = [], PLANOS = [], PLANO_MATS = [], ABASTS = [], USOS = []
@@ -15,39 +22,29 @@ let OPERACAO_CONCLUIR_ID = null
 let AGENDA_ANO = new Date().getFullYear()
 let AGENDA_MES = new Date().getMonth()
 
-// ── auth ──
-async function init(){
-  const { data: { session } } = await supa.auth.getSession()
-  if(session){
-    await carregarUsuario(session.user.id)
-    mostrarApp()
+// ── auth compartilhado (shared/auth.js) ──
+async function sair(){
+  try {
+    if (auth?.sair) await auth.sair()
+  } finally {
+    window.location.reload()
   }
-  supa.auth.onAuthStateChange(async (_ev, session) => {
-    if(session){ await carregarUsuario(session.user.id); mostrarApp() }
-    else { mostrarLogin() }
-  })
 }
-
-async function carregarUsuario(uid){
-  const { data } = await supa.from('usuarios').select('*').eq('auth_id', uid).single()
-  USUARIO = data
-  if(USUARIO) document.getElementById('user-chip').textContent =
-    (USUARIO.funcao || USUARIO.posto_graduacao || USUARIO.nome || 'Usuário') + ' · ' + USUARIO.role
-}
-
-// ── auth via auth.js ─────────────────────────────────────────────
-// (substituir './auth.js' pelo URL do seu CDN ou raw.githubusercontent após publicar)
-// Por ora, Auth está inline abaixo para funcionar como arquivo único.
-
-async function sair(){ await supa.auth.signOut() }
 function mostrarApp(){
   document.getElementById('login-screen').style.display = 'none'
   document.getElementById('app').style.display = 'block'
+  atualizarCabecalhoUsuario()
   carregarTudo()
 }
 function mostrarLogin(){
   document.getElementById('login-screen').style.display = 'flex'
   document.getElementById('app').style.display = 'none'
+}
+function atualizarCabecalhoUsuario(){
+  const texto = USUARIO
+    ? `${USUARIO.funcao || USUARIO.posto_graduacao || USUARIO.nome || 'Usuário'} · ${USUARIO.role}`
+    : 'Livre · observador'
+  document.getElementById('user-chip').textContent = texto
 }
 
 // ── dados ──
@@ -886,185 +883,93 @@ async function concluirOperacao(){
 
 // ── utils ──
 function fecharModal(id){ document.getElementById(id).classList.remove('open') }
-document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
-  if(e.target === o) o.classList.remove('open')
-}))
+function fecharAoClicarFora(){
+  document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => {
+    if(e.target === o) o.classList.remove('open')
+  }))
+}
 
-// ── start ──
-// cargos deste app (podem ser sobrescritos por instância)
-const CARGOS = [
-  { label: 'Direção',  email: 'direcao@cmasm.local',  role: 'admin'      },
-  { label: 'Gestor',   email: 'gestor@cmasm.local',   role: 'gestor'     },
-  { label: 'Técnico',  email: 'tecnico@cmasm.local',  role: 'tecnico'    },
-  { label: 'Livre',    email: null,                   role: 'observador' },
-]
-
-// ── Auth inline (sem import de módulo externo, app é single-file) ──
-;(async function(){
-  const loginEl = document.getElementById('login-screen')
-
-  function emailDeCargo(cargo){ return cargo.email }
-
-  function renderLogin(){
-    loginEl.style.cssText = 'min-height:100vh;display:flex;align-items:center;' +
-      'justify-content:center;padding:20px'
-    loginEl.innerHTML = `
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;
-                  padding:36px 28px;width:100%;max-width:340px">
-        <div style="font-size:28px;margin-bottom:10px">⚙️</div>
-        <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:3px">PMOC Máquinas</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:28px">CMASM · Marinha do Brasil</div>
-
-        <div id="step-cargo">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
-                      color:var(--text3);margin-bottom:12px">Selecione seu cargo</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="cargo-grid"></div>
-          <div onclick="mostrarStepEmail()" style="font-size:11px;color:var(--text3);
-               text-align:center;margin-top:18px;cursor:pointer;text-decoration:underline">
-            Admin — entrar com e-mail
-          </div>
-        </div>
-
-        <div id="step-senha" style="display:none">
-          <div onclick="voltarCargos()" id="cargo-chip"
-            style="display:inline-flex;align-items:center;gap:8px;
-                   background:var(--surface2);border:1px solid var(--border);border-radius:20px;
-                   padding:5px 14px;font-size:13px;font-weight:600;color:var(--text);
-                   margin-bottom:20px;cursor:pointer">
-            <span id="cargo-chip-label">—</span>
-            <span style="color:var(--text3);font-size:11px;font-weight:400">✕ trocar</span>
-          </div>
-          <div style="margin-bottom:14px">
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Senha</label>
-            <input id="auth-senha" type="password" placeholder="••••••••" autocomplete="current-password"
-              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
-                     padding:9px 11px;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;
-                     font-family:var(--ff)"/>
-          </div>
-          <div id="auth-erro" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px"></div>
-          <button onclick="loginCargo()"
-            style="width:100%;background:var(--yellow);color:#1a1a18;border:none;border-radius:6px;
-                   padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--ff)">
-            Entrar
-          </button>
-        </div>
-
-        <div id="step-email" style="display:none">
-          <div style="margin-bottom:14px">
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">E-mail</label>
-            <input id="auth-email" type="email" placeholder="admin@marinha.mil.br"
-              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
-                     padding:9px 11px;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;
-                     font-family:var(--ff)"/>
-          </div>
-          <div style="margin-bottom:14px">
-            <label style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:6px">Senha</label>
-            <input id="auth-email-senha" type="password" placeholder="••••••••"
-              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
-                     padding:9px 11px;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;
-                     font-family:var(--ff)"/>
-          </div>
-          <div id="auth-email-erro" style="font-size:12px;color:var(--red);min-height:16px;margin-bottom:10px"></div>
-          <button onclick="loginEmail()"
-            style="width:100%;background:var(--yellow);color:#1a1a18;border:none;border-radius:6px;
-                   padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--ff)">
-            Entrar
-          </button>
-          <div onclick="voltarCargos()" style="font-size:11px;color:var(--text3);
-               text-align:center;margin-top:14px;cursor:pointer;text-decoration:underline">
-            ← Voltar
-          </div>
-        </div>
-      </div>`
-
-    // renderizar botões de cargo
-    const grid = document.getElementById('cargo-grid')
-    CARGOS.forEach(c => {
-      const btn = document.createElement('button')
-      btn.textContent = c.label
-      btn.style.cssText = 'background:var(--surface2);border:1px solid var(--border);' +
-        'border-radius:8px;padding:12px 8px;font-size:13px;font-weight:600;' +
-        'color:var(--text);cursor:pointer;font-family:var(--ff);width:100%'
-      btn.onmouseenter = () => btn.style.borderColor = 'var(--yellow)'
-      btn.onmouseleave = () => btn.style.borderColor = 'var(--border)'
-      btn.onclick = () => selecionarCargo(c)
-      grid.appendChild(btn)
-    })
-
-    document.getElementById('auth-senha').addEventListener('keydown', e => {
-      if(e.key==='Enter') loginCargo()
-    })
-    document.getElementById('auth-email-senha').addEventListener('keydown', e => {
-      if(e.key==='Enter') loginEmail()
-    })
-  }
-
-  let _cargoSel = null
-
-  window.selecionarCargo = function(cargo){
-    if(!cargo.email){
-      // modo Livre — observador sem senha
-      USUARIO = { role:'observador', nome:'Visitante', funcao:'Livre', cargo:'Livre' }
-      loginEl.style.display = 'none'
-      document.getElementById('app').style.display = 'block'
-      document.getElementById('user-chip').textContent = 'Livre · observador'
-      carregarTudo()
-      return
-    }
-    _cargoSel = cargo
-    document.getElementById('cargo-chip-label').textContent = cargo.label
-    document.getElementById('step-cargo').style.display = 'none'
-    document.getElementById('step-senha').style.display = 'block'
-    document.getElementById('auth-erro').textContent = ''
-    document.getElementById('auth-senha').value = ''
-    setTimeout(() => document.getElementById('auth-senha').focus(), 50)
-  }
-
-  window.voltarCargos = function(){
-    document.getElementById('step-senha').style.display = 'none'
-    document.getElementById('step-email').style.display = 'none'
-    document.getElementById('step-cargo').style.display = 'block'
-    _cargoSel = null
-  }
-
-  window.mostrarStepEmail = function(){
-    document.getElementById('step-cargo').style.display = 'none'
-    document.getElementById('step-email').style.display = 'block'
-  }
-
-  window.loginCargo = async function(){
-    if(!_cargoSel) return
-    const senha = document.getElementById('auth-senha').value
-    const erroEl = document.getElementById('auth-erro')
-    erroEl.textContent = ''
-    if(!senha){ erroEl.textContent = 'Digite a senha.'; return }
-    const { error } = await supa.auth.signInWithPassword({
-      email: _cargoSel.email, password: senha
-    })
-    if(error) erroEl.textContent = 'Senha incorreta.'
-  }
-
-  window.loginEmail = async function(){
-    const email = document.getElementById('auth-email').value.trim()
-    const senha = document.getElementById('auth-email-senha').value
-    const erroEl = document.getElementById('auth-email-erro')
-    erroEl.textContent = ''
-    if(!email||!senha){ erroEl.textContent='Preencha os campos.'; return }
-    const { error } = await supa.auth.signInWithPassword({ email, password: senha })
-    if(error) erroEl.textContent = 'E-mail ou senha incorretos.'
-  }
-
-  // checar sessão existente
-  const { data: { session } } = await supa.auth.getSession()
-  if(session){
-    await carregarUsuario(session.user.id)
-    mostrarApp()
-  } else {
-    renderLogin()
-  }
-
-  supa.auth.onAuthStateChange(async (_ev, session) => {
-    if(session){ await carregarUsuario(session.user.id); mostrarApp() }
-    else { renderLogin() }
+// ── publicação no objeto global — obrigatória em módulo ES para que os
+// handlers inline (onclick/onchange no HTML e em templates literais) continuem
+// resolvendo os nomes. Lista extraída dos dois arquivos, sem os quatro nomes
+// do login antigo removido acima.
+function exporNoWindow(){
+  Object.assign(window, {
+    abrirConcluirOperacao,
+    abrirModalAbastecimento,
+    abrirModalArea,
+    abrirModalAtivo,
+    abrirModalMaterial,
+    abrirModalMovimento,
+    abrirModalOperacao,
+    abrirModalOS,
+    concluirOperacao,
+    concluirOS,
+    exportarComprasCSV,
+    fecharModal,
+    iniciarOperacao,
+    navegarAgenda,
+    renderAtivos,
+    sair,
+    salvarAbastecimento,
+    salvarArea,
+    salvarAtivo,
+    salvarMaterial,
+    salvarMovimento,
+    salvarOperacao,
+    salvarOS,
+    trocarView,
   })
-})()
+}
+
+function mostrarErroBoot(error){
+  document.getElementById('login-screen').innerHTML = `
+    <div class="callout co-red" style="max-width:560px">
+      <strong>Falha ao iniciar o módulo Máquinas.</strong><br>
+      ${esc(error.message || String(error))}
+    </div>
+  `
+}
+
+async function boot(){
+  exporNoWindow()
+
+  aplicarShell({
+    nome: 'Máquinas',
+    accent: '#c9a84c',
+    versao: '1.0',
+    navItems: [
+      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
+      { id: 'ativos', icone: '🔧', label: 'Máquinas' },
+      { id: 'vencimentos', icone: '📅', label: 'Vencimentos' },
+      { id: 'os', icone: '📋', label: 'OS' },
+      { id: 'operacoes', icone: '▶', label: 'Operações' },
+      { id: 'agenda', icone: '▦', label: 'Agenda' },
+      { id: 'materiais', icone: '📦', label: 'Estoque' },
+      { id: 'consumo', icone: '⛽', label: 'Consumo' },
+      { id: 'ciclo', icone: '📈', label: 'Ciclo de vida' },
+      { id: 'compras', icone: '🛒', label: 'Lista de compras' },
+    ],
+  })
+
+  fecharAoClicarFora()
+
+  try {
+    supa = await criarClienteSupabase()
+  } catch (error) {
+    mostrarErroBoot(error)
+    return
+  }
+
+  auth = new Auth(supa, { appNome: 'Máquinas', appIcone: '⚙️' })
+  auth.onLogin(usuario => {
+    USUARIO = usuario
+    mostrarApp()
+  })
+  auth.mount('#login-screen')
+
+  const { data: { session } } = await supa.auth.getSession()
+  if (!session) mostrarLogin()
+}
+
+boot()
