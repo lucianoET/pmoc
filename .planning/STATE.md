@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 06
 current_phase_name: tema-claro-escuro
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-08-11T10:06:40.421Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-08-11T10:15:35.640Z"
 last_activity: 2026-08-11
-last_activity_desc: Phase 06 execution started
+last_activity_desc: "Completed quick task 260811-9sb: Importar módulo Calibração como cópia independente"
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 17
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 06 (tema-claro-escuro) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-08-11 — Completed quick task 260811-9sb: Importar módulo Calibração como cópia independente
 
-Progress: [████████░░] 82% (v2.0)
+Progress: [█████████░] 91% (v2.0)
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [████████░░] 82% (v2.0)
 | Phase 05-base-unificada P07 | 15min | 2 tasks | 5 files |
 | Phase 06 P01 | 3min | 2 tasks | 2 files |
 | Phase 06 P02 | 5min | 3 tasks | 4 files |
+| Phase 06 P03 | 3min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,9 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: 06-01: token --accent-texto criado em shared/pmoc.css porque --accent e declarado por modulo (mesma especificidade, cascata posterior) e a folha comum nao consegue redefini-lo por tema
 - [Phase ?]: 06-02: shared/tema.js criado como implementação única de tema (núcleo puro + aplicadores), botão #btn-tema injetado em montarShell() propaga para os 6 módulos via aplicarShell()->iniciarTema()
 - [Phase ?]: 06-02: normalizarTema valida localStorage por lista fechada com comparação estrita (ASVS V5); sem escuta de prefers-color-scheme em tempo de execução para não sobrescrever escolha manual do usuário
+- [Phase ?]: 06-03: script anti-FOUC posicionado byte-idêntico (mesma posição relativa, não só mesmo comportamento) imediatamente após a meta tag de cor de barra nas 7 superfícies, para que o teste de superfícies compare a mesma linha sem ambiguidade de contexto
+- [Phase ?]: 06-03: portal ganhou bloco [data-theme="claro"] embutido (cópia deliberada dos tokens de shared/pmoc.css, D-02) e consome shared/tema.js via iniciarTema() — duplicação de tokens é obrigatória, duplicação de lógica não acontece
+- [Phase ?]: 06-03: PLAT-04/PLAT-05/PLAT-16 não marcados [x] em REQUIREMENTS.md — fechamento formal com evidência reservado ao plano 06-04, mesmo precedente de 06-01/06-02
 
 ### Pending Todos
 
@@ -160,6 +164,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-11T10:06:40.380Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-08-11T10:15:35.603Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None
