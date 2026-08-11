@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 06 (tema-claro-escuro) — EXECUTING
 Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-08-11 — Phase 06 execution started
+Last activity: 2026-08-11 — Completed quick task 260811-9sb: Importar módulo Calibração como cópia independente
 
 Progress: [████████░░] 82% (v2.0)
 
@@ -156,6 +156,7 @@ painel) segue pendente.
 |------|--------|-----------|
 | 2026-08-10 | renumera-migracoes-fase1 | Migrações da Fase 1 renumeradas de 14/15 para 22/23 (14 e 15 já ocupados por elétrica/fonoclama) |
 | 2026-08-10 | importar-csv-programacao-vtr-emb-em-transportes | Módulo /mapa portado do legado cmms-mapa (Leaflet + xMap) no padrão pmoc, roteado no vercel.json e no portal; import do CSV VTR/EMB já concluído, apenas consulta de conferência documentada em TESTES.md |
+| 2026-08-11 | importar-modulo-calibracao | App legado de calibração (single-file, localStorage, sem Supabase) copiado como módulo independente em /calibracao com assets próprios; rewrite no vercel.json e card ativado no portal — sem unificação com shared/ nem locais (commits 240cfa6, eb1e342) |
 
 ## Session Continuity
 
