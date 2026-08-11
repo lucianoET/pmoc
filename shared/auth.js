@@ -117,7 +117,7 @@ export class Auth {
         <div id="auth-erro" style="font-size:12px;color:var(--red,#b85c4a);
              min-height:16px;margin-bottom:10px"></div>
         <button id="btn-entrar"
-          style="width:100%;background:var(--yellow,#c9a84c);color:#1a1a18;border:none;
+          style="width:100%;background:var(--yellow,#c9a84c);color:var(--bg,#1a1a18);border:none;
                  border-radius:6px;padding:11px;font-size:14px;font-weight:700;
                  cursor:pointer;font-family:inherit">
           Entrar
@@ -145,7 +145,7 @@ export class Auth {
         <div id="auth-email-erro" style="font-size:12px;color:var(--red,#b85c4a);
              min-height:16px;margin-bottom:10px"></div>
         <button id="btn-entrar-email"
-          style="width:100%;background:var(--yellow,#c9a84c);color:#1a1a18;border:none;
+          style="width:100%;background:var(--yellow,#c9a84c);color:var(--bg,#1a1a18);border:none;
                  border-radius:6px;padding:11px;font-size:14px;font-weight:700;
                  cursor:pointer;font-family:inherit">
           Entrar
