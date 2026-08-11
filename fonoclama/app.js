@@ -17,6 +17,7 @@ iniciarModulo({
   prefixo: 'fono',
   nome: 'Fonoclama',
   icone: '📢',
+  versao: '1.0',
   accent: '#4a7fa0',
   descricao: 'Amplificação, consoles, zonas de alto-falantes e linhas 70V — testes por horas de operação',
   unidadeUso: 'h',

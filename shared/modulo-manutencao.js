@@ -1118,6 +1118,8 @@ function exporNoWindow() {
  * @param {string} config.descricao  Subtítulo do painel.
  * @param {object} config.tipos      { CHAVE: { nome, emoji } } — tipos de ativo.
  * @param {string} [config.unidadeUso='h'] Unidade do horímetro.
+ * @param {string} [config.versao]   Versão do módulo, exibida no rodapé do shell comum;
+ *                                    quando ausente, config.versao simplesmente não aparece.
  */
 export async function iniciarModulo(config) {
   CFG = { unidadeUso: 'h', ...config }

@@ -16,6 +16,7 @@ iniciarModulo({
   prefixo: 'elet',
   nome: 'Elétrica',
   icone: '⚡',
+  versao: '1.0',
   accent: '#c9a84c',
   descricao: 'Geradores, quadros, nobreaks e iluminação — manutenção por horas de operação',
   unidadeUso: 'h',
