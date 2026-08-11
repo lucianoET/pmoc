@@ -18,3 +18,6 @@ Thumbs.db
 .env
 .env.*
 *.pem
+
+# Cache de buscas web do researcher do GSD — efêmero, não versionar
+.planning/research/.cache/
