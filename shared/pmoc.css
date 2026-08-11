@@ -61,7 +61,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100
 .b-warn{background:rgba(201,168,76,.15);color:var(--yellow)}
 .b-red{background:rgba(184,92,74,.15);color:var(--red)}
 .b-blue{background:rgba(74,127,160,.15);color:var(--blue)}
-.b-accent{background:rgba(255,255,255,.07);color:var(--accent)}
+.b-accent{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 .b-gold{background:rgba(192,120,64,.15);color:var(--orange)}
 
 .btn{border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff);transition:.15s}

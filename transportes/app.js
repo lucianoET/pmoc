@@ -42,7 +42,7 @@ const STATUS_BADGE = {
   disponivel: 'b-ok',
   em_uso: 'b-blue',
   manutencao: 'b-warn',
-  sobreaviso: 'b-cyan',
+  sobreaviso: 'b-accent',
   indisponivel: 'b-red',
   agendada: 'b-blue',
   em_andamento: 'b-warn',
