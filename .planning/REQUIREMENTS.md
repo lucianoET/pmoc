@@ -12,9 +12,9 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 
 ### Base unificada
 
-- [ ] **PLAT-01**: Os 6 módulos no escopo carregam `shared/pmoc.css` como fonte única de tokens visuais (cor, tipografia, espaçamento) — nenhum define paleta própria
-- [ ] **PLAT-02**: Os 6 módulos usam `shared/auth.js` para login por cargo — `maquinas/app.js` deixa de duplicar o fluxo inline
-- [ ] **PLAT-03**: Existe um shell de layout comum (cabeçalho, navegação por abas, rodapé) reutilizado pelos módulos, sem cada um remontar a estrutura
+- [x] **PLAT-01**: Os 6 módulos no escopo carregam `shared/pmoc.css` como fonte única de tokens visuais (cor, tipografia, espaçamento) — nenhum define paleta própria
+- [x] **PLAT-02**: Os 6 módulos usam `shared/auth.js` para login por cargo — `maquinas/app.js` deixa de duplicar o fluxo inline
+- [x] **PLAT-03**: Existe um shell de layout comum (cabeçalho, navegação por abas, rodapé) reutilizado pelos módulos, sem cada um remontar a estrutura
 
 ### Tema
 
@@ -92,7 +92,6 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 Ideias levantadas na fase de requisitos do v1.0, ainda sem fase. Não confundir com os
 requisitos `PLAT-*` do milestone v2.0 acima.
 
-
 - [ ] Alerta de anomalia de consumo (desvio sobre histórico) — Transportes
 - [ ] Exportação de histórico de manutenção por ativo para auditoria — Transportes
 - [ ] Termografia anexada à tarefa — Elétrica
@@ -120,9 +119,9 @@ Cobertura v2.0: 16/16 requisitos `PLAT-*` mapeados. Cobertura v1.0: 24/24 requis
 
 | Requisito | Fase | Status |
 |-----------|------|--------|
-| PLAT-01 | Phase 5 | Pending |
-| PLAT-02 | Phase 5 | Pending |
-| PLAT-03 | Phase 5 | Pending |
+| PLAT-01 | Phase 5 | Complete |
+| PLAT-02 | Phase 5 | Complete |
+| PLAT-03 | Phase 5 | Complete |
 | PLAT-04 | Phase 6 | Pending |
 | PLAT-05 | Phase 6 | Pending |
 | PLAT-06 | Phase 7 | Pending |

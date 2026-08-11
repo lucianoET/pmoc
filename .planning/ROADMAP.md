@@ -30,12 +30,12 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
   4. `refrigeracao` continua idêntico: não carrega `pmoc.css`, não carrega o shell, e abre normalmente em produção
   5. Nenhuma funcionalidade existente foi perdida — cada módulo faz depois tudo o que fazia antes, e os testes em `tests/` continuam passando
 
-**Plans**: 7 plans
+**Plans**: 1/7 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Base compartilhada: `shared/shell.js` extraído com teste, folha comum estendida e rótulo do observador (PLAT-01, PLAT-02, PLAT-03)
+- [x] 05-01-PLAN.md — Base compartilhada: `shared/shell.js` extraído com teste, folha comum estendida e rótulo do observador (PLAT-01, PLAT-02, PLAT-03)
 
 **Wave 2** *(blocked on Wave 1 completion — quatro planos em paralelo, sem sobreposição de arquivos)*
 
