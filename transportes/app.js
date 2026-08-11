@@ -1,5 +1,6 @@
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
+import { aplicarShell } from '../shared/shell.js'
 
 let supa = null
 let auth = null
@@ -1508,6 +1509,22 @@ function mostrarErroBoot(error) {
 
 async function boot() {
   exporNoWindow()
+
+  aplicarShell({
+    nome: 'Transportes',
+    accent: '#4aa0a0',
+    versao: '1.0',
+    navItems: [
+      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
+      { id: 'ativos', icone: '🚚', label: 'Frota' },
+      { id: 'viagens', icone: '🗺️', label: 'Viagens' },
+      { id: 'manutencao', icone: '🔧', label: 'Manutenção' },
+      { id: 'planos', icone: '🗓️', label: 'Planos' },
+      { id: 'estoque', icone: '📦', label: 'Estoque' },
+      { id: 'relatorios', icone: '🧾', label: 'Relatórios' },
+    ],
+  })
+
   fecharAoClicarFora()
 
   try {
