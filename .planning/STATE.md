@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 06
 current_phase_name: tema-claro-escuro
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-08-11T09:59:32.921Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-08-11T10:06:40.421Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 17
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 06 (tema-claro-escuro) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-08-11 — Phase 06 execution started
 
-Progress: [███████░░░] 73% (v2.0)
+Progress: [████████░░] 82% (v2.0)
 
 ## Performance Metrics
 
@@ -72,6 +72,7 @@ Progress: [███████░░░] 73% (v2.0)
 | Phase 05 P06 | 35min | 2 tasks | 3 files |
 | Phase 05-base-unificada P07 | 15min | 2 tasks | 5 files |
 | Phase 06 P01 | 3min | 2 tasks | 2 files |
+| Phase 06 P02 | 5min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: [Phase 05-07] PLAT-15/16 fecham para a Fase 5 com pendencia herdada explicita: conferencia visual humana pos-login nao foi possivel em nenhum plano da fase (sem credenciais Supabase nem Playwright no ambiente autonomo) - registrada em TESTES.md como item isolado para o UAT
 - [Phase ?]: 06-01: PLAT-04 nao marcado completo — este plano so prepara CSS (tokens + eliminacao de hardcode), botao e logica de alternancia ficam para 06-02
 - [Phase ?]: 06-01: token --accent-texto criado em shared/pmoc.css porque --accent e declarado por modulo (mesma especificidade, cascata posterior) e a folha comum nao consegue redefini-lo por tema
+- [Phase ?]: 06-02: shared/tema.js criado como implementação única de tema (núcleo puro + aplicadores), botão #btn-tema injetado em montarShell() propaga para os 6 módulos via aplicarShell()->iniciarTema()
+- [Phase ?]: 06-02: normalizarTema valida localStorage por lista fechada com comparação estrita (ASVS V5); sem escuta de prefers-color-scheme em tempo de execução para não sobrescrever escolha manual do usuário
 
 ### Pending Todos
 
@@ -156,6 +159,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-11T09:59:32.883Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-08-11T10:06:40.380Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
