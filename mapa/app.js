@@ -1,5 +1,6 @@
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
+import { aplicarShell } from '../shared/shell.js'
 
 // ── estado global ──
 let supa = null
@@ -99,6 +100,13 @@ function mostrarErroBoot(error) {
 
 async function boot() {
   exporNoWindow()
+
+  aplicarShell({
+    nome: 'Mapa',
+    accent: '#4aa0a0',
+    versao: '0.1',
+    navItems: [],
+  })
 
   try {
     supa = await criarClienteSupabase()
