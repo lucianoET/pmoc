@@ -13,7 +13,7 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 ### Base unificada
 
 - [ ] **PLAT-01**: Os 6 módulos no escopo carregam `shared/pmoc.css` como fonte única de tokens visuais (cor, tipografia, espaçamento) — nenhum define paleta própria — **parcial**: `eletrica`, `fonoclama` e `predial` carregam; faltam `mapa` (05-04), `transportes` (05-05) e `maquinas` (05-06)
-- [x] **PLAT-02**: Os 6 módulos usam `shared/auth.js` para login por cargo — `maquinas/app.js` deixa de duplicar o fluxo inline
+- [ ] **PLAT-02**: Os 6 módulos usam `shared/auth.js` para login por cargo — `maquinas/app.js` deixa de duplicar o fluxo inline — **parcial**: `predial`, `transportes` e `mapa` importam; `eletrica`/`fonoclama` autenticam pelo motor; `maquinas` ainda declara `CARGOS` inline (fecha no 05-06)
 - [ ] **PLAT-03**: Existe um shell de layout comum (cabeçalho, navegação por abas, rodapé) reutilizado pelos módulos, sem cada um remontar a estrutura — **parcial**: `shared/shell.js` existe e o motor de `eletrica`/`fonoclama` já o consome; faltam `predial` (05-03), `mapa` (05-04), `transportes` (05-05) e `maquinas` (05-06)
 
 ### Tema
@@ -120,7 +120,7 @@ Cobertura v2.0: 16/16 requisitos `PLAT-*` mapeados. Cobertura v1.0: 24/24 requis
 | Requisito | Fase | Status |
 |-----------|------|--------|
 | PLAT-01 | Phase 5 | Parcial — 3 de 6 módulos |
-| PLAT-02 | Phase 5 | Complete |
+| PLAT-02 | Phase 5 | Parcial — maquinas pendente |
 | PLAT-03 | Phase 5 | Parcial — shell criado, 2 de 6 módulos consomem |
 | PLAT-04 | Phase 6 | Pending |
 | PLAT-05 | Phase 6 | Pending |
