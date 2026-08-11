@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="theme-color" content="#1a1a18"/>
+<script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t!=='claro'&&t!=='escuro'){t=(typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','escuro')}})()/* script classico de proposito: modulo ES e adiado, rodaria depois do primeiro desenho e reintroduziria a piscada de tema */</script>
 <title>PMOC Mapa</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous"/>
@@ -21,7 +22,7 @@ html,body{height:100%}
 .mod-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:10px 12px;margin-bottom:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff);text-align:left;transition:.15s}
 .mod-btn:hover{color:var(--text)}
 .mod-btn.active{border-color:var(--accent);color:var(--text)}
-.mod-badge-demo{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:8px;background:rgba(201,168,76,.15);color:var(--yellow);flex-shrink:0}
+.mod-badge-demo{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:8px;background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow);flex-shrink:0}
 .map-area{flex:1;min-width:0;height:100%}
 #mapa{width:100%;height:100%}
 </style>

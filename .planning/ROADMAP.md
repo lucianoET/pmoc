@@ -71,20 +71,20 @@ Plans:
 
 **Decisões travadas**: D-01 `mapa/xmap.css` (skin do Leaflet, tokens `--xm-*`) fica FORA do escopo e permanece dark-only — o critério 5 vale para o chrome do módulo, não para o mapa em si; registrar como suposição explícita no plano · D-02 o portal `/index.html` entra junto com os 6 módulos (7 superfícies no total), com os mesmos tokens e o mesmo script anti-FOUC · D-03 convenção em português: atributo `data-theme="claro" | "escuro"` no `<html>` e chave `localStorage` `pmoc-tema` · D-04 `refrigeracao` permanece congelada e intocada (PLAT-15/PLAT-16)
 **UI hint**: yes
-**Plans**: 4 plans
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Folha comum ganha o bloco de tema claro (12 tokens verificados em WCAG AA), o token derivado `--accent-texto` e perde os hardcodes de cor que dependiam de fundo escuro (PLAT-04, PLAT-16)
+- [x] 06-01-PLAN.md — Folha comum ganha o bloco de tema claro (12 tokens verificados em WCAG AA), o token derivado `--accent-texto` e perde os hardcodes de cor que dependiam de fundo escuro (PLAT-04, PLAT-16)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 06-02-PLAN.md — `shared/tema.js` novo com núcleo puro testado e validação por lista fechada; botão de tema injetado por `montarShell()` chega aos 6 módulos de uma vez (PLAT-04, PLAT-05, PLAT-16)
+- [x] 06-02-PLAN.md — `shared/tema.js` novo com núcleo puro testado e validação por lista fechada; botão de tema injetado por `montarShell()` chega aos 6 módulos de uma vez (PLAT-04, PLAT-05, PLAT-16)
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 06-03-PLAN.md — Script clássico de pré-desenho replicado nas 7 superfícies, portal com tokens próprios e consumo de `shared/tema.js`, gates automatizados de D-01 e D-04 (PLAT-04, PLAT-05, PLAT-16)
+- [x] 06-03-PLAN.md — Script clássico de pré-desenho replicado nas 7 superfícies, portal com tokens próprios e consumo de `shared/tema.js`, gates automatizados de D-01 e D-04 (PLAT-04, PLAT-05, PLAT-16)
 
 **Wave 4** *(blocked on Wave 3)*
 
