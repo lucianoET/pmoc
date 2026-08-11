@@ -5,6 +5,7 @@
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { gravar } from '../shared/persistencia.js'
+import { aplicarShell } from '../shared/shell.js'
 import { GUT_ESCALA, classificarGut, linhasVisiveis, montarArvore } from './dominio.js'
 
 let supa = null
@@ -1073,6 +1074,21 @@ function exporNoWindow() {
 
 async function boot() {
   exporNoWindow()
+
+  aplicarShell({
+    nome: 'Predial',
+    accent: '#8a7f5c',
+    versao: '1.0',
+    navItems: [
+      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
+      { id: 'locais', icone: '🏛️', label: 'Locais' },
+      { id: 'inspecoes', icone: '📋', label: 'Inspeções' },
+      { id: 'checklist', icone: '📝', label: 'Checklist' },
+      { id: 'templates', icone: '🗂️', label: 'Templates' },
+      { id: 'laudos', icone: '🧾', label: 'Laudos' },
+    ],
+  })
+
   document.querySelectorAll('.overlay').forEach(overlay => {
     overlay.addEventListener('click', evento => {
       if (evento.target === overlay) overlay.classList.remove('open')

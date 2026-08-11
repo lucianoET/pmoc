@@ -13,24 +13,6 @@
 <div id="login-screen"></div>
 
 <div id="app">
-  <div class="topbar">
-    <div class="logo"><div class="logo-dot"></div> PMOC <span class="logo-accent">Predial</span></div>
-    <div class="topbar-right">
-      <a class="topbar-back" href="/">← Portal</a>
-      <span class="user-chip" id="user-chip">—</span>
-      <button class="btn btn-s btn-sm" onclick="sair()">Sair</button>
-    </div>
-  </div>
-
-  <div class="nav">
-    <button class="nav-btn active" onclick="trocarView('painel',this)">📊 Painel</button>
-    <button class="nav-btn" onclick="trocarView('locais',this)">🏛️ Locais</button>
-    <button class="nav-btn" onclick="trocarView('inspecoes',this)">📋 Inspeções</button>
-    <button class="nav-btn" onclick="trocarView('checklist',this)">📝 Checklist</button>
-    <button class="nav-btn" onclick="trocarView('templates',this)">🗂️ Templates</button>
-    <button class="nav-btn" onclick="trocarView('laudos',this)">🧾 Laudos</button>
-  </div>
-
   <div class="main">
     <div id="alerta-carga"></div>
     <div class="view active" id="view-painel"></div>
