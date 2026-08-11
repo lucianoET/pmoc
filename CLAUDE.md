@@ -32,7 +32,8 @@ Three independent frontend entry points sharing one Postgres backend via the Sup
 - `/index.html` — portal (navigation hub)
 - `/refrigeracao/index.html` — PMOC Refrigeração v2.8, a **single ~436 KB file** with embedded CSS + JS. HVAC inventory with the full public-contracting workflow: orçamento → execução → fiscalização → composição de pagamento (ARP items) → certificação → auditoria. QR codes, print forms, CSV export (CATMAT).
 - `/maquinas/index.html` + `/maquinas/app.js` — PMOC Máquinas v1.0. Hour-meter-based maintenance of cutting equipment: plans per `tipo_modelo`, automatic stock decrement, fuel tracking, depreciation, procurement shopping-list CSV.
-- `/shared/auth.js` — reusable role-login ES module (`Auth` class). Note: `maquinas/app.js` currently duplicates this auth flow inline instead of importing it.
+- `/shared/auth.js` — reusable role-login ES module (`Auth` class), imported by all six new-generation modules (`transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`, `maquinas`). `refrigeracao` stays outside this base, frozen by user decision.
+- `/shared/shell.js` — reusable layout shell (`aplicarShell()`): header, tab strip (when the module has one) and footer, consumed by the same six modules above. Changing `shell.js` changes header/tabs/footer for all six at once.
 
 **State pattern (both apps):** global UPPER_CASE arrays (`ATIVOS`, `OS_LIST`, `MATERIAIS`, `PLANOS`, …) populated by `carregarTudo()` (parallel `Promise.all` Supabase queries), then `render*()` functions rebuild DOM sections via template literals. Every save re-runs `carregarTudo()` — no optimistic updates, no partial refresh. Modals drive all CRUD; inline `onclick="fn(${id})"` handlers are the norm.
 

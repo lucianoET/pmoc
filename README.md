@@ -126,6 +126,7 @@ pmoc/
 │   ├── auth.js                Login por cargo (reutilizável)
 │   ├── supabase-config.js     Reuso da configuração Supabase
 │   ├── pmoc.css               Estilo comum dos módulos novos
+│   ├── shell.js               Shell de layout comum — cabeçalho, abas e rodapé (testado)
 │   ├── vencimento.js          Regra de vencimento por horímetro (testada)
 │   └── modulo-manutencao.js   Motor de elétrica/fonoclama
 ├── supabase/                  24 migrações numeradas, aplicadas em ordem
