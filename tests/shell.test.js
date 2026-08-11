@@ -53,3 +53,11 @@ test('o rodapé traz o nome do módulo e o link do portal, com a versão aparece
   assert.match(comVersao, /v2\.1/)
   assert.doesNotMatch(semVersao, /<span>v/)
 })
+
+test('a barra superior traz o botão de tema, com manipulador de alternância, e a classe não colide com o prefixo de aba', async () => {
+  const { montarShell } = await modulo
+  const { topo } = montarShell({ nome: 'Máquinas', navItems: [] })
+  assert.match(topo, /id="btn-tema"/)
+  assert.match(topo, /onclick="alternarTema\(\)"/)
+  assert.doesNotMatch(topo, /class="btn-tema[^"]*nav/)
+})

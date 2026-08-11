@@ -13,6 +13,13 @@
 // critério de sucesso 3 da Fase 5 (base unificada).
 // ══════════════════════════════════════════════════════════════════
 
+// Import deliberado (Fase 6): shared/shell.js passa a depender de um
+// arquivo irmão dentro do próprio shared/, carregado pelo mesmo
+// mecanismo nativo de módulos ES que os 6 módulos já usam — sem
+// bundler, sem dependência externa, o projeto continua zero-build.
+// Uma fase futura não deve "corrigir" esta importação de volta.
+import { iniciarTema } from './tema.js'
+
 // escapa texto vindo da configuração antes de entrar em HTML — mesmo padrão de mapa/app.js
 function esc(valor) {
   return String(valor ?? '').replace(/[&<>'"]/g, caractere => ({
@@ -38,6 +45,10 @@ export function montarShell(cfg) {
       <div class="logo"><div class="logo-dot"></div> PMOC <span class="logo-accent">${esc(nome)}</span></div>
       <div class="topbar-right">
         ${linkPortal}
+        <!-- btn-tema: nem o id nem a classe podem conter a subsequência "nav" —
+             tests/shell.test.js conta botões e afirma ausência da faixa de abas
+             por expressão regular sobre esse prefixo -->
+        <button id="btn-tema" class="btn-tema" onclick="alternarTema()" title="Ir para o tema claro" aria-label="Ir para o tema claro">☀</button>
         <span class="user-chip" id="user-chip">—</span>
         <button class="btn btn-s btn-sm" onclick="sair()">Sair</button>
       </div>
@@ -81,6 +92,10 @@ export function aplicarShell(cfg) {
   // afterbegin/beforeend preservam intacto o miolo que o módulo já colocou em #app
   raiz.insertAdjacentHTML('afterbegin', topo)
   raiz.insertAdjacentHTML('beforeend', rodape)
+
+  // por último: o botão de tema já está no documento, então iniciarTema()
+  // consegue sincronizar o rótulo dele com o tema aplicado
+  iniciarTema()
 
   return raiz
 }
