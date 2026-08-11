@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 5
 current_phase_name: base-unificada
 status: executing
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-08-11T00:43:40.977Z"
-last_activity: 2026-08-10
-last_activity_desc: Executado 05-05-PLAN.md
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-08-11T01:00:04.372Z"
+last_activity: 2026-08-11
+last_activity_desc: Executado 05-06-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 5 (Base unificada) — EXECUTANDO
-Plan: 5 de 7
-Status: 05-05-PLAN.md concluído (transportes consumindo shared/shell.js e shared/pmoc.css — família de marca própria --cyan/kc-cyan/b-cyan aposentada, cabeçalho/abas/rodapé pelo shell comum); aguardando 05-06
-Last activity: 2026-08-10 — Executado 05-05-PLAN.md
+Plan: 6 de 7
+Status: 05-06-PLAN.md concluído (máquinas — módulo de maior risco da fase — consumindo shared/auth.js, shared/supabase-config.js e shared/shell.js; login inline duplicado removido, paleta própria substituída por --accent:#c9a84c, chrome estático removido, app.js migrado de script clássico para módulo ES com handlers publicados via exporNoWindow()); aguardando 05-07
+Last activity: 2026-08-11 — Executado 05-06-PLAN.md
 
-Progress: [███████░░░] 71% (v2.0)
+Progress: [█████████░] 86% (v2.0)
 
 ## Performance Metrics
 
@@ -69,6 +69,7 @@ Progress: [███████░░░] 71% (v2.0)
 | Phase 05 P03 | 12min | 1 tasks | 2 files |
 | Phase 05 P04 | 8min | 2 tasks | 2 files |
 | Phase 05 P05 | 20min | 2 tasks | 3 files |
+| Phase 05 P06 | 35min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,9 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase 05-03]: predial passa a chamar aplicarShell() diretamente no boot() (padrao distinto do motor modulo-manutencao.js), servindo de referencia para mapa e transportes
 - [Phase 05-04]: mapa e o primeiro modulo de producao a usar aplicarShell() com navItems: [] (sem faixa de abas), provando o caso de tela cheia do shell comum
 - [Phase 05-05]: transportes e o primeiro caso da fase de aposentadoria completa de uma familia de marca propria (--cyan/kc-cyan/b-cyan) em favor de --accent/kc-accent/b-accent da folha comum; shared/pmoc.css ganhou .b-accent com fundo tintado via color-mix, sem afetar os modulos ja migrados (nenhum usava a classe antes)
+- [Phase 05-06]: maquinas e o unico modulo da fase migrado de script classico para type=module no mesmo commit da adocao do login/shell compartilhados — exporNoWindow() vira requisito estrutural (nao so boa pratica) e passa por gate de extracao dinamica dos handlers inline
+- [Phase 05-06]: extracao dinamica dos handlers inline em maquinas/index.html + maquinas/app.js encontra 22 nomes (nao 24 como o texto do plano previa), porque sair() e trocarView() passaram a existir so no markup gerado em runtime por shared/shell.js — ambos continuam publicados em exporNoWindow(); todos os 22 nomes extraidos estao publicados (T-05-21 mitigado). Piso numerico "≥23" do gate do plano 05-06 ficou desalinhado com a arquitetura real; documentado como deviation no 05-06-SUMMARY.md
+- [Phase 05-06]: tests/integracao-operacoes-maquinas.test.js ajustado — data-view="operacoes"/"agenda" nao existem mais como markup estatico (geradas por aplicarShell()); teste passou a checar id="view-operacoes"/"view-agenda" no HTML e id:'operacoes'/id:'agenda' na config de abas de app.js
 
 ### Pending Todos
 
@@ -146,6 +150,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-11T00:38:11.173Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-08-11T01:00:04.372Z
+Stopped at: Completed 05-06-PLAN.md
 Resume file: None

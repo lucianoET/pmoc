@@ -30,7 +30,7 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
   4. `refrigeracao` continua idêntico: não carrega `pmoc.css`, não carrega o shell, e abre normalmente em produção
   5. Nenhuma funcionalidade existente foi perdida — cada módulo faz depois tudo o que fazia antes, e os testes em `tests/` continuam passando
 
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 Plans:
 **Wave 1**
@@ -46,7 +46,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion — módulo de maior risco, por último)*
 
-- [ ] 05-06-PLAN.md — Máquinas: folha comum, login compartilhado, shell e migração para módulo ES com handlers publicados (PLAT-01, PLAT-02, PLAT-03, PLAT-16)
+- [x] 05-06-PLAN.md — Máquinas: folha comum, login compartilhado, shell e migração para módulo ES com handlers publicados (PLAT-01, PLAT-02, PLAT-03, PLAT-16)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
