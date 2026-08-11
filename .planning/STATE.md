@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 5
 current_phase_name: base-unificada
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-08-11T00:32:08.105Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-08-11T00:38:11.210Z"
 last_activity: 2026-08-10
-last_activity_desc: Executado 05-03-PLAN.md
+last_activity_desc: Executado 05-04-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 5 (Base unificada) — EXECUTANDO
-Plan: 3 de 7
-Status: 05-03-PLAN.md concluído (predial consumindo shared/shell.js — cabeçalho, abas e rodapé pelo shell comum); aguardando 05-04
-Last activity: 2026-08-10 — Executado 05-03-PLAN.md
+Plan: 4 de 7
+Status: 05-04-PLAN.md concluído (mapa consumindo shared/shell.js — cabeçalho e rodapé pelo shell comum, com navItems vazio e sem faixa de abas); aguardando 05-05
+Last activity: 2026-08-10 — Executado 05-04-PLAN.md
 
-Progress: [████░░░░░░] 43% (v2.0)
+Progress: [██████░░░░] 57% (v2.0)
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Progress: [████░░░░░░] 43% (v2.0)
 | Phase 05 P01 | 5min | 3 tasks | 4 files |
 | Phase 05-base-unificada P02 | 10min | 2 tasks | 3 files |
 | Phase 05 P03 | 12min | 1 tasks | 2 files |
+| Phase 05 P04 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,7 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: D-01: acesso Livre em shared/auth.js grava funcao=cargo.label, preservando o chip 'Livre · observador' de Máquinas
 - [Phase ?]: D-03 aplicado: eletrica/app.js e fonoclama/app.js declaram versao: '1.0' no rodapé, repetindo a versão já exibida no cartão do portal
 - [Phase 05-03]: predial passa a chamar aplicarShell() diretamente no boot() (padrao distinto do motor modulo-manutencao.js), servindo de referencia para mapa e transportes
+- [Phase 05-04]: mapa e o primeiro modulo de producao a usar aplicarShell() com navItems: [] (sem faixa de abas), provando o caso de tela cheia do shell comum
 
 ### Pending Todos
 
@@ -142,6 +144,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-11T00:31:49.897Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-08-11T00:38:11.173Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
