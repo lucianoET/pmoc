@@ -45,7 +45,7 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 ### Não regressão
 
 - [ ] **PLAT-15**: `refrigeracao` continua funcionando sem nenhuma alteração — não carrega `pmoc.css` nem o shell comum
-- [ ] **PLAT-16**: Nenhum módulo perde funcionalidade na unificação; o que existia antes continua existindo depois
+- [x] **PLAT-16**: Nenhum módulo perde funcionalidade na unificação; o que existia antes continua existindo depois
 
 ---
 

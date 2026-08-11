@@ -5,16 +5,16 @@ milestone_name: Consolidação da plataforma
 current_phase: 5
 current_phase_name: base-unificada
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-08-11T00:18:54.194Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-08-11T00:25:14.561Z"
 last_activity: 2026-08-10
-last_activity_desc: Executado 05-01-PLAN.md — shared/shell.js criado, pmoc.css e auth.js estendidos
+last_activity_desc: Executado 05-02-PLAN.md
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 7
-  completed_plans: 1
-  percent: 14
+  completed_plans: 2
+  percent: 0
 ---
 
 # Project State
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 5 (Base unificada) — EXECUTANDO
-Plan: 1 de 7
-Status: 05-01-PLAN.md concluído (shared/shell.js, pmoc.css e auth.js estendidos); aguardando 05-02
-Last activity: 2026-08-10 — Executado 05-01-PLAN.md
+Plan: 2 de 7
+Status: 05-02-PLAN.md concluído (motor de manutenção consumindo shared/shell.js; elétrica e fonoclama com versão no rodapé); aguardando 05-03
+Last activity: 2026-08-10 — Executado 05-02-PLAN.md
 
-Progress: [█░░░░░░░░░] 14% (v2.0)
+Progress: [███░░░░░░░] 29% (v2.0)
 
 ## Performance Metrics
 
@@ -65,6 +65,7 @@ Progress: [█░░░░░░░░░] 14% (v2.0)
 | Phase quick-260810-k0q P01 | 55min | 3 tasks | 10 files |
 | Phase 01 P04 | 50min | 3 tasks | 2 files |
 | Phase 05 P01 | 5min | 3 tasks | 4 files |
+| Phase 05-base-unificada P02 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,7 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: 01-04: o CSV ref/Mapa de VTR e EMB ATU 20FEV26.csv NAO e o inventario — e registro de viagens de um dia; o inventario real (PDF de mesmo nome) tem 43 ativos (33 viaturas + 10 embarcacoes), corrigido pela migracao 24
 - [Phase ?]: 01-04: unidade_uso segue a natureza operacional do equipamento (horimetro vs hodometro), nao a categoria de schema — empilhadeira/trator/guindaste sao tipo=viatura mas unidade_uso=h
 - [Phase ?]: D-01: acesso Livre em shared/auth.js grava funcao=cargo.label, preservando o chip 'Livre · observador' de Máquinas
+- [Phase ?]: D-03 aplicado: eletrica/app.js e fonoclama/app.js declaram versao: '1.0' no rodapé, repetindo a versão já exibida no cartão do portal
 
 ### Pending Todos
 
@@ -138,6 +140,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-11T00:18:54.158Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-08-11T00:25:14.525Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
