@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Consolidação da plataforma
-current_phase: 5
+current_phase: 06
+current_phase_name: tema-claro-escuro
 status: executing
-stopped_at: Completed 05-07-PLAN.md — Fase 5 (Base unificada) concluida
-last_updated: "2026-08-11T03:19:46.172Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-08-11T09:59:32.921Z"
 last_activity: 2026-08-11
-last_activity_desc: Executado 05-07-PLAN.md (auditoria de fechamento da Fase 5)
+last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 11
+  completed_plans: 8
   percent: 17
-current_phase_name: base-unificada
 ---
 
 # Project State
@@ -24,16 +24,16 @@ current_phase_name: base-unificada
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supabase + login por cargo), com os dados legados consolidados e importados — sem quebrar os módulos em produção.
-**Current focus:** Milestone v2.0 — Fase 5 (Base unificada)
+**Current focus:** Phase 06 — tema-claro-escuro
 
 ## Current Position
 
-Phase: 5 — COMPLETE
-Plan: 7 de 7
+Phase: 06 (tema-claro-escuro) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-08-11 — Executado 05-07-PLAN.md (auditoria de fechamento da Fase 5)
+Last activity: 2026-08-11 — Phase 06 execution started
 
-Progress: [██████████] 100% (v2.0)
+Progress: [███████░░░] 73% (v2.0)
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [██████████] 100% (v2.0)
 | Phase 05 P05 | 20min | 2 tasks | 3 files |
 | Phase 05 P06 | 35min | 2 tasks | 3 files |
 | Phase 05-base-unificada P07 | 15min | 2 tasks | 5 files |
+| Phase 06 P01 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase 05-06]: tests/integracao-operacoes-maquinas.test.js ajustado — data-view="operacoes"/"agenda" nao existem mais como markup estatico (geradas por aplicarShell()); teste passou a checar id="view-operacoes"/"view-agenda" no HTML e id:'operacoes'/id:'agenda' na config de abas de app.js
 - [Phase ?]: [Phase 05-07] Requisitos PLAT-01/02/03/15/16 fechados em REQUIREMENTS.md apenas com evidencia de comando anexada ao texto do requisito, nunca por presuncao
 - [Phase ?]: [Phase 05-07] PLAT-15/16 fecham para a Fase 5 com pendencia herdada explicita: conferencia visual humana pos-login nao foi possivel em nenhum plano da fase (sem credenciais Supabase nem Playwright no ambiente autonomo) - registrada em TESTES.md como item isolado para o UAT
+- [Phase ?]: 06-01: PLAT-04 nao marcado completo — este plano so prepara CSS (tokens + eliminacao de hardcode), botao e logica de alternancia ficam para 06-02
+- [Phase ?]: 06-01: token --accent-texto criado em shared/pmoc.css porque --accent e declarado por modulo (mesma especificidade, cascata posterior) e a folha comum nao consegue redefini-lo por tema
 
 ### Pending Todos
 
@@ -153,6 +156,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-11T01:11:00.718Z
-Stopped at: Completed 05-07-PLAN.md — Fase 5 (Base unificada) concluida
+Last session: 2026-08-11T09:59:32.883Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
