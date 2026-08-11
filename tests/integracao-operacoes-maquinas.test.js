@@ -16,14 +16,20 @@ test('carrega o domínio antes da aplicação', () => {
 
 test('expõe operações, agenda e os três formulários do fluxo', () => {
   for (const trecho of [
-    'data-view="operacoes"',
-    'data-view="agenda"',
+    'id="view-operacoes"',
+    'id="view-agenda"',
     'id="operacoes-kanban"',
     'id="agenda-calendario"',
     'id="modal-operacao"',
     'id="modal-area"',
     'id="modal-concluir-operacao"',
   ]) assert.match(html, new RegExp(trecho))
+  // Desde a Fase 5 Plano 6, a faixa de abas (com data-view) é gerada em
+  // tempo de execução por shared/shell.js (aplicarShell), não é mais
+  // markup estático em maquinas/index.html — a exposição de operações e
+  // agenda passa a ser verificada pela configuração de abas em app.js.
+  assert.match(app, /id:\s*'operacoes'/)
+  assert.match(app, /id:\s*'agenda'/)
 })
 
 test('carrega áreas e operações e conclui por RPC', () => {

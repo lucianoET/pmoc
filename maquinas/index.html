@@ -6,109 +6,21 @@
 <meta name="theme-color" content="#1a1a18"/>
 <title>PMOC Máquinas</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
 <style>
-/* ── tokens ── */
-:root{
-  --bg:#1a1a18; --surface:#242420; --surface2:#2e2e2a; --border:#38382f;
-  --text:#e8e4d8; --text2:#a09a88; --text3:#6a6458;
-  --green:#5a9e6f; --yellow:#c9a84c; --red:#b85c4a; --blue:#4a7fa0;
-  --orange:#c07840;
-  --ff:'Inter',system-ui,sans-serif;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:15px}
-body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh}
+:root{--accent:#c9a84c}
 
-/* ── layout ── */
-#app{display:none}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);
-  padding:0 20px;height:52px;display:flex;align-items:center;justify-content:space-between;
-  position:sticky;top:0;z-index:50}
-.logo{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
-.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
-.topbar-right{display:flex;align-items:center;gap:12px}
-.user-chip{font-size:12px;color:var(--text2);background:var(--surface2);
-  padding:4px 10px;border-radius:20px;border:1px solid var(--border)}
-.nav{background:var(--surface);border-bottom:1px solid var(--border);
-  display:flex;gap:2px;padding:0 20px;overflow-x:auto}
-.nav-btn{padding:10px 14px;font-size:13px;font-weight:500;color:var(--text2);
-  background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;
-  white-space:nowrap;font-family:var(--ff);transition:.15s}
-.nav-btn:hover{color:var(--text)}
-.nav-btn.active{color:var(--text);border-bottom-color:var(--yellow)}
-.main{max-width:1200px;margin:0 auto;padding:24px 20px}
-.view{display:none}.view.active{display:block}
-
-/* ── tipografia ── */
-.view-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px}
-.view-sub{font-size:13px;color:var(--text2);margin-bottom:24px}
+/* ── divergências preservadas da folha comum (Fase 5, D-02) ── */
+.main{max-width:1200px}
+.modal{max-width:520px}
+.empty{padding:48px 20px}
+.empty-ico{font-size:36px}
 h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
-
-/* ── kpis ── */
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:28px}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
-.kpi.kc-ok{border-left:3px solid var(--green)}.kpi.kc-warn{border-left:3px solid var(--yellow)}
-.kpi.kc-red{border-left:3px solid var(--red)}.kpi.kc-blue{border-left:3px solid var(--blue)}
-.kpi.kc-gold{border-left:3px solid var(--orange)}
-.kpi-n{font-size:1.8rem;font-weight:700;line-height:1;color:var(--text)}
-.kpi-l{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
-
-/* ── tabela ── */
-.tbl-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:auto}
-.tbl{width:100%;border-collapse:collapse}
-.tbl th{background:var(--surface2);font-size:11px;font-weight:600;text-transform:uppercase;
-  letter-spacing:.06em;color:var(--text3);padding:10px 14px;text-align:left;
-  border-bottom:1px solid var(--border);white-space:nowrap}
-.tbl td{padding:10px 14px;font-size:13px;color:var(--text2);
-  border-bottom:1px solid rgba(255,255,255,.04)}
-.tbl tr:last-child td{border-bottom:none}
+.kpi-row{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
 .tbl tr:hover td{background:rgba(255,255,255,.02);cursor:pointer}
-.tbl td.hi{color:var(--text);font-weight:500}
 
-/* ── badges ── */
-.badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap}
-.b-ok{background:rgba(90,158,111,.15);color:var(--green)}
-.b-warn{background:rgba(201,168,76,.15);color:var(--yellow)}
-.b-red{background:rgba(184,92,74,.15);color:var(--red)}
-.b-blue{background:rgba(74,127,160,.15);color:var(--blue)}
-
-/* ── modal ── */
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;
-  align-items:center;justify-content:center;padding:16px}
-.overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:10px;
-  width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column}
-.modal-hd{padding:16px 20px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between}
-.modal-hd h3{font-size:15px;font-weight:600;color:var(--text);margin:0}
-.modal-body{padding:20px;overflow-y:auto;flex:1}
-.modal-ft{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
-
-/* ── forms ── */
-.frow{margin-bottom:14px}
-label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px}
-input,select,textarea{width:100%;background:var(--surface2);border:1px solid var(--border);
-  border-radius:6px;padding:8px 10px;font-size:13px;color:var(--text);font-family:var(--ff);
-  outline:none;transition:.15s}
-input:focus,select:focus,textarea:focus{border-color:var(--yellow)}
-textarea{resize:vertical;min-height:70px}
-.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.fgrid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-
-/* ── botões ── */
-.btn{border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;
-  cursor:pointer;font-family:var(--ff);transition:.15s}
-.btn-p{background:var(--yellow);color:#1a1a18}.btn-p:hover{opacity:.88}
-.btn-s{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
-.btn-s:hover{border-color:var(--yellow);color:var(--yellow)}
-.btn-d{background:rgba(184,92,74,.2);color:var(--red);border:1px solid rgba(184,92,74,.3)}
-.btn-sm{padding:5px 12px;font-size:12px}
-
-/* ── alertas ── */
-.callout{border-radius:7px;padding:12px 16px;border-left:3px solid;font-size:13px;line-height:1.6;margin-bottom:20px}
-.co-warn{background:rgba(201,168,76,.08);border-color:var(--yellow);color:#c9a84c}
-.co-red{background:rgba(184,92,74,.08);border-color:var(--red);color:#b85c4a}
-.co-ok{background:rgba(90,158,111,.08);border-color:var(--green);color:#5a9e6f}
+/* ── login (id ainda referenciado por shared/auth.js) ── */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 
 /* ── uso bar ── */
 .uso-bar-wrap{width:100%;background:var(--surface2);border-radius:4px;height:6px;overflow:hidden}
@@ -132,31 +44,8 @@ textarea{resize:vertical;min-height:70px}
 .compra-det{font-size:11px;color:var(--text2);margin-top:2px}
 .compra-qtd{font-size:13px;font-weight:700;color:var(--yellow);white-space:nowrap}
 
-/* ── login ── */
-#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-.login-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
-  padding:36px 32px;width:100%;max-width:360px}
-.login-logo{font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px}
-.login-sub{font-size:13px;color:var(--text2);margin-bottom:28px;line-height:1.5}
-.login-err{font-size:12px;color:var(--red);margin-top:8px;display:none}
-.login-toggle{font-size:12px;color:var(--text3);text-align:center;margin-top:14px;cursor:pointer}
-.login-toggle span{color:var(--yellow)}
-
-/* ── empty ── */
-.empty{text-align:center;padding:48px 20px;color:var(--text3)}
-.empty-ico{font-size:36px;margin-bottom:12px}
-.empty p{font-size:14px}
-
-/* ── seção materiais no painel ── */
-.mat-alert{display:flex;align-items:center;justify-content:space-between;
-  padding:10px 14px;background:var(--surface2);border-radius:6px;margin-bottom:6px}
-.mat-info{font-size:12px}
-.mat-nome{font-weight:500;color:var(--text)}
-.mat-stock{color:var(--text3)}
-
 /* ── operações ── */
 .ops-actions{display:flex;gap:8px;flex-wrap:wrap}
-.view-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
 .section-spaced{margin-top:24px}
 .kanban{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:12px;overflow-x:auto;padding-bottom:4px}
 .kanban-col{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;min-height:180px}
@@ -194,25 +83,6 @@ textarea{resize:vertical;min-height:70px}
 
 <!-- APP -->
 <div id="app">
-  <div class="topbar">
-    <div class="logo"><div class="logo-dot"></div> PMOC <span style="color:var(--yellow)">Máquinas</span></div>
-    <div class="topbar-right">
-      <span class="user-chip" id="user-chip">—</span>
-      <button class="btn btn-s btn-sm" onclick="sair()">Sair</button>
-    </div>
-  </div>
-  <div class="nav">
-    <button class="nav-btn active" data-view="painel" onclick="trocarView('painel',this)">📊 Painel</button>
-    <button class="nav-btn" data-view="ativos" onclick="trocarView('ativos',this)">🔧 Máquinas</button>
-    <button class="nav-btn" data-view="vencimentos" onclick="trocarView('vencimentos',this)">📅 Vencimentos</button>
-    <button class="nav-btn" data-view="os" onclick="trocarView('os',this)">📋 OS</button>
-    <button class="nav-btn" data-view="operacoes" onclick="trocarView('operacoes',this)">▶ Operações</button>
-    <button class="nav-btn" data-view="agenda" onclick="trocarView('agenda',this)">▦ Agenda</button>
-    <button class="nav-btn" data-view="materiais" onclick="trocarView('materiais',this)">📦 Estoque</button>
-    <button class="nav-btn" data-view="consumo" onclick="trocarView('consumo',this)">⛽ Consumo</button>
-    <button class="nav-btn" data-view="ciclo" onclick="trocarView('ciclo',this)">📈 Ciclo de vida</button>
-    <button class="nav-btn" data-view="compras" onclick="trocarView('compras',this)">🛒 Lista de compras</button>
-  </div>
   <div class="main">
 
     <!-- PAINEL -->
@@ -646,6 +516,6 @@ textarea{resize:vertical;min-height:70px}
 </div>
 
 <script src="/maquinas/operacoes.js"></script>
-<script src="/maquinas/app.js"></script>
+<script type="module" src="/maquinas/app.js"></script>
 </body>
 </html>

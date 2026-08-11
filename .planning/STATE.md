@@ -1,19 +1,20 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: consolidacao-da-plataforma
+milestone_name: Consolidação da plataforma
 current_phase: 5
-current_phase_name: base-unificada
-status: planning
-stopped_at: Milestone v2.0 criado — aguardando /gsd-plan-phase 5
-last_updated: "2026-08-10T21:16:40.024Z"
-last_activity: 2026-08-10
-last_activity_desc: "Milestone v2.0 (Consolidação da plataforma) criado: 6 fases, 16 requisitos PLAT"
+status: completed
+stopped_at: Completed 05-07-PLAN.md — Fase 5 (Base unificada) concluida
+last_updated: "2026-08-11T01:11:00.761Z"
+last_activity: 2026-08-11
+last_activity_desc: Executado 05-07-PLAN.md (auditoria de fechamento da Fase 5)
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 7
+  completed_plans: 7
+  percent: 17
+current_phase_name: base-unificada
 ---
 
 # Project State
@@ -27,12 +28,12 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 ## Current Position
 
-Phase: 5 (Base unificada) — PLANEJAMENTO
-Plan: 0 de TBD
-Status: Milestone v2.0 criado; fase 5 ainda não planejada
-Last activity: 2026-08-10 — Milestone v2.0 criado (6 fases, 16 requisitos PLAT)
+Phase: 5 — COMPLETE
+Plan: 7 de 7
+Status: Phase 5 complete — 05-07 (auditoria de fechamento) executado
+Last activity: 2026-08-11 — Executado 05-07-PLAN.md (auditoria de fechamento da Fase 5)
 
-Progress: [░░░░░░░░░░] 0% (v2.0)
+Progress: [██████████] 100% (v2.0)
 
 ## Performance Metrics
 
@@ -63,6 +64,13 @@ Progress: [░░░░░░░░░░] 0% (v2.0)
 | Phase 01 P03 | 14min | 2 tasks | 2 files |
 | Phase quick-260810-k0q P01 | 55min | 3 tasks | 10 files |
 | Phase 01 P04 | 50min | 3 tasks | 2 files |
+| Phase 05 P01 | 5min | 3 tasks | 4 files |
+| Phase 05-base-unificada P02 | 10min | 2 tasks | 3 files |
+| Phase 05 P03 | 12min | 1 tasks | 2 files |
+| Phase 05 P04 | 8min | 2 tasks | 2 files |
+| Phase 05 P05 | 20min | 2 tasks | 3 files |
+| Phase 05 P06 | 35min | 2 tasks | 3 files |
+| Phase 05-base-unificada P07 | 15min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -89,6 +97,16 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: Nenhuma migração SQL nova criada para reimportar o CSV de VTR/EMB — import já concluído em 11_transportes_seed.sql (Fase 01 Plano 04); apenas a consulta de conferência foi documentada em TESTES.md
 - [Phase ?]: 01-04: o CSV ref/Mapa de VTR e EMB ATU 20FEV26.csv NAO e o inventario — e registro de viagens de um dia; o inventario real (PDF de mesmo nome) tem 43 ativos (33 viaturas + 10 embarcacoes), corrigido pela migracao 24
 - [Phase ?]: 01-04: unidade_uso segue a natureza operacional do equipamento (horimetro vs hodometro), nao a categoria de schema — empilhadeira/trator/guindaste sao tipo=viatura mas unidade_uso=h
+- [Phase ?]: D-01: acesso Livre em shared/auth.js grava funcao=cargo.label, preservando o chip 'Livre · observador' de Máquinas
+- [Phase ?]: D-03 aplicado: eletrica/app.js e fonoclama/app.js declaram versao: '1.0' no rodapé, repetindo a versão já exibida no cartão do portal
+- [Phase 05-03]: predial passa a chamar aplicarShell() diretamente no boot() (padrao distinto do motor modulo-manutencao.js), servindo de referencia para mapa e transportes
+- [Phase 05-04]: mapa e o primeiro modulo de producao a usar aplicarShell() com navItems: [] (sem faixa de abas), provando o caso de tela cheia do shell comum
+- [Phase 05-05]: transportes e o primeiro caso da fase de aposentadoria completa de uma familia de marca propria (--cyan/kc-cyan/b-cyan) em favor de --accent/kc-accent/b-accent da folha comum; shared/pmoc.css ganhou .b-accent com fundo tintado via color-mix, sem afetar os modulos ja migrados (nenhum usava a classe antes)
+- [Phase 05-06]: maquinas e o unico modulo da fase migrado de script classico para type=module no mesmo commit da adocao do login/shell compartilhados — exporNoWindow() vira requisito estrutural (nao so boa pratica) e passa por gate de extracao dinamica dos handlers inline
+- [Phase 05-06]: extracao dinamica dos handlers inline em maquinas/index.html + maquinas/app.js encontra 22 nomes (nao 24 como o texto do plano previa), porque sair() e trocarView() passaram a existir so no markup gerado em runtime por shared/shell.js — ambos continuam publicados em exporNoWindow(); todos os 22 nomes extraidos estao publicados (T-05-21 mitigado). Piso numerico "≥23" do gate do plano 05-06 ficou desalinhado com a arquitetura real; documentado como deviation no 05-06-SUMMARY.md
+- [Phase 05-06]: tests/integracao-operacoes-maquinas.test.js ajustado — data-view="operacoes"/"agenda" nao existem mais como markup estatico (geradas por aplicarShell()); teste passou a checar id="view-operacoes"/"view-agenda" no HTML e id:'operacoes'/id:'agenda' na config de abas de app.js
+- [Phase ?]: [Phase 05-07] Requisitos PLAT-01/02/03/15/16 fechados em REQUIREMENTS.md apenas com evidencia de comando anexada ao texto do requisito, nunca por presuncao
+- [Phase ?]: [Phase 05-07] PLAT-15/16 fecham para a Fase 5 com pendencia herdada explicita: conferencia visual humana pos-login nao foi possivel em nenhum plano da fase (sem credenciais Supabase nem Playwright no ambiente autonomo) - registrada em TESTES.md como item isolado para o UAT
 
 ### Pending Todos
 
@@ -135,6 +153,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-10T21:16:39.991Z
-Stopped at: Completed 01-04-PLAN.md (com correcao pos-checkpoint do inventario)
+Last session: 2026-08-11T01:11:00.718Z
+Stopped at: Completed 05-07-PLAN.md — Fase 5 (Base unificada) concluida
 Resume file: None

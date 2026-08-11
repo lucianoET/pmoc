@@ -12,9 +12,9 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 
 ### Base unificada
 
-- [ ] **PLAT-01**: Os 6 módulos no escopo carregam `shared/pmoc.css` como fonte única de tokens visuais (cor, tipografia, espaçamento) — nenhum define paleta própria
-- [ ] **PLAT-02**: Os 6 módulos usam `shared/auth.js` para login por cargo — `maquinas/app.js` deixa de duplicar o fluxo inline
-- [ ] **PLAT-03**: Existe um shell de layout comum (cabeçalho, navegação por abas, rodapé) reutilizado pelos módulos, sem cada um remontar a estrutura
+- [x] **PLAT-01**: Os 6 módulos no escopo carregam `shared/pmoc.css` como fonte única de tokens visuais (cor, tipografia, espaçamento) — nenhum define paleta própria — **verificado em 05-07**: `grep -c "shared/pmoc.css" {maquinas,transportes,eletrica,fonoclama,predial,mapa}/index.html` = 1 em cada um dos 6; nenhum dos 6 declara `--bg:`/`--surface:`/`--border:`/`--text:`/`--ff:` (a única declaração de cor própria restante em cada um é `--accent`)
+- [x] **PLAT-02**: Os 6 módulos usam `shared/auth.js` para login por cargo — `maquinas/app.js` deixa de duplicar o fluxo inline — **verificado em 05-07**: `transportes`, `predial`, `mapa` e `maquinas` importam `Auth` de `shared/auth.js` diretamente em `app.js`; `eletrica`/`fonoclama` autenticam pelo motor `shared/modulo-manutencao.js`, que importa `Auth` de `./auth.js`; nenhum dos 6 declara `CARGOS` inline nem contém endereço `@cmasm.local` (0 ocorrências em todos)
+- [x] **PLAT-03**: Existe um shell de layout comum (cabeçalho, navegação por abas, rodapé) reutilizado pelos módulos, sem cada um remontar a estrutura — **verificado em 05-07**: `maquinas`, `transportes`, `predial` e `mapa` chamam `aplicarShell()` de `shared/shell.js` diretamente em `app.js`; `eletrica`/`fonoclama` herdam via `shared/modulo-manutencao.js`, que também chama `aplicarShell()`; os 3 módulos com faixa de abas escrita à mão antes da fase (`maquinas`, `transportes`, `predial`) têm 0 ocorrências de `nav-btn` estático em `index.html`
 
 ### Tema
 
@@ -44,8 +44,8 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 
 ### Não regressão
 
-- [ ] **PLAT-15**: `refrigeracao` continua funcionando sem nenhuma alteração — não carrega `pmoc.css` nem o shell comum
-- [ ] **PLAT-16**: Nenhum módulo perde funcionalidade na unificação; o que existia antes continua existindo depois
+- [x] **PLAT-15**: `refrigeracao` continua funcionando sem nenhuma alteração — não carrega `pmoc.css` nem o shell comum — **verificado em 05-07**: `git diff --name-only b53505c..HEAD -- refrigeracao/` retorna lista vazia (nenhum commit da fase tocou o diretório); `grep -c 'shared/\|pmoc.css' refrigeracao/index.html` = 0 — **pendência herdada**: a conferência humana com o inspetor de rede aberto e a checagem visual do fluxo principal não puderam ser feitas neste plano nem em nenhum dos planos 05-02 a 05-06 (ambiente autônomo, sem credenciais Supabase nem Playwright) — fica registrada em `TESTES.md` § "Fase 5" como item isolado para o UAT
+- [x] **PLAT-16**: Nenhum módulo perde funcionalidade na unificação; o que existia antes continua existindo depois — **verificado em 05-07**: cada plano (05-01 a 05-06) documentou por gate estrutural que views/ids/modais/permissões de domínio permaneceram intactos; `node --test` subiu de 19 para 25 testes, todos verdes, sem nenhum teste removido ou enfraquecido; as 7 rotas do `vercel.json` resolvem para arquivos existentes — **pendência herdada**: a conferência visual humana pós-login (clicar em todas as abas/modais dos 6 módulos com sessão Supabase real) não pôde ser feita em nenhum plano da fase por falta de credenciais e de Playwright no ambiente autônomo; registrada como roteiro manual pendente em `TESTES.md` § "Fase 5", item para o UAT
 
 ---
 
@@ -92,7 +92,6 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 Ideias levantadas na fase de requisitos do v1.0, ainda sem fase. Não confundir com os
 requisitos `PLAT-*` do milestone v2.0 acima.
 
-
 - [ ] Alerta de anomalia de consumo (desvio sobre histórico) — Transportes
 - [ ] Exportação de histórico de manutenção por ativo para auditoria — Transportes
 - [ ] Termografia anexada à tarefa — Elétrica
@@ -120,9 +119,9 @@ Cobertura v2.0: 16/16 requisitos `PLAT-*` mapeados. Cobertura v1.0: 24/24 requis
 
 | Requisito | Fase | Status |
 |-----------|------|--------|
-| PLAT-01 | Phase 5 | Pending |
-| PLAT-02 | Phase 5 | Pending |
-| PLAT-03 | Phase 5 | Pending |
+| PLAT-01 | Phase 5 | Complete — verificado em 05-07 |
+| PLAT-02 | Phase 5 | Complete — verificado em 05-07 |
+| PLAT-03 | Phase 5 | Complete — verificado em 05-07 |
 | PLAT-04 | Phase 6 | Pending |
 | PLAT-05 | Phase 6 | Pending |
 | PLAT-06 | Phase 7 | Pending |
@@ -134,8 +133,8 @@ Cobertura v2.0: 16/16 requisitos `PLAT-*` mapeados. Cobertura v1.0: 24/24 requis
 | PLAT-12 | Phase 9 | Pending |
 | PLAT-13 | Phase 10 | Pending |
 | PLAT-14 | Phase 10 | Pending |
-| PLAT-15 | Phases 5-10 | Pending (verificado em cada fase) |
-| PLAT-16 | Phases 5-10 | Pending (verificado em cada fase) |
+| PLAT-15 | Phases 5-10 | Complete para a Fase 5 — verificado em 05-07; reverifica em cada fase seguinte |
+| PLAT-16 | Phases 5-10 | Complete para a Fase 5 — verificado em 05-07; reverifica em cada fase seguinte |
 
 ### Rastreabilidade v1.0
 

@@ -210,7 +210,7 @@ export class Auth {
   _selecionarCargo(cargo, card) {
     // "Livre" → acesso observador sem senha
     if (!cargo.email) {
-      this._usuario = { role: 'observador', nome: 'Visitante', cargo: 'Livre' }
+      this._usuario = { role: 'observador', nome: 'Visitante', cargo: cargo.label, funcao: cargo.label }
       if (this._onLogin) this._onLogin(this._usuario)
       this._el.style.display = 'none'
       return

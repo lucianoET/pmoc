@@ -246,7 +246,7 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 - Depends on: Supabase JS SDK (CDN), browser APIs
 - Used by: Web browsers (Vercel static delivery)
 - Purpose: Role-based login and session management
-- Location: `/shared/auth.js`, inline auth code in `/maquinas/app.js`
+- Location: `/shared/auth.js`, imported by `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa` and `maquinas` (direct or via `shared/modulo-manutencao.js`); `refrigeracao` stays outside this base, frozen by user decision
 - Contains: Cargo selection UI, password prompt, token exchange, session persistence
 - Depends on: Supabase Auth API
 - Used by: All frontend apps

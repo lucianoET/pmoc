@@ -305,3 +305,64 @@ where importado_de = 'Mapa de VTR e EMB ATU 20FEV26.csv';
 Se os números vierem menores que o esperado, a correção é reexecutar
 `11_transportes_seed.sql` — o seed é idempotente (`on conflict do update`).
 **Não** criar migração nova para reimportar o CSV.
+
+## Fase 5 — Base unificada — auditoria de fechamento — 11/08/2026
+
+A Fase 5 unificou os seis módulos novos (`maquinas`, `transportes`, `eletrica`, `fonoclama`,
+`predial`, `mapa`) numa base comum: os seis carregam `shared/pmoc.css` como fonte única de
+tokens visuais (a única cor própria que sobra em cada um é `--accent`), autenticam por
+`shared/auth.js` (direto ou pelo motor `shared/modulo-manutencao.js`, usado por `eletrica` e
+`fonoclama`) e montam cabeçalho, faixa de abas (quando existe) e rodapé pelo shell comum
+`shared/shell.js`. A `refrigeracao` fica fora do escopo, congelada por decisão do usuário — a
+conferência de que ela não foi tocada é um passo isolado abaixo, não uma presunção.
+
+### Preparação
+
+- [x] Rodar `node --test` na raiz do repositório, sem argumento — é a primeira linha de defesa
+      contra regressão e precisa estar verde antes de qualquer conferência manual.
+- [ ] Servir o repositório por HTTP a partir da raiz (`python -m http.server`) para os testes
+      manuais abaixo — abrir via `file://` quebra a descoberta de credenciais do
+      `shared/supabase-config.js`.
+
+### Fluxo manual, por módulo
+
+Repetir para `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial` e `mapa`:
+
+- [ ] Abrir a rota do módulo (`/maquinas`, `/transportes`, `/eletrica`, `/fonoclama`, `/predial`, `/mapa`).
+- [ ] Entrar por cada cargo (admin, gestor, tecnico) e confirmar que a tela de login nunca exibe
+      o e-mail interno do cargo.
+- [ ] Entrar no acesso Livre e confirmar que continua sem exigir senha, com o chip
+      "Livre · observador" aparecendo onde o cabeçalho/rodapé mostra a função do usuário.
+- [ ] Entrar como Observador (ou Livre) e confirmar que nenhum botão de escrita aparece.
+- [ ] Percorrer todas as abas do módulo (dez em Máquinas, sete em Transportes, seis em Predial,
+      seis em Elétrica/Fonoclama; Mapa não tem abas — navega pela barra lateral de camadas,
+      confirmar que a faixa de abas simplesmente não aparece).
+- [ ] Confirmar que o rodapé aparece com nome do módulo, versão e link "← Portal" para `/`.
+- [ ] Confirmar, no console do navegador, ausência de erro de referência (função não definida) —
+      é o que o gate dos handlers inline (`exporNoWindow()`) protege, mas só o clique real confirma.
+
+### Conferência isolada de não regressão da refrigeração (PLAT-15)
+
+Este passo é isolado de propósito, e não pode ser substituído por presunção: a rota
+`/refrigeracao` continuou ativa durante toda a fase, então é fácil deixá-la aberta numa aba e
+supor que "está tudo igual" sem checar.
+
+- [x] Verificação estática por histórico: `git diff --name-only b53505c..HEAD -- refrigeracao/`
+      retorna lista vazia — nenhum commit da fase tocou o diretório.
+- [x] Verificação estática por busca: `refrigeracao/index.html` não referencia `shared/` nem
+      `pmoc.css` (`grep -c 'shared/\|pmoc.css' refrigeracao/index.html` = 0), a mesma busca que já
+      retornava vazio antes da fase começar.
+- [ ] Verificação humana com o inspetor de rede aberto: abrir `/refrigeracao` **depois de toda a
+      fase concluída**, confirmar que nenhuma requisição de rede aponta para `shared/` ou para
+      qualquer arquivo compartilhado, e que o console termina sem erro.
+- [ ] Percorrer o fluxo principal (login, inventário, uma ordem de contratação) e confirmar que
+      está igual ao que era antes da fase.
+
+### Testes automatizados
+
+```bash
+node --test
+```
+
+Resultado esperado: **25 testes aprovados, 0 falhas** (eram 19 no início da fase; os 6 testes
+novos são de `tests/shell.test.js`, plano 05-01).

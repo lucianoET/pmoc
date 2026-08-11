@@ -30,27 +30,27 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
   4. `refrigeracao` continua idêntico: não carrega `pmoc.css`, não carrega o shell, e abre normalmente em produção
   5. Nenhuma funcionalidade existente foi perdida — cada módulo faz depois tudo o que fazia antes, e os testes em `tests/` continuam passando
 
-**Plans**: 7 plans
+**Plans**: 7/7 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Base compartilhada: `shared/shell.js` extraído com teste, folha comum estendida e rótulo do observador (PLAT-01, PLAT-02, PLAT-03)
+- [x] 05-01-PLAN.md — Base compartilhada: `shared/shell.js` extraído com teste, folha comum estendida e rótulo do observador (PLAT-01, PLAT-02, PLAT-03)
 
 **Wave 2** *(blocked on Wave 1 completion — quatro planos em paralelo, sem sobreposição de arquivos)*
 
-- [ ] 05-02-PLAN.md — Motor de manutenção consome o shell; elétrica e fonoclama saem junto (PLAT-03, PLAT-16)
-- [ ] 05-03-PLAN.md — Predial monta cabeçalho, abas e rodapé pelo shell comum (PLAT-03, PLAT-16)
-- [ ] 05-04-PLAN.md — Mapa adota a folha comum e o shell sem abas (PLAT-01, PLAT-03, PLAT-16)
-- [ ] 05-05-PLAN.md — Transportes adota a folha comum, aposenta a classe de marca própria e monta o shell (PLAT-01, PLAT-03, PLAT-16)
+- [x] 05-02-PLAN.md — Motor de manutenção consome o shell; elétrica e fonoclama saem junto (PLAT-03, PLAT-16)
+- [x] 05-03-PLAN.md — Predial monta cabeçalho, abas e rodapé pelo shell comum (PLAT-03, PLAT-16)
+- [x] 05-04-PLAN.md — Mapa adota a folha comum e o shell sem abas (PLAT-01, PLAT-03, PLAT-16)
+- [x] 05-05-PLAN.md — Transportes adota a folha comum, aposenta a classe de marca própria e monta o shell (PLAT-01, PLAT-03, PLAT-16)
 
 **Wave 3** *(blocked on Wave 2 completion — módulo de maior risco, por último)*
 
-- [ ] 05-06-PLAN.md — Máquinas: folha comum, login compartilhado, shell e migração para módulo ES com handlers publicados (PLAT-01, PLAT-02, PLAT-03, PLAT-16)
+- [x] 05-06-PLAN.md — Máquinas: folha comum, login compartilhado, shell e migração para módulo ES com handlers publicados (PLAT-01, PLAT-02, PLAT-03, PLAT-16)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 05-07-PLAN.md — Auditoria da fase, roteiro em `TESTES.md` e conferência isolada de não regressão da refrigeração (PLAT-15, PLAT-16)
+- [x] 05-07-PLAN.md — Auditoria da fase, roteiro em `TESTES.md` e conferência isolada de não regressão da refrigeração (PLAT-15, PLAT-16)
 
 **Baseline da fase**: commit `b53505c` (19 testes passando em `node --test`); os gates de não regressão comparam contra ele
 **Decisões travadas**: D-01 rótulo do observador preservado · D-02 cor de destaque do Máquinas `#c9a84c` (a que o módulo já usa hoje na aba ativa, botão primário, foco e nome no logo — corrigida após conferência no código; o verde `#5a9e6f` é token semântico, não de marca) · D-03 rodapé com nome, versão e link do portal

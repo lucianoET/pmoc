@@ -6,130 +6,25 @@
 <meta name="theme-color" content="#1a1a18"/>
 <title>PMOC Transportes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
 <style>
-:root{
-  --bg:#1a1a18; --surface:#242420; --surface2:#2e2e2a; --border:#38382f;
-  --text:#e8e4d8; --text2:#a09a88; --text3:#6a6458;
-  --green:#5a9e6f; --yellow:#c9a84c; --red:#b85c4a; --blue:#4a7fa0;
-  --cyan:#4aa0a0; --ff:'Inter',system-ui,sans-serif;
-}
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:15px}
-body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh}
-#app{display:none}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
-.logo{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
-.logo-accent{color:var(--cyan)}
-.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--cyan)}
-.topbar-right{display:flex;align-items:center;gap:12px}
-.user-chip{font-size:12px;color:var(--text2);background:var(--surface2);padding:4px 10px;border-radius:20px;border:1px solid var(--border)}
-.nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:2px;padding:0 20px;overflow-x:auto}
-.nav-btn{padding:10px 14px;font-size:13px;font-weight:500;color:var(--text2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;font-family:var(--ff);transition:.15s}
-.nav-btn:hover{color:var(--text)}
-.nav-btn.active{color:var(--text);border-bottom-color:var(--cyan)}
-.main{max-width:1240px;margin:0 auto;padding:24px 20px}
-.view{display:none}.view.active{display:block}
-.view-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px}
-.view-sub{font-size:13px;color:var(--text2);margin-bottom:24px}
-.view-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px}
-.section-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.section-split{display:grid;grid-template-columns:1.2fr .8fr;gap:20px;align-items:start}
-.stack{display:grid;gap:10px}
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:28px}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
-.kc-blue{border-left:3px solid var(--blue)} .kc-ok{border-left:3px solid var(--green)}
-.kc-warn{border-left:3px solid var(--yellow)} .kc-red{border-left:3px solid var(--red)}
-.kc-cyan{border-left:3px solid var(--cyan)}
-.kpi-n{font-size:1.8rem;font-weight:700;line-height:1;color:var(--text)}
-.kpi-l{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
-.tbl-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:auto}
-.tbl{width:100%;border-collapse:collapse}
-.tbl th{background:var(--surface2);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:10px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
-.tbl td{padding:10px 14px;font-size:13px;color:var(--text2);border-bottom:1px solid rgba(255,255,255,.04);vertical-align:top}
-.tbl tr:last-child td{border-bottom:none}
-.tbl td.hi{color:var(--text);font-weight:500}
-.badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;white-space:nowrap}
-.b-ok{background:rgba(90,158,111,.15);color:var(--green)}
-.b-warn{background:rgba(201,168,76,.15);color:var(--yellow)}
-.b-red{background:rgba(184,92,74,.15);color:var(--red)}
-.b-blue{background:rgba(74,127,160,.15);color:var(--blue)}
-.b-cyan{background:rgba(74,160,160,.15);color:var(--cyan)}
-.btn{border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff);transition:.15s}
-.btn-p{background:var(--cyan);color:#0f1214}.btn-p:hover{opacity:.88}
-.btn-s{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
-.btn-s:hover{border-color:var(--cyan);color:var(--cyan)}
-.btn-d{background:rgba(184,92,74,.2);color:var(--red);border:1px solid rgba(184,92,74,.3)}
-.btn-sm{padding:5px 12px;font-size:12px}
-.callout{border-radius:7px;padding:12px 16px;border-left:3px solid;font-size:13px;line-height:1.6;margin-bottom:20px}
-.co-warn{background:rgba(201,168,76,.08);border-color:var(--yellow);color:#c9a84c}
-.co-red{background:rgba(184,92,74,.08);border-color:var(--red);color:#b85c4a}
-.co-ok{background:rgba(90,158,111,.08);border-color:var(--green);color:#5a9e6f}
-.co-blue{background:rgba(74,127,160,.08);border-color:var(--blue);color:#8eb9d1}
-.panel-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
-.panel-card h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
-.empty{text-align:center;padding:36px 20px;color:var(--text3)}
-.empty-ico{font-size:30px;margin-bottom:12px}
-.mat-alert{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:10px 14px;background:var(--surface2);border-radius:6px}
-.mat-info{font-size:12px}
-.mat-nome{font-weight:500;color:var(--text)}
-.mat-stock{color:var(--text3);margin-top:2px}
-.tagline{font-size:12px;color:var(--text3)}
-.filters-inline{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.control-auto{width:auto}
-.control-search{max-width:320px}
-input,select,textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;color:var(--text);font-family:var(--ff);outline:none;transition:.15s}
-input:focus,select:focus,textarea:focus{border-color:var(--cyan)}
-textarea{resize:vertical;min-height:70px}
-.frow{margin-bottom:14px}
-.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.fgrid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px}
-.help{font-size:11px;color:var(--text3);margin-top:4px}
-.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center;padding:16px}
-.overlay.open{display:flex}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:100%;max-width:700px;max-height:90vh;display:flex;flex-direction:column}
-.modal-hd{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.modal-hd h3{font-size:15px;font-weight:600;color:var(--text);margin:0}
-.modal-body{padding:20px;overflow-y:auto;flex:1}
-.modal-ft{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
-.hidden{display:none!important}
-.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-@media(max-width:900px){.section-split{grid-template-columns:1fr}}
-@media(max-width:700px){.fgrid,.fgrid3{grid-template-columns:1fr}.kpi-row{grid-template-columns:1fr 1fr}}
+:root{--accent:#4aa0a0}
 </style>
 </head>
 <body>
 <div id="login-screen"></div>
 
 <div id="app">
-  <div class="topbar">
-    <div class="logo"><div class="logo-dot"></div> PMOC <span class="logo-accent">Transportes</span></div>
-    <div class="topbar-right">
-      <span class="user-chip" id="user-chip">—</span>
-      <button class="btn btn-s btn-sm" onclick="sair()">Sair</button>
-    </div>
-  </div>
-
-  <div class="nav">
-    <button class="nav-btn active" onclick="trocarView('painel',this)">📊 Painel</button>
-    <button class="nav-btn" onclick="trocarView('ativos',this)">🚚 Frota</button>
-    <button class="nav-btn" onclick="trocarView('viagens',this)">🗺️ Viagens</button>
-    <button class="nav-btn" onclick="trocarView('manutencao',this)">🔧 Manutenção</button>
-    <button class="nav-btn" onclick="trocarView('planos',this)">🗓️ Planos</button>
-    <button class="nav-btn" onclick="trocarView('estoque',this)">📦 Estoque</button>
-    <button class="nav-btn" onclick="trocarView('relatorios',this)">🧾 Relatórios</button>
-  </div>
-
   <div class="main">
     <div class="view active" id="view-painel">
       <div class="view-title">Painel</div>
       <div class="view-sub">Visão geral da frota, histórico importado e alertas de manutenção.</div>
       <div id="painel-erro"></div>
       <div class="kpi-row">
-        <div class="kpi kc-cyan"><div class="kpi-n" id="kpi-total">—</div><div class="kpi-l">Ativos</div></div>
+        <div class="kpi kc-accent"><div class="kpi-n" id="kpi-total">—</div><div class="kpi-l">Ativos</div></div>
         <div class="kpi kc-ok"><div class="kpi-n" id="kpi-disponiveis">—</div><div class="kpi-l">Disponíveis</div></div>
         <div class="kpi kc-blue"><div class="kpi-n" id="kpi-sobreaviso">—</div><div class="kpi-l">Sobreaviso</div></div>
-        <div class="kpi kc-cyan"><div class="kpi-n" id="kpi-viagens">—</div><div class="kpi-l">Viagens</div></div>
+        <div class="kpi kc-accent"><div class="kpi-n" id="kpi-viagens">—</div><div class="kpi-l">Viagens</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-manut">—</div><div class="kpi-l">Manutenções próximas</div></div>
         <div class="kpi kc-red"><div class="kpi-n" id="kpi-vencidas">—</div><div class="kpi-l">Manutenções vencidas (uso)</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-estoque-baixo">—</div><div class="kpi-l">Peças abaixo do mínimo</div></div>
@@ -310,7 +205,7 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
         <button class="btn btn-s btn-sm" onclick="exportarViagensCsv()">Exportar CSV</button>
       </div>
       <div class="kpi-row">
-        <div class="kpi kc-cyan"><div class="kpi-n" id="rel-viagens">—</div><div class="kpi-l">Viagens registradas</div></div>
+        <div class="kpi kc-accent"><div class="kpi-n" id="rel-viagens">—</div><div class="kpi-l">Viagens registradas</div></div>
         <div class="kpi kc-blue"><div class="kpi-n" id="rel-passageiros">—</div><div class="kpi-l">Passageiros informados</div></div>
         <div class="kpi kc-ok"><div class="kpi-n" id="rel-carga">—</div><div class="kpi-l">Carga total (kg)</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="rel-uso">—</div><div class="kpi-l">Uso acumulado</div></div>
