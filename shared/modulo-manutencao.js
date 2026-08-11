@@ -16,6 +16,7 @@ import { criarClienteSupabase } from './supabase-config.js'
 import { montarArvore } from './arvore.js'
 import { gravar } from './persistencia.js'
 import { calcularOcorrencia } from './vencimento.js'
+import { aplicarShell } from './shell.js'
 
 const ROLES_ESCRITA = ['admin', 'gestor', 'tecnico']
 
@@ -222,29 +223,10 @@ async function recarregar() {
 }
 
 // ── layout ──
+// O chrome (barra superior, abas, rodapé) vem de shared/shell.js — este
+// módulo só produz o miolo (o conteúdo das seis views).
 function montarLayout() {
-  document.title = `PMOC ${CFG.nome}`
-  document.documentElement.style.setProperty('--accent', CFG.accent)
-
   el('app').innerHTML = `
-    <div class="topbar">
-      <div class="logo"><div class="logo-dot"></div> PMOC <span class="logo-accent">${esc(CFG.nome)}</span></div>
-      <div class="topbar-right">
-        <a class="topbar-back" href="/">← Portal</a>
-        <span class="user-chip" id="user-chip">—</span>
-        <button class="btn btn-s btn-sm" onclick="sair()">Sair</button>
-      </div>
-    </div>
-
-    <div class="nav">
-      <button class="nav-btn active" onclick="trocarView('painel',this)">📊 Painel</button>
-      <button class="nav-btn" onclick="trocarView('ativos',this)">${CFG.icone} Ativos</button>
-      <button class="nav-btn" onclick="trocarView('vencimentos',this)">⏱️ Vencimentos</button>
-      <button class="nav-btn" onclick="trocarView('os',this)">🔧 Ordens de serviço</button>
-      <button class="nav-btn" onclick="trocarView('planos',this)">📋 Planos</button>
-      <button class="nav-btn" onclick="trocarView('estoque',this)">📦 Estoque</button>
-    </div>
-
     <div class="main">
       <div id="alerta-carga"></div>
       <div class="view active" id="view-painel"></div>
@@ -255,6 +237,20 @@ function montarLayout() {
       <div class="view" id="view-estoque"></div>
     </div>
   `
+
+  aplicarShell({
+    nome: CFG.nome,
+    accent: CFG.accent,
+    versao: CFG.versao,
+    navItems: [
+      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
+      { id: 'ativos', icone: CFG.icone, label: 'Ativos' },
+      { id: 'vencimentos', icone: '⏱️', label: 'Vencimentos' },
+      { id: 'os', icone: '🔧', label: 'Ordens de serviço' },
+      { id: 'planos', icone: '📋', label: 'Planos' },
+      { id: 'estoque', icone: '📦', label: 'Estoque' },
+    ],
+  })
 
   document.body.insertAdjacentHTML('beforeend', montarModais())
   document.querySelectorAll('.overlay').forEach(overlay => {
