@@ -29,6 +29,7 @@ import {
   normalizarFlora,
   normalizarInclinacao,
   normalizarLimpeza,
+  dentroDoEnvelope,
 } from './mapa-geometria.js'
 
 // ── Bloco 1 — cliente ───────────────────────────────────────────────
@@ -300,6 +301,72 @@ export async function atualizarZona(id, zona) {
     .single()
   if (error) {
     alert('Erro ao atualizar zona: ' + error.message)
+    return null
+  }
+  return data
+}
+
+// ── Bloco 6 — escrita de posição de ativo (plano 10-07, PLAT-20) ───────
+// salvarPosicaoAtivo é a única função deste arquivo que grava lat/lon na
+// tabela do PRÓPRIO ativo. Ela nunca escreve na tabela de locais: a
+// coordenada de um local (cmasm_locais.lat/lon) é do prédio inteiro,
+// compartilhada por todos os ativos ligados a ele — gravá-la a partir do
+// arraste de UM ativo moveria todos os vizinhos junto, exatamente o modo
+// de falha que a arquitetura de duas camadas do plano 10-01 existe para
+// evitar (resolverPosicao: própria vence herdada, nunca o contrário).
+
+// Cargos que podem posicionar ativo — DELIBERADAMENTE DIFERENTE de
+// CARGOS_ZONA (mapa/mapa-editor.js, plano 10-06: admin+gestor, espelhando
+// a política de maq_areas). As tabelas de ativo escritas aqui
+// (supabase/01_maquinas_schema.sql linhas 97-101 — maq_ativos;
+// supabase/14_eletrica_fonoclama_schema.sql linhas 166-170 — elet_ativos)
+// escopam update a "authenticated" SEM distinção de cargo: o banco
+// aceitaria qualquer sessão autenticada. A lista abaixo é mais estreita
+// por decisão de produto — posicionamento é trabalho de campo, quem sabe
+// onde a máquina está é quem a opera — registrada em
+// 10-07-PLAN.md § "Decisão de planejamento registrada". O risco residual
+// (a política do banco aceitando um cargo futuro que esta lista não
+// inclui) é aceito e registrado no modelo de ameaças do plano (T-10-37):
+// estreitar a policy exigiria remover e recriar restrição existente, fora
+// do "aditivo apenas" que a fase respeita.
+export const CARGOS_POSICAO = ['admin', 'gestor', 'tecnico']
+
+export async function salvarPosicaoAtivo(modulo, id, lat, lon) {
+  // Resolve a tabela pela mesma lista fechada de carregarAtivosDoModulo —
+  // nome de tabela nunca é montado por concatenação de texto.
+  const tabela = TABELA_POR_MODULO[modulo]
+  if (!tabela) {
+    throw new Error(
+      `mapa-dados: módulo "${modulo}" não está na lista fechada de tabelas de ativo (TABELA_POR_MODULO).`
+    )
+  }
+  // Identificador validado como inteiro estrito, mesmo critério que o lado
+  // de destino do link já usa (maquinas/app.js#_abrirAtivoDaUrl, plano
+  // 10-03) — Number.isSafeInteger, não um cast tolerante.
+  if (!Number.isSafeInteger(id)) {
+    alert('Erro: identificador de ativo inválido.')
+    return null
+  }
+  // Validação de coordenada pelo núcleo puro, ANTES de qualquer viagem de
+  // rede. Os mesmos quatro números estão no check da migração 25 — a
+  // barreira real é a de lá; esta recusa existe só para o usuário ver uma
+  // frase em português em vez de um erro de restrição do Postgres. O par
+  // incompleto (só lat ou só lon) não pode acontecer por construção: as
+  // duas coordenadas são gravadas juntas, abaixo, no mesmo comando — o que
+  // a segunda restrição (num_nulls) da migração 25 protege.
+  if (!dentroDoEnvelope(lat, lon)) {
+    alert('Erro: a coordenada está fora da região do CMASM. Verifique o ponto marcado no mapa.')
+    return null
+  }
+  const supa = obterCliente()
+  const { data, error } = await supa
+    .from(tabela)
+    .update({ lat, lon })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    alert('Erro ao salvar posição: ' + error.message)
     return null
   }
   return data
