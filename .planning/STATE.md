@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 10
 current_phase_name: mapa-operacional
 status: executing
-stopped_at: Completed 10-03-PLAN.md
-last_updated: "2026-08-12T09:00:45.435Z"
+stopped_at: Completed 10-04-PLAN.md
+last_updated: "2026-08-12T09:14:19.668Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 19
-  completed_plans: 14
+  completed_plans: 15
   percent: 25
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 10 (mapa-operacional) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-08-12 — Phase 10 execution started
 
-Progress: [███████░░░] 74% (v2.0)
+Progress: [████████░░] 79% (v2.0)
 
 ## Performance Metrics
 
@@ -78,6 +78,7 @@ Progress: [███████░░░] 74% (v2.0)
 | Phase 10 P01 | 15min | 2 tasks | 2 files |
 | Phase 10 P02 | 20min | 3 tasks | 3 files |
 | Phase 10 P03 | 15min | 2 tasks | 3 files |
+| Phase 10 P04 | 35min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: [Phase 10-02] D-01 (aguada mock) e D-04 (sem maq_operacoes/horas_utilizadas/area_executada_m2 em mapa/) viram gate permanente em tests/mapa-decisoes.test.js, com varredura dinâmica de diretório
 - [Phase ?]: [Phase 10-03] Chave de parâmetro do deep link conferida por teste contra o resultado real de linkDoModulo() de mapa/mapa-geometria.js, não repetida a mão — mapa-geometria.js não exporta constante isolada com o nome da chave
 - [Phase ?]: [Phase 10-03] _abrirAtivoDaUrl() e DEEP_LINK_ATIVO_CONSUMIDO usam o mesmo nome nos dois arquivos de destino (maquinas/app.js, shared/modulo-manutencao.js) — mesma adição, escrita duas vezes
+- [Phase ?]: createTile usa getTileUrl() publico do Leaflet (troca sincrona de this._url) em vez do _getTileData(coords) do esboco do RESEARCH — metodo inexistente na API real do Leaflet 1.9.4
+- [Phase ?]: Poligono vs linha na conversao OSM decidido pela chave principal (building/landuse/natural/man_made), nao por qualquer caminho fechado — highway/waterway/barrier/place continuam linha
 
 ### Pending Todos
 
@@ -179,6 +182,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-12T09:00:45.391Z
-Stopped at: Completed 10-03-PLAN.md
+Last session: 2026-08-12T09:14:19.628Z
+Stopped at: Completed 10-04-PLAN.md
 Resume file: None
