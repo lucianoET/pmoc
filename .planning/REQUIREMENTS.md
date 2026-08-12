@@ -137,7 +137,7 @@ requisitos `PLAT-*` do milestone v2.0 acima.
 
 ## Traceability
 
-Cobertura v2.0: 16/16 requisitos `PLAT-*` mapeados. Cobertura v1.0: 24/24 requisitos mapeados.
+Cobertura v2.0: 22/22 requisitos `PLAT-*` mapeados — os 16 originais mais PLAT-17 a PLAT-22, acrescentados no replanejamento do mapa (Phase 10 expandida, Phases 11 e 12 criadas). Cobertura v1.0: 24/24 requisitos mapeados.
 
 | Requisito | Fase | Status |
 |-----------|------|--------|
