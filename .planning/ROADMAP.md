@@ -176,7 +176,7 @@ Plans:
 
 **Baseline da fase**: commit `511bb9e` (58 testes passando em `node --test`); os gates de não regressão comparam contra ele
 **UI hint**: yes
-**Plans**: 5/8 plans executed
+**Plans**: 6/8 plans executed
 
 Plans:
 **Wave 1** *(três planos em paralelo, sem sobreposição de arquivos)*
@@ -192,7 +192,7 @@ Plans:
 
 **Wave 3** *(blocked on 10-05)*
 
-- [ ] 10-06-PLAN.md — Editor de zonas de serviço portado do legado para dentro do `/mapa`: desenho de polígono, atributos de terreno, área calculada e máquinas compatíveis, gravando em `maq_areas` (PLAT-18, PLAT-16)
+- [x] 10-06-PLAN.md — Editor de zonas de serviço portado do legado para dentro do `/mapa`: desenho de polígono, atributos de terreno, área calculada e máquinas compatíveis, gravando em `maq_areas` (PLAT-18, PLAT-16)
 
 **Wave 4** *(blocked on 10-06)*
 
