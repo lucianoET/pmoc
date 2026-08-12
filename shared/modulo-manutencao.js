@@ -1068,12 +1068,43 @@ function exportarComprasCsv() {
   ])
 }
 
+// ── deep link do mapa (PLAT-14) ──
+// Metade de destino do link que sai do balão de ativo no mapa (plano 10-05
+// monta a rota, `linkDoModulo` de mapa/mapa-geometria.js). Servindo tanto
+// elétrica quanto fonoclama de uma vez — os dois compartilham este motor.
+// A barra de endereço é a entrada menos confiável que existe — a validação
+// de forma é anterior a qualquer uso (T-10-12). Roda uma vez por
+// carregamento de página: a marca abaixo impede que trocar de aba dentro
+// do módulo reabra a ficha por cima do que o usuário estiver fazendo.
+let DEEP_LINK_ATIVO_CONSUMIDO = false
+function _abrirAtivoDaUrl() {
+  if (DEEP_LINK_ATIVO_CONSUMIDO) return
+  DEEP_LINK_ATIVO_CONSUMIDO = true
+  const bruto = new URLSearchParams(window.location.search).get('ativo')
+  // Conversão estrita: só dígitos (sem sinal, fração ou notação exponencial)
+  // e o resultado precisa ser um inteiro seguro. Qualquer outra forma é
+  // descartada em silêncio, sem erro e sem mensagem.
+  if (bruto === null || !/^\d+$/.test(bruto)) return
+  const id = Number(bruto)
+  if (!Number.isSafeInteger(id)) return
+  const ativo = ATIVOS.find(a => a.id === id)
+  // Não encontrado é o caso normal de um ativo desativado entre uma tela e
+  // outra, não uma condição de erro — sai sem consulta extra ao banco.
+  if (!ativo) return
+  // abrirModalAtivo trata id nulo/ausente como "novo ativo" — por isso só
+  // chamamos depois de confirmar que o ativo existe na lista carregada;
+  // passar o valor cru adiante abriria um formulário de cadastro vazio
+  // para quem clicou num ativo do mapa (T-10-13).
+  abrirModalAtivo(ativo.id)
+}
+
 // ── sessão ──
-function mostrarApp() {
+async function mostrarApp() {
   el('login-screen').style.display = 'none'
   el('app').style.display = 'block'
   el('user-chip').textContent = `${USUARIO?.nome || 'Usuário'} · ${USUARIO?.role || '—'}`
-  recarregar()
+  await recarregar()
+  _abrirAtivoDaUrl()
 }
 
 function mostrarLogin() {
