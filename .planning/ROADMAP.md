@@ -13,7 +13,7 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
 - [ ] **Phase 7: UI/UX mobile** - `eletrica`, `fonoclama`, `predial` e `mapa` utilizáveis em celular, sem rolagem horizontal da página
 - [ ] **Phase 8: Kanban e calendário compartilhados** - Componentes extraídos de `maquinas/` para `shared/`, com os testes preservados, e adotados por outros módulos
 - [ ] **Phase 9: Documentos** - Exportação CSV unificada, importação de arquivo com conferência e geração de PDF
-- [ ] **Phase 10: Mapa operável** - O mapa deixa de ser visualização de dados de demonstração e passa a ler do Supabase, aceitar edição (ativos e zonas de serviço desenhadas) e abrir sem internet na área do CMASM
+- [ ] **Phase 10: Mapa operacional** - O mapa deixa de ser visualização de dados de demonstração e passa a ler do Supabase, aceitar edição (ativos e zonas de serviço desenhadas) e abrir sem internet na área do CMASM
 - [ ] **Phase 11: Telemetria no mapa** - GPS, sensores e mapa de calor alimentados pela camada de dispositivos (Home Assistant/MQTT), por escrita de fora para dentro. **Travada** por decisão de segurança da OM
 - [ ] **Phase 12: Planta como camada** - Planta (imagem, PDF ou CAD vetorial) ancorada geograficamente sobre o mapa, com opacidade, rotação e escala
 
@@ -131,14 +131,14 @@ Plans:
   4. Importar o mesmo arquivo duas vezes não duplica registros
   5. Usuário gera PDF do que está vendo, a partir de uma implementação compartilhada
 
-### Phase 10: Mapa operável
+### Phase 10: Mapa operacional
 
 **Goal**: O mapa deixa de exibir dados de demonstração e passa a ler do Supabase, aceitar edição e abrir sem internet na área do CMASM
 **Depends on**: Phase 5
 **Requirements**: PLAT-13, PLAT-14, PLAT-17, PLAT-18, PLAT-19, PLAT-20, PLAT-15, PLAT-16
 **Success Criteria** (what must be TRUE):
 
-  1. O `/mapa` mostra ativos dos módulos sobre a planta do CMASM, posicionados pelo vínculo `cmasm_locais.local_id` já existente
+  1. O `/mapa` mostra ativos dos módulos sobre a planta do CMASM, posicionados por coordenada geográfica. **Correção de premissa (pesquisa 10-RESEARCH.md):** o texto anterior deste critério dizia "posicionados pelo vínculo `cmasm_locais.local_id` já existente", o que está errado — `cmasm_locais` não tem nenhuma coluna de coordenada; o vínculo posiciona na árvore organizacional, não no espaço. Acrescentar `lat`/`lon` a `cmasm_locais` (posição herdada pelo local) e permitir sobreposição por ativo é pré-requisito desta fase, não algo já pronto
   2. Usuário filtra o que aparece no mapa por módulo de origem
   3. Clicar num ativo leva ao registro dele no módulo de origem
   4. Ativo sem `local_id` preenchido não quebra o mapa — some ou aparece numa lista de não localizados, de forma explícita
@@ -148,6 +148,12 @@ Plans:
   8. Usuário acrescenta e reposiciona ativos pelo mapa, com a posição persistida
   9. O mapa base abre e desenha a área do CMASM **com a rede desligada**; fora da área coberta ou além do zoom cacheado, cai para o provedor online sem deixar buraco em branco
   10. Quem tem acesso de observador **não** consegue desenhar, mover nem gravar — a restrição vale no banco (RLS), não só na interface
+
+**Decisões travadas**:
+- **D-01** — A camada `aguada` fica **fora** do PLAT-17 e é adiada para a Phase 11. Ela não tem tabela no pmoc: é sistema externo autônomo (FastAPI + SQLite próprios, `MODULOS_EXTERNOS.md`) alimentado por MQTT. Criar tabela estática agora duplicaria o sistema externo para ser descartada quando a telemetria chegar. Os 35 pontos dela seguem fixos em `mapa/xmap-layers-aguada.js`, e o critério 6 vale para `grama` e `eletrica`. A exclusão deve virar teste, não omissão — como D-01/D-05 da Fase 6.
+- **D-02** — Satélite permanece **apenas online**. Nenhum cache do Esri.
+- **D-03** — Zonas de serviço são auxiliares e temporárias: ficam em `maq_areas`, deliberadamente **fora** da árvore `cmasm_locais`.
+- **D-04** — Estimativa de tempo e custo por zona fica **fora** desta fase. Não existe no legado (o que existe é compatibilidade de máquina). Quando vier, `maq_operacoes` já grava `horas_utilizadas` e `area_executada_m2`, permitindo derivar m²/h de execução real.
 
 **Notas de implementação** (levantadas antes do planejamento):
 
