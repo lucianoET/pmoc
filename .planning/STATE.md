@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 10
 current_phase_name: mapa-operacional
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-08-12T08:40:42.887Z"
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-08-12T08:46:48.791Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 19
-  completed_plans: 11
+  completed_plans: 12
   percent: 25
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 10 (mapa-operacional) — EXECUTING
-Plan: 1 of 8
-Status: Executing Phase 10
+Plan: 2 of 8
+Status: Ready to execute
 Last activity: 2026-08-12 — Phase 10 execution started
 
-Progress: [██████████] 100% (v2.0)
+Progress: [██████░░░░] 63% (v2.0)
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Progress: [██████████] 100% (v2.0)
 | Phase 06 P02 | 5min | 3 tasks | 4 files |
 | Phase 06 P03 | 3min | 3 tasks | 8 files |
 | Phase 06 P04 | 25min | 2 tasks | 5 files |
+| Phase 10 P01 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,9 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: [Phase 06-04] D-05 registrada: /calibracao (8a superficie, importada por tarefa concorrente durante a Fase 6) fica fora da convencao pmoc-tema por decisao — tem alternador de tema proprio e incompativel (cmasm_erp_theme, dark/light), provado em codigo por caso novo em tests/tema-superficies.test.js
 - [Phase ?]: [Phase 06-04] PLAT-04/PLAT-05 fechados com evidencia por comando; PLAT-15/PLAT-16 reverificados para a Fase 6 sem apagar o registro da Fase 5 (05-07) — node --test 44/44, refrigeracao/mapa/xmap.css intocados desde 351b13c
 - [Phase ?]: [Phase 06-04] Tres gates automatizados mal especificados encontrados na auditoria (dois em 06-02-PLAN.md ja contornados por comentario legitimo, um no proprio 06-04-PLAN.md — grep -qiE com \| sob -E nao alterna) — documentados no SUMMARY, nao corrigidos nos planos de origem
+- [Phase ?]: [Phase 10-01] Envelope geográfico como restrição única por tabela combinando lat e lon com AND (não duas restrições separadas), capturando o par trocado (latitude gravada na coluna de longitude)
+- [Phase ?]: [Phase 10-01] Nenhuma policy nova criada na migração 25: as seis tabelas (cmasm_locais + 5 tabelas de ativo) já escopam insert/update a authenticated desde suas migrações de origem; colunas novas herdam essa restrição
+- [Phase ?]: [Phase 10-01] cmasm_locais.lat/lon completa o Pattern 2 do RESEARCH (posição herdada do prédio/sala); coluna maquinas_compativeis não criada em maq_areas — compatibilidade fica derivada por função pura no cliente (plano 10-02)
 
 ### Pending Todos
 
@@ -168,6 +172,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-12T00:54:45.566Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-08-12T08:46:48.751Z
+Stopped at: Completed 10-01-PLAN.md
 Resume file: None
