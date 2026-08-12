@@ -111,3 +111,46 @@ test('mapa/xmap.css nao menciona o atributo de tema (D-01)', () => {
   const conteudo = fs.readFileSync(XMAP_CSS, 'utf8')
   assert.doesNotMatch(conteudo, /data-theme/)
 })
+
+// D-05 (registrada em 06-04, auditoria de fechamento): calibracao entrou no
+// repositorio durante esta fase, por uma tarefa concorrente (commits
+// 240cfa6/eb1e342), como copia independente do app legado — nao e um dos
+// 6 modulos nem o portal (D-02), e fica fora do escopo desta fase, no
+// mesmo raciocinio que ja vale para refrigeracao (D-04). A diferenca e que
+// calibracao NAO esta simplesmente sem tema: o proprio app legado ja tem
+// alternador de tema visivel, so que com mecanismo proprio e incompativel
+// com a convencao da plataforma (chave 'cmasm_erp_theme', nao 'pmoc-tema';
+// valores 'dark'/'light' em ingles, nao 'claro'/'escuro'; nenhuma
+// referencia a shared/). Este teste prova as duas coisas ao mesmo tempo —
+// que a convencao da plataforma nao vazou para dentro do modulo, e que a
+// ausencia dela e deliberada, nao esquecida, porque o modulo de fato tem
+// o proprio atributo de tema, só que desconectado.
+test('calibracao/index.html fica fora da convencao pmoc-tema por decisao (D-05) — tem alternador de tema proprio, incompativel de proposito com a convencao da plataforma', async () => {
+  const { CHAVE_TEMA, TEMAS } = await modulo
+  const conteudo = fs.readFileSync(path.join(RAIZ, 'calibracao', 'index.html'), 'utf8')
+  assert.ok(
+    !conteudo.includes(CHAVE_TEMA),
+    `calibracao/index.html menciona a chave de tema da plataforma '${CHAVE_TEMA}' — a convencao vazou para um modulo que deveria ficar fora dela`
+  )
+  assert.doesNotMatch(
+    conteudo,
+    /shared\//,
+    'calibracao/index.html referencia shared/ — deveria continuar standalone, como o app legado que e'
+  )
+  for (const tema of TEMAS) {
+    assert.doesNotMatch(
+      conteudo,
+      new RegExp(`data-theme=["']${tema}["']`),
+      `calibracao usa o valor '${tema}' da lista fechada da plataforma — deveria usar o proprio vocabulario (dark/light)`
+    )
+  }
+  // confirma que a ausencia da convencao da plataforma nao e por o modulo
+  // simplesmente nao ter nocao de tema nenhuma — ele tem a propria, e essa
+  // presenca é o que torna a exclusao uma decisao registrada, nao uma
+  // lacuna descoberta por quem for usar
+  assert.match(
+    conteudo,
+    /data-theme/,
+    'calibracao deixou de ter qualquer atributo de tema proprio — revisar esta nota de exclusao deliberada (D-05), o cenario mudou'
+  )
+})

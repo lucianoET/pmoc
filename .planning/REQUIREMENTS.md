@@ -18,8 +18,8 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 
 ### Tema
 
-- [ ] **PLAT-04**: Usuário alterna entre tema claro e escuro em qualquer módulo, com uma única implementação apoiada nas variáveis de `pmoc.css`
-- [ ] **PLAT-05**: A preferência de tema persiste entre sessões e entre módulos, e respeita `prefers-color-scheme` na primeira visita
+- [x] **PLAT-04**: Usuário alterna entre tema claro e escuro em qualquer módulo, com uma única implementação apoiada nas variáveis de `pmoc.css` — **verificado em 06-04**: `shared/tema.js` é a única implementação (núcleo puro + aplicadores de DOM) para as 7 superfícies do projeto; o botão `#btn-tema` é injetado uma vez em `shared/shell.js`/`montarShell()` e chega aos 6 módulos via `aplicarShell()`, e o portal o consome diretamente; `for f in index.html maquinas/index.html transportes/index.html eletrica/index.html fonoclama/index.html predial/index.html mapa/index.html; do grep -h "pmoc-tema" $f | head -1; done | sort -u | wc -l` = 1 (as 7 cópias do script de pré-desenho são byte-idênticas); `tests/tema-superficies.test.js` (10 casos) prova por comando que nenhum dos 6 módulos declara token de cor além de `--accent` nem cria bloco de tema próprio — **pendência herdada**: o clique real do botão em cada uma das 7 superfícies e a legibilidade visual dos estados de alerta nos dois temas (critério de sucesso 5) não puderam ser conferidos em ambiente autônomo, sem navegador controlável; registrados em `TESTES.md` § "Fase 6" como roteiro manual para o UAT
+- [x] **PLAT-05**: A preferência de tema persiste entre sessões e entre módulos, e respeita `prefers-color-scheme` na primeira visita — **verificado em 06-04**: `shared/tema.js` centraliza a leitura salvo→sistema→padrão sob a chave única `localStorage['pmoc-tema']`, compartilhada entre as 7 superfícies pela mesma origem; `normalizarTema` valida por lista fechada com comparação estrita, sem trim nem conversão de caixa (ASVS V5), coberto por `tests/tema.test.js` (8 casos, incluindo recusa de carga de marcação e de valor corrompido); nenhuma escuta de `prefers-color-scheme` em tempo de execução, para que a escolha manual do usuário não seja sobrescrita pelo sistema — **pendência herdada**: fechar/reabrir o navegador de fato, navegar entre módulos com sessão real e trocar a preferência do sistema operacional são comportamentos de runtime que este ambiente autônomo não pode exercitar; registrados em `TESTES.md` § "Fase 6" como roteiro manual para o UAT
 
 ### Mobile
 
@@ -44,8 +44,8 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 
 ### Não regressão
 
-- [x] **PLAT-15**: `refrigeracao` continua funcionando sem nenhuma alteração — não carrega `pmoc.css` nem o shell comum — **verificado em 05-07**: `git diff --name-only b53505c..HEAD -- refrigeracao/` retorna lista vazia (nenhum commit da fase tocou o diretório); `grep -c 'shared/\|pmoc.css' refrigeracao/index.html` = 0 — **pendência herdada**: a conferência humana com o inspetor de rede aberto e a checagem visual do fluxo principal não puderam ser feitas neste plano nem em nenhum dos planos 05-02 a 05-06 (ambiente autônomo, sem credenciais Supabase nem Playwright) — fica registrada em `TESTES.md` § "Fase 5" como item isolado para o UAT
-- [x] **PLAT-16**: Nenhum módulo perde funcionalidade na unificação; o que existia antes continua existindo depois — **verificado em 05-07**: cada plano (05-01 a 05-06) documentou por gate estrutural que views/ids/modais/permissões de domínio permaneceram intactos; `node --test` subiu de 19 para 25 testes, todos verdes, sem nenhum teste removido ou enfraquecido; as 7 rotas do `vercel.json` resolvem para arquivos existentes — **pendência herdada**: a conferência visual humana pós-login (clicar em todas as abas/modais dos 6 módulos com sessão Supabase real) não pôde ser feita em nenhum plano da fase por falta de credenciais e de Playwright no ambiente autônomo; registrada como roteiro manual pendente em `TESTES.md` § "Fase 5", item para o UAT
+- [x] **PLAT-15**: `refrigeracao` continua funcionando sem nenhuma alteração — não carrega `pmoc.css` nem o shell comum — **verificado em 05-07**: `git diff --name-only b53505c..HEAD -- refrigeracao/` retorna lista vazia (nenhum commit da fase tocou o diretório); `grep -c 'shared/\|pmoc.css' refrigeracao/index.html` = 0 — **pendência herdada**: a conferência humana com o inspetor de rede aberto e a checagem visual do fluxo principal não puderam ser feitas neste plano nem em nenhum dos planos 05-02 a 05-06 (ambiente autônomo, sem credenciais Supabase nem Playwright) — fica registrada em `TESTES.md` § "Fase 5" como item isolado para o UAT — **reverificado na Fase 6 (06-04)**: `git diff --name-only 351b13c..HEAD -- refrigeracao/` continua vazio; `grep -c 'shared/\|pmoc.css' refrigeracao/index.html`, `grep -c 'pmoc-tema' refrigeracao/index.html` e `grep -c 'data-theme' refrigeracao/index.html` são todos 0 — os três agora também travados por gate automatizado permanente em `tests/tema-superficies.test.js`, deixando de depender só de disciplina humana; **pendência herdada repetida**: a conferência humana com inspetor de rede e o percurso do fluxo principal continuam pendentes, mesmo motivo — registrada de novo em `TESTES.md` § "Fase 6"
+- [x] **PLAT-16**: Nenhum módulo perde funcionalidade na unificação; o que existia antes continua existindo depois — **verificado em 05-07**: cada plano (05-01 a 05-06) documentou por gate estrutural que views/ids/modais/permissões de domínio permaneceram intactos; `node --test` subiu de 19 para 25 testes, todos verdes, sem nenhum teste removido ou enfraquecido; as 7 rotas do `vercel.json` resolvem para arquivos existentes — **pendência herdada**: a conferência visual humana pós-login (clicar em todas as abas/modais dos 6 módulos com sessão Supabase real) não pôde ser feita em nenhum plano da fase por falta de credenciais e de Playwright no ambiente autônomo; registrada como roteiro manual pendente em `TESTES.md` § "Fase 5", item para o UAT — **reverificado na Fase 6 (06-04)**: `node --test` sobe de 25 (baseline pós-Fase 5) para 44 testes, 0 falhas, nenhum teste removido — crescimento em `tests/shell.test.js` (6→7, botão de tema), `tests/tema.test.js` (novo, 8 casos) e `tests/tema-superficies.test.js` (novo no plano 06-03 com 9, mais 1 caso desta auditoria — D-05 calibração — 10 no total); as rotas de `vercel.json` (as 7 desta fase mais `/calibracao`, importada por tarefa concorrente fora do escopo da fase) resolvem para arquivo existente; nenhuma view/id/modal/permissão de domínio mudou nos 6 módulos — **pendência herdada repetida**: a conferência visual humana pós-login continua pendente, mesmo motivo — registrada de novo em `TESTES.md` § "Fase 6"
 
 ---
 
@@ -122,8 +122,8 @@ Cobertura v2.0: 16/16 requisitos `PLAT-*` mapeados. Cobertura v1.0: 24/24 requis
 | PLAT-01 | Phase 5 | Complete — verificado em 05-07 |
 | PLAT-02 | Phase 5 | Complete — verificado em 05-07 |
 | PLAT-03 | Phase 5 | Complete — verificado em 05-07 |
-| PLAT-04 | Phase 6 | Pending |
-| PLAT-05 | Phase 6 | Pending |
+| PLAT-04 | Phase 6 | Complete — verificado em 06-04 |
+| PLAT-05 | Phase 6 | Complete — verificado em 06-04 |
 | PLAT-06 | Phase 7 | Pending |
 | PLAT-07 | Phase 7 | Pending |
 | PLAT-08 | Phase 8 | Pending |
@@ -133,8 +133,8 @@ Cobertura v2.0: 16/16 requisitos `PLAT-*` mapeados. Cobertura v1.0: 24/24 requis
 | PLAT-12 | Phase 9 | Pending |
 | PLAT-13 | Phase 10 | Pending |
 | PLAT-14 | Phase 10 | Pending |
-| PLAT-15 | Phases 5-10 | Complete para a Fase 5 — verificado em 05-07; reverifica em cada fase seguinte |
-| PLAT-16 | Phases 5-10 | Complete para a Fase 5 — verificado em 05-07; reverifica em cada fase seguinte |
+| PLAT-15 | Phases 5-10 | Complete para a Fase 5 (05-07) e para a Fase 6 (06-04); reverifica em cada fase seguinte |
+| PLAT-16 | Phases 5-10 | Complete para a Fase 5 (05-07) e para a Fase 6 (06-04); reverifica em cada fase seguinte |
 
 ### Rastreabilidade v1.0
 
