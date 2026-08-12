@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="../shared/pmoc.css"/>
-<link rel="stylesheet" href="xmap.css"/>
+<link rel="stylesheet" href="/mapa/xmap.css"/>
 <style>
 html,body{height:100%}
 #app{height:100vh;flex-direction:column}
@@ -53,10 +53,14 @@ html,body{height:100%}
   </div>
 </div>
 
-<script src="xmap.js"></script>
-<script src="xmap-layers-aguada.js"></script>
-<script src="xmap-layers-grama.js"></script>
-<script src="xmap-layers-eletrica.js"></script>
+<!-- Caminho absoluto de raiz, nao relativo: o vercel.json reescreve /mapa (sem barra
+     final) para mapa/index.html, entao href/src relativo resolve contra a raiz do site
+     e da 404. Mesmo padrao ja usado em maquinas/index.html. Vale tambem para reuso do
+     componente a partir de outro modulo, que precisa apontar para /mapa/ de qualquer forma. -->
+<script src="/mapa/xmap.js"></script>
+<script src="/mapa/xmap-layers-aguada.js"></script>
+<script src="/mapa/xmap-layers-grama.js"></script>
+<script src="/mapa/xmap-layers-eletrica.js"></script>
 
 <script type="module">
 const modulo = location.protocol === 'file:'

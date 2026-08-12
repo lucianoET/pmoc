@@ -4,8 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CMASM — Controle de Calibração</title>
-<link rel="stylesheet" href="assets/fonts.css">
-<link rel="stylesheet" href="assets/erp-module-shell.css">
+<!-- Caminho absoluto de raiz, nao relativo: o vercel.json reescreve /calibracao (sem
+     barra final) para calibracao/index.html, entao href relativo resolve contra a raiz
+     do site e da 404. Mesmo padrao ja usado em maquinas/ e mapa/. -->
+<link rel="stylesheet" href="/calibracao/assets/fonts.css">
+<link rel="stylesheet" href="/calibracao/assets/erp-module-shell.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
