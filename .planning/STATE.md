@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 10
 current_phase_name: mapa-operacional
 status: executing
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-08-12T08:54:47.154Z"
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-08-12T09:00:45.435Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 19
-  completed_plans: 13
+  completed_plans: 14
   percent: 25
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 10 (mapa-operacional) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-08-12 — Phase 10 execution started
 
-Progress: [███████░░░] 68% (v2.0)
+Progress: [███████░░░] 74% (v2.0)
 
 ## Performance Metrics
 
@@ -77,6 +77,7 @@ Progress: [███████░░░] 68% (v2.0)
 | Phase 06 P04 | 25min | 2 tasks | 5 files |
 | Phase 10 P01 | 15min | 2 tasks | 2 files |
 | Phase 10 P02 | 20min | 3 tasks | 3 files |
+| Phase 10 P03 | 15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: [Phase 10-02] calcAreaM2 e calcCompatCliente portadas byte-a-byte do legado (DEV_ERP/cmms-mapa/admin.html), incluindo o ternário redundante do ramo acentuado — quirk sem efeito prático preservado, não uma correção
 - [Phase ?]: [Phase 10-02] VOCABULARIO_REGRA fixado nos três termos reais de calcCompatCliente (cortador_grama, roçadeira, motosserra); minitrator/trator saem em semMapeamento sem adivinhação, cobrindo o Pitfall 1 da pesquisa
 - [Phase ?]: [Phase 10-02] D-01 (aguada mock) e D-04 (sem maq_operacoes/horas_utilizadas/area_executada_m2 em mapa/) viram gate permanente em tests/mapa-decisoes.test.js, com varredura dinâmica de diretório
+- [Phase ?]: [Phase 10-03] Chave de parâmetro do deep link conferida por teste contra o resultado real de linkDoModulo() de mapa/mapa-geometria.js, não repetida a mão — mapa-geometria.js não exporta constante isolada com o nome da chave
+- [Phase ?]: [Phase 10-03] _abrirAtivoDaUrl() e DEEP_LINK_ATIVO_CONSUMIDO usam o mesmo nome nos dois arquivos de destino (maquinas/app.js, shared/modulo-manutencao.js) — mesma adição, escrita duas vezes
 
 ### Pending Todos
 
@@ -176,6 +179,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-12T08:54:37.980Z
-Stopped at: Completed 10-02-PLAN.md
+Last session: 2026-08-12T09:00:45.391Z
+Stopped at: Completed 10-03-PLAN.md
 Resume file: None

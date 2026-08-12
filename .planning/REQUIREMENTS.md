@@ -40,7 +40,7 @@ Escopo: `maquinas`, `transportes`, `eletrica`, `fonoclama`, `predial`, `mapa`.
 ### Mapa
 
 - [x] **PLAT-13**: O `/mapa` plota ativos dos módulos sobre a planta do CMASM, usando o vínculo `cmasm_locais.local_id` já existente
-- [ ] **PLAT-14**: Usuário navega do ativo no mapa para o registro dele no módulo de origem
+- [x] **PLAT-14**: Usuário navega do ativo no mapa para o registro dele no módulo de origem
 - [ ] **PLAT-17**: As camadas do mapa leem dados do Supabase em vez dos dados de demonstração embutidos em `mapa/xmap-layers-*.js` — sem isso não há onde gravar edição
 - [x] **PLAT-18**: Usuário desenha zonas de serviço no mapa (polígono), atribui características de terreno (flora, inclinação, limpeza), vê a área calculada em m² e as máquinas compatíveis. As zonas são auxiliares e temporárias: ficam em `maq_areas`, **fora** da árvore `cmasm_locais`
 - [ ] **PLAT-19**: O mapa base abre sem internet na área do CMASM, a partir de tiles servidos pelo próprio projeto, caindo para o provedor online fora dessa área ou além do zoom coberto. O satélite fica **apenas online**, por decisão do usuário
@@ -141,7 +141,7 @@ Cobertura v2.0: 16/16 requisitos `PLAT-*` mapeados. Cobertura v1.0: 24/24 requis
 | PLAT-11 | Phase 9 | Pending |
 | PLAT-12 | Phase 9 | Pending |
 | PLAT-13 | Phase 10 | Complete |
-| PLAT-14 | Phase 10 | Pending |
+| PLAT-14 | Phase 10 | Complete |
 | PLAT-17 | Phase 10 | Pending |
 | PLAT-18 | Phase 10 | Complete |
 | PLAT-19 | Phase 10 | Pending |
