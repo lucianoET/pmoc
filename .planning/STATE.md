@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Consolidação da plataforma
-current_phase: 06
-current_phase_name: tema-claro-escuro
+current_phase: 10
+current_phase_name: mapa-operacional
 status: verifying
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-08-12T00:54:45.603Z"
-last_activity: 2026-08-11
-last_activity_desc: "Completed quick task 260811-9sb: Importar módulo Calibração como cópia independente"
+stopped_at: Completed 10-08-PLAN.md — Fase 10 (mapa operacional) fechada
+last_updated: "2026-08-12T10:26:24.949Z"
+last_activity: 2026-08-12
+last_activity_desc: Phase 10 execution started
 progress:
-  total_phases: 6
-  completed_phases: 2
-  total_plans: 11
-  completed_plans: 11
-  percent: 33
+  total_phases: 8
+  completed_phases: 3
+  total_plans: 19
+  completed_plans: 19
+  percent: 38
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supabase + login por cargo), com os dados legados consolidados e importados — sem quebrar os módulos em produção.
-**Current focus:** Phase 06 — tema-claro-escuro
+**Current focus:** Phase 10 — mapa-operacional
 
 ## Current Position
 
-Phase: 06 (tema-claro-escuro) — VERIFYING
-Plan: 4 of 4
+Phase: 10 (mapa-operacional) — EXECUTING
+Plan: 8 of 8
 Status: Phase complete — ready for verification
-Last activity: 2026-08-11 — Completed quick task 260811-9sb: Importar módulo Calibração como cópia independente
+Last activity: 2026-08-12 — Phase 10 execution started
 
 Progress: [██████████] 100% (v2.0)
 
@@ -75,6 +75,14 @@ Progress: [██████████] 100% (v2.0)
 | Phase 06 P02 | 5min | 3 tasks | 4 files |
 | Phase 06 P03 | 3min | 3 tasks | 8 files |
 | Phase 06 P04 | 25min | 2 tasks | 5 files |
+| Phase 10 P01 | 15min | 2 tasks | 2 files |
+| Phase 10 P02 | 20min | 3 tasks | 3 files |
+| Phase 10 P03 | 15min | 2 tasks | 3 files |
+| Phase 10 P04 | 35min | 3 tasks | 6 files |
+| Phase 10-mapa-operacional P05 | 30min | 3 tasks | 7 files |
+| Phase 10-mapa-operacional P06 | 40min | 3 tasks | 5 files |
+| Phase 10-mapa-operacional P07 | 50min | 3 tasks | 5 files |
+| Phase 10-mapa-operacional P08 | 45min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -121,6 +129,24 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: [Phase 06-04] D-05 registrada: /calibracao (8a superficie, importada por tarefa concorrente durante a Fase 6) fica fora da convencao pmoc-tema por decisao — tem alternador de tema proprio e incompativel (cmasm_erp_theme, dark/light), provado em codigo por caso novo em tests/tema-superficies.test.js
 - [Phase ?]: [Phase 06-04] PLAT-04/PLAT-05 fechados com evidencia por comando; PLAT-15/PLAT-16 reverificados para a Fase 6 sem apagar o registro da Fase 5 (05-07) — node --test 44/44, refrigeracao/mapa/xmap.css intocados desde 351b13c
 - [Phase ?]: [Phase 06-04] Tres gates automatizados mal especificados encontrados na auditoria (dois em 06-02-PLAN.md ja contornados por comentario legitimo, um no proprio 06-04-PLAN.md — grep -qiE com \| sob -E nao alterna) — documentados no SUMMARY, nao corrigidos nos planos de origem
+- [Phase ?]: [Phase 10-01] Envelope geográfico como restrição única por tabela combinando lat e lon com AND (não duas restrições separadas), capturando o par trocado (latitude gravada na coluna de longitude)
+- [Phase ?]: [Phase 10-01] Nenhuma policy nova criada na migração 25: as seis tabelas (cmasm_locais + 5 tabelas de ativo) já escopam insert/update a authenticated desde suas migrações de origem; colunas novas herdam essa restrição
+- [Phase ?]: [Phase 10-01] cmasm_locais.lat/lon completa o Pattern 2 do RESEARCH (posição herdada do prédio/sala); coluna maquinas_compativeis não criada em maq_areas — compatibilidade fica derivada por função pura no cliente (plano 10-02)
+- [Phase ?]: [Phase 10-02] calcAreaM2 e calcCompatCliente portadas byte-a-byte do legado (DEV_ERP/cmms-mapa/admin.html), incluindo o ternário redundante do ramo acentuado — quirk sem efeito prático preservado, não uma correção
+- [Phase ?]: [Phase 10-02] VOCABULARIO_REGRA fixado nos três termos reais de calcCompatCliente (cortador_grama, roçadeira, motosserra); minitrator/trator saem em semMapeamento sem adivinhação, cobrindo o Pitfall 1 da pesquisa
+- [Phase ?]: [Phase 10-02] D-01 (aguada mock) e D-04 (sem maq_operacoes/horas_utilizadas/area_executada_m2 em mapa/) viram gate permanente em tests/mapa-decisoes.test.js, com varredura dinâmica de diretório
+- [Phase ?]: [Phase 10-03] Chave de parâmetro do deep link conferida por teste contra o resultado real de linkDoModulo() de mapa/mapa-geometria.js, não repetida a mão — mapa-geometria.js não exporta constante isolada com o nome da chave
+- [Phase ?]: [Phase 10-03] _abrirAtivoDaUrl() e DEEP_LINK_ATIVO_CONSUMIDO usam o mesmo nome nos dois arquivos de destino (maquinas/app.js, shared/modulo-manutencao.js) — mesma adição, escrita duas vezes
+- [Phase ?]: createTile usa getTileUrl() publico do Leaflet (troca sincrona de this._url) em vez do _getTileData(coords) do esboco do RESEARCH — metodo inexistente na API real do Leaflet 1.9.4
+- [Phase ?]: Poligono vs linha na conversao OSM decidido pela chave principal (building/landuse/natural/man_made), nao por qualquer caminho fechado — highway/waterway/barrier/place continuam linha
+- [Phase ?]: mapa-dados.js: TABELA_POR_MODULO fica só com maquinas/eletrica (o que o plano 10-05 usa), cresce nos planos 10-06/10-07
+- [Phase ?]: Ponte de vocabulário status/estado local a cada arquivo de camada (statusParaExibicao/estadoParaExibicao) traduz operante/inoperante/manutencao/baixado do banco para o vocabulário de cor/ícone dos componentes visuais portados do legado, sem tocar essas funções
+- [Phase ?]: CARGOS_ZONA = [admin, gestor] espelha a política de escrita real de maq_areas (migração 12), comparada por teste com a política real, não apenas lida
+- [Phase ?]: area_m2 nunca aceito pronto da tela — sempre recalculado via calcAreaM2 na mesma chamada que grava geom (T-10-30)
+- [Phase ?]: CARGOS_POSICAO = [admin, gestor, tecnico]: subconjunto deliberado da policy real de update de maq_ativos/elet_ativos (sem role in(...)), diferente de CARGOS_ZONA (10-06) que espelha 1:1 a policy de maq_areas
+- [Phase ?]: Modo 'Mover ativos' com toggle próprio (camada arrastável separada da de exibição) — evita duplicar visualmente marcadores; xMap.registerLayer não é chamado de novo após uma gravação por causa de bug conhecido em mapa/xmap.js (arquivo com edição proibida) que duplicaria layerGroups
+- [Phase ?]: PLAT-19 fechado como parcial — desenho de zona sem rede pronto e provado; tiles raster ficam como procedimento do usuário (mapa/tiles/GERAR-TILES.md), nunca marcado completo por presunção
+- [Phase ?]: PLAT-13 corrigido no próprio texto do requisito: o vínculo cmasm_locais.local_id é organizacional, não geográfico — a migração 25 acrescentou lat/lon de fato
 
 ### Pending Todos
 
@@ -168,6 +194,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-12T00:54:45.566Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-08-12T10:26:24.909Z
+Stopped at: Completed 10-08-PLAN.md — Fase 10 (mapa operacional) fechada
 Resume file: None

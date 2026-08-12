@@ -9,6 +9,16 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+<!-- leaflet-draw@1.0.4, versão exata fixada de proposito (nao faixa): e a
+     biblioteca sobre a qual o editor legado (DEV_ERP/cmms-mapa/admin.html)
+     ja foi escrito — porta-lo por cima dela evita reescrever o editor do
+     zero. Sem lancamento desde 2018, auditada como legitima na pesquisa
+     desta fase (10-RESEARCH.md § Package Legitimacy Audit — sem postinstall,
+     download alto e estavel). Caminho de saida registrado, nao so aceito:
+     se um navegador futuro quebrar a compatibilidade, o sucessor mantido e
+     @geoman-io/leaflet-geoman-free (10-RESEARCH.md, Pattern 8). -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" crossorigin="anonymous"/>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="../shared/pmoc.css"/>
 <link rel="stylesheet" href="/mapa/xmap.css"/>
 <style>
@@ -16,15 +26,51 @@ html,body{height:100%}
 #app{height:100vh;flex-direction:column}
 .topbar{flex-shrink:0;position:static}
 .shell-footer{margin-top:0}
-.body-layout{display:flex;flex:1;min-height:0}
-.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:16px 12px;overflow-y:auto}
+.body-layout{display:flex;flex:1;min-height:0;position:relative}
+/* A barra de módulos é retrátil e passa POR CIMA do mapa, em vez de disputar
+   largura com ele: em tela estreita ela consumia metade do espaço e o mapa
+   virava uma tira. Fica fora do fluxo (position:absolute), então .map-area
+   ocupa a largura inteira sempre. Zoom do Leaflet está em bottomright e o
+   painel do editor ancora à direita, então a entrada pela esquerda não colide. */
+.sidebar{position:absolute;left:0;top:0;bottom:0;z-index:820;width:min(220px,80vw);background:var(--surface);border-right:1px solid var(--border);padding:16px 12px;overflow-y:auto;transform:translateX(-100%);transition:transform .18s ease;visibility:hidden}
+.sidebar.aberta{transform:none;visibility:visible;box-shadow:4px 0 16px rgba(0,0,0,.28)}
+/* Acima dos controles do Leaflet (800) e abaixo do painel do editor (900). */
+#btn-modulos{position:absolute;left:10px;top:10px;z-index:810;display:flex;align-items:center;gap:7px;padding:7px 11px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:12px;font-weight:600;font-family:var(--ff);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:.15s}
+#btn-modulos:hover{color:var(--text);border-color:var(--accent)}
+#btn-modulos[aria-expanded="true"]{color:var(--text);border-color:var(--accent)}
+/* Com a barra aberta o botão ficaria embaixo dela, deixando o usuário sem como
+   fechá-la pelo mesmo controle que a abriu. Desliza junto com a barra. */
+.body-layout:has(.sidebar.aberta) #btn-modulos{left:calc(min(220px,80vw) + 10px)}
 .sidebar-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:12px}
 .mod-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:10px 12px;margin-bottom:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff);text-align:left;transition:.15s}
 .mod-btn:hover{color:var(--text)}
 .mod-btn.active{border-color:var(--accent);color:var(--text)}
 .mod-badge-demo{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:8px;background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow);flex-shrink:0}
-.map-area{flex:1;min-width:0;height:100%}
+.map-area{flex:1;min-width:0;height:100%;position:relative}
 #mapa{width:100%;height:100%}
+/* Painel do editor de zona (plano 10-06) — chrome do modulo, so tokens da
+   folha comum (D-01 da Fase 6: mapa/xmap.css nao e aberto). Preenchido em
+   tempo de execucao por mapa/mapa-editor.js; aqui so o conteiner e o
+   estilo. Comeca oculto (sem a classe .aberto). */
+#editor-painel{display:none;position:absolute;top:0;right:0;bottom:0;width:300px;background:var(--surface);border-left:1px solid var(--border);padding:16px;overflow-y:auto;z-index:900}
+#editor-painel.aberto{display:block}
+.ed-fg{margin-bottom:12px}
+.ed-fg label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px}
+.ed-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ed-chip{padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--ff)}
+.ed-chip.sel{border-color:var(--accent);color:var(--text)}
+.ed-compat{background:var(--surface2);border-radius:6px;padding:10px;font-size:12px;color:var(--text2);line-height:1.5}
+.ed-compat-vazio{color:var(--text3)}
+.ed-area{font-size:13px;font-weight:600;color:var(--text);margin:12px 0}
+.ed-actions{display:flex;gap:8px;margin-top:8px}
+/* Painel de não localizados (plano 10-07, PLAT-20) — mesma barra lateral
+   dos botões de módulo, só tokens da folha comum (D-01 da Fase 6). */
+.nl-vazio{font-size:12px;color:var(--text3);line-height:1.5}
+.nl-modulo{margin-bottom:14px}
+.nl-modulo-nome{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);margin-bottom:6px}
+.nl-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)}
+.nl-item:last-child{border-bottom:none}
+.nl-btn{padding:4px 8px;font-size:11px;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -32,23 +78,31 @@ html,body{height:100%}
 
 <div id="app">
   <div class="body-layout">
-    <div class="sidebar">
+    <div class="sidebar" id="barra-modulos" aria-hidden="true">
       <div class="sidebar-title">Módulos</div>
       <button class="mod-btn" onclick="alternarModulo('aguada', this)">
         <span>Aguada — monitoramento hídrico</span>
-        <span class="mod-badge-demo">demo</span>
+        <span class="mod-badge-demo" title="Sistema externo autônomo (FastAPI + SQLite, alimentado por MQTT) — sem tabela no projeto pmoc; integração real entra na Phase 11 (decisão travada D-01)">demo</span>
       </button>
       <button class="mod-btn" onclick="alternarModulo('grama', this)">
         <span>Grama — controle vegetal</span>
-        <span class="mod-badge-demo">demo</span>
       </button>
       <button class="mod-btn" onclick="alternarModulo('eletrica', this)">
         <span>Elétrica — sistema elétrico</span>
-        <span class="mod-badge-demo">demo</span>
       </button>
+      <!-- Painel de não localizados (plano 10-07, PLAT-20) — desenhado em
+           tempo de execução por mapa/app.js#renderNaoLocalizados a partir
+           de mapa/mapa-dados.js#NAO_LOCALIZADOS. Título de seção no mesmo
+           estilo do título "Módulos" acima (.sidebar-title). -->
+      <div class="sidebar-title" id="nao-localizados-titulo">Não localizados</div>
+      <div id="nao-localizados"></div>
     </div>
     <div class="map-area">
+      <button id="btn-modulos" type="button" aria-expanded="false" aria-controls="barra-modulos">
+        <span aria-hidden="true">☰</span><span>Módulos</span>
+      </button>
       <div id="mapa"></div>
+      <div id="editor-painel"></div>
     </div>
   </div>
 </div>
@@ -59,8 +113,11 @@ html,body{height:100%}
      componente a partir de outro modulo, que precisa apontar para /mapa/ de qualquer forma. -->
 <script src="/mapa/xmap.js"></script>
 <script src="/mapa/xmap-layers-aguada.js"></script>
-<script src="/mapa/xmap-layers-grama.js"></script>
-<script src="/mapa/xmap-layers-eletrica.js"></script>
+<!-- xmap-layers-grama.js e xmap-layers-eletrica.js viraram módulo ES no plano
+     10-05 (registrarCamadasGrama/registrarCamadasEletrica) e são importados
+     por mapa/app.js depois de o cliente do Supabase existir — não carregam
+     mais como script clássico aqui. A aguada continua script clássico porque
+     não depende de cliente nenhum (D-01). -->
 
 <script type="module">
 const modulo = location.protocol === 'file:'

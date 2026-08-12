@@ -13,7 +13,9 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
 - [ ] **Phase 7: UI/UX mobile** - `eletrica`, `fonoclama`, `predial` e `mapa` utilizáveis em celular, sem rolagem horizontal da página
 - [ ] **Phase 8: Kanban e calendário compartilhados** - Componentes extraídos de `maquinas/` para `shared/`, com os testes preservados, e adotados por outros módulos
 - [ ] **Phase 9: Documentos** - Exportação CSV unificada, importação de arquivo com conferência e geração de PDF
-- [ ] **Phase 10: Mapa integrado** - Ativos dos módulos plotados sobre a planta do CMASM via `cmasm_locais.local_id`, com navegação para o módulo de origem
+- [ ] **Phase 10: Mapa operacional** - O mapa deixa de ser visualização de dados de demonstração e passa a ler do Supabase, aceitar edição (ativos e zonas de serviço desenhadas) e abrir sem internet na área do CMASM
+- [ ] **Phase 11: Telemetria no mapa** - GPS, sensores e mapa de calor alimentados pela camada de dispositivos (Home Assistant/MQTT), por escrita de fora para dentro. **Travada** por decisão de segurança da OM
+- [ ] **Phase 12: Planta como camada** - Planta (imagem, PDF ou CAD vetorial) ancorada geograficamente sobre o mapa, com opacidade, rotação e escala
 
 ### Detalhamento das fases do v2.0
 
@@ -129,18 +131,110 @@ Plans:
   4. Importar o mesmo arquivo duas vezes não duplica registros
   5. Usuário gera PDF do que está vendo, a partir de uma implementação compartilhada
 
-### Phase 10: Mapa integrado
+### Phase 10: Mapa operacional
 
-**Goal**: O mapa deixa de ser uma planta isolada e passa a mostrar onde estão os ativos de cada módulo
+**Goal**: O mapa deixa de exibir dados de demonstração e passa a ler do Supabase, aceitar edição e abrir sem internet na área do CMASM
 **Depends on**: Phase 5
-**Requirements**: PLAT-13, PLAT-14, PLAT-16
+**Requirements**: PLAT-13, PLAT-14, PLAT-17, PLAT-18, PLAT-19, PLAT-20, PLAT-15, PLAT-16
 **Success Criteria** (what must be TRUE):
 
-  1. O `/mapa` mostra ativos dos módulos sobre a planta do CMASM, posicionados pelo vínculo `cmasm_locais.local_id` já existente
+  1. O `/mapa` mostra ativos dos módulos sobre a planta do CMASM, posicionados por coordenada geográfica. **Correção de premissa (pesquisa 10-RESEARCH.md):** o texto anterior deste critério dizia "posicionados pelo vínculo `cmasm_locais.local_id` já existente", o que está errado — `cmasm_locais` não tem nenhuma coluna de coordenada; o vínculo posiciona na árvore organizacional, não no espaço. Acrescentar `lat`/`lon` a `cmasm_locais` (posição herdada pelo local) e permitir sobreposição por ativo é pré-requisito desta fase, não algo já pronto
   2. Usuário filtra o que aparece no mapa por módulo de origem
   3. Clicar num ativo leva ao registro dele no módulo de origem
   4. Ativo sem `local_id` preenchido não quebra o mapa — some ou aparece numa lista de não localizados, de forma explícita
   5. O mapa continua funcionando para quem só tem acesso de observador
+  6. As camadas leem do Supabase — nenhum dado de demonstração embutido em `mapa/xmap-layers-*.js` permanece na origem do que é exibido
+  7. Usuário desenha uma zona de serviço no mapa, atribui flora, inclinação e limpeza, e vê a área em m² calculada do polígono e as máquinas compatíveis; a zona persiste e reabre igual
+  8. Usuário acrescenta e reposiciona ativos pelo mapa, com a posição persistida
+  9. O mapa base abre e desenha a área do CMASM **com a rede desligada**; fora da área coberta ou além do zoom cacheado, cai para o provedor online sem deixar buraco em branco
+  10. Quem tem acesso de observador **não** consegue desenhar, mover nem gravar — a restrição vale no banco (RLS), não só na interface
+
+**Decisões travadas**:
+
+- **D-01** — A camada `aguada` fica **fora** do PLAT-17 e é adiada para a Phase 11. Ela não tem tabela no pmoc: é sistema externo autônomo (FastAPI + SQLite próprios, `MODULOS_EXTERNOS.md`) alimentado por MQTT. Criar tabela estática agora duplicaria o sistema externo para ser descartada quando a telemetria chegar. Os 35 pontos dela seguem fixos em `mapa/xmap-layers-aguada.js`, e o critério 6 vale para `grama` e `eletrica`. A exclusão deve virar teste, não omissão — como D-01/D-05 da Fase 6.
+- **D-02** — Satélite permanece **apenas online**. Nenhum cache do Esri.
+- **D-03** — Zonas de serviço são auxiliares e temporárias: ficam em `maq_areas`, deliberadamente **fora** da árvore `cmasm_locais`.
+- **D-04** — Estimativa de tempo e custo por zona fica **fora** desta fase. Não existe no legado (o que existe é compatibilidade de máquina). Quando vier, `maq_operacoes` já grava `horas_utilizadas` e `area_executada_m2`, permitindo derivar m²/h de execução real.
+
+**Notas de implementação** (levantadas antes do planejamento):
+
+- O editor já existe e ficou fora do port: `DEV_ERP/cmms-mapa/admin.html` (44 KB, `leaflet-draw@1.0.4`) e `demo.html`. O `mapa/xmap.js` no pmoc é idêntico ao de lá, então o componente já aceita o editor — falta a aplicação que o pilota. Ele fala com `http://localhost:8010/api/grama`, backend que não existe aqui: trocar por Supabase.
+- Modelo de zona já definido no legado: `flora` (`gramado`, `capim_colonial`, `mata_fechada`), `inclinacao` (`plano` 0-5%, `moderado` 5-20%, `acentuado` >20%), `limpeza` (`limpa`, `media`, `densa`), `coords_json`, `area_m2` calculada do polígono, e `calcCompatCliente()` derivando as máquinas compatíveis.
+- `maq_areas` e `maq_operacoes` já existem (migração 12). Falta em `maq_areas`: geometria e os três atributos de terreno — migração aditiva, sem `DROP`.
+- Estimativa de tempo e custo por zona **não existe no legado** e fica fora desta fase. Quando vier, `maq_operacoes` já grava `horas_utilizadas` e `area_executada_m2`, permitindo derivar m²/h de execução real em vez de constante arbitrária.
+- Tiles locais: bbox do extrato `map_cmasm_2026abr.osm` (`-22.84731,-43.11868` a `-22.82761,-43.09739`). z13–18 com entorno mais z19 na ilha ≈ 1.900 tiles ≈ 12 MB. Precedente pronto em `aguada/frontend/assets/leaflet-tiles/` (283 tiles, 6,3 KB de média, servidos como `{z}/{x}/{y}.png`) — falta a queda para o online, que o aguada não tem.
+- Satélite fica **apenas online** por decisão do usuário — nada de cache do Esri.
+- A política de uso do OSM proíbe download em massa de `tile.openstreetmap.org`. O extrato `.osm` local é dado ODbL e renderizar os próprios tiles a partir dele é o caminho limpo. Decidir isso no planejamento.
+- 12 MB de tile binário entram no histórico do git para sempre e o projeto é zero-build (não há passo de deploy onde gerar). Alternativa a avaliar: Supabase Storage.
+
+**Decisões tomadas no planejamento** (registradas aqui para a Phase 11 não redescobri-las):
+
+- **Tiles raster ficam como passo do usuário, não como bloqueio da fase.** A cadeia de renderização (Mapnik/osmium) não existe no ambiente autônomo e exige pacote de sistema, fora do zero-build. O caminho escolhido entrega os dois lados: uma **planta vetorial** convertida do próprio `.osm` por script do repositório, sem rede e sem ferramenta externa, que faz a área do CMASM desenhar offline hoje; e o **mecanismo de tile local com queda para o online**, que funciona com zero tiles no disco e passa a servir offline quando o usuário rodar o procedimento escrito em `mapa/tiles/GERAR-TILES.md`. Nenhum tile é baixado do serviço público, nem uma vez.
+- **Editor de zona aparece para `admin`/`gestor`; posicionamento de ativo para `admin`/`gestor`/`tecnico`.** As duas listas são diferentes de propósito: cada tela espelha a política de escrita da tabela que ela grava (`maq_areas` é restrita a admin/gestor desde a migração 12; as tabelas de ativo aceitam qualquer sessão autenticada). Travado por teste que compara tela e banco.
+- **`minitrator` e `trator` não são mapeados para o vocabulário de compatibilidade.** A coluna `categoria` não distingue cortador montado de trator agrícola; forçar o mapeamento acertaria dois dos três e erraria um em silêncio. Eles saem numa lista de "não classificados" visível na tela.
+- **PLAT-20 é lido como dar coordenada a ativo existente**, não como cadastrar ativo pelo mapa — cadastro tem regra de domínio própria em cada módulo.
+
+**Baseline da fase**: commit `511bb9e` (58 testes passando em `node --test`); os gates de não regressão comparam contra ele
+**UI hint**: yes
+**Plans**: 8/8 plans executed
+
+Plans:
+**Wave 1** *(três planos em paralelo, sem sobreposição de arquivos)*
+
+- [x] 10-01-PLAN.md — Migração 25: geometria e atributos de terreno em `maq_areas`, `lat`/`lon` nas seis tabelas com trava de envelope e de par completo, mais gate estático de que a migração é aditiva e não afrouxa escrita (PLAT-13, PLAT-18, PLAT-20, PLAT-16)
+- [x] 10-02-PLAN.md — Núcleo puro `mapa/mapa-geometria.js` com a fórmula de área portada e conferida numericamente, compatibilidade de máquinas com a normalização de vocabulário que faltava, e as decisões D-01 e D-04 viradas em teste (PLAT-18, PLAT-13, PLAT-16)
+- [x] 10-03-PLAN.md — Lado de destino do link: `maquinas` e o motor compartilhado de `eletrica`/`fonoclama` abrem a ficha do ativo pelo parâmetro de URL (PLAT-14, PLAT-16)
+
+**Wave 2** *(blocked on Wave 1 — dois planos em paralelo)*
+
+- [x] 10-04-PLAN.md — Base offline: planta vetorial da área do CMASM convertida do `.osm` local, tile local com queda para o online só no basemap de mapa (D-02 em gate) e procedimento de geração de tiles com a política de uso registrada (PLAT-19, PLAT-16)
+- [x] 10-05-PLAN.md — Camadas passam a ler do Supabase por uma porta única de dados; grama e elétrica sem dado de demonstração, com posição herdada ou própria, link para o módulo de origem e coleta dos não localizados (PLAT-17, PLAT-13, PLAT-14, PLAT-16)
+
+**Wave 3** *(blocked on 10-05)*
+
+- [x] 10-06-PLAN.md — Editor de zonas de serviço portado do legado para dentro do `/mapa`: desenho de polígono, atributos de terreno, área calculada e máquinas compatíveis, gravando em `maq_areas` (PLAT-18, PLAT-16)
+
+**Wave 4** *(blocked on 10-06)*
+
+- [x] 10-07-PLAN.md — Acrescentar e reposicionar ativos pelo mapa, com painel de não localizados por módulo e gate de que arrastar um ativo não move o prédio (PLAT-20, PLAT-13, PLAT-16)
+
+**Wave 5** *(blocked on todos)*
+
+- [x] 10-08-PLAN.md — Auditoria de fechamento: roteiro manual pelos dez critérios em `TESTES.md`, não regressão isolada da refrigeração, documentação e fechamento dos requisitos com evidência (PLAT-13, PLAT-14, PLAT-17, PLAT-18, PLAT-19, PLAT-20, PLAT-15, PLAT-16)
+
+---
+
+### Phase 11: Telemetria no mapa
+
+**Goal**: Posições de GPS, leituras de sensores e mapa de calor aparecem no mapa, sem expor nenhum serviço do CMASM
+**Depends on**: Phase 10
+**Requirements**: PLAT-21
+**Status**: **Travada** — depende de decisão de política de segurança da OM sobre exposição de telemetria, que não é decisão técnica
+**Success Criteria** (what must be TRUE):
+
+  1. Posição de dispositivo com GPS (embarcação, viatura) aparece no mapa e atualiza
+  2. Câmeras e sensores aparecem como elementos posicionados no mapa
+  3. Leituras de sensor formam mapa de calor sobre o mapa base
+  4. A ingestão é **escrita de fora para dentro**: a camada de dispositivos empurra para o Supabase, e nenhum serviço do CMASM (Home Assistant, Frigate, Mosquitto) aceita conexão de entrada a partir do site público
+  5. Stream de câmera **não** transita pelo site público — o mapa mostra o elemento e um endereço que só resolve na rede interna
+
+**Notas**: a arquitetura já está desenhada em `DEV_ERP/04-modulos-pmoc.md` (`Câmeras IP → Frigate NVR → Home Assistant → Mosquitto → CMASM.ERP API`) e o stack existe em `cmms-seguranca/cmasm-vigilancia/docker-compose.yml`, ainda não em execução. O padrão de ingestão já foi provado no `aguada` (`ESP32 → MQTT → bridge.py → SQLite → WebSocket`). O mapa do Home Assistant é card Lovelace preso ao frontend dele e **não** serve como mapa do pmoc; o papel dele é camada de dispositivos.
+
+---
+
+### Phase 12: Planta como camada
+
+**Goal**: Uma planta do CMASM se sobrepõe ao mapa, ancorada geograficamente, para posicionar e conferir elementos
+**Depends on**: Phase 10
+**Requirements**: PLAT-22
+**Success Criteria** (what must be TRUE):
+
+  1. Usuário carrega planta em imagem, PDF ou CAD vetorial
+  2. A planta acompanha pan e zoom do mapa — o alinhamento não se perde ao mover o mapa
+  3. Usuário ajusta opacidade, rotação e escala para alinhar a planta ao terreno
+  4. O alinhamento escolhido persiste, em vez de precisar ser refeito a cada abertura
+
+**Notas**: existe precedente parcial em `DEV_reference_readonly/cmasm-mapa-v2.html`, com duas diferenças que o tornam insuficiente como port direto — ele aceita `image/*,.svg` e **não** PDF (não há `pdf.js` em nenhum lugar da árvore de referência), e o overlay é um `<img>` com `transform: translate(-50%,-50%) rotate() scale()` preso ao centro da tela: os handlers de `zoom`/`rotate` do mapa só atualizam texto de barra de status e nunca tocam no overlay, então arrastar o mapa desliza o mapa por baixo de uma planta parada. Além disso é MapLibre, não Leaflet. Decisão do usuário: fazer a versão corrigida (PDF via `pdf.js` e âncora geográfica), não o port fiel. Para CAD vetorial (DXF) o caminho melhor é converter em geometria Leaflet — georreferencia certo, escala sem borrar e torna os elementos clicáveis; DWG é proprietário e precisa virar DXF antes.
 
 ---
 

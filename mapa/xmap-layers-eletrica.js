@@ -1,214 +1,160 @@
 // Portado do app legado cmms-mapa (/home/luc/DEV_ERP/cmms-mapa) para o módulo pmoc /mapa.
-// Dados de camada abaixo são de demonstração (mock), não vêm do Supabase.
+// Desde o plano 10-05, os dados de camada vêm do Supabase (mapa/mapa-dados.js) — as
+// quatro listas de demonstração que existiam aqui (GERADORES, TRANSFORMADORES, QUADROS,
+// RAMAIS) saíram. As camadas de transformador e de ramal foram REMOVIDAS: não há tabela
+// nenhuma no projeto que descreva esses elementos, e mantê-las com dado fixo contrariaria
+// o critério de sucesso 6 (nenhum dado de demonstração continua sendo a origem do que a
+// camada exibe) enquanto inventar tabela para elas seria escopo novo, fora desta fase.
 /**
  * xMap Layers — xEletrica (Sistema Elétrico)
- * Elementos: geradores, transformadores, ramais principais, quadros de distribuição
+ * Elementos: os quatro tipos reais de elet_ativos (GERADOR, QGBT, NOBREAK, ILUMINACAO —
+ * eletrica/app.js:8-13), um layer por tipo, agrupados como o módulo elétrica já usa.
  *
- * Módulo xEletrica ainda em desenvolvimento — dados são mock de planejamento.
- * Posições aproximadas dentro do perímetro da instalação.
+ * registrarCamadasEletrica() é chamada pelo boot (mapa/app.js) depois de o cliente do
+ * Supabase existir — a camada não se registra mais sozinha ao carregar.
  */
 
-(function () {
+import { carregarAtivosEletricos, carregarLocaisComPosicao, posicionarAtivos } from './mapa-dados.js'
+import { linkDoModulo } from './mapa-geometria.js'
 
-  /* ── Dados mock de infraestrutura elétrica ── */
-  const GERADORES = [
-    { id: 'GE-01', nome: 'GE-01', lat: -22.8378, lon: -43.1088, kva: 250, estado: 'standby',     combustivel: 88, horasUso: 1240 },
-    { id: 'GE-02', nome: 'GE-02', lat: -22.8385, lon: -43.1067, kva: 150, estado: 'operando',    combustivel: 62, horasUso: 876  },
-    { id: 'GE-03', nome: 'GE-03', lat: -22.8455, lon: -43.1006, kva: 100, estado: 'manutencao',  combustivel: 0,  horasUso: 3200 },
-  ];
+// Os mesmos quatro tipos de eletrica/app.js:8-13, duplicados aqui de
+// propósito: importar eletrica/app.js executaria o boot inteiro daquele
+// módulo (iniciarModulo tem efeito colateral no import, monta tela e
+// liga listener), então os rótulos entram como valor solto — mesmo
+// espírito de normalizarCategoria em mapa/mapa-geometria.js para a
+// categoria de máquinas.
+const TIPOS_ELETRICOS = {
+  GERADOR:    { nome: 'Gerador',          emoji: '⚡' },
+  QGBT:       { nome: 'QGBT / Painel',    emoji: '🧰' },
+  NOBREAK:    { nome: 'Nobreak / UPS',    emoji: '🔋' },
+  ILUMINACAO: { nome: 'Iluminação',       emoji: '💡' },
+}
 
-  const TRANSFORMADORES = [
-    { id: 'TR-01', nome: 'TR-01', lat: -22.8380, lon: -43.1082, kva: 500, tensao: '13.8kV/380V', estado: 'operando', carga_pct: 67 },
-    { id: 'TR-02', nome: 'TR-02', lat: -22.8393, lon: -43.1073, kva: 300, tensao: '13.8kV/220V', estado: 'operando', carga_pct: 45 },
-    { id: 'TR-03', nome: 'TR-03', lat: -22.8452, lon: -43.1005, kva: 200, tensao: '13.8kV/380V', estado: 'standby', carga_pct: 0  },
-  ];
+// elet_ativos.status no banco é operante|inoperante|manutencao|baixado
+// (supabase/14_eletrica_fonoclama_schema.sql), não o
+// operando|standby|manutencao|alerta|inativo que estadoColor/estadoClass
+// abaixo falam (portados do legado, mantidos como estão). Ponte local,
+// mesmo espírito de statusParaExibicao em xmap-layers-grama.js.
+function estadoParaExibicao(status) {
+  const mapa = { operante: 'operando', manutencao: 'manutencao', inoperante: 'alerta', baixado: 'inativo' }
+  return mapa[status] || status;
+}
 
-  const QUADROS = [
-    { id: 'QD-01', nome: 'QD-Geral', lat: -22.8382, lon: -43.1084, tipo: 'geral',       estado: 'operando', circuitos: 24 },
-    { id: 'QD-02', nome: 'QD-Adm',   lat: -22.8374, lon: -43.1086, tipo: 'distribuicao', estado: 'operando', circuitos: 12 },
-    { id: 'QD-03', nome: 'QD-Ope',   lat: -22.8391, lon: -43.1069, tipo: 'distribuicao', estado: 'operando', circuitos: 16 },
-    { id: 'QD-04', nome: 'QD-IF',    lat: -22.8454, lon: -43.1007, tipo: 'distribuicao', estado: 'alerta',   circuitos: 8  },
-  ];
-
-  const RAMAIS = [
-    {
-      id: 'RM-01', nome: 'Ramal Principal', tensao: '13.8kV', tipo: 'alta_tensao',
-      coords: [[-22.8365,-43.1095],[-22.8380,-43.1082],[-22.8393,-43.1073]],
-    },
-    {
-      id: 'RM-02', nome: 'Ramal IF', tensao: '13.8kV', tipo: 'alta_tensao',
-      coords: [[-22.8393,-43.1073],[-22.8420,-43.1040],[-22.8452,-43.1005]],
-    },
-    {
-      id: 'RM-03', nome: 'Ramal Adm', tensao: '380V', tipo: 'baixa_tensao',
-      coords: [[-22.8380,-43.1082],[-22.8376,-43.1087],[-22.8374,-43.1086]],
-    },
-    {
-      id: 'RM-04', nome: 'Ramal Ope', tensao: '220V', tipo: 'baixa_tensao',
-      coords: [[-22.8393,-43.1073],[-22.8391,-43.1069]],
-    },
-  ];
-
-  /* ── Helpers de cor/estilo ── */
-  function estadoColor(estado) {
-    switch (estado) {
-      case 'operando':   return '#22c55e';
-      case 'standby':    return '#38bdf8';
-      case 'manutencao': return '#f59e0b';
-      case 'alerta':     return '#ef4444';
-      case 'inativo':    return '#4a6785';
-      default:           return '#8fa8c8';
-    }
+/* ── Helpers de cor/estilo ── */
+function estadoColor(estado) {
+  switch (estado) {
+    case 'operando':   return '#22c55e';
+    case 'standby':    return '#38bdf8';
+    case 'manutencao': return '#f59e0b';
+    case 'alerta':     return '#ef4444';
+    case 'inativo':    return '#4a6785';
+    default:           return '#8fa8c8';
   }
+}
 
-  function estadoClass(estado) {
-    if (estado === 'operando') return 'ok';
-    if (estado === 'alerta')   return 'error';
-    if (estado === 'manutencao') return 'warn';
-    return '';
-  }
+function estadoClass(estado) {
+  if (estado === 'operando') return 'ok';
+  if (estado === 'alerta')   return 'error';
+  if (estado === 'manutencao') return 'warn';
+  return '';
+}
 
-  function ramaisStyle(tipo) {
-    if (tipo === 'alta_tensao') return { color: '#fbbf24', weight: 3, opacity: 0.8, dashArray: null };
-    return { color: '#f97316', weight: 2, opacity: 0.65, dashArray: '6 3' };
-  }
+/* ── SVG Icons ──
+   geradorSVG e quadroSVG reaproveitados do port legado, com a etiqueta de
+   potência (kva) removida — elet_ativos não tem essa coluna, é um schema
+   genérico (id, codigo, nome, tipo, status, uso_atual, ...). NOBREAK e
+   ILUMINACAO não tinham ícone no arquivo legado (a lista de mock nunca
+   cobria esses dois tipos); ativoGenericoSVG segue o mesmo padrão visual
+   (retângulo + emoji) que o resto do arquivo já usa. */
+function geradorSVG(estado) {
+  const c = estadoColor(estado);
+  const spin = estado === 'operando';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
+    <rect x="2" y="2" width="30" height="30" rx="6" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="2"/>
+    <text x="17" y="20" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700" fill="${c}">GEN</text>
+    ${spin ? `<circle cx="28" cy="6" r="3" fill="${c}"/>` : ''}
+  </svg>`;
+}
 
-  function cargaClass(pct) {
-    if (pct >= 80) return 'error';
-    if (pct >= 60) return 'warn';
-    return 'ok';
-  }
+function quadroSVG(estado) {
+  const c = estadoColor(estado);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+    <rect x="2" y="2" width="24" height="24" rx="3" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="2"/>
+    <rect x="6" y="7"  width="6" height="3" rx="1" fill="${c}" opacity=".7"/>
+    <rect x="6" y="12" width="6" height="3" rx="1" fill="${c}" opacity=".5"/>
+    <rect x="16" y="7"  width="6" height="3" rx="1" fill="${c}" opacity=".7"/>
+    <rect x="16" y="12" width="6" height="3" rx="1" fill="${c}" opacity=".5"/>
+    <rect x="6" y="17" width="16" height="2" rx="1" fill="${c}" opacity=".3"/>
+  </svg>`;
+}
 
-  /* ── SVG Icons ── */
-  function geradorSVG(estado, kva) {
-    const c = estadoColor(estado);
-    const spin = estado === 'operando';
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
-      <rect x="2" y="2" width="30" height="30" rx="6" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="2"/>
-      <text x="17" y="14" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="7" fill="${c}" opacity=".6">GEN</text>
-      <text x="17" y="24" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="8" font-weight="700" fill="${c}">${kva}kVA</text>
-      ${spin ? `<circle cx="28" cy="6" r="3" fill="${c}"/>` : ''}
-    </svg>`;
-  }
+function ativoGenericoSVG(emoji, estado) {
+  const c = estadoColor(estado);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
+    <rect x="2" y="2" width="22" height="22" rx="5" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="1.5"/>
+    <text x="13" y="17" text-anchor="middle" font-size="12" fill="${c}">${emoji}</text>
+  </svg>`;
+}
 
-  function trafoSVG(estado) {
-    const c = estadoColor(estado);
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
-      <rect x="2" y="2" width="26" height="26" rx="5" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="2"/>
-      <circle cx="10" cy="15" r="5" fill="none" stroke="${c}" stroke-width="1.5"/>
-      <circle cx="20" cy="15" r="5" fill="none" stroke="${c}" stroke-width="1.5"/>
-    </svg>`;
-  }
+function iconePorTipo(tipo, estado) {
+  if (tipo === 'GERADOR') return geradorSVG(estado);
+  if (tipo === 'QGBT')    return quadroSVG(estado);
+  return ativoGenericoSVG(TIPOS_ELETRICOS[tipo]?.emoji || '⚙', estado);
+}
 
-  function quadroSVG(tipo, estado) {
-    const c = estadoColor(estado);
-    const isGeral = tipo === 'geral';
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${isGeral ? 28 : 22}" height="${isGeral ? 28 : 22}" viewBox="0 0 28 28">
-      <rect x="2" y="2" width="24" height="24" rx="3" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="${isGeral ? 2 : 1.5}"/>
-      <rect x="6" y="7"  width="6" height="3" rx="1" fill="${c}" opacity=".7"/>
-      <rect x="6" y="12" width="6" height="3" rx="1" fill="${c}" opacity=".5"/>
-      <rect x="16" y="7"  width="6" height="3" rx="1" fill="${c}" opacity=".7"/>
-      <rect x="16" y="12" width="6" height="3" rx="1" fill="${c}" opacity=".5"/>
-      <rect x="6" y="17" width="16" height="2" rx="1" fill="${c}" opacity=".3"/>
-    </svg>`;
-  }
+function makeIcon(svg, size, anchor) {
+  return L.divIcon({ html: svg, className: '', iconSize: size, iconAnchor: anchor, popupAnchor: [0, -anchor[1]] });
+}
 
-  function makeIcon(svg, size, anchor) {
-    return L.divIcon({ html: svg, className: '', iconSize: size, iconAnchor: anchor, popupAnchor: [0, -anchor[1]] });
-  }
+/* ── Renderiza os ativos de um tipo, já posicionados (mapa-dados.js
+   resolveu lat/lon e a origem da posição). ── */
+function renderAtivosEletricos(group, ativos, tipo) {
+  const info = TIPOS_ELETRICOS[tipo];
+  ativos.forEach(a => {
+    const estadoExibicao = estadoParaExibicao(a.status);
+    const icon = makeIcon(iconePorTipo(tipo, estadoExibicao), tipo === 'GERADOR' ? [34, 34] : [26, 26], tipo === 'GERADOR' ? [17, 17] : [13, 13]);
+    const marker = L.marker([a.lat, a.lon], { icon });
 
-  /* ── Definições de layers ── */
-  const layerDefs = {
+    const rows = [
+      ['Estado',  a.status,                                        estadoClass(estadoExibicao)],
+      ['Uso',     (a.uso_atual || 0) + ' ' + (a.unidade_uso || 'h')],
+      ['Posição', a.origemPosicao === 'propria' ? 'Própria' : 'Herdada do local', 'info'],
+    ];
 
-    ramais: {
-      label: 'Ramais',
-      color: '#fbbf24',
+    // O link nunca é concatenado — sai só de linkDoModulo, que valida
+    // módulo por lista fechada e identificador por forma (T-10-22). Se a
+    // função devolver nulo, a linha simplesmente não aparece.
+    const link = linkDoModulo('eletrica', a.id);
+    if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info']);
+
+    marker.bindPopup(
+      xMap.utils.popupHTML(info.emoji, a.nome, info.nome, rows),
+      { maxWidth: 220 }
+    );
+    group.addLayer(marker);
+  });
+}
+
+/* ── Registro: busca uma vez, agrupa por tipo real, e só então registra
+   no componente xMap — um layer por tipo de elet_ativos. ── */
+export async function registrarCamadasEletrica() {
+  const [ativosBrutos, locais] = await Promise.all([
+    carregarAtivosEletricos(),
+    carregarLocaisComPosicao(),
+  ]);
+  const posicionados = posicionarAtivos(ativosBrutos, locais, 'eletrica');
+
+  const layerDefs = {};
+  for (const [tipo, info] of Object.entries(TIPOS_ELETRICOS)) {
+    const doTipo = posicionados.filter(a => a.tipo === tipo);
+    layerDefs[tipo.toLowerCase()] = {
+      label: info.nome,
+      color: '#c9a84c',
       render(group) {
-        RAMAIS.forEach(r => {
-          const style = ramaisStyle(r.tipo);
-          const line = L.polyline(r.coords, style);
-          line.bindPopup(xMap.utils.popupHTML(
-            '⚡', r.nome, r.tipo === 'alta_tensao' ? 'Alta Tensão' : 'Baixa Tensão',
-            [
-              ['Tensão', r.tensao, r.tipo === 'alta_tensao' ? 'warn' : 'info'],
-            ]
-          ), { maxWidth: 200 });
-          group.addLayer(line);
-        });
+        renderAtivosEletricos(group, doTipo, tipo);
       },
-    },
-
-    geradores: {
-      label: 'Geradores',
-      color: '#22c55e',
-      render(group) {
-        GERADORES.forEach(g => {
-          const icon = makeIcon(geradorSVG(g.estado, g.kva), [34, 34], [17, 17]);
-          const marker = L.marker([g.lat, g.lon], { icon });
-          marker.bindPopup(xMap.utils.popupHTML(
-            '⚡', g.nome, 'Gerador',
-            [
-              ['Estado',      g.estado,          estadoClass(g.estado)],
-              ['Potência',    g.kva + ' kVA'],
-              ['Combustível', g.combustivel + '%', g.combustivel < 20 ? 'warn' : 'ok'],
-              ['Horas',       g.horasUso + ' h'],
-            ]
-          ), { maxWidth: 220 });
-          group.addLayer(marker);
-        });
-      },
-    },
-
-    transformadores: {
-      label: 'Transformadores',
-      color: '#fbbf24',
-      render(group) {
-        TRANSFORMADORES.forEach(t => {
-          const icon = makeIcon(trafoSVG(t.estado), [30, 30], [15, 15]);
-          const marker = L.marker([t.lat, t.lon], { icon });
-          marker.bindPopup(xMap.utils.popupHTML(
-            '🔌', t.nome, 'Transformador',
-            [
-              ['Estado',  t.estado,       estadoClass(t.estado)],
-              ['Tensão',  t.tensao],
-              ['Carga',   t.carga_pct + '%', cargaClass(t.carga_pct)],
-              ['Cap.',    t.kva + ' kVA'],
-            ]
-          ), { maxWidth: 220 });
-          group.addLayer(marker);
-        });
-      },
-    },
-
-    quadros: {
-      label: 'Quadros',
-      color: '#f97316',
-      render(group) {
-        QUADROS.forEach(q => {
-          const sz = q.tipo === 'geral' ? 28 : 22;
-          const icon = makeIcon(quadroSVG(q.tipo, q.estado), [sz, sz], [sz/2, sz/2]);
-          const marker = L.marker([q.lat, q.lon], { icon });
-          marker.bindPopup(xMap.utils.popupHTML(
-            '🗄', q.nome, q.tipo === 'geral' ? 'Quadro Geral' : 'Quadro Distribuição',
-            [
-              ['Estado',    q.estado,          estadoClass(q.estado)],
-              ['Circuitos', q.circuitos + ' circ.'],
-            ]
-          ), { maxWidth: 200 });
-          group.addLayer(marker);
-        });
-      },
-    },
-
-  };
-
-  function tryRegister() {
-    if (typeof xMap !== 'undefined' && xMap.registerLayer) {
-      xMap.registerLayer('eletrica', layerDefs);
-    } else {
-      setTimeout(tryRegister, 50);
-    }
+    };
   }
-  tryRegister();
 
-})();
+  xMap.registerLayer('eletrica', layerDefs);
+}

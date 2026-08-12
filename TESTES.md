@@ -257,6 +257,12 @@ Ao terminar: `docker rm -f pmoc-teste`.
 
 ## Módulo Mapa (/mapa) — implementação 10/08/2026
 
+> Esta seção descreve o **estado de demonstração** do módulo, anterior à Fase 10 (dados fixos
+> embutidos em `mapa/xmap-layers-*.js`, sem escrita, sem posição real). A seção
+> "Fase 10 — Mapa operacional — auditoria de fechamento", mais abaixo, descreve o módulo como
+> ele ficou depois da fase — leitura do Supabase, editor de zona, posicionamento de ativo e base
+> offline — e é o roteiro a seguir a partir de agora.
+
 ### Preparação
 
 - [ ] Servir o repositório por HTTP a partir da raiz (`python -m http.server`) —
@@ -585,3 +591,250 @@ pós-Fase 5, 05-07; os 19 testes novos vêm de `tests/shell.test.js` (+1, botão
 06-02), `tests/tema.test.js` (8 casos novos, núcleo puro de `shared/tema.js`, plano 06-02),
 `tests/tema-superficies.test.js` (9 casos no plano 06-03 + 1 caso novo desta auditoria, D-05
 calibração, 10 no total)).
+
+## Fase 10 — Mapa operacional — auditoria de fechamento — 12/08/2026
+
+A Fase 10 tira o `/mapa` do estado de demonstração descrito na seção acima e o transforma no
+mapa operacional real: `mapa/mapa-dados.js` é a única porta de leitura e escrita do Supabase
+dentro de `mapa/`; `mapa/mapa-geometria.js` é o núcleo puro (área geodésica, compatibilidade de
+máquina, envelope de coordenada, resolução de posição em duas camadas); `mapa/mapa-editor.js`
+acrescenta dois modos — desenhar zona de serviço (`admin`/`gestor`) e posicionar/reposicionar
+ativo (`admin`/`gestor`/`tecnico`) — sobre a mesma instância de mapa; e o mapa base desenha a
+área do CMASM com a rede desligada, por uma planta vetorial estática (`mapa/planta-cmasm.geojson`)
+mais um mecanismo de tile local com queda para o provedor online.
+
+Esta fase tem duas coisas que as Fases 5 e 6 não tinham, e que viram item nomeado do roteiro em
+vez de caixa de verificação que ninguém consegue marcar: uma migração que **o usuário precisa
+rodar** antes de qualquer conferência (`supabase/25_mapa_geometria_posicao.sql`), e um requisito
+(PLAT-19) cuja prova sem rede só existe em servidor local — nunca contra a URL de produção.
+
+### Preparação (nesta ordem)
+
+1. **Executar `supabase/25_mapa_geometria_posicao.sql` no SQL Editor do projeto `pmoc`
+   (`thoaqipyhfmromsgzmjs`).** É o primeiro passo e é **bloqueante**: sem ele não existem as
+   colunas `geom`/`flora`/`inclinacao`/`limpeza` em `maq_areas` nem `lat`/`lon` nas seis tabelas
+   de posição, e nada do resto deste roteiro funciona. Conferir com as duas consultas do rodapé
+   do próprio arquivo:
+   - `select column_name from information_schema.columns where table_name = 'maq_areas' and column_name in ('geom','flora','inclinacao','limpeza');`
+     — esperado 4 linhas.
+   - `select count(*) from maq_ativos where lat is not null;` (repetir para `transp_ativos`,
+     `elet_ativos`, `fono_ativos`, `equipamentos`, `cmasm_locais`) — esperado **0** logo depois
+     da migração, antes de qualquer ativo ser posicionado pela tela.
+2. Subir o servidor local a partir da raiz do repositório — `python -m http.server`, o comando
+   que o próprio `CLAUDE.md` documenta — e abrir `/mapa`.
+3. **Aviso destacado: logo depois da migração, nenhum ativo tem coordenada.** O mapa abre sem
+   nenhum marcador de máquina ou ativo elétrico — as zonas de `maq_areas` também começam sem
+   `geom`. Isto é o **estado inicial correto**, não defeito. A primeira tarefa da conferência é
+   posicionar alguns ativos pela lista de não localizados (painel `#nao-localizados` na barra
+   lateral) — sem este aviso, quem abrir o mapa pela primeira vez conclui, errado, que a fase não
+   funcionou.
+
+### Roteiro pelos dez critérios de sucesso da fase (na ordem do `ROADMAP.md`)
+
+**Critério 1 — ativos posicionados sobre a planta do CMASM.** Depois de posicionar ao menos um
+ativo de `maquinas` e um de `eletrica` (Critério 8 abaixo), confirmar que o marcador aparece
+sobre a planta/tiles do mapa, na coordenada gravada. **Pendente de sessão real** — depende de
+navegador autenticado e de dado posicionado, nenhum dos dois disponível neste ambiente.
+
+**Critério 2 — filtro por módulo de origem.** Ativar e desativar cada camada da barra lateral
+(Aguada, Grama/Máquinas, Elétrica) e confirmar que só os marcadores do módulo ligado aparecem.
+**Pendente de sessão real.**
+
+**Critério 3 — link para o módulo de origem.** Clicar num ativo do mapa, seguir o link do balão
+e confirmar que o módulo de destino (`/maquinas`, `/eletrica` ou `/fonoclama`) abre já com a
+ficha daquele ativo — repetir num segundo módulo. A metade de destino (`?ativo=<id>` lido e
+`abrirModalAtivo` chamado) está provada por gate estático desde o plano 10-03
+(`tests/mapa-deep-link.test.js`) e a metade de origem (`linkDoModulo`, nunca concatenada à mão)
+desde o plano 10-05 (`tests/mapa-camadas.test.js`); o percurso de ponta a ponta pela tela —
+clicar de fato e ver a ficha abrir — é **pendente de sessão real**.
+
+**Critério 4 — ativo sem posição some ou aparece numa lista de não localizados, de forma
+explícita.** Conferir os dois lados, porque uma lista que some não distingue "está tudo certo"
+de "quebrou": (a) com ativos ainda sem coordenada, o painel de não localizados mostra a contagem
+agrupada por módulo de origem; (b) depois de posicionar todos os ativos de um módulo, a seção
+daquele módulo no painel mostra a frase de estado vazio, em vez de simplesmente desaparecer. O
+agrupamento e o estado vazio estão implementados em `mapa/app.js#renderNaoLocalizados`, cobertos
+por `tests/mapa-posicionamento.test.js`; o **aparecer de fato na tela** é pendente de sessão
+real — e, logo depois da migração 25, o número esperado é "todos os ativos carregados", que é o
+próprio estado que este painel existe para tornar visível, não um bug.
+
+**Critério 5 e 10 — observador não escreve, nem pela interface nem pelo banco.** Entrar como
+Livre (acesso observador, sem senha):
+
+1. Confirmar que **não aparecem** botão de "Editar zonas" nem ação de "Posicionar"/"Mover
+   ativos" na barra lateral nem no painel de não localizados.
+2. Confirmar que as camadas (Aguada, Grama/Máquinas, Elétrica) continuam desenhando
+   normalmente — o acesso Livre é leitura, não ausência de mapa.
+3. Com o **console do navegador** aberto, tentar uma gravação direta contra o Supabase — por
+   exemplo `supa.from('maq_areas').insert({...})` e `supa.from('maq_ativos').update({lat:-22.8,lon:-43.1}).eq('id', 1)`
+   — e confirmar que o banco recusa (`401`/`42501`, RLS).
+
+**Esta segunda parte é a que prova o critério** (10): esconder o botão é interface, a
+recusa do banco é a garantia real. O acesso Livre nunca autentica no Supabase — opera como papel
+anônimo — e é por isso que as políticas escopadas a `authenticated` já o excluem antes mesmo de
+qualquer lista de cargo do lado do cliente ser consultada. **Pendente de sessão real** (a
+recusa do banco em si já está provada estruturalmente pela migração 25 e por
+`tests/mapa-schema.test.js`, mas o clique real e a tentativa via console não).
+
+**Critério 6 — camadas leem do Supabase, sem dado de demonstração.** `mapa/xmap-layers-grama.js`
+e `mapa/xmap-layers-eletrica.js` não têm mais `MOCK_AREAS`/`MOCK_MAQUINAS`/`GERADORES`/
+`TRANSFORMADORES`/`QUADROS`/`RAMAIS` — confirmado por gate estático
+(`tests/mapa-camadas.test.js`) e por leitura de código (plano 10-05). A camada `aguada`
+**continua** com dado fixo — isto é D-01 (ver "Limitações conhecidas" abaixo), não um item deste
+critério a corrigir.
+
+**Critério 7 — zona de serviço: polígono, atributos, área calculada, máquinas compatíveis.**
+Como `admin` ou `gestor`, ligar "Editar zonas", desenhar um polígono de tamanho conhecido — um
+quarteirão, um campo — e conferir que a área calculada (`m²`) é da ordem esperada; escolher os
+três atributos de terreno (flora, inclinação, limpeza) e ver a lista de máquinas compatíveis
+mudar a cada escolha; salvar, recarregar a página e confirmar que a zona volta igual (mesma
+geometria, mesmos atributos, mesma área). Se houver máquina de categoria que a regra não
+classifica (`minitrator`/`trator` — ver "Limitações conhecidas"), a tela mostra quantas e quais
+em vez de escondê-las, e isto é o comportamento correto, não uma lacuna. **Pendente de sessão
+real** — `mapa/mapa-editor.js` e `mapa/mapa-dados.js#salvarZona/atualizarZona` estão provados por
+gate estrutural (`tests/mapa-editor.test.js`), nunca exercitados contra o Supabase real.
+
+**Critério 8 — acrescentar e reposicionar ativo pelo mapa.** Como `admin`/`gestor`/`tecnico`,
+clicar em "Posicionar" num item da lista de não localizados, clicar no mapa e confirmar que o
+ativo sai da lista e passa a aparecer (depois de recarregar a página — ver "Limitações
+conhecidas" abaixo sobre a camada de exibição não atualizar na hora); ligar "Mover ativos" e
+arrastar um marcador existente para uma posição nova, soltar e confirmar que a posição persiste
+recarregando a página. Arrastar um ativo para **fora** do envelope geográfico do CMASM deve ser
+recusado com o marcador voltando à posição anterior (ver "Bordas a exercitar"). **Pendente de
+sessão real** — `salvarPosicaoAtivo` está provada por gate estrutural
+(`tests/mapa-posicionamento.test.js`), nunca exercitada contra o Supabase real.
+
+**Critério 9 — mapa base abre e desenha com a rede desligada.** Passo a passo próprio:
+
+1. Servidor local rodando (`python -m http.server` a partir da raiz).
+2. Abrir `/mapa`, deixar a planta/tiles carregarem uma vez.
+3. **Desligar a rede** (modo avião, ou desconectar Wi-Fi/cabo).
+4. Recarregar a página e confirmar que a área do CMASM desenha — a planta vetorial
+   (`mapa/planta-cmasm.geojson`, 117 feições, 171 KB) desenha sempre, mesmo sem nenhum tile
+   raster local; se `mapa/tiles/` tiver sido populado pelo procedimento do usuário
+   (`mapa/tiles/GERAR-TILES.md`), os tiles raster também desenham.
+5. Alternar para o basemap **Satélite** com a rede desligada: a tela fica vazia. **Isto é a
+   decisão D-02 funcionando**, não uma falha — o satélite permanece apenas online por decisão do
+   usuário, sem cache local.
+
+**Contra a URL de produção (`https://pmoc-orcin.vercel.app`) esse teste é impossível**, e a
+frase merece destaque: o projeto **não tem service worker** (nenhum
+`serviceWorker.register` em nenhum arquivo do repositório), então sem rede o navegador **nunca
+chega a buscar a própria página** — não há nada para desligar "depois" de carregar, porque não
+há como carregar sem rede em primeiro lugar. Quem tentar contra a URL de produção com o Wi-Fi
+desligado e concluir "não funciona" estará testando outra coisa (a ausência de service worker,
+não a base offline). A prova real é sempre servidor local + rede desligada, passos 1-4 acima.
+Para quem quiser o degrau adicional de fidelidade cartográfica (tiles raster de rua, não só a
+planta vetorial), o procedimento — que não é passo de deploy nem bloqueio desta fase — está em
+`mapa/tiles/GERAR-TILES.md`, sem repeti-lo aqui.
+
+### Bordas a exercitar
+
+Bordas que quebram em produção e não aparecem em teste automatizado — mesmo espírito da seção
+equivalente da Fase 6:
+
+1. [ ] Como `tecnico`, arrastar um ativo posicionado para **fora** do envelope geográfico do
+       CMASM (por exemplo, soltar o marcador em outro estado): o sistema recusa a gravação com
+       mensagem, e o marcador volta à posição anterior — nunca fica visualmente "salvo" num lugar
+       que o banco recusaria.
+2. [ ] Como `admin`/`gestor`, desenhar um polígono de **dois vértices** (linha, não área
+       fechada) na ferramenta de zona: confirmar que a área não é gravada como valor absurdo
+       (zero, negativo ou `NaN`) — a ferramenta de desenho do `leaflet-draw` deveria impedir o
+       polígono de fechar com menos de três vértices antes mesmo da gravação.
+3. [ ] Tentar salvar uma zona **sem** os três atributos de terreno preenchidos e conferir o que
+       a tela diz — a validação client-side (`validarAtributosZona`, antes de qualquer viagem de
+       rede) e o `check` da migração 25 (barreira real) devem concordar.
+4. [ ] Recarregar `/maquinas` com o parâmetro de ativo apontando para um identificador
+       **inexistente** (`?ativo=999999`) e confirmar que o módulo abre normal, sem travar nem
+       abrir formulário de cadastro vazio.
+
+### Limitações conhecidas
+
+Cada uma com o motivo — para não ser confundida com defeito:
+
+- **A camada `aguada` continua com dado fixo (D-01).** Ela não tem tabela no pmoc: é sistema
+  externo autônomo (FastAPI + SQLite próprios, alimentado por MQTT), fora do escopo desta fase
+  e adiado para a Phase 11. O selo "demo" nos botões de módulo do mapa fica só nela — se aparecer
+  em Grama ou Elétrica, **isso sim** é regressão a reportar.
+- **O mapa Leaflet (barra lateral de camadas, legendas, balões) continua escuro nos dois
+  temas** — herdado de D-01 da Fase 6: `mapa/xmap.css` tem tokens próprios (`--xm-*`) fora do
+  escopo do tema da plataforma.
+- **O satélite não funciona sem rede (D-02).** Decisão do usuário, não bug — ver Critério 9.
+- **Estimativa de tempo e custo por zona não existe (D-04).** Fora do escopo desta fase; quando
+  vier, deriva de execução real (`maq_operacoes.horas_utilizadas`/`area_executada_m2`), não de
+  constante arbitrária.
+- **A coordenada dos prédios em `cmasm_locais` continua vazia.** A posição herdada (segunda
+  camada de `resolverPosicao`) só passa a valer depois de alguém preencher `lat`/`lon` nos
+  registros de `cmasm_locais` — pendência de dado, não de código. Posicionar ativo por ativo pela
+  lista de não localizados já resolve o caso de uso sem depender disso.
+- **Dentro de uma mesma sessão, a camada de exibição (Grama/Elétrica) só reflete uma posição
+  recém-gravada depois de recarregar a página** (deviation registrada em `10-07-SUMMARY.md`):
+  `xMap.registerLayer` (fora dos arquivos editáveis por decisão travada) cria um grupo novo sem
+  remover o anterior — recarregar de novo depois de cada posicionamento duplicaria marcadores. A
+  lista de não localizados e a camada arrastável do próprio editor atualizam na hora; a camada
+  persistente, só no próximo carregamento.
+- **`minitrator` e `trator` não são mapeados para o vocabulário de compatibilidade de máquina.**
+  Decisão tomada no planejamento da fase: a coluna `categoria` não distingue cortador montado de
+  trator agrícola, e forçar o mapeamento acertaria dois casos e erraria um em silêncio. Eles
+  aparecem numa lista "não classificados" visível, não escondidos.
+- **Zonas de serviço ficam em `maq_areas`, fora da árvore `cmasm_locais` (D-03).** Decisão
+  travada da fase: zonas são auxiliares e temporárias, não locais permanentes — uma fase futura
+  não deveria movê-las para a árvore de locais achando que é organização melhor.
+
+### Conferência isolada de não regressão da refrigeração (PLAT-15)
+
+Este passo é isolado de propósito, e não pode ser substituído por presunção — mesmo formato das
+Fases 5 e 6:
+
+- [x] Verificação estática por histórico: `git diff --name-only 511bb9e..HEAD -- refrigeracao/`
+      retorna lista vazia — nenhum commit da Fase 10 tocou o diretório (`511bb9e` é o baseline
+      da fase).
+- [x] Verificação estática por busca negativa: `refrigeracao/index.html` não referencia nenhum
+      arquivo novo do mapa nem infraestrutura compartilhada —
+      `for p in "shared/" "pmoc.css" "pmoc-tema" "data-theme" "mapa-dados" "mapa-geometria"; do grep -c "$p" refrigeracao/index.html; done`
+      dá **0** para os seis termos.
+- [x] `mapa/xmap.css` intocado desde `511bb9e` (D-01 da Fase 6, herdada) —
+      `git diff --name-only 511bb9e..HEAD -- mapa/xmap.css` retorna lista vazia.
+- [ ] Verificação humana com o inspetor de rede aberto: abrir `/refrigeracao` **depois de toda a
+      fase concluída**, confirmar que nenhuma requisição de rede aponta para `shared/`, `mapa/`
+      ou qualquer arquivo compartilhado, e que o console termina sem erro. **Pendência herdada
+      das Fases 5 e 6** — mesmo motivo (ambiente autônomo, sem credenciais nem navegador
+      controlável).
+- [ ] Percorrer o fluxo principal (login, inventário, uma ordem de contratação) e confirmar que
+      está igual ao que era antes da fase. **Mesma pendência herdada.**
+
+### O que este ambiente autônomo não pode provar
+
+Registrado sem eufemismo, para não desaparecer como se tivesse sido verificado:
+
+- **Nenhuma conferência visual pós-login foi feita** — o ambiente autônomo não tem credenciais
+  do Supabase nem navegador controlável. Toda evidência deste plano é estática, por comando —
+  mesmo limite que fechou as Fases 5 e 6.
+- **Nenhuma confirmação de que a migração 25 entrou** no banco de produção real — toda afirmação
+  sobre o banco neste plano é sobre o **arquivo** `supabase/25_mapa_geometria_posicao.sql`, não
+  sobre o estado real do Supabase.
+- **Nenhum teste com a rede desligada** foi executado de fato — o comportamento de queda
+  tile-local→online e o desenho da planta sem rede estão provados por gate estrutural
+  (`tests/mapa-base-offline.test.js`), não por navegador real com Wi-Fi desligado.
+- **Nenhum tile raster foi gerado** — `mapa/tiles/` contém só `.gitkeep`; o procedimento
+  (`mapa/tiles/GERAR-TILES.md`) é passo do usuário, não executado neste ambiente.
+- **Nenhuma gravação real** em `maq_areas.geom`/`flora`/`inclinacao`/`limpeza` nem em
+  `maq_ativos.lat`/`lon`/`elet_ativos.lat`/`lon` foi exercitada contra o Supabase real —
+  `salvarZona`/`atualizarZona`/`salvarPosicaoAtivo` estão corretas estruturalmente (gate
+  automatizado + leitura de código), nunca testadas ponta a ponta.
+
+### Testes automatizados
+
+```bash
+node --test
+```
+
+Resultado esperado: **135 testes aprovados, 0 falhas** (eram 58 no início da fase — baseline
+`511bb9e`; os 77 testes novos vêm de sete arquivos: `tests/mapa-schema.test.js` (9 casos, plano
+10-01, gate estático da migração 25), `tests/mapa-geometria.test.js` (23 casos, plano 10-02,
+núcleo puro) e `tests/mapa-decisoes.test.js` (4 casos, plano 10-02, D-01/D-04 em gate),
+`tests/mapa-deep-link.test.js` (7 casos, plano 10-03, metade de destino do link), `tests/mapa-
+base-offline.test.js` (10 casos, plano 10-04, PLAT-19/D-02), `tests/mapa-camadas.test.js` (8
+casos, plano 10-05, porta única de dados), `tests/mapa-editor.test.js` (8 casos, plano 10-06,
+cargo de zona) e `tests/mapa-posicionamento.test.js` (8 casos, plano 10-07, cargo de posição e
+envelope) — 9+23+4+7+10+8+8+8 = 77).

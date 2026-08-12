@@ -60,6 +60,8 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 
 ## Database Schema
 
+- `maq_areas.geom`/`flora`/`inclinacao`/`limpeza` (Phase 10, migration 25) — service-zone geometry (`jsonb`) and three closed-list terrain attributes, additive columns on the existing table
+- `lat`/`lon` on `cmasm_locais` + five asset tables (`maq_ativos`, `transp_ativos`, `elet_ativos`, `fono_ativos`, `equipamentos`) — Phase 10, migration 25, two-layer position (inherited from location, overridable per asset), each pair guarded by a geographic-envelope check and a complete-pair check
 - `maq_ativos` — Equipment inventory
 - `maq_planos` — Maintenance plans by equipment type
 - `maq_materiais` — Spare parts and consumables
@@ -208,6 +210,10 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 - `shared/tema.js` (`143` lines): Reusable light/dark theme module (pure core + DOM appliers)
 - `maquinas/app.js` (`~900` lines): Single monolithic app with all logic and rendering
 - `refrigeracao/index.html` (`~1400` lines): Single HTML file with embedded CSS and JavaScript
+- `mapa/mapa-dados.js` (Phase 10): single Supabase read/write door for the whole `mapa/` module — every query in the module goes through here, enforced by a permanent gate
+- `mapa/mapa-geometria.js` (Phase 10): pure core of the map module — geodesic area, machine-compatibility rule, terrain vocabulary normalizers, geographic envelope, two-layer position resolution, module deep-link builder — no browser API, testable in Node
+- `mapa/mapa-editor.js` (Phase 10): two edit modes layered on the existing map instance (draw service zone; position/reposition asset), each scoped by its own role list mirroring the write policy of the table it touches
+- `mapa/planta-cmasm.geojson` (Phase 10): static vector floor plan of the CMASM area (117 features, 171 KB), converted once from a local `.osm` extract by `mapa/gerar-planta.mjs`, draws the base map with the network off
 
 <!-- GSD:conventions-end -->
 
