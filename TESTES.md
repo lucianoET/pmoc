@@ -517,18 +517,62 @@ supor que "está tudo igual" sem checar.
 - [ ] Percorrer o fluxo principal (login, inventário, uma ordem de contratação) e confirmar que
       está igual ao que era antes da fase. **Mesma pendência herdada.**
 
+### Verificação em produção — 12/08/2026, após o merge do PR #6
+
+Feita em navegador real contra `https://pmoc-orcin.vercel.app`, depois que a Fase 6 inteira
+já estava em `main`. Fecha parte do que a auditoria 06-04 tinha deixado como pendência de UAT,
+por medição, não por leitura de código. O que **não** foi coberto continua listado na seção
+seguinte.
+
+**Critério 4 — preferência do sistema na primeira visita.** Portal com `localStorage` sem a
+chave `pmoc-tema`, navegador em `prefers-color-scheme: light` → `data-theme="claro"` já na
+carga. A detecção salvo → sistema → padrão funciona no navegador, não só no teste de unidade.
+
+**Critérios 1 e 3 — alternância e persistência entre módulos.** Clique real em `#btn-tema` no
+portal: `claro → escuro`, gravado em `localStorage['pmoc-tema']`. Navegação em seguida para
+`/maquinas`: herdou `escuro` e trouxe o botão. Persistência entre superfícies confirmada com
+sessão de navegador real.
+
+**Critério 5 — contraste medido, não calculado.** Medido sobre a renderização real em
+`/maquinas`, compondo o alfa de 8% do fundo dos callouts sobre o fundo da página (o valor de
+`background-color` deles é `color(srgb … / 0.08)`, então medir o texto contra o fundo declarado
+dá número errado):
+
+| Elemento | Tema claro | Tema escuro | Mínimo AA |
+|---|---|---|---|
+| Texto do corpo | 14,05:1 | 13,71:1 | 4,5:1 |
+| `co-warn` (aviso) | **4,81:1** | 6,68:1 | 4,5:1 |
+| `co-ok` (conforme) | 5,08:1 | **4,90:1** | 4,5:1 |
+
+Todos passam. A margem mais estreita é `co-warn` no tema claro, **0,31 acima do limite** — vale
+tratar esse par de cores como intocável sem nova medição. `co-red` e `co-blue` existem em
+`shared/pmoc.css` mas não estavam renderizados em `/maquinas`; medir quando aparecerem numa
+página com esses estados.
+
+**D-05 reproduzida.** Com `localStorage['pmoc-tema'] = 'claro'`, `/calibracao` recarregada
+continuou escura: `data-theme="dark"` (vocabulário próprio, não `escuro`), fundo
+`rgb(7, 17, 31)` contra `rgb(26, 26, 24)` da plataforma, sem `#btn-tema`, e
+`localStorage['cmasm_erp_theme'] = 'dark'` convivendo com `pmoc-tema = 'claro'` na mesma origem
+sem que uma chave saiba da outra. A exclusão registrada em D-05 é o comportamento real em
+produção, não uma previsão.
+
 ### O que este ambiente autônomo não pode provar
 
 Registrado por escrito, para não desaparecer como se tivesse sido verificado:
 
-- **Toda a conferência visual pós-login** (os cinco itens marcados `[ ]` acima, mais a conferência
-  humana de rede da refrigeração) depende de navegador real e, em alguns módulos, de sessão
-  Supabase autenticada — este executor não tem credenciais nem navegador controlável.
-- **O contraste WCAG AA** registrado nos planos 06-01/06-02 foi **calculado** pela fórmula de
-  luminância relativa da WCAG 2.1 sobre os valores de cor fechados no planejamento, não **medido**
-  por ferramenta de inspeção em tempo real. A conferência com o color picker do Chrome DevTools ou
-  o WebAIM Contrast Checker, sobre a renderização real dos dois temas, permanece no roteiro manual
-  acima (critério 5) — não foi refeita nesta auditoria.
+- **A conferência visual pós-login** de cada módulo depende de sessão Supabase autenticada —
+  a verificação de 12/08 acima cobriu portal, `/maquinas` e `/calibracao` sem autenticar, então
+  telas atrás do login continuam por conferir.
+- **A ausência de piscada (anti-FOUC)** não foi medida. Que o atributo já esteja correto na
+  carga é condição necessária, não prova de que não houve repintura — isso exige gravação de
+  quadros ou inspeção de pintura, não uma leitura de estado.
+- **A barra do navegador em dispositivo móvel** acompanhando o tema (meta `theme-color`).
+- **A conferência humana de rede da refrigeração** (PLAT-15): abrir `/refrigeracao` com o
+  inspetor e confirmar que nenhum arquivo compartilhado é carregado. **Pendência herdada da
+  Fase 5.**
+- **Os quatro módulos restantes** (`transportes`, `eletrica`, `fonoclama`, `predial`) e o
+  `/mapa` não foram abertos na verificação de 12/08 — o roteiro por superfície acima segue
+  valendo para eles.
 
 ### Testes automatizados
 
