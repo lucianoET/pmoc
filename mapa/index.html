@@ -26,8 +26,21 @@ html,body{height:100%}
 #app{height:100vh;flex-direction:column}
 .topbar{flex-shrink:0;position:static}
 .shell-footer{margin-top:0}
-.body-layout{display:flex;flex:1;min-height:0}
-.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);padding:16px 12px;overflow-y:auto}
+.body-layout{display:flex;flex:1;min-height:0;position:relative}
+/* A barra de módulos é retrátil e passa POR CIMA do mapa, em vez de disputar
+   largura com ele: em tela estreita ela consumia metade do espaço e o mapa
+   virava uma tira. Fica fora do fluxo (position:absolute), então .map-area
+   ocupa a largura inteira sempre. Zoom do Leaflet está em bottomright e o
+   painel do editor ancora à direita, então a entrada pela esquerda não colide. */
+.sidebar{position:absolute;left:0;top:0;bottom:0;z-index:820;width:min(220px,80vw);background:var(--surface);border-right:1px solid var(--border);padding:16px 12px;overflow-y:auto;transform:translateX(-100%);transition:transform .18s ease;visibility:hidden}
+.sidebar.aberta{transform:none;visibility:visible;box-shadow:4px 0 16px rgba(0,0,0,.28)}
+/* Acima dos controles do Leaflet (800) e abaixo do painel do editor (900). */
+#btn-modulos{position:absolute;left:10px;top:10px;z-index:810;display:flex;align-items:center;gap:7px;padding:7px 11px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:12px;font-weight:600;font-family:var(--ff);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:.15s}
+#btn-modulos:hover{color:var(--text);border-color:var(--accent)}
+#btn-modulos[aria-expanded="true"]{color:var(--text);border-color:var(--accent)}
+/* Com a barra aberta o botão ficaria embaixo dela, deixando o usuário sem como
+   fechá-la pelo mesmo controle que a abriu. Desliza junto com a barra. */
+.body-layout:has(.sidebar.aberta) #btn-modulos{left:calc(min(220px,80vw) + 10px)}
 .sidebar-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:12px}
 .mod-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:10px 12px;margin-bottom:6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff);text-align:left;transition:.15s}
 .mod-btn:hover{color:var(--text)}
@@ -57,7 +70,7 @@ html,body{height:100%}
 
 <div id="app">
   <div class="body-layout">
-    <div class="sidebar">
+    <div class="sidebar" id="barra-modulos" aria-hidden="true">
       <div class="sidebar-title">Módulos</div>
       <button class="mod-btn" onclick="alternarModulo('aguada', this)">
         <span>Aguada — monitoramento hídrico</span>
@@ -71,6 +84,9 @@ html,body{height:100%}
       </button>
     </div>
     <div class="map-area">
+      <button id="btn-modulos" type="button" aria-expanded="false" aria-controls="barra-modulos">
+        <span aria-hidden="true">☰</span><span>Módulos</span>
+      </button>
       <div id="mapa"></div>
       <div id="editor-painel"></div>
     </div>

@@ -33,6 +33,10 @@ function mostrarApp() {
   document.getElementById('login-screen').style.display = 'none'
   document.getElementById('app').style.display = 'flex'
   atualizarCabecalhoUsuario()
+  // Antes de inicializarMapa() e fora do try dele de propósito: a barra de
+  // módulos não depende do mapa, e se o mapa falhar ao subir ela precisa
+  // continuar abrindo — senão a falha de um leva o outro junto.
+  ligarBarraModulos()
   inicializarMapa()
 }
 
@@ -96,6 +100,47 @@ function alternarModulo(mod, btn) {
     btn.classList.add('active')
   }
   xMap.setModules([...MODULOS_ATIVOS])
+}
+
+// ── barra de módulos retrátil ──
+// A barra passa por cima do mapa em vez de disputar largura com ele. Em tela
+// estreita ela consumia metade do espaço e o mapa virava uma tira.
+function _barraModulos() {
+  return document.getElementById('barra-modulos')
+}
+
+function _mostrarBarraModulos(abrir) {
+  const barra = _barraModulos()
+  const btn = document.getElementById('btn-modulos')
+  if (!barra || !btn) return
+  barra.classList.toggle('aberta', abrir)
+  barra.setAttribute('aria-hidden', abrir ? 'false' : 'true')
+  btn.setAttribute('aria-expanded', abrir ? 'true' : 'false')
+}
+
+function _barraEstaAberta() {
+  return _barraModulos()?.classList.contains('aberta') === true
+}
+
+function ligarBarraModulos() {
+  const barra = _barraModulos()
+  const btn = document.getElementById('btn-modulos')
+  if (!barra || !btn) return
+
+  btn.addEventListener('click', evento => {
+    evento.stopPropagation()
+    _mostrarBarraModulos(!_barraEstaAberta())
+  })
+
+  // Clique fora fecha; clique dentro da própria barra, não — senão marcar um
+  // módulo fecharia a barra antes de o usuário marcar o segundo.
+  barra.addEventListener('click', evento => evento.stopPropagation())
+  document.addEventListener('click', () => {
+    if (_barraEstaAberta()) _mostrarBarraModulos(false)
+  })
+  document.addEventListener('keydown', evento => {
+    if (evento.key === 'Escape' && _barraEstaAberta()) _mostrarBarraModulos(false)
+  })
 }
 
 // ── sessão ──
