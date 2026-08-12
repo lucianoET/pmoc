@@ -257,7 +257,7 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 - Location: `/shared/tema.js`, consumed by the 6 modules via `shared/shell.js` (`aplicarShell()` → `iniciarTema()`) and by the portal (`/index.html`) directly, since the portal doesn't load the shared shell
 - Contains: pure core (`normalizarTema`, `proximoTema`, no browser API — testable in Node) + DOM appliers (`detectarTema`, `temaAtual`, `aplicarTema`, `alternarTema`, `iniciarTema`)
 - Depends on: `localStorage` (key `pmoc-tema`), `matchMedia('(prefers-color-scheme: light)')`, `data-theme="claro"|"escuro"` attribute on the root element
-- Used by: All 7 surfaces (6 modules + portal); `refrigeracao` and `mapa/xmap.css` (Leaflet skin) stay outside, frozen/dark-only by decision
+- Used by: All 7 surfaces (6 modules + portal); `refrigeracao` (frozen, D-04) and `mapa/xmap.css` (Leaflet skin, dark-only, D-01) stay outside; `/calibracao` (D-05) is outside too and has its own competing convention — `localStorage['cmasm_erp_theme']` with `dark`/`light` values, unrelated to `pmoc-tema` — so do not assume it follows this mechanism
 - Purpose: Data access (read/write/delete)
 - Location: Supabase JavaScript SDK (instantiated with URL + anon key)
 - Contains: SQL queries via `.from()`, `.select()`, `.insert()`, `.update()`, `.delete()`

@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 ## Current Position
 
-Phase: 06 (tema-claro-escuro) — EXECUTING
+Phase: 06 (tema-claro-escuro) — VERIFYING
 Plan: 4 of 4
 Status: Phase complete — ready for verification
 Last activity: 2026-08-11 — Completed quick task 260811-9sb: Importar módulo Calibração como cópia independente
