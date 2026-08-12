@@ -166,6 +166,41 @@ Plans:
 - A política de uso do OSM proíbe download em massa de `tile.openstreetmap.org`. O extrato `.osm` local é dado ODbL e renderizar os próprios tiles a partir dele é o caminho limpo. Decidir isso no planejamento.
 - 12 MB de tile binário entram no histórico do git para sempre e o projeto é zero-build (não há passo de deploy onde gerar). Alternativa a avaliar: Supabase Storage.
 
+**Decisões tomadas no planejamento** (registradas aqui para a Phase 11 não redescobri-las):
+
+- **Tiles raster ficam como passo do usuário, não como bloqueio da fase.** A cadeia de renderização (Mapnik/osmium) não existe no ambiente autônomo e exige pacote de sistema, fora do zero-build. O caminho escolhido entrega os dois lados: uma **planta vetorial** convertida do próprio `.osm` por script do repositório, sem rede e sem ferramenta externa, que faz a área do CMASM desenhar offline hoje; e o **mecanismo de tile local com queda para o online**, que funciona com zero tiles no disco e passa a servir offline quando o usuário rodar o procedimento escrito em `mapa/tiles/GERAR-TILES.md`. Nenhum tile é baixado do serviço público, nem uma vez.
+- **Editor de zona aparece para `admin`/`gestor`; posicionamento de ativo para `admin`/`gestor`/`tecnico`.** As duas listas são diferentes de propósito: cada tela espelha a política de escrita da tabela que ela grava (`maq_areas` é restrita a admin/gestor desde a migração 12; as tabelas de ativo aceitam qualquer sessão autenticada). Travado por teste que compara tela e banco.
+- **`minitrator` e `trator` não são mapeados para o vocabulário de compatibilidade.** A coluna `categoria` não distingue cortador montado de trator agrícola; forçar o mapeamento acertaria dois dos três e erraria um em silêncio. Eles saem numa lista de "não classificados" visível na tela.
+- **PLAT-20 é lido como dar coordenada a ativo existente**, não como cadastrar ativo pelo mapa — cadastro tem regra de domínio própria em cada módulo.
+
+**Baseline da fase**: commit `511bb9e` (58 testes passando em `node --test`); os gates de não regressão comparam contra ele
+**UI hint**: yes
+**Plans**: 8 plans
+
+Plans:
+**Wave 1** *(três planos em paralelo, sem sobreposição de arquivos)*
+
+- [ ] 10-01-PLAN.md — Migração 25: geometria e atributos de terreno em `maq_areas`, `lat`/`lon` nas seis tabelas com trava de envelope e de par completo, mais gate estático de que a migração é aditiva e não afrouxa escrita (PLAT-13, PLAT-18, PLAT-20, PLAT-16)
+- [ ] 10-02-PLAN.md — Núcleo puro `mapa/mapa-geometria.js` com a fórmula de área portada e conferida numericamente, compatibilidade de máquinas com a normalização de vocabulário que faltava, e as decisões D-01 e D-04 viradas em teste (PLAT-18, PLAT-13, PLAT-16)
+- [ ] 10-03-PLAN.md — Lado de destino do link: `maquinas` e o motor compartilhado de `eletrica`/`fonoclama` abrem a ficha do ativo pelo parâmetro de URL (PLAT-14, PLAT-16)
+
+**Wave 2** *(blocked on Wave 1 — dois planos em paralelo)*
+
+- [ ] 10-04-PLAN.md — Base offline: planta vetorial da área do CMASM convertida do `.osm` local, tile local com queda para o online só no basemap de mapa (D-02 em gate) e procedimento de geração de tiles com a política de uso registrada (PLAT-19, PLAT-16)
+- [ ] 10-05-PLAN.md — Camadas passam a ler do Supabase por uma porta única de dados; grama e elétrica sem dado de demonstração, com posição herdada ou própria, link para o módulo de origem e coleta dos não localizados (PLAT-17, PLAT-13, PLAT-14, PLAT-16)
+
+**Wave 3** *(blocked on 10-05)*
+
+- [ ] 10-06-PLAN.md — Editor de zonas de serviço portado do legado para dentro do `/mapa`: desenho de polígono, atributos de terreno, área calculada e máquinas compatíveis, gravando em `maq_areas` (PLAT-18, PLAT-16)
+
+**Wave 4** *(blocked on 10-06)*
+
+- [ ] 10-07-PLAN.md — Acrescentar e reposicionar ativos pelo mapa, com painel de não localizados por módulo e gate de que arrastar um ativo não move o prédio (PLAT-20, PLAT-13, PLAT-16)
+
+**Wave 5** *(blocked on todos)*
+
+- [ ] 10-08-PLAN.md — Auditoria de fechamento: roteiro manual pelos dez critérios em `TESTES.md`, não regressão isolada da refrigeração, documentação e fechamento dos requisitos com evidência (PLAT-13, PLAT-14, PLAT-17, PLAT-18, PLAT-19, PLAT-20, PLAT-15, PLAT-16)
+
 ---
 
 ### Phase 11: Telemetria no mapa
