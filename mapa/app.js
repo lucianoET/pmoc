@@ -4,6 +4,7 @@ import { aplicarShell } from '../shared/shell.js'
 import { definirCliente } from './mapa-dados.js'
 import { registrarCamadasGrama } from './xmap-layers-grama.js'
 import { registrarCamadasEletrica } from './xmap-layers-eletrica.js'
+import { iniciarEditorZonas } from './mapa-editor.js'
 
 // ── estado global ──
 let supa = null
@@ -70,6 +71,11 @@ function inicializarMapa() {
 async function registrarCamadasDoBanco() {
   try {
     await Promise.all([registrarCamadasGrama(), registrarCamadasEletrica()])
+    // Editor de zona (plano 10-06) — depois de o mapa existir e as camadas
+    // estarem registradas, sobre a mesma instância que xMap já expõe
+    // (nenhuma segunda instância de mapa é criada). Sai sem efeito se o
+    // cargo da sessão não estiver na lista de escrita de maq_areas.
+    iniciarEditorZonas(xMap.getLeafletMap(), USUARIO)
   } catch (error) {
     mostrarErroMapa(error)
   }

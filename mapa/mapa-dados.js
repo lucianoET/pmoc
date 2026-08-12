@@ -23,7 +23,13 @@
 // nenhum, indistinguível de mapa quebrado (critério de sucesso 4).
 // ══════════════════════════════════════════════════════════════════
 
-import { resolverPosicao } from './mapa-geometria.js'
+import {
+  resolverPosicao,
+  calcAreaM2,
+  normalizarFlora,
+  normalizarInclinacao,
+  normalizarLimpeza,
+} from './mapa-geometria.js'
 
 // ── Bloco 1 — cliente ───────────────────────────────────────────────
 // Existe UM cliente Supabase por página — o que o boot de mapa/app.js cria
@@ -206,4 +212,95 @@ export function posicionarAtivos(ativos, locais, modulo) {
     }
   }
   return posicionados
+}
+
+// ── Bloco 5 — escrita de zona (plano 10-06) ─────────────────────────
+// salvarZona/atualizarZona são as duas únicas funções deste arquivo que
+// gravam em maq_areas — e em nenhuma outra tabela (D-03: zona não entra em
+// cmasm_locais). mapa/mapa-editor.js chama só estas duas; nenhuma operação
+// de escrita mora lá.
+//
+// O que NÃO é portado: o padrão de gravação do editor legado
+// (DEV_ERP/cmms-mapa/admin.html) fala com um backend Node próprio, com
+// requisição a serviço em porta local, captura de exceção e aviso
+// flutuante próprio (toast). Não existe backend aqui — o Supabase é o
+// backend do projeto inteiro — e o idioma de erro é um só (CLAUDE.md §
+// Conventions): desestruturar o erro, avisar com a mensagem, voltar.
+
+// Confere os três atributos de terreno pela mesma lista fechada que o
+// `check` da migração 25 grava no banco, antes de gastar uma viagem de
+// rede — a barreira real é a do banco, esta é só a recusa antecipada
+// (T-10-29), para o usuário ver o erro na hora em vez de um erro de
+// restrição do Postgres.
+function validarAtributosZona(zona) {
+  if (zona?.flora != null && normalizarFlora(zona.flora) == null) {
+    return `flora "${zona.flora}" fora da lista fechada`
+  }
+  if (zona?.inclinacao != null && normalizarInclinacao(zona.inclinacao) == null) {
+    return `inclinação "${zona.inclinacao}" fora da lista fechada`
+  }
+  if (zona?.limpeza != null && normalizarLimpeza(zona.limpeza) == null) {
+    return `limpeza "${zona.limpeza}" fora da lista fechada`
+  }
+  return null
+}
+
+// A área em metros quadrados nunca vem pronta da tela — é sempre
+// recalculada aqui, na mesma chamada que grava a geometria, a partir da
+// mesma lista de vértices, para os dois valores nunca ficarem fora de
+// sincronia (T-10-30).
+export async function salvarZona(zona) {
+  const problema = validarAtributosZona(zona)
+  if (problema) {
+    alert('Erro: ' + problema)
+    return null
+  }
+  const supa = obterCliente()
+  const { data, error } = await supa
+    .from('maq_areas')
+    .insert({
+      codigo: zona?.codigo || null,
+      nome: zona?.nome,
+      tipo: zona?.tipo,
+      geom: zona?.geom,
+      area_m2: calcAreaM2(zona?.geom),
+      flora: zona?.flora ?? null,
+      inclinacao: zona?.inclinacao ?? null,
+      limpeza: zona?.limpeza ?? null,
+    })
+    .select()
+    .single()
+  if (error) {
+    alert('Erro ao salvar zona: ' + error.message)
+    return null
+  }
+  return data
+}
+
+export async function atualizarZona(id, zona) {
+  const problema = validarAtributosZona(zona)
+  if (problema) {
+    alert('Erro: ' + problema)
+    return null
+  }
+  const supa = obterCliente()
+  const { data, error } = await supa
+    .from('maq_areas')
+    .update({
+      nome: zona?.nome,
+      tipo: zona?.tipo,
+      geom: zona?.geom,
+      area_m2: calcAreaM2(zona?.geom),
+      flora: zona?.flora ?? null,
+      inclinacao: zona?.inclinacao ?? null,
+      limpeza: zona?.limpeza ?? null,
+    })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    alert('Erro ao atualizar zona: ' + error.message)
+    return null
+  }
+  return data
 }
