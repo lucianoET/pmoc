@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 10
 current_phase_name: mapa-operacional
 status: executing
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-08-12T08:46:48.791Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-08-12T08:54:47.154Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 19
-  completed_plans: 12
+  completed_plans: 13
   percent: 25
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 10 (mapa-operacional) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-08-12 — Phase 10 execution started
 
-Progress: [██████░░░░] 63% (v2.0)
+Progress: [███████░░░] 68% (v2.0)
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Progress: [██████░░░░] 63% (v2.0)
 | Phase 06 P03 | 3min | 3 tasks | 8 files |
 | Phase 06 P04 | 25min | 2 tasks | 5 files |
 | Phase 10 P01 | 15min | 2 tasks | 2 files |
+| Phase 10 P02 | 20min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -125,6 +126,9 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: [Phase 10-01] Envelope geográfico como restrição única por tabela combinando lat e lon com AND (não duas restrições separadas), capturando o par trocado (latitude gravada na coluna de longitude)
 - [Phase ?]: [Phase 10-01] Nenhuma policy nova criada na migração 25: as seis tabelas (cmasm_locais + 5 tabelas de ativo) já escopam insert/update a authenticated desde suas migrações de origem; colunas novas herdam essa restrição
 - [Phase ?]: [Phase 10-01] cmasm_locais.lat/lon completa o Pattern 2 do RESEARCH (posição herdada do prédio/sala); coluna maquinas_compativeis não criada em maq_areas — compatibilidade fica derivada por função pura no cliente (plano 10-02)
+- [Phase ?]: [Phase 10-02] calcAreaM2 e calcCompatCliente portadas byte-a-byte do legado (DEV_ERP/cmms-mapa/admin.html), incluindo o ternário redundante do ramo acentuado — quirk sem efeito prático preservado, não uma correção
+- [Phase ?]: [Phase 10-02] VOCABULARIO_REGRA fixado nos três termos reais de calcCompatCliente (cortador_grama, roçadeira, motosserra); minitrator/trator saem em semMapeamento sem adivinhação, cobrindo o Pitfall 1 da pesquisa
+- [Phase ?]: [Phase 10-02] D-01 (aguada mock) e D-04 (sem maq_operacoes/horas_utilizadas/area_executada_m2 em mapa/) viram gate permanente em tests/mapa-decisoes.test.js, com varredura dinâmica de diretório
 
 ### Pending Todos
 
@@ -172,6 +176,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-12T08:46:48.751Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-08-12T08:54:37.980Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None

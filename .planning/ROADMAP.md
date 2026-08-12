@@ -176,13 +176,13 @@ Plans:
 
 **Baseline da fase**: commit `511bb9e` (58 testes passando em `node --test`); os gates de não regressão comparam contra ele
 **UI hint**: yes
-**Plans**: 1/8 plans executed
+**Plans**: 2/8 plans executed
 
 Plans:
 **Wave 1** *(três planos em paralelo, sem sobreposição de arquivos)*
 
 - [x] 10-01-PLAN.md — Migração 25: geometria e atributos de terreno em `maq_areas`, `lat`/`lon` nas seis tabelas com trava de envelope e de par completo, mais gate estático de que a migração é aditiva e não afrouxa escrita (PLAT-13, PLAT-18, PLAT-20, PLAT-16)
-- [ ] 10-02-PLAN.md — Núcleo puro `mapa/mapa-geometria.js` com a fórmula de área portada e conferida numericamente, compatibilidade de máquinas com a normalização de vocabulário que faltava, e as decisões D-01 e D-04 viradas em teste (PLAT-18, PLAT-13, PLAT-16)
+- [x] 10-02-PLAN.md — Núcleo puro `mapa/mapa-geometria.js` com a fórmula de área portada e conferida numericamente, compatibilidade de máquinas com a normalização de vocabulário que faltava, e as decisões D-01 e D-04 viradas em teste (PLAT-18, PLAT-13, PLAT-16)
 - [ ] 10-03-PLAN.md — Lado de destino do link: `maquinas` e o motor compartilhado de `eletrica`/`fonoclama` abrem a ficha do ativo pelo parâmetro de URL (PLAT-14, PLAT-16)
 
 **Wave 2** *(blocked on Wave 1 — dois planos em paralelo)*
