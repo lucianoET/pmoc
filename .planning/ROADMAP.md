@@ -176,7 +176,7 @@ Plans:
 
 **Baseline da fase**: commit `511bb9e` (58 testes passando em `node --test`); os gates de não regressão comparam contra ele
 **UI hint**: yes
-**Plans**: 4/8 plans executed
+**Plans**: 5/8 plans executed
 
 Plans:
 **Wave 1** *(três planos em paralelo, sem sobreposição de arquivos)*
@@ -188,7 +188,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 — dois planos em paralelo)*
 
 - [x] 10-04-PLAN.md — Base offline: planta vetorial da área do CMASM convertida do `.osm` local, tile local com queda para o online só no basemap de mapa (D-02 em gate) e procedimento de geração de tiles com a política de uso registrada (PLAT-19, PLAT-16)
-- [ ] 10-05-PLAN.md — Camadas passam a ler do Supabase por uma porta única de dados; grama e elétrica sem dado de demonstração, com posição herdada ou própria, link para o módulo de origem e coleta dos não localizados (PLAT-17, PLAT-13, PLAT-14, PLAT-16)
+- [x] 10-05-PLAN.md — Camadas passam a ler do Supabase por uma porta única de dados; grama e elétrica sem dado de demonstração, com posição herdada ou própria, link para o módulo de origem e coleta dos não localizados (PLAT-17, PLAT-13, PLAT-14, PLAT-16)
 
 **Wave 3** *(blocked on 10-05)*
 
