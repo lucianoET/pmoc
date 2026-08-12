@@ -147,10 +147,19 @@ test('calibracao/index.html fica fora da convencao pmoc-tema por decisao (D-05) 
   // confirma que a ausencia da convencao da plataforma nao e por o modulo
   // simplesmente nao ter nocao de tema nenhuma — ele tem a propria, e essa
   // presenca é o que torna a exclusao uma decisao registrada, nao uma
-  // lacuna descoberta por quem for usar
+  // lacuna descoberta por quem for usar.
+  // Afirmar so a substring 'data-theme' seria fraco demais: ela pode existir
+  // apenas como seletor de CSS e continuaria casando mesmo que o alternador
+  // proprio fosse removido. As duas provas abaixo sao do mecanismo em si —
+  // a chave de persistencia dele e a escrita no elemento raiz.
   assert.match(
     conteudo,
-    /data-theme/,
-    'calibracao deixou de ter qualquer atributo de tema proprio — revisar esta nota de exclusao deliberada (D-05), o cenario mudou'
+    /cmasm_erp_theme/,
+    'calibracao nao usa mais a chave propria cmasm_erp_theme — revisar esta nota de exclusao deliberada (D-05), o cenario mudou'
+  )
+  assert.match(
+    conteudo,
+    /documentElement\.dataset\.theme\s*=/,
+    'calibracao nao escreve mais o tema proprio no elemento raiz — revisar esta nota de exclusao deliberada (D-05), o cenario mudou'
   )
 })
