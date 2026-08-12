@@ -71,7 +71,7 @@ Plans:
 
 **Decisões travadas**: D-01 `mapa/xmap.css` (skin do Leaflet, tokens `--xm-*`) fica FORA do escopo e permanece dark-only — o critério 5 vale para o chrome do módulo, não para o mapa em si; registrar como suposição explícita no plano · D-02 o portal `/index.html` entra junto com os 6 módulos (7 superfícies no total), com os mesmos tokens e o mesmo script anti-FOUC · D-03 convenção em português: atributo `data-theme="claro" | "escuro"` no `<html>` e chave `localStorage` `pmoc-tema` · D-04 `refrigeracao` permanece congelada e intocada (PLAT-15/PLAT-16)
 **UI hint**: yes
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -88,7 +88,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 06-04-PLAN.md — Auditoria de fechamento: roteiro manual em `TESTES.md`, não regressão da refrigeração e atualização de documentação e requisitos (PLAT-04, PLAT-05, PLAT-15, PLAT-16)
+- [x] 06-04-PLAN.md — Auditoria de fechamento: roteiro manual em `TESTES.md`, não regressão da refrigeração e atualização de documentação e requisitos (PLAT-04, PLAT-05, PLAT-15, PLAT-16)
 
 ### Phase 7: UI/UX mobile
 
