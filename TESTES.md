@@ -366,3 +366,178 @@ node --test
 
 Resultado esperado: **25 testes aprovados, 0 falhas** (eram 19 no início da fase; os 6 testes
 novos são de `tests/shell.test.js`, plano 05-01).
+
+## Fase 6 — Tema claro/escuro — auditoria de fechamento — 11/08/2026
+
+A Fase 6 dá aos 6 módulos e ao portal um segundo tema, claro, ao lado do escuro que já existia.
+`shared/pmoc.css` ganhou um bloco `[data-theme="claro"]` aditivo com os 12 tokens de cor do tema
+claro (o bloco `:root` escuro continua sendo o padrão, byte-idêntico); `shared/tema.js` é a
+implementação única de detecção (`localStorage` → `prefers-color-scheme` → padrão escuro),
+validação por lista fechada, aplicação, alternância e persistência de tema para as 7 superfícies
+do projeto; o botão de alternância sai de `shared/shell.js` (`montarShell()`), e por isso aparece
+nos 6 módulos de uma vez, sem tocar em nenhum `index.html` de módulo para esse fim; um script
+clássico (não `type="module"`, sem `src` externo) replicado byte-idêntico no `<head>` das 7
+superfícies aplica o tema salvo antes do primeiro desenho, para eliminar a piscada de tema errado
+ao recarregar a página; e o portal (`/index.html`, D-02) recebeu o próprio bloco de tokens claros
+embutido, porque não carrega `shared/pmoc.css`, mas nenhuma lógica própria — ele consome
+`shared/tema.js` como os 6 módulos. A `refrigeracao` ficou fora da fase inteira, congelada por
+decisão do usuário (D-04); a conferência de que ela não foi tocada é um passo isolado abaixo, não
+uma presunção.
+
+### Preparação
+
+- [ ] Rodar `node --test` na raiz do repositório, sem argumento, antes de qualquer conferência
+      manual — é a primeira linha de defesa contra regressão.
+- [ ] Servir o repositório por HTTP a partir da raiz (`python -m http.server`) — abrir por
+      `file://` quebra a descoberta de credenciais do `shared/supabase-config.js` e agora também
+      o script de tema do portal.
+- [ ] Limpar o armazenamento local do domínio (`localStorage.clear()` no console, ou "Limpar
+      dados do site" nas ferramentas do navegador) antes de começar — para que o primeiro item do
+      roteiro abaixo teste de fato uma primeira visita, sem preferência salva.
+
+### Roteiro manual, por superfície
+
+Repetir para as 7 superfícies do projeto — `/` (portal), `/maquinas`, `/transportes`,
+`/eletrica`, `/fonoclama`, `/predial`, `/mapa`:
+
+- [ ] O botão de tema aparece na barra superior (no portal, no cabeçalho institucional, ao lado
+      da legenda; nos 6 módulos, na `topbar-right`, antes do chip de usuário).
+- [ ] Clicar no botão alterna o tema **sem recarregar a página**.
+- [ ] O rótulo/título/texto acessível do botão muda junto, oferecendo sempre o tema que **ainda
+      não** está em vigor (mostra "Ir para o tema claro" quando o escuro está em vigor, e
+      vice-versa).
+- [ ] Recarregar a página com o tema claro em vigor: a página **não pisca** no tema escuro antes
+      de assentar no claro (é o que o script de pré-desenho no `<head>` existe para evitar).
+- [ ] Em navegador móvel (ou emulação de dispositivo), a cor da barra do navegador acompanha o
+      tema (visível a partir da `<meta name="theme-color">`, atualizada por `aplicarTema()`).
+
+### Roteiro dos cinco critérios de sucesso da fase
+
+Cada critério como item nomeado, para que nenhum se perca:
+
+- [ ] **Critério 1 — alternância presente e sem recarga.** Já coberto pelo bloco acima, repetido
+      nas 7 superfícies.
+- [ ] **Critério 2 — ausência de CSS de tema por módulo.** Abrir o bloco `<style>` de cada
+      `index.html` dos 6 módulos e confirmar que a única declaração de cor própria é `--accent`;
+      nenhum módulo declara `--bg`/`--surface`/`--surface2`/`--border`/`--text`/`--text2`/
+      `--text3`/`--green`/`--yellow`/`--red`/`--blue`/`--orange`, nem cria um bloco
+      `[data-theme="claro"]` próprio. (Gate estrutural equivalente em
+      `tests/tema-superficies.test.js`, mas a leitura visual do `<style>` é a conferência final.)
+- [ ] **Critério 3 — persistência entre sessões e entre módulos.** Escolher o tema claro em
+      `/maquinas`, fechar a aba (ou o navegador inteiro) e reabrir em `/transportes`: o tema claro
+      continua em vigor sem precisar escolher de novo. Isto só se prova fechando e reabrindo o
+      navegador de verdade — **nenhum comando substitui este item**.
+- [ ] **Critério 4 — preferência do sistema na primeira visita.** Com o armazenamento limpo
+      (preparação acima), trocar o tema do sistema operacional para claro, abrir qualquer
+      superfície e confirmar que ela abre no tema claro sem nenhum clique; repetir trocando o
+      sistema para escuro.
+- [ ] **Critério 5 — legibilidade dos estados de alerta nos dois temas.** Abrir, em cada tema, ao
+      menos uma view com callout de vencido (`.co-red`/`.co-warn`), uma com estoque baixo e uma
+      com equipamento inoperante (INOP) — por exemplo, abas de Materiais/Estoque e de Ativos em
+      `maquinas`, `transportes` ou `predial` — e confirmar visualmente que o texto do alerta e a
+      borda dele têm a mesma cor (não uma cor "presa" no tema antigo) e são legíveis sobre o
+      fundo em ambos os temas.
+
+### Bordas a exercitar
+
+Bloco próprio, numerado — são bordas que quebram em produção e não aparecem em teste
+automatizado:
+
+1. [ ] Bloquear o armazenamento local pela política de privacidade do navegador (ou modo privado
+       com bloqueio de terceiros) e abrir uma superfície: a página precisa carregar normalmente e
+       o tema ainda alternar **dentro da sessão** (só não persiste entre recargas).
+2. [ ] Pelo console do navegador, gravar à mão um valor inválido na chave (`localStorage.setItem
+       ('pmoc-tema','sistema')`) e recarregar a página: o tema precisa cair para a preferência do
+       sistema operacional, **não** aplicar o valor corrompido.
+3. [ ] Abrir um modal em qualquer módulo (cadastro de ativo, OS, material) e alternar o tema com
+       o modal aberto: o modal **não fecha** e o que estava digitado **não se perde** — trocar o
+       tema só reescreve o atributo `data-theme` do elemento raiz.
+4. [ ] Abrir dois módulos em abas diferentes do mesmo navegador, alternar o tema numa delas e
+       recarregar a outra: a outra aba passa a exibir a nova preferência (não há sincronização em
+       tempo real entre abas, só ao recarregar/navegar — comportamento esperado, não defeito).
+
+### Limitação conhecida de D-01 — mapa Leaflet permanece escuro
+
+Em `/mapa`, a barra superior, o rodapé, o botão de tema e os painéis que vêm da folha comum
+(`shared/pmoc.css`) alternam normalmente nos dois temas. A barra lateral de camadas, as legendas
+e os balões de marcador do Leaflet/xMap **continuam escuros nos dois temas**, porque
+`mapa/xmap.css` tem um sistema de tokens próprio (`--xm-*`) e ficou fora do escopo desta fase, por
+decisão registrada no roadmap (D-01). **Isto é esperado e não deve ser reportado como defeito** —
+é candidato a item de backlog para uma fase futura, não uma falha da Fase 6.
+
+### D-05 — Calibração (`/calibracao`) fica fora da convenção de tema da plataforma
+
+Durante esta fase, uma tarefa concorrente (`quick-260811-9sb`, commits `240cfa6`/`eb1e342`)
+importou o app legado de Calibração como módulo independente em `/calibracao`, com rota própria
+em `vercel.json` e card ativo no portal. Isto faz de `/calibracao` uma **8ª superfície** no
+repositório, fora da lista de 7 que a decisão D-02 fechou para esta fase (os 6 módulos +
+o portal). **Decisão registrada aqui, com o mesmo peso de D-01/D-02/D-03/D-04:**
+
+- **O que fica fora:** `/calibracao` não foi portado para `shared/` nesta fase e não segue a
+  convenção `pmoc-tema`/`data-theme="claro"`/`"escuro"` estabelecida por D-03. Não é escopo desta
+  fase — portar o módulo para a base comum é trabalho de uma fase própria, não uma tarefa de
+  auditoria.
+- **Por quê:** o mesmo raciocínio já aplicado a `refrigeracao` (D-04) — um app legado standalone,
+  fora do escopo declarado da fase, não deve ser tocado de raspão numa auditoria de fechamento.
+- **A diferença importante em relação a `refrigeracao`:** `/calibracao` **não está** simplesmente
+  sem tema — o app legado já tem o próprio alternador de tema visível (botão "☀️ Claro"/"🌙
+  Escuro" no cabeçalho), mas com mecanismo **incompatível** com a plataforma: chave
+  `localStorage['cmasm_erp_theme']` (não `pmoc-tema`), valores `'dark'`/`'light'` em inglês (não
+  `'claro'`/`'escuro'`), sem `shared/tema.js` nem qualquer referência a `shared/`. Um usuário que
+  troca para o tema claro em `/maquinas` e depois clica no card Calibração no portal chega a uma
+  página cujo tema é decidido por um mecanismo totalmente separado — **inconsistência visível ao
+  navegar entre módulos**, e não uma ausência de tema.
+- **Não é presunção não verificada:** `tests/tema-superficies.test.js` ganhou um caso novo (D-05)
+  que prova, por comando, que a chave `pmoc-tema` não vazou para dentro de `calibracao/index.html`
+  e que o módulo de fato tem seu próprio `data-theme`, desconectado — a exclusão fica marcada em
+  código, não como omissão silenciosa.
+- **O que fecharia isto:** uma fase futura de "portar Calibração para a base comum" (mesmo
+  trabalho que Transportes/Elétrica/Fonoclama/Predial/Mapa já passaram na Fase 5), candidata a
+  item de backlog.
+
+### Conferência isolada de não regressão da refrigeração (PLAT-15)
+
+Este passo é isolado de propósito, e não pode ser substituído por presunção: a rota
+`/refrigeracao` continuou ativa durante toda a fase, então é fácil deixá-la aberta numa aba e
+supor que "está tudo igual" sem checar.
+
+- [x] Verificação estática por histórico: `git diff --name-only 351b13c..HEAD -- refrigeracao/`
+      retorna lista vazia — nenhum commit da fase tocou o diretório (commit `351b13c` é a
+      pesquisa da Fase 6, o último antes da execução).
+- [x] Verificação estática por busca: `refrigeracao/index.html` não referencia `shared/` nem
+      `pmoc.css` (`grep -c 'shared/\|pmoc.css' refrigeracao/index.html` = 0), não menciona a
+      chave de tema (`grep -c 'pmoc-tema' refrigeracao/index.html` = 0) e não menciona o atributo
+      de tema (`grep -c 'data-theme' refrigeracao/index.html` = 0) — os três gates automatizados
+      em `tests/tema-superficies.test.js`.
+- [ ] Verificação humana com o inspetor de rede aberto: abrir `/refrigeracao` **depois de toda a
+      fase concluída**, confirmar que nenhuma requisição de rede aponta para `shared/` ou para
+      qualquer arquivo compartilhado, e que o console termina sem erro. **Pendência herdada da
+      Fase 5** — não foi possível em nenhum plano de nenhuma das duas fases, por falta de
+      credenciais Supabase e de navegador controlável no ambiente autônomo.
+- [ ] Percorrer o fluxo principal (login, inventário, uma ordem de contratação) e confirmar que
+      está igual ao que era antes da fase. **Mesma pendência herdada.**
+
+### O que este ambiente autônomo não pode provar
+
+Registrado por escrito, para não desaparecer como se tivesse sido verificado:
+
+- **Toda a conferência visual pós-login** (os cinco itens marcados `[ ]` acima, mais a conferência
+  humana de rede da refrigeração) depende de navegador real e, em alguns módulos, de sessão
+  Supabase autenticada — este executor não tem credenciais nem navegador controlável.
+- **O contraste WCAG AA** registrado nos planos 06-01/06-02 foi **calculado** pela fórmula de
+  luminância relativa da WCAG 2.1 sobre os valores de cor fechados no planejamento, não **medido**
+  por ferramenta de inspeção em tempo real. A conferência com o color picker do Chrome DevTools ou
+  o WebAIM Contrast Checker, sobre a renderização real dos dois temas, permanece no roteiro manual
+  acima (critério 5) — não foi refeita nesta auditoria.
+
+### Testes automatizados
+
+```bash
+node --test
+```
+
+Resultado esperado: **44 testes aprovados, 0 falhas** (eram 25 no início da fase — baseline
+pós-Fase 5, 05-07; os 19 testes novos vêm de `tests/shell.test.js` (+1, botão de tema, plano
+06-02), `tests/tema.test.js` (8 casos novos, núcleo puro de `shared/tema.js`, plano 06-02),
+`tests/tema-superficies.test.js` (9 casos no plano 06-03 + 1 caso novo desta auditoria, D-05
+calibração, 10 no total)).
