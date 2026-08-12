@@ -1,6 +1,9 @@
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
+import { definirCliente } from './mapa-dados.js'
+import { registrarCamadasGrama } from './xmap-layers-grama.js'
+import { registrarCamadasEletrica } from './xmap-layers-eletrica.js'
 
 // ── estado global ──
 let supa = null
@@ -52,6 +55,21 @@ function inicializarMapa() {
       maxZoom: 19,
     })
     MAPA_INICIALIZADO = true
+    registrarCamadasDoBanco()
+  } catch (error) {
+    mostrarErroMapa(error)
+  }
+}
+
+// Registra as camadas que leem do Supabase (grama e elétrica — PLAT-17)
+// depois de o mapa existir. A aguada continua se registrando sozinha por
+// script clássico (D-01), sem passar por aqui. Falha de uma camada não
+// derruba o boot inteiro: cada função de leitura já mostra o próprio erro
+// visível (mapa/mapa-dados.js#mostrarErroDeCarga); este catch cobre só o
+// caso de a própria chamada de registro lançar antes disso.
+async function registrarCamadasDoBanco() {
+  try {
+    await Promise.all([registrarCamadasGrama(), registrarCamadasEletrica()])
   } catch (error) {
     mostrarErroMapa(error)
   }
@@ -114,6 +132,7 @@ async function boot() {
     mostrarErroBoot(error)
     return
   }
+  definirCliente(supa)
 
   auth = new Auth(supa, { appNome: 'Mapa', appIcone: '🗺️' })
   auth.onLogin(usuario => {

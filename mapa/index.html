@@ -36,15 +36,13 @@ html,body{height:100%}
       <div class="sidebar-title">Módulos</div>
       <button class="mod-btn" onclick="alternarModulo('aguada', this)">
         <span>Aguada — monitoramento hídrico</span>
-        <span class="mod-badge-demo">demo</span>
+        <span class="mod-badge-demo" title="Sistema externo autônomo (FastAPI + SQLite, alimentado por MQTT) — sem tabela no projeto pmoc; integração real entra na Phase 11 (decisão travada D-01)">demo</span>
       </button>
       <button class="mod-btn" onclick="alternarModulo('grama', this)">
         <span>Grama — controle vegetal</span>
-        <span class="mod-badge-demo">demo</span>
       </button>
       <button class="mod-btn" onclick="alternarModulo('eletrica', this)">
         <span>Elétrica — sistema elétrico</span>
-        <span class="mod-badge-demo">demo</span>
       </button>
     </div>
     <div class="map-area">
@@ -59,8 +57,11 @@ html,body{height:100%}
      componente a partir de outro modulo, que precisa apontar para /mapa/ de qualquer forma. -->
 <script src="/mapa/xmap.js"></script>
 <script src="/mapa/xmap-layers-aguada.js"></script>
-<script src="/mapa/xmap-layers-grama.js"></script>
-<script src="/mapa/xmap-layers-eletrica.js"></script>
+<!-- xmap-layers-grama.js e xmap-layers-eletrica.js viraram módulo ES no plano
+     10-05 (registrarCamadasGrama/registrarCamadasEletrica) e são importados
+     por mapa/app.js depois de o cliente do Supabase existir — não carregam
+     mais como script clássico aqui. A aguada continua script clássico porque
+     não depende de cliente nenhum (D-01). -->
 
 <script type="module">
 const modulo = location.protocol === 'file:'

@@ -1,5 +1,16 @@
 // Portado do app legado cmms-mapa (/home/luc/DEV_ERP/cmms-mapa) para o módulo pmoc /mapa.
-// Dados de camada abaixo são de demonstração (mock), não vêm do Supabase.
+//
+// Dados de camada abaixo continuam de demonstração (mock) por DECISÃO TRAVADA D-01
+// (ROADMAP.md § "Phase 10 → Decisões travadas"), não por pendência esquecida:
+//   1. aguada é sistema externo autônomo — FastAPI + SQLite próprios, alimentado por
+//      MQTT (ref/MODULOS_EXTERNOS.md) — sem tabela nenhuma no projeto pmoc;
+//   2. criar uma tabela estática agora, só para ler como grama e elétrica passaram a
+//      ler no plano 10-05, duplicaria esse sistema para descartá-la assim que a
+//      telemetria real da Phase 11 chegar — trabalho gasto duas vezes;
+//   3. a exclusão está travada por teste automatizado nas duas direções —
+//      tests/mapa-decisoes.test.js (não ganha consulta ao Supabase) e
+//      tests/mapa-camadas.test.js (continua sendo a única camada com o selo de
+//      demonstração na barra lateral de mapa/index.html).
 /**
  * xMap Layers — xAguada (Monitoramento Hídrico)
  * Elementos: reservatórios, bombas, válvulas, hidrômetros, tubulações, ETE
