@@ -13,7 +13,9 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
 - [ ] **Phase 7: UI/UX mobile** - `eletrica`, `fonoclama`, `predial` e `mapa` utilizáveis em celular, sem rolagem horizontal da página
 - [ ] **Phase 8: Kanban e calendário compartilhados** - Componentes extraídos de `maquinas/` para `shared/`, com os testes preservados, e adotados por outros módulos
 - [ ] **Phase 9: Documentos** - Exportação CSV unificada, importação de arquivo com conferência e geração de PDF
-- [ ] **Phase 10: Mapa integrado** - Ativos dos módulos plotados sobre a planta do CMASM via `cmasm_locais.local_id`, com navegação para o módulo de origem
+- [ ] **Phase 10: Mapa operável** - O mapa deixa de ser visualização de dados de demonstração e passa a ler do Supabase, aceitar edição (ativos e zonas de serviço desenhadas) e abrir sem internet na área do CMASM
+- [ ] **Phase 11: Telemetria no mapa** - GPS, sensores e mapa de calor alimentados pela camada de dispositivos (Home Assistant/MQTT), por escrita de fora para dentro. **Travada** por decisão de segurança da OM
+- [ ] **Phase 12: Planta como camada** - Planta (imagem, PDF ou CAD vetorial) ancorada geograficamente sobre o mapa, com opacidade, rotação e escala
 
 ### Detalhamento das fases do v2.0
 
@@ -129,11 +131,11 @@ Plans:
   4. Importar o mesmo arquivo duas vezes não duplica registros
   5. Usuário gera PDF do que está vendo, a partir de uma implementação compartilhada
 
-### Phase 10: Mapa integrado
+### Phase 10: Mapa operável
 
-**Goal**: O mapa deixa de ser uma planta isolada e passa a mostrar onde estão os ativos de cada módulo
+**Goal**: O mapa deixa de exibir dados de demonstração e passa a ler do Supabase, aceitar edição e abrir sem internet na área do CMASM
 **Depends on**: Phase 5
-**Requirements**: PLAT-13, PLAT-14, PLAT-16
+**Requirements**: PLAT-13, PLAT-14, PLAT-17, PLAT-18, PLAT-19, PLAT-20, PLAT-15, PLAT-16
 **Success Criteria** (what must be TRUE):
 
   1. O `/mapa` mostra ativos dos módulos sobre a planta do CMASM, posicionados pelo vínculo `cmasm_locais.local_id` já existente
@@ -141,6 +143,56 @@ Plans:
   3. Clicar num ativo leva ao registro dele no módulo de origem
   4. Ativo sem `local_id` preenchido não quebra o mapa — some ou aparece numa lista de não localizados, de forma explícita
   5. O mapa continua funcionando para quem só tem acesso de observador
+  6. As camadas leem do Supabase — nenhum dado de demonstração embutido em `mapa/xmap-layers-*.js` permanece na origem do que é exibido
+  7. Usuário desenha uma zona de serviço no mapa, atribui flora, inclinação e limpeza, e vê a área em m² calculada do polígono e as máquinas compatíveis; a zona persiste e reabre igual
+  8. Usuário acrescenta e reposiciona ativos pelo mapa, com a posição persistida
+  9. O mapa base abre e desenha a área do CMASM **com a rede desligada**; fora da área coberta ou além do zoom cacheado, cai para o provedor online sem deixar buraco em branco
+  10. Quem tem acesso de observador **não** consegue desenhar, mover nem gravar — a restrição vale no banco (RLS), não só na interface
+
+**Notas de implementação** (levantadas antes do planejamento):
+
+- O editor já existe e ficou fora do port: `DEV_ERP/cmms-mapa/admin.html` (44 KB, `leaflet-draw@1.0.4`) e `demo.html`. O `mapa/xmap.js` no pmoc é idêntico ao de lá, então o componente já aceita o editor — falta a aplicação que o pilota. Ele fala com `http://localhost:8010/api/grama`, backend que não existe aqui: trocar por Supabase.
+- Modelo de zona já definido no legado: `flora` (`gramado`, `capim_colonial`, `mata_fechada`), `inclinacao` (`plano` 0-5%, `moderado` 5-20%, `acentuado` >20%), `limpeza` (`limpa`, `media`, `densa`), `coords_json`, `area_m2` calculada do polígono, e `calcCompatCliente()` derivando as máquinas compatíveis.
+- `maq_areas` e `maq_operacoes` já existem (migração 12). Falta em `maq_areas`: geometria e os três atributos de terreno — migração aditiva, sem `DROP`.
+- Estimativa de tempo e custo por zona **não existe no legado** e fica fora desta fase. Quando vier, `maq_operacoes` já grava `horas_utilizadas` e `area_executada_m2`, permitindo derivar m²/h de execução real em vez de constante arbitrária.
+- Tiles locais: bbox do extrato `map_cmasm_2026abr.osm` (`-22.84731,-43.11868` a `-22.82761,-43.09739`). z13–18 com entorno mais z19 na ilha ≈ 1.900 tiles ≈ 12 MB. Precedente pronto em `aguada/frontend/assets/leaflet-tiles/` (283 tiles, 6,3 KB de média, servidos como `{z}/{x}/{y}.png`) — falta a queda para o online, que o aguada não tem.
+- Satélite fica **apenas online** por decisão do usuário — nada de cache do Esri.
+- A política de uso do OSM proíbe download em massa de `tile.openstreetmap.org`. O extrato `.osm` local é dado ODbL e renderizar os próprios tiles a partir dele é o caminho limpo. Decidir isso no planejamento.
+- 12 MB de tile binário entram no histórico do git para sempre e o projeto é zero-build (não há passo de deploy onde gerar). Alternativa a avaliar: Supabase Storage.
+
+---
+
+### Phase 11: Telemetria no mapa
+
+**Goal**: Posições de GPS, leituras de sensores e mapa de calor aparecem no mapa, sem expor nenhum serviço do CMASM
+**Depends on**: Phase 10
+**Requirements**: PLAT-21
+**Status**: **Travada** — depende de decisão de política de segurança da OM sobre exposição de telemetria, que não é decisão técnica
+**Success Criteria** (what must be TRUE):
+
+  1. Posição de dispositivo com GPS (embarcação, viatura) aparece no mapa e atualiza
+  2. Câmeras e sensores aparecem como elementos posicionados no mapa
+  3. Leituras de sensor formam mapa de calor sobre o mapa base
+  4. A ingestão é **escrita de fora para dentro**: a camada de dispositivos empurra para o Supabase, e nenhum serviço do CMASM (Home Assistant, Frigate, Mosquitto) aceita conexão de entrada a partir do site público
+  5. Stream de câmera **não** transita pelo site público — o mapa mostra o elemento e um endereço que só resolve na rede interna
+
+**Notas**: a arquitetura já está desenhada em `DEV_ERP/04-modulos-pmoc.md` (`Câmeras IP → Frigate NVR → Home Assistant → Mosquitto → CMASM.ERP API`) e o stack existe em `cmms-seguranca/cmasm-vigilancia/docker-compose.yml`, ainda não em execução. O padrão de ingestão já foi provado no `aguada` (`ESP32 → MQTT → bridge.py → SQLite → WebSocket`). O mapa do Home Assistant é card Lovelace preso ao frontend dele e **não** serve como mapa do pmoc; o papel dele é camada de dispositivos.
+
+---
+
+### Phase 12: Planta como camada
+
+**Goal**: Uma planta do CMASM se sobrepõe ao mapa, ancorada geograficamente, para posicionar e conferir elementos
+**Depends on**: Phase 10
+**Requirements**: PLAT-22
+**Success Criteria** (what must be TRUE):
+
+  1. Usuário carrega planta em imagem, PDF ou CAD vetorial
+  2. A planta acompanha pan e zoom do mapa — o alinhamento não se perde ao mover o mapa
+  3. Usuário ajusta opacidade, rotação e escala para alinhar a planta ao terreno
+  4. O alinhamento escolhido persiste, em vez de precisar ser refeito a cada abertura
+
+**Notas**: existe precedente parcial em `DEV_reference_readonly/cmasm-mapa-v2.html`, com duas diferenças que o tornam insuficiente como port direto — ele aceita `image/*,.svg` e **não** PDF (não há `pdf.js` em nenhum lugar da árvore de referência), e o overlay é um `<img>` com `transform: translate(-50%,-50%) rotate() scale()` preso ao centro da tela: os handlers de `zoom`/`rotate` do mapa só atualizam texto de barra de status e nunca tocam no overlay, então arrastar o mapa desliza o mapa por baixo de uma planta parada. Além disso é MapLibre, não Leaflet. Decisão do usuário: fazer a versão corrigida (PDF via `pdf.js` e âncora geográfica), não o port fiel. Para CAD vetorial (DXF) o caminho melhor é converter em geometria Leaflet — georreferencia certo, escala sem borrar e torna os elementos clicáveis; DWG é proprietário e precisa virar DXF antes.
 
 ---
 
