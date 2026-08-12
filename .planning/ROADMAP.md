@@ -176,7 +176,7 @@ Plans:
 
 **Baseline da fase**: commit `511bb9e` (58 testes passando em `node --test`); os gates de não regressão comparam contra ele
 **UI hint**: yes
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans executed
 
 Plans:
 **Wave 1** *(três planos em paralelo, sem sobreposição de arquivos)*
@@ -200,7 +200,7 @@ Plans:
 
 **Wave 5** *(blocked on todos)*
 
-- [ ] 10-08-PLAN.md — Auditoria de fechamento: roteiro manual pelos dez critérios em `TESTES.md`, não regressão isolada da refrigeração, documentação e fechamento dos requisitos com evidência (PLAT-13, PLAT-14, PLAT-17, PLAT-18, PLAT-19, PLAT-20, PLAT-15, PLAT-16)
+- [x] 10-08-PLAN.md — Auditoria de fechamento: roteiro manual pelos dez critérios em `TESTES.md`, não regressão isolada da refrigeração, documentação e fechamento dos requisitos com evidência (PLAT-13, PLAT-14, PLAT-17, PLAT-18, PLAT-19, PLAT-20, PLAT-15, PLAT-16)
 
 ---
 

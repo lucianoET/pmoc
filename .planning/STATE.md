@@ -4,17 +4,17 @@ milestone: v2.0
 milestone_name: Consolidação da plataforma
 current_phase: 10
 current_phase_name: mapa-operacional
-status: executing
-stopped_at: Completed 10-mapa-operacional/10-07-PLAN.md
-last_updated: "2026-08-12T10:15:48.833Z"
+status: verifying
+stopped_at: Completed 10-08-PLAN.md — Fase 10 (mapa operacional) fechada
+last_updated: "2026-08-12T10:26:24.949Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 19
-  completed_plans: 18
-  percent: 25
+  completed_plans: 19
+  percent: 38
 ---
 
 # Project State
@@ -30,10 +30,10 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 10 (mapa-operacional) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-12 — Phase 10 execution started
 
-Progress: [██████████] 95% (v2.0)
+Progress: [██████████] 100% (v2.0)
 
 ## Performance Metrics
 
@@ -82,6 +82,7 @@ Progress: [██████████] 95% (v2.0)
 | Phase 10-mapa-operacional P05 | 30min | 3 tasks | 7 files |
 | Phase 10-mapa-operacional P06 | 40min | 3 tasks | 5 files |
 | Phase 10-mapa-operacional P07 | 50min | 3 tasks | 5 files |
+| Phase 10-mapa-operacional P08 | 45min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: area_m2 nunca aceito pronto da tela — sempre recalculado via calcAreaM2 na mesma chamada que grava geom (T-10-30)
 - [Phase ?]: CARGOS_POSICAO = [admin, gestor, tecnico]: subconjunto deliberado da policy real de update de maq_ativos/elet_ativos (sem role in(...)), diferente de CARGOS_ZONA (10-06) que espelha 1:1 a policy de maq_areas
 - [Phase ?]: Modo 'Mover ativos' com toggle próprio (camada arrastável separada da de exibição) — evita duplicar visualmente marcadores; xMap.registerLayer não é chamado de novo após uma gravação por causa de bug conhecido em mapa/xmap.js (arquivo com edição proibida) que duplicaria layerGroups
+- [Phase ?]: PLAT-19 fechado como parcial — desenho de zona sem rede pronto e provado; tiles raster ficam como procedimento do usuário (mapa/tiles/GERAR-TILES.md), nunca marcado completo por presunção
+- [Phase ?]: PLAT-13 corrigido no próprio texto do requisito: o vínculo cmasm_locais.local_id é organizacional, não geográfico — a migração 25 acrescentou lat/lon de fato
 
 ### Pending Todos
 
@@ -191,6 +194,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-12T10:15:48.793Z
-Stopped at: Completed 10-mapa-operacional/10-07-PLAN.md
+Last session: 2026-08-12T10:26:24.909Z
+Stopped at: Completed 10-08-PLAN.md — Fase 10 (mapa operacional) fechada
 Resume file: None
