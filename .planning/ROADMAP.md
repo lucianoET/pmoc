@@ -176,7 +176,7 @@ Plans:
 
 **Baseline da fase**: commit `511bb9e` (58 testes passando em `node --test`); os gates de não regressão comparam contra ele
 **UI hint**: yes
-**Plans**: 6/8 plans executed
+**Plans**: 7/8 plans executed
 
 Plans:
 **Wave 1** *(três planos em paralelo, sem sobreposição de arquivos)*
@@ -196,7 +196,7 @@ Plans:
 
 **Wave 4** *(blocked on 10-06)*
 
-- [ ] 10-07-PLAN.md — Acrescentar e reposicionar ativos pelo mapa, com painel de não localizados por módulo e gate de que arrastar um ativo não move o prédio (PLAT-20, PLAT-13, PLAT-16)
+- [x] 10-07-PLAN.md — Acrescentar e reposicionar ativos pelo mapa, com painel de não localizados por módulo e gate de que arrastar um ativo não move o prédio (PLAT-20, PLAT-13, PLAT-16)
 
 **Wave 5** *(blocked on todos)*
 

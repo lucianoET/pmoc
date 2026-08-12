@@ -5,15 +5,15 @@ milestone_name: Consolidação da plataforma
 current_phase: 10
 current_phase_name: mapa-operacional
 status: executing
-stopped_at: Completed 10-mapa-operacional-06-PLAN.md
-last_updated: "2026-08-12T09:54:05.928Z"
+stopped_at: Completed 10-mapa-operacional/10-07-PLAN.md
+last_updated: "2026-08-12T10:15:48.833Z"
 last_activity: 2026-08-12
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 19
-  completed_plans: 17
+  completed_plans: 18
   percent: 25
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 ## Current Position
 
 Phase: 10 (mapa-operacional) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-08-12 — Phase 10 execution started
 
-Progress: [█████████░] 89% (v2.0)
+Progress: [██████████] 95% (v2.0)
 
 ## Performance Metrics
 
@@ -81,6 +81,7 @@ Progress: [█████████░] 89% (v2.0)
 | Phase 10 P04 | 35min | 3 tasks | 6 files |
 | Phase 10-mapa-operacional P05 | 30min | 3 tasks | 7 files |
 | Phase 10-mapa-operacional P06 | 40min | 3 tasks | 5 files |
+| Phase 10-mapa-operacional P07 | 50min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: Ponte de vocabulário status/estado local a cada arquivo de camada (statusParaExibicao/estadoParaExibicao) traduz operante/inoperante/manutencao/baixado do banco para o vocabulário de cor/ícone dos componentes visuais portados do legado, sem tocar essas funções
 - [Phase ?]: CARGOS_ZONA = [admin, gestor] espelha a política de escrita real de maq_areas (migração 12), comparada por teste com a política real, não apenas lida
 - [Phase ?]: area_m2 nunca aceito pronto da tela — sempre recalculado via calcAreaM2 na mesma chamada que grava geom (T-10-30)
+- [Phase ?]: CARGOS_POSICAO = [admin, gestor, tecnico]: subconjunto deliberado da policy real de update de maq_ativos/elet_ativos (sem role in(...)), diferente de CARGOS_ZONA (10-06) que espelha 1:1 a policy de maq_areas
+- [Phase ?]: Modo 'Mover ativos' com toggle próprio (camada arrastável separada da de exibição) — evita duplicar visualmente marcadores; xMap.registerLayer não é chamado de novo após uma gravação por causa de bug conhecido em mapa/xmap.js (arquivo com edição proibida) que duplicaria layerGroups
 
 ### Pending Todos
 
@@ -188,6 +191,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-12T09:54:05.882Z
-Stopped at: Completed 10-mapa-operacional-06-PLAN.md
+Last session: 2026-08-12T10:15:48.793Z
+Stopped at: Completed 10-mapa-operacional/10-07-PLAN.md
 Resume file: None
