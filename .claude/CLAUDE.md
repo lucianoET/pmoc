@@ -186,6 +186,7 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 ## Module Design
 
 - Reusable module (`shared/auth.js`): exports `Auth` class and `cadastrarCargo()` function
+- Reusable module (`shared/tema.js`): exports pure core (`normalizarTema`, `proximoTema`) plus DOM appliers (`detectarTema`, `temaAtual`, `aplicarTema`, `alternarTema`, `iniciarTema`) and two constants (`CHAVE_TEMA`, `TEMAS`)
 - Single-file apps: no exports, global scope for functions and state
 - Not used; each file is standalone
 - No index.js files for re-exports
@@ -204,6 +205,7 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 ## Code Organization
 
 - `shared/auth.js` (`293` lines): Reusable authentication component
+- `shared/tema.js` (`143` lines): Reusable light/dark theme module (pure core + DOM appliers)
 - `maquinas/app.js` (`~900` lines): Single monolithic app with all logic and rendering
 - `refrigeracao/index.html` (`~1400` lines): Single HTML file with embedded CSS and JavaScript
 
@@ -227,6 +229,7 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 | Refrigeracao App | Equipment maintenance tracking (v2.8) | `/refrigeracao/index.html` |
 | Máquinas App | Cutting equipment lifecycle management | `/maquinas/index.html`, `/maquinas/app.js` |
 | Shared Auth | Reusable role-based login module | `/shared/auth.js` |
+| Shared Tema | Single light/dark theme implementation (detection, validation, application, toggle, persistence) for all 7 surfaces | `/shared/tema.js` |
 | DB Schema | Data models and migrations | `/supabase/*.sql` |
 
 ## Pattern Overview
@@ -250,6 +253,11 @@ Sistema modular de gestão da manutenção de ativos do CMASM (Centro de Míssei
 - Contains: Cargo selection UI, password prompt, token exchange, session persistence
 - Depends on: Supabase Auth API
 - Used by: All frontend apps
+- Purpose: Light/dark theme — detection (saved → `prefers-color-scheme` → dark default), closed-list validation, application, toggle and persistence
+- Location: `/shared/tema.js`, consumed by the 6 modules via `shared/shell.js` (`aplicarShell()` → `iniciarTema()`) and by the portal (`/index.html`) directly, since the portal doesn't load the shared shell
+- Contains: pure core (`normalizarTema`, `proximoTema`, no browser API — testable in Node) + DOM appliers (`detectarTema`, `temaAtual`, `aplicarTema`, `alternarTema`, `iniciarTema`)
+- Depends on: `localStorage` (key `pmoc-tema`), `matchMedia('(prefers-color-scheme: light)')`, `data-theme="claro"|"escuro"` attribute on the root element
+- Used by: All 7 surfaces (6 modules + portal); `refrigeracao` and `mapa/xmap.css` (Leaflet skin) stay outside, frozen/dark-only by decision
 - Purpose: Data access (read/write/delete)
 - Location: Supabase JavaScript SDK (instantiated with URL + anon key)
 - Contains: SQL queries via `.from()`, `.select()`, `.insert()`, `.update()`, `.delete()`
