@@ -32,7 +32,18 @@ import {
   INCLINACOES,
   LIMPEZAS,
 } from './mapa-geometria.js'
-import { carregarAreas, carregarMaquinas, salvarZona, atualizarZona } from './mapa-dados.js'
+import {
+  carregarAreas,
+  carregarMaquinas,
+  carregarAtivosEletricos,
+  carregarLocaisComPosicao,
+  posicionarAtivos,
+  salvarZona,
+  atualizarZona,
+  salvarPosicaoAtivo,
+  CARGOS_POSICAO,
+  NAO_LOCALIZADOS,
+} from './mapa-dados.js'
 
 // Espelha exatamente a política de inserção/atualização de maq_areas
 // (supabase/12_maquinas_areas_operacoes.sql, linhas 51-59) — os dois únicos
@@ -360,4 +371,212 @@ function exporManipuladores() {
       alert('Arraste os vértices no mapa e clique em Salvar quando terminar.')
     }
   }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Modo de posicionamento de ativo (plano 10-07, PLAT-20) — estado próprio,
+// não compartilha nenhuma variável com o editor de zona acima: os dois
+// modos coexistem (cargos diferentes podem habilitar um, o outro, os dois
+// ou nenhum).
+//
+// Dois comportamentos, os dois gravando só pela porta única de dados
+// (salvarPosicaoAtivo, mapa/mapa-dados.js — Task 1 deste plano), nunca com
+// escrita direta aqui:
+//   1. Clicar em "Posicionar" num item da lista de não localizados
+//      (mapa/app.js#renderNaoLocalizados, publicado aqui em
+//      window.posSelecionarAtivo) entra em modo de espera de clique: o
+//      próximo clique no mapa grava a posição daquele ativo. Esc cancela
+//      sem gravar.
+//   2. Com o modo "Mover ativos" ligado, os ativos já posicionados
+//      aparecem numa camada PRÓPRIA do editor — não a camada de exibição
+//      de xmap-layers-grama.js/-eletrica.js, fora dos arquivos deste
+//      plano — com marcador arrastável; ao soltar, grava a nova posição.
+//      Se a gravação falhar ou a coordenada for recusada pelo envelope, o
+//      marcador volta à posição anterior (T-10-38).
+// ══════════════════════════════════════════════════════════════════
+let _mapaPosicao = null
+let _modoPosicaoAtivo = false
+let _grupoAtivosArrastaveis = null
+let _controlePosicao = null
+let _aguardandoClique = null // { modulo, id } | null
+let _aoMudarPosicaoAtivo = () => {}
+
+const FAIXA_AGUARDANDO_ID = 'mapa-editor-aguardando-clique'
+
+export function iniciarEditorAtivos(mapa, usuario, aoMudarPosicao) {
+  // Sai sem fazer nada quando o cargo não está em CARGOS_POSICAO — a
+  // constante importada de mapa-dados.js, nunca redeclarada aqui: o gate
+  // de tests/mapa-posicionamento.test.js confere a origem única.
+  if (!CARGOS_POSICAO.includes(usuario?.role)) return
+  _mapaPosicao = mapa
+  _aoMudarPosicaoAtivo = typeof aoMudarPosicao === 'function' ? aoMudarPosicao : () => {}
+  criarBotaoPosicionar(mapa)
+  exporManipuladoresPosicao()
+}
+
+// ── botão de alternância do modo "Mover ativos", mesmo padrão de
+// criarBotaoAlternar (editor de zona, acima): L.control reusando
+// .btn/.btn-s da folha comum, sem família de botão nova ──
+function criarBotaoPosicionar(mapa) {
+  _controlePosicao = L.control({ position: 'topright' })
+  _controlePosicao.onAdd = () => {
+    const btn = L.DomUtil.create('button', 'btn btn-s')
+    btn.type = 'button'
+    btn.textContent = 'Mover ativos'
+    btn.style.margin = '10px'
+    L.DomEvent.disableClickPropagation(btn)
+    btn.addEventListener('click', () => alternarModoPosicao(mapa, btn))
+    return btn
+  }
+  _controlePosicao.addTo(mapa)
+}
+
+async function alternarModoPosicao(mapa, btn) {
+  _modoPosicaoAtivo = !_modoPosicaoAtivo
+  btn.classList.toggle('active', _modoPosicaoAtivo)
+  if (_modoPosicaoAtivo) {
+    btn.textContent = 'Parar de mover'
+    await recarregarPosicionamento(mapa)
+  } else {
+    btn.textContent = 'Mover ativos'
+    if (_grupoAtivosArrastaveis) {
+      mapa.removeLayer(_grupoAtivosArrastaveis)
+      _grupoAtivosArrastaveis = null
+    }
+  }
+}
+
+// Busca os ativos já posicionados de novo (máquinas + elétrica) e chama
+// posicionarAtivos (núcleo puro + mapa-dados.js) — SEMPRE, não só quando
+// "Mover ativos" está ligado, porque é esta busca que atualiza
+// NAO_LOCALIZADOS depois de uma gravação. A lista da barra lateral
+// (mapa/app.js#renderNaoLocalizados) precisa disso mesmo quando o usuário
+// posicionou pela lista sem nunca ligar o modo de arraste — é o motivo de
+// esta função não estar condicionada ao toggle, só o desenho da camada
+// arrastável está.
+async function recarregarPosicionamento(mapa) {
+  const locais = await carregarLocaisComPosicao()
+  const [maquinas, eletricos] = await Promise.all([carregarMaquinas(), carregarAtivosEletricos()])
+  const posicionados = [
+    ...posicionarAtivos(maquinas, locais, 'maquinas').map((a) => ({ ...a, _modulo: 'maquinas' })),
+    ...posicionarAtivos(eletricos, locais, 'eletrica').map((a) => ({ ...a, _modulo: 'eletrica' })),
+  ]
+  if (_modoPosicaoAtivo && mapa) desenharMarcadoresArrastaveis(mapa, posicionados)
+  _aoMudarPosicaoAtivo()
+}
+
+// Camada própria do editor — não a camada de exibição registrada por
+// xmap-layers-grama.js/-eletrica.js (fora dos arquivos deste plano), mesma
+// decisão de carregarZonasEditaveis acima (editor de zona): os marcadores
+// arrastáveis só existem enquanto "Mover ativos" está ligado, para não
+// duplicar visualmente os marcadores de exibição o tempo todo.
+function desenharMarcadoresArrastaveis(mapa, ativos) {
+  if (_grupoAtivosArrastaveis) {
+    mapa.removeLayer(_grupoAtivosArrastaveis)
+    _grupoAtivosArrastaveis = null
+  }
+  _grupoAtivosArrastaveis = new L.FeatureGroup().addTo(mapa)
+  for (const ativo of ativos) {
+    const marker = L.marker([ativo.lat, ativo.lon], { draggable: true })
+    let posicaoAnterior = marker.getLatLng()
+    marker.on('dragstart', () => {
+      posicaoAnterior = marker.getLatLng()
+    })
+    marker.on('dragend', async () => {
+      const ll = marker.getLatLng()
+      const salvo = await salvarPosicaoAtivo(ativo._modulo, ativo.id, ll.lat, ll.lng)
+      if (!salvo) {
+        // salvarPosicaoAtivo já avisou (envelope recusado ou erro do
+        // banco, idioma do projeto). Devolver o marcador aqui, na volta
+        // da gravação, é a única ordem possível de forma honesta: o aviso
+        // de rede não dá para prever antes de tentar. O que importa é que
+        // nenhum marcador fica visualmente "salvo" num lugar que o banco
+        // recusou (T-10-38).
+        marker.setLatLng(posicaoAnterior)
+        return
+      }
+      await recarregarPosicionamento(mapa)
+    })
+    const origemTexto =
+      ativo.origemPosicao === 'propria'
+        ? 'Posição própria.'
+        : 'Posição herdada do prédio — arrastar grava posição própria, sem mover o prédio.'
+    marker.bindPopup(`<strong>${esc(ativo.nome || ativo.codigo || `#${ativo.id}`)}</strong><br>${origemTexto}`)
+    _grupoAtivosArrastaveis.addLayer(marker)
+  }
+}
+
+// ── posicionar a partir da lista de não localizados ─────────────────────
+function selecionarParaPosicionar(modulo, id) {
+  if (!_mapaPosicao) return
+  cancelarEsperaClique()
+  const item = NAO_LOCALIZADOS.find((a) => a.origemModulo === modulo && a.id === id)
+  const nome = item?.codigo || item?.nome || `#${id}`
+  _aguardandoClique = { modulo, id }
+  mostrarFaixaAguardando(nome)
+  _mapaPosicao.getContainer().style.cursor = 'crosshair'
+  _mapaPosicao.once('click', aoClicarParaPosicionar)
+  document.addEventListener('keydown', aoEscapeCancelar)
+}
+
+async function aoClicarParaPosicionar(e) {
+  const alvo = _aguardandoClique
+  if (!alvo) return
+  encerrarEsperaClique()
+  const salvo = await salvarPosicaoAtivo(alvo.modulo, alvo.id, e.latlng.lat, e.latlng.lng)
+  if (!salvo) return // salvarPosicaoAtivo já avisou (idioma do projeto)
+  await recarregarPosicionamento(_mapaPosicao)
+}
+
+function aoEscapeCancelar(evento) {
+  if (evento.key === 'Escape') cancelarEsperaClique()
+}
+
+// Só a limpeza visual (cursor, faixa, listener de teclado) — usada tanto
+// pelo cancelamento quanto pelo clique bem-sucedido, para os dois nunca
+// deixarem a faixa ou o listener de Esc sobrando.
+function encerrarEsperaClique() {
+  _aguardandoClique = null
+  ocultarFaixaAguardando()
+  if (_mapaPosicao) _mapaPosicao.getContainer().style.cursor = ''
+  document.removeEventListener('keydown', aoEscapeCancelar)
+}
+
+function cancelarEsperaClique() {
+  if (!_aguardandoClique) return
+  if (_mapaPosicao) _mapaPosicao.off('click', aoClicarParaPosicionar)
+  encerrarEsperaClique()
+}
+
+// Faixa curta, mesmo idioma visual de mostrarErroDeCarga (mapa-dados.js) —
+// classe .callout já existente na folha comum, sem cor escrita à mão.
+// textContent, não innerHTML: o nome vem de linha de banco e nunca passa
+// por marcação aqui, então esc() não se aplica (não é HTML).
+function mostrarFaixaAguardando(nome) {
+  let el = document.getElementById(FAIXA_AGUARDANDO_ID)
+  if (!el) {
+    el = document.createElement('div')
+    el.id = FAIXA_AGUARDANDO_ID
+    el.className = 'callout co-blue'
+    el.style.cssText =
+      'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:1000;max-width:min(560px,92vw);margin:0'
+    document.body.appendChild(el)
+  }
+  el.textContent = `Clique no mapa para posicionar "${nome}". Esc cancela.`
+}
+
+function ocultarFaixaAguardando() {
+  document.getElementById(FAIXA_AGUARDANDO_ID)?.remove()
+}
+
+// Publicado no window só depois da checagem de cargo em iniciarEditorAtivos
+// — mesmo padrão de exporManipuladores (editor de zona, acima): quem não
+// tem cargo de escrita nunca ganha este manipulador global. Chamado pelo
+// onclick que mapa/app.js#renderNaoLocalizados monta em cada item da
+// lista de não localizados; recebe só módulo (vocabulário fechado) e
+// identificador numérico — nunca o nome do ativo, que fica de fora do
+// atributo onclick de propósito, para não abrir caminho de injeção via
+// entidade HTML decodificada dentro de uma string JS de aspas simples.
+function exporManipuladoresPosicao() {
+  window.posSelecionarAtivo = (modulo, id) => selecionarParaPosicionar(modulo, id)
 }
