@@ -10,7 +10,7 @@ As fases 2 a 4 do v1.0 (domínio: abastecimento de transportes, inspeções de e
 
 - [ ] **Phase 5: Base unificada** - Os 6 módulos passam a carregar `shared/pmoc.css` como fonte única de tokens e `shared/auth.js` para login, com shell de layout comum
 - [ ] **Phase 6: Tema claro/escuro** - Alternância de tema em qualquer módulo, numa implementação só, com preferência persistida entre módulos
-- [ ] **Phase 7: UI/UX mobile** - `eletrica`, `fonoclama`, `predial` e `mapa` utilizáveis em celular, sem rolagem horizontal da página
+- [x] **Phase 7: UI/UX mobile** - `eletrica`, `fonoclama`, `predial` e `mapa` utilizáveis em celular, sem rolagem horizontal da página
 - [ ] **Phase 8: Kanban e calendário compartilhados** - Componentes extraídos de `maquinas/` para `shared/`, com os testes preservados, e adotados por outros módulos
 - [ ] **Phase 9: Documentos** - Exportação CSV unificada, importação de arquivo com conferência e geração de PDF
 - [ ] **Phase 10: Mapa operacional** - O mapa deixa de ser visualização de dados de demonstração e passa a ler do Supabase, aceitar edição (ativos e zonas de serviço desenhadas) e abrir sem internet na área do CMASM
@@ -104,6 +104,17 @@ Plans:
   3. Modais e formulários cabem na tela e permitem preencher e salvar sem zoom
   4. A navegação principal é alcançável com o polegar, sem depender de precisão de mouse
   5. `maquinas` e `transportes`, que já tinham `@media`, não regridem
+
+**Plans**: 1/1 plans executed
+
+Plans:
+**Wave 1**
+
+- [x] 07-01-PLAN.md — Regras de celular na folha comum, campos do login a 16px, painel do editor do mapa limitado pela tela, gate permanente e roteiro manual (PLAT-06, PLAT-07, PLAT-15, PLAT-16)
+
+**Decisões travadas**: D-01 a faixa de abas continua no topo, rolável, com alvo de toque de 44px — não vira barra fixa inferior nem gaveta · D-02 tabela larga rola dentro do próprio contêiner; nada de cartões empilhados · D-03/D-04 verificação por gate estático em `node --test` mais roteiro manual, sem npm e sem navegador headless; o gate é permanente · D-05 campo de formulário a 16px em tela estreita, porque abaixo disso o iOS aplica zoom ao focar
+**Baseline da fase**: commit `2b3cade` (135 testes); ao fim, 144
+**UI hint**: yes
 
 ### Phase 8: Kanban e calendário compartilhados
 

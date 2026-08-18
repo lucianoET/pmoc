@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Consolidação da plataforma
-current_phase: 10
-current_phase_name: mapa-operacional
+current_phase: 7
+current_phase_name: ui-ux-mobile
 status: verifying
-stopped_at: Completed 10-08-PLAN.md — Fase 10 (mapa operacional) fechada
-last_updated: "2026-08-12T10:26:24.949Z"
-last_activity: 2026-08-12
-last_activity_desc: Phase 10 execution started
+stopped_at: Completed 07-01-PLAN.md — Fase 7 (UI/UX mobile) executada; Fase 10 aguarda a migração 25 rodar em produção para o UAT
+last_updated: "2026-08-18T00:00:00.000Z"
+last_activity: 2026-08-18
+last_activity_desc: Fase 7 executada em um plano (144 testes verdes)
 progress:
   total_phases: 8
-  completed_phases: 3
-  total_plans: 19
-  completed_plans: 19
-  percent: 38
+  completed_phases: 4
+  total_plans: 20
+  completed_plans: 20
+  percent: 50
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supabase + login por cargo), com os dados legados consolidados e importados — sem quebrar os módulos em produção.
-**Current focus:** Phase 10 — mapa-operacional
+**Current focus:** Phase 7 — ui-ux-mobile
 
 ## Current Position
 
-Phase: 10 (mapa-operacional) — EXECUTING
-Plan: 8 of 8
-Status: Phase complete — ready for verification
-Last activity: 2026-08-12 — Phase 10 execution started
+Phase: 7 (ui-ux-mobile) — EXECUTED
+Plan: 1 of 1
+Status: Fase 7 completa. Fase 10 completa, mas o UAT dela está bloqueado até a migração 25 rodar em produção
+Last activity: 2026-08-18 — Fase 7 executada
 
 Progress: [██████████] 100% (v2.0)
 
