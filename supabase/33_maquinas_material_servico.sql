@@ -14,7 +14,9 @@
 -- peça precisar de dois serviços, o caminho é uma tabela de ligação
 -- N:N (maq_material_servicos) — não alargar esta coluna.
 --
--- Migração aditiva. Aplicada em produção: (preencher a data ao rodar)
+-- Migração aditiva. Aplicada em produção em 18/08/2026 — conferida contra
+-- o banco: coluna bigint com a FK para rep_servicos, 0 de 34 materiais
+-- vinculados (o vínculo é preenchido peça a peça no cadastro do estoque).
 -- ══════════════════════════════════════════════════════════════════
 
 alter table maq_materiais

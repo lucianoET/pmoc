@@ -1259,21 +1259,15 @@ do estoque — dois cliques, duas linhas da mesma peça, e o unique recusava. Tr
 Os dois seletores da OS ganharam "➕ Cadastrar novo…": peça abre o modal de material, serviço abre
 um modal novo (`rep_servicos`); o item criado volta selecionado na linha que pediu.
 
-### Migração 33 — pendente de aplicação
+### Migração 33 — aplicada em 18/08/2026 ✅ (0/34 materiais vinculados)
 
 `supabase/33_maquinas_material_servico.sql` (aditiva): `maq_materiais.servico_id` → o serviço
 padrão da peça. Ao lançar a peça numa OS o serviço entra junto; ao lançar o serviço, as peças
 vinculadas entram juntas — os dois sentidos saem da mesma coluna. O vínculo é gerenciado no
 cadastro do material (clicar no **nome** do material no estoque abre o cadastro, que agora também
-edita — só para cargo de escrita). Sem a migração, nada quebra: a coluna ausente vem como
-`undefined` e o vínculo simplesmente não dispara.
-
-Depois de aplicar:
-
-```sql
-select column_name from information_schema.columns
- where table_name='maq_materiais' and column_name='servico_id';   -- 1 linha
-```
+edita — só para cargo de escrita). Conferida contra o banco: coluna `bigint` com a FK para
+`rep_servicos`. **Nenhum material vinculado ainda** — o vínculo se preenche peça a peça no
+cadastro, e enquanto for 0/34 o comportamento automático não dispara para ninguém.
 
 ### Fica para o usuário (com cargo de escrita)
 
