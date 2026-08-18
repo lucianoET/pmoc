@@ -172,6 +172,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
              não um sistema à parte, por isso o link mora aqui e não no portal. -->
         <div style="display:flex;gap:8px">
           <a class="btn btn-s btn-sm" href="/reparos" title="Catálogo de diagnóstico sintoma → causa por modelo, usado na OS corretiva">🛠 Catálogo de reparos</a>
+          <button class="btn btn-s btn-sm" id="btn-hora-homem" onclick="abrirModalHoraHomem()" title="Valor da hora usado no custo de mão de obra das OS">🕒 Hora-homem</button>
           <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
         </div>
       </div>
@@ -240,28 +241,12 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         </div>
       </div>
       <div class="view-sub">Consumíveis, peças e ferramentas</div>
-      <!-- O valor da hora-homem mora aqui porque é o outro preço do módulo: o
-           estoque diz quanto custa a peça, este campo diz quanto custa a hora.
-           Os dois juntos são o custo de uma OS. -->
-      <div class="panel-card" style="margin-bottom:16px">
-        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-          <div style="flex:0 1 200px">
-            <label for="cfg-valor-hora">Valor da hora-homem (R$)</label>
-            <input type="number" id="cfg-valor-hora" min="0" step="0.01" placeholder="não informado"/>
-          </div>
-          <button class="btn btn-p btn-sm" id="btn-valor-hora" onclick="salvarValorHora()">Salvar</button>
-          <div class="help" id="cfg-hora-ajuda" style="flex:1 1 260px;margin:0">
-            Usado como padrão no custo de mão de obra das OS. Enquanto estiver vazio,
-            o custo de mão de obra fica zerado.
-          </div>
-        </div>
-      </div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Código</th><th>Nome</th><th>Tipo</th><th>Estoque atual</th><th>Mínimo</th><th>Preço un.</th><th>Status</th>
+            <th>Código</th><th>Nome</th><th>Tipo</th><th>Sistema</th><th>Aplicação</th><th>Estoque atual</th><th>Mínimo</th><th>Preço un.</th><th>Status</th>
           </tr></thead>
-          <tbody id="tb-materiais"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <tbody id="tb-materiais"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -610,6 +595,34 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
   </div>
 </div>
 
+<!-- MODAL: HORA-HOMEM
+     O valor da hora-homem saiu da aba Estoque (18/08/2026): é o outro preço
+     do módulo — o estoque diz quanto custa a peça, este campo diz quanto
+     custa a hora — mas quem precisa dele está lançando serviço numa OS, não
+     conferindo estoque. Aberto pelo botão no cabeçalho da aba OS. -->
+<div class="overlay" id="modal-hora-homem">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hd">
+      <h3>Valor da hora-homem</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-hora-homem')" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="frow">
+        <label for="cfg-valor-hora">Valor da hora-homem (R$)</label>
+        <input type="number" id="cfg-valor-hora" min="0" step="0.01" placeholder="não informado"/>
+      </div>
+      <div class="help" id="cfg-hora-ajuda" style="margin:0">
+        Usado como padrão no custo de mão de obra das OS. Enquanto estiver vazio,
+        o custo de mão de obra fica zerado.
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-hora-homem')">Cancelar</button>
+      <button class="btn btn-p" id="btn-valor-hora" onclick="salvarValorHora()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: MATERIAL -->
 <div class="overlay" id="modal-material">
   <div class="modal">
@@ -633,6 +646,29 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         </div>
         <div class="frow"><label>Unidade</label><input type="text" id="mat-uni" value="un"/></div>
         <div class="frow"><label>Estoque mínimo</label><input type="number" id="mat-min" value="2" min="0"/></div>
+      </div>
+      <!-- Sistema/aplicação (migração 34): some quando a migração não rodou —
+           não há onde gravar. Mesmo idioma do wrapper de serviço abaixo. -->
+      <div class="fgrid" id="mat-campos-34">
+        <div class="frow">
+          <label for="mat-sistema">Sistema</label>
+          <input type="text" id="mat-sistema" list="lista-sistemas" placeholder="Ex: Motor"/>
+          <datalist id="lista-sistemas">
+            <option value="Motor"></option>
+            <option value="Transmissão"></option>
+            <option value="Hidráulico"></option>
+            <option value="Elétrico"></option>
+            <option value="Corte"></option>
+            <option value="Chassi"></option>
+            <option value="Filtragem"></option>
+            <option value="Lubrificação"></option>
+          </datalist>
+        </div>
+        <div class="frow">
+          <label for="mat-aplicacao">Aplicação</label>
+          <select id="mat-aplicacao"></select>
+          <div class="help">Modelo em que a peça serve. "Vários" é para peça compartilhada entre modelos.</div>
+        </div>
       </div>
       <div class="frow" id="mat-servico-wrap">
         <label>Serviço vinculado</label>

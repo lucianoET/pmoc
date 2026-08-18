@@ -75,3 +75,35 @@ test('nenhuma coluna de aquisição foi acrescentada a maq_materiais — a quant
   assert.deepEqual(colunas.sort(), ['aplicacao', 'sistema'],
     'a quantidade em aquisição é derivada de quantidade - qtd_recebida, não uma coluna denormalizada')
 })
+
+// ── material: sistema e aplicação (migração 34) ────────────────────────────
+test('o modal de material tem os dois campos novos, com o datalist de sugestões', () => {
+  assert.match(HTML, /id="mat-sistema"/)
+  assert.match(HTML, /id="mat-aplicacao"/)
+  assert.match(HTML, /id="lista-sistemas"/)
+  for (const sugestao of ['Motor', 'Transmissão', 'Hidráulico', 'Elétrico', 'Corte', 'Chassi', 'Filtragem', 'Lubrificação']) {
+    assert.match(HTML, new RegExp(`<option value="${sugestao}">`),
+      `sugestão "${sugestao}" deveria estar no datalist de sistemas`)
+  }
+})
+
+test('a tabela do estoque tem as colunas Sistema e Aplicação', () => {
+  assert.match(HTML, /<th>Sistema<\/th><th>Aplicação<\/th>/)
+  assert.match(APP, /esc\(m\.sistema \|\| '—'\)/)
+  assert.match(APP, /esc\(m\.aplicacao \|\| '—'\)/)
+})
+
+test('opcoesAplicacao() põe Vários no topo e junta ATIVOS.tipo_modelo com fabricante+modelo de MODELOS', () => {
+  const bloco = APP.match(/function opcoesAplicacao\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'maquinas/app.js deveria declarar opcoesAplicacao')
+  assert.match(bloco[1], /ATIVOS\.map\(a => a\.tipo_modelo\)/)
+  assert.match(bloco[1], /MODELOS\.map\(m => `\$\{m\.fabricante\} \$\{m\.modelo\}`/)
+  assert.match(bloco[1], /return \['Vários', \.\.\.distintas\]/)
+})
+
+test('salvarMaterial() só envia sistema/aplicação quando a migração 34 está disponível (D7)', () => {
+  const salvar = APP.match(/async function salvarMaterial\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(salvar)
+  assert.match(salvar[1], /if\(MIGRACAO_34\)\{[\s\S]*?campos\.sistema[\s\S]*?campos\.aplicacao/,
+    'num banco sem a migração, mandar coluna inexistente derrubaria todo o cadastro de material')
+})

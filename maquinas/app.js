@@ -19,7 +19,7 @@ let AREAS = [], OPERACOES = [], OPERACOES_ERRO = null
 // Catálogo de reparos (migração 26). Carregado à parte e tolerante a ausência:
 // enquanto a migração não rodar em produção, as três listas ficam vazias e o
 // módulo segue funcionando exatamente como antes.
-let REPAROS = [], REP_MATS = [], REP_SERVS = [], SERVICOS = []
+let REPAROS = [], REP_MATS = [], REP_SERVS = [], SERVICOS = [], MODELOS = []
 // Itens de manutenção por OS (migração 29). Mesma tolerância do catálogo de
 // reparos: sem a migração a lista fica vazia, a OS volta a ser de um item só e
 // nada quebra.
@@ -48,6 +48,12 @@ let OSD_PECAS = [], OSD_SERVICOS = []
 let LINHA_NOVO_MATERIAL = null, LINHA_NOVO_SERVICO = null
 // material aberto no modal de cadastro (null = criação)
 let MATERIAL_MODAL_ID = null
+// migração 34 (sistema/aplicação do material + listas de compra): sonda que
+// diz se as duas tabelas novas estão disponíveis. Definida por
+// carregarCompras() (aba Necessidades) — enquanto essa carga não roda ainda
+// nesta task, fica false e os campos/telas que dependem dela ficam ocultos,
+// exatamente como mat-servico-wrap se comporta sem a migração 26.
+let MIGRACAO_34 = false
 let AGENDA_ANO = new Date().getFullYear()
 let AGENDA_MES = new Date().getMonth()
 
@@ -138,17 +144,19 @@ async function carregarTudo(){
 // Fora do Promise.all de carregarTudo() de propósito: se as tabelas rep_* ainda
 // não existirem, o erro fica contido aqui e o módulo continua igual ao que era.
 async function carregarCatalogoReparos(){
-  const [rp, rm, rs, sv] = await Promise.all([
+  const [rp, rm, rs, sv, md] = await Promise.all([
     supa.from('rep_reparos').select('*').eq('ativo', true).order('frequencia', {ascending:false}),
     supa.from('rep_reparo_materiais').select('*'),
     supa.from('rep_reparo_servicos').select('*'),
     supa.from('rep_servicos').select('*').eq('ativo', true),
+    supa.from('rep_modelos').select('*').eq('ativo', true),
   ])
-  const indisponivel = rp.error || rm.error || rs.error || sv.error
+  const indisponivel = rp.error || rm.error || rs.error || sv.error || md.error
   REPAROS   = indisponivel ? [] : (rp.data || [])
   REP_MATS  = indisponivel ? [] : (rm.data || [])
   REP_SERVS = indisponivel ? [] : (rs.data || [])
   SERVICOS  = indisponivel ? [] : (sv.data || [])
+  MODELOS   = indisponivel ? [] : (md.data || [])
 }
 
 // ── itens de manutenção por OS (migração 29) ──
@@ -786,16 +794,9 @@ function navegarAgenda(direcao){
 
 // ── MATERIAIS ──
 function renderMateriais(){
-  const campoHora = document.getElementById('cfg-valor-hora')
-  // não sobrescreve o que o usuário está digitando agora
-  if(campoHora && document.activeElement !== campoHora){
-    campoHora.value = valorHoraPadrao() ?? ''
-  }
-  aplicarPermissoesConfig()
-
   const tbody = document.getElementById('tb-materiais')
   if(!MATERIAIS.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum material cadastrado</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Nenhum material cadastrado</td></tr>'
     return
   }
   tbody.innerHTML = MATERIAIS.map(m => {
@@ -810,6 +811,8 @@ function renderMateriais(){
         <td class="hi">${esc(m.codigo||'—')}</td>
         <td>${esc(m.nome)}</td>
         <td><span class="badge b-blue">${esc(m.tipo.toUpperCase())}</span></td>
+        <td>${esc(m.sistema || '—')}</td>
+        <td>${esc(m.aplicacao || '—')}</td>
         <td><input type="number" id="ed-atual" value="${m.estoque_atual}" min="0" step="0.5" style="width:88px"/></td>
         <td><input type="number" id="ed-minimo" value="${m.estoque_minimo}" min="0" step="0.5" style="width:88px"/></td>
         <td><input type="number" id="ed-preco" value="${m.preco ?? ''}" min="0" step="0.01" placeholder="0,00" style="width:96px"/></td>
@@ -828,6 +831,8 @@ function renderMateriais(){
         ? `<a href="#" onclick="event.preventDefault();abrirModalMaterial(${m.id})" style="color:var(--text)" title="Editar cadastro e serviço vinculado">${esc(m.nome)}</a>`
         : esc(m.nome)}</td>
       <td><span class="badge b-blue">${esc(m.tipo.toUpperCase())}</span></td>
+      <td>${esc(m.sistema || '—')}</td>
+      <td>${esc(m.aplicacao || '—')}</td>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
           <span>${m.estoque_atual} ${esc(m.unidade)}</span>
@@ -850,6 +855,16 @@ function renderMateriais(){
 }
 
 // ── valor da hora-homem (maq_config, migração 30) ──
+// Saiu da aba Estoque (18/08/2026) e passou a viver num modal aberto do
+// cabeçalho da aba OS — é lá que o custo de mão de obra é consumido, não na
+// conferência de estoque.
+function abrirModalHoraHomem(){
+  const campo = document.getElementById('cfg-valor-hora')
+  campo.value = valorHoraPadrao() ?? ''
+  aplicarPermissoesConfig()
+  document.getElementById('modal-hora-homem').classList.add('open')
+}
+
 // Conferido contra as políticas reais em 18/08/2026: TODA escrita do módulo
 // Máquinas (maq_os, maq_materiais, maq_estoque_movimentos, maq_config) está
 // escopada a `authenticated`, e o acesso Livre nunca autentica. Uma regra só,
@@ -893,6 +908,7 @@ async function salvarValorHora(){
     alert('O valor não foi gravado: seu cargo não tem permissão de escrita na configuração do módulo.')
     return
   }
+  fecharModal('modal-hora-homem')
   await carregarTudo()
 }
 
@@ -1667,7 +1683,7 @@ function recalcularCustosOS(){
   aviso.style.display = semValor ? '' : 'none'
   aviso.innerHTML = semValor
     ? (valorHoraPadrao() === null
-      ? '⚠ Nenhum valor de hora-homem cadastrado no módulo — o custo de mão de obra fica zerado. Defina o valor na aba Estoque.'
+      ? '⚠ Nenhum valor de hora-homem cadastrado no módulo — o custo de mão de obra fica zerado. Defina o valor no botão 🕒 Hora-homem, no topo desta aba.'
       : '⚠ Há serviço sem valor da hora; o custo de mão de obra desconsidera essas linhas.')
     : ''
 }
@@ -2210,6 +2226,18 @@ async function salvarAtivo(){
 }
 
 // ── MODAL MATERIAL ──
+// Etiquetas de modelo distintas, para o campo "aplicação" do material
+// (migração 34). "Vários" é opção fixa, não ausência de valor: uma peça
+// compartilhada precisa DIZER que é compartilhada, enquanto campo vazio
+// significa "ninguém classificou ainda" — os dois estados são diferentes e
+// a tela não pode confundi-los.
+function opcoesAplicacao(){
+  const doAtivos = ATIVOS.map(a => a.tipo_modelo).filter(Boolean)
+  const doModelos = MODELOS.map(m => `${m.fabricante} ${m.modelo}`.trim()).filter(Boolean)
+  const distintas = [...new Set([...doAtivos, ...doModelos])].sort((a,b) => a.localeCompare(b))
+  return ['Vários', ...distintas]
+}
+
 function abrirModalMaterial(id){
   MATERIAL_MODAL_ID = id || null
   const material = id ? MATERIAIS.find(m => m.id === id) : null
@@ -2221,6 +2249,15 @@ function abrirModalMaterial(id){
   document.getElementById('mat-tipo').value = material?.tipo || 'consumivel'
   document.getElementById('mat-uni').value  = material?.unidade || 'un'
   document.getElementById('mat-min').value  = material?.estoque_minimo ?? 2
+
+  // sistema/aplicação (migração 34): sem a migração não há onde gravar, o
+  // bloco some — mesmo idioma de mat-servico-wrap logo abaixo.
+  const camposNovos = document.getElementById('mat-campos-34')
+  camposNovos.style.display = MIGRACAO_34 ? '' : 'none'
+  document.getElementById('mat-sistema').value = material?.sistema || ''
+  document.getElementById('mat-aplicacao').innerHTML =
+    '<option value="">— não classificado —</option>' +
+    opcoesAplicacao().map(op => `<option value="${esc(op)}" ${op===material?.aplicacao?'selected':''}>${esc(op)}</option>`).join('')
 
   // serviço vinculado (migração 33): o serviço que esta peça costuma exigir.
   // Sem catálogo carregado o campo some — não há o que vincular.
@@ -2243,6 +2280,14 @@ async function salvarMaterial(){
     unidade:         document.getElementById('mat-uni').value.trim() || 'un',
     estoque_minimo:  parseFloat(document.getElementById('mat-min').value) || 0,
     servico_id:      parseInt(document.getElementById('mat-servico').value) || null,
+  }
+
+  // sistema/aplicação só entram no payload com a migração 34 disponível: num
+  // banco sem ela, as colunas não existem e mandar essas chaves derrubaria o
+  // cadastro inteiro do material.
+  if(MIGRACAO_34){
+    campos.sistema   = document.getElementById('mat-sistema').value.trim() || null
+    campos.aplicacao = document.getElementById('mat-aplicacao').value || null
   }
 
   // .select() pela mesma razão de sempre: sob RLS, escrita sem efeito volta
@@ -2382,6 +2427,7 @@ function exporNoWindow(){
     abrirModalAbastecimento,
     abrirModalArea,
     abrirModalAtivo,
+    abrirModalHoraHomem,
     abrirModalMaterial,
     abrirModalMovimento,
     abrirModalOperacao,
