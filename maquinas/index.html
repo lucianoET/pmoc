@@ -168,7 +168,12 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     <div class="view" id="view-os">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div class="view-title">Ordens de Serviço</div>
-        <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
+        <!-- Reparos é o catálogo sintoma → causa que a OS corretiva consome —
+             não um sistema à parte, por isso o link mora aqui e não no portal. -->
+        <div style="display:flex;gap:8px">
+          <a class="btn btn-s btn-sm" href="/reparos" title="Catálogo de diagnóstico sintoma → causa por modelo, usado na OS corretiva">🛠 Catálogo de reparos</a>
+          <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
+        </div>
       </div>
       <div class="view-sub">Clique numa OS para ver o detalhe, editar e exportar</div>
       <div class="filters-inline">

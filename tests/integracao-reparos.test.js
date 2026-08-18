@@ -93,12 +93,19 @@ test('o modal de OS tem o bloco de diagnóstico e ele nasce escondido', () => {
   assert.match(maqHtml, /id="os-reparo-confirmado"/)
 })
 
-test('reparos está roteado no Vercel e visível no portal', () => {
+// Decisão (18/08/2026): Reparos deixou de ter cartão próprio no portal — o
+// portal lista sistemas, não sub-catálogos de um sistema. O catálogo é
+// alcançado de dentro do Máquinas, onde de fato é consumido (na OS
+// corretiva). Uma fase futura não deve "consertar" o portal de volta.
+test('reparos está roteado no Vercel e é alcançado por dentro do Máquinas', () => {
   const vercel = JSON.parse(ler(['vercel.json']))
   const rota = vercel.rewrites.find(r => r.source === '/reparos')
   assert.ok(rota, 'sem rewrite, /reparos dá 404 em produção')
   assert.equal(rota.destination, '/reparos/index.html')
-  assert.match(ler(['index.html']), /href="\/reparos"/)
+  assert.doesNotMatch(ler(['index.html']), /href="\/reparos"/,
+    'o portal não anuncia mais Reparos como módulo próprio')
+  assert.match(maqHtml, /href="\/reparos"/,
+    'o catálogo é alcançado de dentro do Máquinas, onde é consumido')
 })
 
 // Encontrado em smoke test com o Playwright em 18/08/2026: com a migração 26
