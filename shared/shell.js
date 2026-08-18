@@ -38,19 +38,27 @@ export function montarShell(cfg) {
   const portalLink = cfg.portalLink !== false
   const versao = cfg.versao
 
-  const linkPortal = portalLink ? '<a class="topbar-back" href="/">← Portal</a>' : ''
+  // o rótulo "Portal" some por CSS em tela estreita e sobra a seta, que é o
+  // que cabe — daí o texto vir em elemento próprio, e não solto no link
+  const linkPortal = portalLink
+    ? '<a class="topbar-back" href="/" title="Voltar ao portal" aria-label="Voltar ao portal">←<span class="topbar-back-txt"> Portal</span></a>'
+    : ''
 
+  // Ordem pedida pelo usuário e mantida em UMA linha em qualquer largura:
+  // título, usuário, modo (tema), portal, sair. Em tela estreita quem cede é o
+  // título (corta com reticências) e o link do portal (fica só a seta) — os
+  // dois se recuperam pelo contexto; um chip de cargo cortado, não.
   const topbar = `
     <div class="topbar">
       <div class="logo"><div class="logo-dot"></div> PMOC <span class="logo-accent">${esc(nome)}</span></div>
       <div class="topbar-right">
-        ${linkPortal}
+        <span class="user-chip" id="user-chip">—</span>
         <!-- btn-tema: nem o id nem a classe podem conter a subsequência "nav" —
              tests/shell.test.js conta botões e afirma ausência da faixa de abas
              por expressão regular sobre esse prefixo -->
         <button id="btn-tema" class="btn-tema" onclick="alternarTema()" title="Ir para o tema claro" aria-label="Ir para o tema claro">☀</button>
-        <span class="user-chip" id="user-chip">—</span>
-        <button class="btn btn-s btn-sm" onclick="sair()">Sair</button>
+        ${linkPortal}
+        <button class="btn btn-s btn-sm btn-sair" onclick="sair()">Sair</button>
       </div>
     </div>`
 

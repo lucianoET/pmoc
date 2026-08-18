@@ -18,6 +18,7 @@ const APP = fs.readFileSync(path.join(RAIZ, 'maquinas', 'app.js'), 'utf8')
 const HTML = fs.readFileSync(path.join(RAIZ, 'maquinas', 'index.html'), 'utf8')
 const SCHEMA_01 = fs.readFileSync(path.join(RAIZ, 'supabase', '01_maquinas_schema.sql'), 'utf8')
 const MIGRACAO_29 = path.join(RAIZ, 'supabase', '29_maquinas_os_itens.sql')
+const MIGRACAO_31 = path.join(RAIZ, 'supabase', '31_maquinas_os_fluxo.sql')
 
 // ── migração 29 ───────────────────────────────────────────────────────────
 test('a migração 29 existe, cria maq_os_itens e é aditiva', () => {
@@ -53,9 +54,11 @@ test('a situação da OS vem da tela, não é mais fixa em concluída', () => {
 })
 
 test('os rótulos de situação cobrem exatamente a lista fechada do banco', () => {
-  // a lista fechada é do banco (migração 01); a tela só traduz
-  const check = SCHEMA_01.match(/status text not null default 'pendente' check \(status in \(([^)]+)\)\)/)
-  assert.ok(check, 'maq_os.status deveria continuar com lista fechada no schema')
+  // a lista fechada é do banco — a migração 31 alargou a da 01 com os dois
+  // estados de oficina (delineamento e espera); a tela só traduz
+  const sql31 = fs.readFileSync(MIGRACAO_31, 'utf8')
+  const check = sql31.match(/check \(status in \(([^)]+)\)\)/)
+  assert.ok(check, 'a migração 31 deveria declarar a lista fechada alargada de maq_os.status')
   const doBanco = check[1].split(',').map(s => s.trim().replace(/'/g, '')).sort()
 
   const bloco = APP.match(/const STATUS_OS = \{([\s\S]*?)\n\}/)
@@ -66,18 +69,35 @@ test('os rótulos de situação cobrem exatamente a lista fechada do banco', () 
     'a tela e o banco precisam falar do mesmo conjunto de situações — nem a mais, nem a menos')
 })
 
-test('o fluxo é aberta → execução → concluída, e os estados finais não avançam', () => {
+test('o fluxo da oficina é aberta → delineamento → espera → execução → concluída', () => {
   const bloco = APP.match(/function proximoStatus\(status\)\{([\s\S]*?)\n\}/)
   assert.ok(bloco, 'maquinas/app.js deveria declarar proximoStatus')
-  assert.match(bloco[1], /if\(status === 'pendente'\)\s+return \{ status: 'em_andamento'/)
+  assert.match(bloco[1], /if\(status === 'pendente'\)\s+return \{ status: 'delineamento'/)
+  assert.match(bloco[1], /if\(status === 'delineamento'\) return \{ status: 'espera'/)
+  assert.match(bloco[1], /if\(status === 'espera'\)\s+return \{ status: 'em_andamento'/)
   assert.match(bloco[1], /if\(status === 'em_andamento'\) return \{ status: 'concluida'/)
   assert.match(bloco[1], /return null/,
     'concluída e cancelada são finais — sem botão de avançar')
 })
 
+test('encerrar o delineamento registra quem e quando, e a migração 31 dá as colunas', () => {
+  const sql31 = fs.readFileSync(MIGRACAO_31, 'utf8')
+  assert.match(sql31, /add column if not exists delineado_por text/)
+  assert.match(sql31, /add column if not exists delineado_em timestamptz/)
+  assert.doesNotMatch(sql31, /drop\s+(table|column)/i,
+    'a 31 troca um check e adiciona colunas — não remove nada')
+
+  const bloco = APP.match(/async function avancarOS\(id\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /payload\.delineado_por = USUARIO\?\.nome/)
+  assert.match(bloco[1], /payload\.delineado_em = new Date\(\)\.toISOString\(\)/)
+})
+
 // ── baixa de estoque só na conclusão ──────────────────────────────────────
 test('a baixa de peças mora numa função só, chamada pelos caminhos de conclusão', () => {
-  assert.match(APP, /async function baixarPecasDaOS\(osId, planoIds, pecasReparo, reparo\)/)
+  // a função passou a receber a lista de peças já resolvida, em vez de montar
+  // a lista por dentro a partir de plano e diagnóstico
+  assert.match(APP, /async function baixarPecasDaOS\(osId, pecas, reparo\)/)
 
   // três caminhos levam à conclusão e os três precisam debitar igual
   const chamadas = APP.match(/await baixarPecasDaOS\(/g) || []
@@ -85,13 +105,13 @@ test('a baixa de peças mora numa função só, chamada pelos caminhos de conclu
     `esperado ao menos 3 chamadas de baixarPecasDaOS (criar concluída, concluir pela lista, concluir pelo detalhe), encontradas ${chamadas.length}`)
 })
 
-test('criar uma OS aberta não baixa estoque', () => {
+test('criar uma OS que ainda não executa não baixa estoque', () => {
   const bloco = APP.match(/async function salvarOS\(\)\{([\s\S]*?)\n\}/)
   assert.ok(bloco, 'maquinas/app.js deveria declarar salvarOS')
-  assert.match(bloco[1], /if\(concluida && osNova\?\.id\)\{\s*\n\s*await baixarPecasDaOS/,
-    'a baixa dentro de salvarOS precisa estar sob a condição de OS concluída')
-  assert.match(bloco[1], /custo_pecas: concluida \? custo_pecas : 0/,
-    'OS aberta não consumiu peça nenhuma ainda — custo entra na conclusão')
+  assert.match(bloco[1], /const executando = status === 'em_andamento' \|\| concluida/,
+    'a baixa acompanha o início da execução, não a conclusão')
+  assert.match(bloco[1], /if\(executando && osNova\?\.id\)\{\s*\n\s*await baixarPecasDaOS/,
+    'a baixa dentro de salvarOS precisa estar sob a condição de execução')
   assert.match(bloco[1], /data_conclusao: concluida \? data : null/)
 })
 
@@ -172,12 +192,30 @@ test('a linha da OS abre o detalhe', () => {
   assert.match(APP, /async function salvarDetalheOS\(\)/)
 })
 
-test('concluir pelo detalhe baixa estoque igual a concluir pela lista', () => {
+test('entrar em execução pelo detalhe baixa estoque igual a entrar pela lista', () => {
   const bloco = APP.match(/async function salvarDetalheOS\(\)\{([\s\S]*?)\n\}/)
   assert.ok(bloco)
-  assert.match(bloco[1], /const virouConcluida = status === 'concluida' && os\.status !== 'concluida'/)
-  assert.match(bloco[1], /if\(virouConcluida\)\{[\s\S]*?await baixarPecasDaOS/,
-    'deixar um caminho de conclusão sem baixa seria um furo no estoque')
+  assert.match(bloco[1], /const virouExecucao = EXECUTADOS\.includes\(status\) && !EXECUTADOS\.includes\(os\.status\)/)
+  assert.match(bloco[1], /if\(virouExecucao\) await baixarPecasDaOS/,
+    'deixar um caminho de execução sem baixa seria um furo no estoque')
+})
+
+test('a baixa é idempotente: quem já debitou na execução não debita de novo na conclusão', () => {
+  assert.match(APP, /async function estoqueJaBaixadoDaOS\(osId\)/)
+  assert.match(APP, /eq\('os_id', osId\)\.eq\('tipo', 'saida'\)\.limit\(1\)/,
+    'a fonte é o movimento de estoque da própria OS, não uma flag paralela')
+  const bloco = APP.match(/async function baixarPecasDaOS\(osId, pecas, reparo\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /if\(await estoqueJaBaixadoDaOS\(osId\)\) return/,
+    'a guarda mora dentro da baixa — todos os caminhos a ganham de graça')
+})
+
+test('a lista de OS sinaliza falta de material e o filtro isola essas OS', () => {
+  assert.match(APP, /function faltasDaOS\(os\)/)
+  assert.match(APP, /if\(filtro === 'falta'\) lista = lista\.filter\(o => faltasDaOS\(o\)\.length > 0\)/)
+  assert.match(HTML, /id="filtro-os"/)
+  assert.match(HTML, /<option value="falta">/)
+  assert.match(HTML, /<th>Material<\/th>/)
 })
 
 test('a exportação da OS não introduz dependência externa', () => {
@@ -197,4 +235,48 @@ test('o CSV da OS protege contra injeção de fórmula em planilha', () => {
   // com =, +, - ou @ vira comando ao abrir no Excel
   assert.match(APP, /function csvSeguro\(valor\)\{[\s\S]*?\/\^\[=\+\\-@\]\/\.test\(texto\)/)
   assert.match(APP, /csvEscape\(csvSeguro\(v\)\)/)
+})
+
+// ── painel como resumo, não relatório ─────────────────────────────────────
+test('cada bloco do painel corta em 5 linhas e manda o resto para a aba', () => {
+  assert.match(APP, /function pintarResumo\(\{ alvo, itens, vazio, aba, linha, teto \}\)/)
+  assert.match(APP, /const TETO = 5/)
+  assert.match(APP, /const visiveis = itens\.slice\(0, teto\)/,
+    'sem o corte, 28 máquinas e 34 materiais viravam três telas de rolagem antes do primeiro dado útil')
+  assert.match(APP, /Ver os outros \$\{restantes\}/)
+  assert.match(APP, /function irParaAba\(id\)/)
+})
+
+test('o painel mostra as OS em aberto — a lista que a situação da OS tornou possível', () => {
+  assert.match(HTML, /id="kpi-os-abertas"/)
+  assert.match(HTML, /id="painel-os"/)
+  assert.match(APP, /!\['concluida','cancelada'\]\.includes\(o\.status\)/,
+    'aberto é tudo que ainda não terminou — inclusive delineamento e espera')
+})
+
+// ── estoque editável em linha ─────────────────────────────────────────────
+test('a linha do estoque edita quantidade, mínimo e preço', () => {
+  assert.match(APP, /function editarMaterial\(id\)/)
+  assert.match(APP, /async function salvarLinhaMaterial\(id\)/)
+  for (const campo of ['ed-atual', 'ed-minimo', 'ed-preco']) {
+    assert.ok(APP.includes(`id="${campo}"`), `o campo ${campo} deveria existir na linha em edição`)
+  }
+  assert.match(APP, /update\(\{ estoque_atual: atual, estoque_minimo: minimo, preco \}\)/)
+})
+
+test('mexer na quantidade à mão deixa rastro em maq_estoque_movimentos', () => {
+  const bloco = APP.match(/async function salvarLinhaMaterial\(id\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /const diferenca = atual - Number\(material\.estoque_atual\)/)
+  assert.match(bloco[1], /tipo: diferenca > 0 \? 'entrada' : 'saida'/)
+  assert.match(bloco[1], /motivo: `Ajuste manual no estoque/,
+    'sem o movimento, o saldo muda e ninguém sabe por quê')
+})
+
+test('a edição em linha valida antes de gravar', () => {
+  const bloco = APP.match(/async function salvarLinhaMaterial\(id\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /if\(!\(atual >= 0\) \|\| !\(minimo >= 0\)\)/,
+    'quantidade e mínimo negativos ou não numéricos não podem chegar ao banco')
+  assert.match(bloco[1], /if\(preco !== null && !\(preco >= 0\)\)/)
 })

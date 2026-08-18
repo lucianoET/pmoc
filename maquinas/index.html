@@ -96,15 +96,23 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <div class="kpi kc-red"><div class="kpi-n" id="kpi-inop">—</div><div class="kpi-l">Inoperantes</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-venc">—</div><div class="kpi-l">Manutenções vencendo</div></div>
         <div class="kpi kc-red"><div class="kpi-n" id="kpi-estoque-baixo">—</div><div class="kpi-l">Estoque abaixo do mín.</div></div>
+        <div class="kpi kc-blue"><div class="kpi-n" id="kpi-os-abertas">—</div><div class="kpi-l">OS em aberto</div></div>
       </div>
-      <div class="fgrid" style="gap:20px;align-items:start">
-        <div>
-          <h3>Máquinas inoperantes</h3>
-          <div id="painel-inop"><div class="empty"><div class="empty-ico">✅</div><p>Todas operantes</p></div></div>
+      <!-- Três blocos de resumo, cada um com no máximo 5 linhas e um botão para
+           a aba onde a lista inteira mora. O painel responde "o que precisa de
+           mim agora", não "tudo que existe" — para isso existem as outras abas. -->
+      <div class="fgrid3" style="gap:16px;align-items:start">
+        <div class="panel-card">
+          <h3>OS em aberto</h3>
+          <div id="painel-os" class="stack"><div class="empty"><div class="empty-ico">📋</div><p>Carregando...</p></div></div>
         </div>
-        <div>
-          <h3>Materiais críticos (abaixo do mínimo)</h3>
-          <div id="painel-mats"><div class="empty"><div class="empty-ico">📦</div><p>Carregando...</p></div></div>
+        <div class="panel-card">
+          <h3>Máquinas inoperantes</h3>
+          <div id="painel-inop" class="stack"><div class="empty"><div class="empty-ico">✅</div><p>Todas operantes</p></div></div>
+        </div>
+        <div class="panel-card">
+          <h3>Materiais abaixo do mínimo</h3>
+          <div id="painel-mats" class="stack"><div class="empty"><div class="empty-ico">📦</div><p>Carregando...</p></div></div>
         </div>
       </div>
     </div>
@@ -163,13 +171,25 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
       </div>
       <div class="view-sub">Clique numa OS para ver o detalhe, editar e exportar</div>
+      <div class="filters-inline">
+        <select id="filtro-os" onchange="renderOS()" class="control-auto">
+          <option value="">Todas as situações</option>
+          <option value="falta">⚠ Com falta de material</option>
+          <option value="pendente">Abertas</option>
+          <option value="delineamento">Em delineamento</option>
+          <option value="espera">Em espera</option>
+          <option value="em_andamento">Em execução</option>
+          <option value="concluida">Concluídas</option>
+          <option value="cancelada">Canceladas</option>
+        </select>
+      </div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
             <th>Data</th><th>Máquina</th><th>Tipo</th><th>Serviço</th>
-            <th>Técnico</th><th>Status</th><th>Ações</th>
+            <th>Material</th><th>Técnico</th><th>Status</th><th>Ações</th>
           </tr></thead>
-          <tbody id="tb-os"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <tbody id="tb-os"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -215,6 +235,22 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         </div>
       </div>
       <div class="view-sub">Consumíveis, peças e ferramentas</div>
+      <!-- O valor da hora-homem mora aqui porque é o outro preço do módulo: o
+           estoque diz quanto custa a peça, este campo diz quanto custa a hora.
+           Os dois juntos são o custo de uma OS. -->
+      <div class="panel-card" style="margin-bottom:16px">
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:0 1 200px">
+            <label for="cfg-valor-hora">Valor da hora-homem (R$)</label>
+            <input type="number" id="cfg-valor-hora" min="0" step="0.01" placeholder="não informado"/>
+          </div>
+          <button class="btn btn-p btn-sm" id="btn-valor-hora" onclick="salvarValorHora()">Salvar</button>
+          <div class="help" id="cfg-hora-ajuda" style="flex:1 1 260px;margin:0">
+            Usado como padrão no custo de mão de obra das OS. Enquanto estiver vazio,
+            o custo de mão de obra fica zerado.
+          </div>
+        </div>
+      </div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
@@ -359,18 +395,21 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <input type="date" id="os-data"/>
         </div>
       </div>
-      <!-- Situação da OS. Até aqui toda OS nascia concluída, o que impedia
-           registrar serviço que foi aberto e ainda não terminou. A baixa de
-           estoque e a atualização do horímetro acontecem na CONCLUSÃO, não na
-           abertura — uma OS aberta que já debitou peça mentiria o estoque. -->
+      <!-- Situação da OS — o fluxo da oficina: aberta (recepção; quem entregou
+           a máquina vai nas observações) → delineamento (diagnóstico) → espera
+           (aguardando material ou técnico) → execução → concluída. A baixa de
+           estoque acontece no INÍCIO DA EXECUÇÃO — uma OS em espera que já
+           debitou peça mentiria o estoque. -->
       <div class="frow">
         <label>Situação *</label>
         <select id="os-status">
-          <option value="pendente">Aberta</option>
+          <option value="pendente">Aberta (recepção)</option>
+          <option value="delineamento">Em delineamento</option>
+          <option value="espera">Em espera</option>
           <option value="em_andamento">Em execução</option>
           <option value="concluida">Concluída</option>
         </select>
-        <div class="help" id="os-status-ajuda">Peças e horímetro só são baixados quando a OS for concluída.</div>
+        <div class="help" id="os-status-ajuda">As peças são descontadas do estoque quando a execução inicia.</div>
       </div>
       <div class="frow" id="os-plano-wrap">
         <label>Plano de manutenção</label>
@@ -640,7 +679,9 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <div class="frow">
           <label>Situação</label>
           <select id="osd-status">
-            <option value="pendente">Aberta</option>
+            <option value="pendente">Aberta (recepção)</option>
+            <option value="delineamento">Em delineamento</option>
+            <option value="espera">Em espera</option>
             <option value="em_andamento">Em execução</option>
             <option value="concluida">Concluída</option>
             <option value="cancelada">Cancelada</option>
@@ -651,11 +692,18 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <input type="text" id="osd-tecnico"/>
         </div>
       </div>
-      <div class="fgrid3">
-        <div class="frow"><label>Custo de peças (R$)</label><input type="number" id="osd-custo-pecas" min="0" step="0.01"/></div>
-        <div class="frow"><label>Custo de mão de obra (R$)</label><input type="number" id="osd-custo-mo" min="0" step="0.01"/></div>
-        <div class="frow"><label>Horas de serviço</label><input type="number" id="osd-horas" min="0" step="0.5"/></div>
+      <!-- Os três números deixaram de ser digitados: saem das duas listas
+           abaixo. Peça é quantidade × preço; mão de obra é horas × valor da
+           hora. Ficam só de leitura para que ninguém "conserte" o total sem
+           corrigir a linha que o produziu. -->
+      <div class="kpi-row" style="margin:16px 0">
+        <div class="kpi kc-blue"><div class="kpi-n" id="osd-custo-pecas">—</div><div class="kpi-l">Peças (R$)</div></div>
+        <div class="kpi kc-gold"><div class="kpi-n" id="osd-custo-mo">—</div><div class="kpi-l">Mão de obra (R$)</div></div>
+        <div class="kpi kc-accent"><div class="kpi-n" id="osd-horas">—</div><div class="kpi-l">Horas de serviço</div></div>
+        <div class="kpi kc-ok"><div class="kpi-n" id="osd-custo-total">—</div><div class="kpi-l">Total (R$)</div></div>
       </div>
+      <div class="help" id="osd-aviso-hora" style="display:none;margin-bottom:12px"></div>
+
       <div class="frow">
         <label>Descrição</label>
         <textarea id="osd-desc"></textarea>
@@ -663,6 +711,22 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="frow" id="osd-itens-wrap">
         <label>Itens de manutenção</label>
         <div id="osd-itens" class="stack"></div>
+      </div>
+
+      <div class="frow">
+        <div class="view-head" style="margin-bottom:8px">
+          <label style="margin:0">Peças consumidas</label>
+          <button class="btn btn-s btn-sm" onclick="adicionarPecaOS()">+ Peça</button>
+        </div>
+        <div id="osd-pecas" class="stack"></div>
+      </div>
+
+      <div class="frow">
+        <div class="view-head" style="margin-bottom:8px">
+          <label style="margin:0">Serviços executados</label>
+          <button class="btn btn-s btn-sm" onclick="adicionarServicoOS()">+ Serviço</button>
+        </div>
+        <div id="osd-servicos" class="stack"></div>
       </div>
     </div>
     <div class="modal-ft">

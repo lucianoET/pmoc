@@ -11,7 +11,8 @@
 -- relatório e todo código anterior a esta migração sigam funcionando. A
 -- migração é aditiva, como todas as outras (nunca DROP).
 --
--- Aplicada em produção: (preencher a data ao rodar)
+-- Aplicada em produção: 18/08/2026 — conferida contra o banco (8 colunas, o
+-- unique (os_id, plano_id), os dois índices, RLS ligado e as duas políticas).
 -- ══════════════════════════════════════════════════════════════════
 
 create table if not exists maq_os_itens (

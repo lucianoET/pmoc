@@ -30,19 +30,45 @@ html{font-size:15px}
 body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh}
 #app{display:none}
 
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
-.logo{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
+/* Barra superior em UMA linha, sempre: título, usuário, modo, portal, sair.
+   Nada de flex-wrap — quem cede espaço é o título, que corta com reticências
+   (min-width:0 no item flex é o que permite o corte acontecer). */
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:52px;display:flex;align-items:center;justify-content:space-between;gap:10px;position:sticky;top:0;z-index:50}
+.logo{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .logo-accent{color:var(--accent-texto)}
-.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
-.topbar-right{display:flex;align-items:center;gap:12px}
-.user-chip{font-size:12px;color:var(--text2);background:var(--surface2);padding:4px 10px;border-radius:20px;border:1px solid var(--border)}
-.topbar-back{font-size:12px;color:var(--text3);text-decoration:none}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.user-chip{font-size:12px;color:var(--text2);background:var(--surface2);padding:4px 10px;border-radius:20px;border:1px solid var(--border);white-space:nowrap}
+.topbar-back{font-size:12px;color:var(--text3);text-decoration:none;white-space:nowrap}
 .topbar-back:hover{color:var(--accent-texto)}
 
-.nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:2px;padding:0 20px;overflow-x:auto}
-.nav-btn{padding:10px 14px;font-size:13px;font-weight:500;color:var(--text2);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;font-family:var(--ff);transition:.15s}
-.nav-btn:hover{color:var(--text)}
-.nav-btn.active{color:var(--text);border-bottom-color:var(--accent-texto)}
+/* Abas com cara de botão. A rolagem se anuncia por sombra nas bordas, não por
+   setas: seta é mais um alvo para o polegar errar e come a largura que falta
+   em 375px. O truque é de CSS puro — dois pares de gradiente, um preso ao
+   conteúdo (background-attachment:local, some quando a rolagem chega ao fim) e
+   outro preso ao contêiner (scroll, é a sombra em si). Sem JavaScript, sem
+   ouvir evento de rolagem. */
+.nav{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;gap:6px;padding:8px 20px;overflow-x:auto;scrollbar-width:none;
+  background-image:
+    linear-gradient(to right, var(--surface), transparent),
+    linear-gradient(to left,  var(--surface), transparent),
+    linear-gradient(to right, rgba(0,0,0,.28), transparent),
+    linear-gradient(to left,  rgba(0,0,0,.28), transparent);
+  background-position:left center, right center, left center, right center;
+  background-repeat:no-repeat;
+  background-size:28px 100%, 28px 100%, 12px 100%, 12px 100%;
+  background-attachment:local, local, scroll, scroll;
+}
+.nav::-webkit-scrollbar{display:none}
+.nav-btn{
+  padding:8px 13px;font-size:13px;font-weight:500;color:var(--text2);
+  background:var(--surface2);border:1px solid var(--border);border-radius:7px;
+  cursor:pointer;white-space:nowrap;font-family:var(--ff);transition:.15s;flex-shrink:0
+}
+.nav-btn:hover{color:var(--text);border-color:var(--text3)}
+.nav-btn.active{color:var(--text);background:color-mix(in srgb,var(--accent) 18%,var(--surface2));border-color:var(--accent)}
 
 .main{max-width:1240px;margin:0 auto;padding:24px 20px}
 .view{display:none}.view.active{display:block}
@@ -53,14 +79,21 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100
 .section-split{display:grid;grid-template-columns:1.2fr .8fr;gap:20px;align-items:start}
 .stack{display:grid;gap:10px}
 
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:28px}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+/* Indicadores em UMA linha. Antes eram cartões de 170px que envolviam para a
+   linha de baixo e comiam meia tela antes do conteúdo começar; agora a fila é
+   única e rola na horizontal quando não cabe — o gesto é o mesmo das abas. */
+.kpi-row{
+  display:grid;grid-auto-flow:column;grid-auto-columns:minmax(132px,1fr);
+  gap:10px;margin-bottom:20px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px
+}
+.kpi-row::-webkit-scrollbar{display:none}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:11px 13px}
 .kc-blue{border-left:3px solid var(--blue)} .kc-ok{border-left:3px solid var(--green)}
 .kc-warn{border-left:3px solid var(--yellow)} .kc-red{border-left:3px solid var(--red)}
 .kc-accent{border-left:3px solid var(--accent)}
 .kc-gold{border-left:3px solid var(--orange)}
-.kpi-n{font-size:1.8rem;font-weight:700;line-height:1;color:var(--text)}
-.kpi-l{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+.kpi-n{font-size:1.45rem;font-weight:700;line-height:1;color:var(--text)}
+.kpi-l{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px;line-height:1.3}
 
 .tbl-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:auto}
 .tbl{width:100%;border-collapse:collapse}
@@ -154,20 +187,25 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
    · 16px nos campos não é gosto — abaixo disso o navegador do iOS aplica zoom
      automático ao focar o campo, e o usuário perde o enquadramento da tela no
      meio do preenchimento.
-   · o link do portal sai da barra superior porque ele já existe no rodapé do
-     shell; em 375 px cinco elementos na barra estouram a largura, e este é o
-     único que está duplicado.
+   · a barra superior mantém os cinco elementos na mesma linha (pedido do
+     usuário). Para caber em 375 px, o rótulo "Portal" some e fica só a seta, e
+     o título encolhe e corta com reticências — os dois se recuperam pelo
+     contexto. O cargo do usuário fica inteiro: chip cortado não se adivinha.
 
    A faixa de abas continua no topo e rolando na horizontal (D-01 da fase): o que
    muda é a área de toque, que sobe para 44 px, não o lugar da navegação. */
 @media(max-width:480px){
   input,select,textarea{font-size:16px}
-  .topbar{height:auto;min-height:52px;padding:8px 12px;flex-wrap:wrap;gap:8px}
-  .topbar-back{display:none}
-  .nav{padding:0 12px}
-  .nav-btn{padding:12px 14px;min-height:44px}
+  .topbar{padding:0 10px;gap:7px}
+  .topbar-right{gap:7px}
+  .logo{font-size:13px;gap:6px}
+  .topbar-back-txt{display:none}
+  .user-chip{padding:3px 8px}
+  .btn-sair{padding:5px 9px}
+  .nav{padding:8px 10px;gap:5px}
+  .nav-btn{padding:11px 12px;min-height:44px}
   .main{padding:16px 12px}
-  .kpi-row{grid-template-columns:1fr}
+  .kpi-row{grid-auto-columns:minmax(116px,1fr)}
   .overlay{padding:8px}
   .modal{max-height:94vh}
   .modal-hd,.modal-ft{padding:12px 14px}

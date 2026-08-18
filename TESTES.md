@@ -1026,20 +1026,24 @@ razão de ser do design, nunca executou uma única vez. Mesma situação do writ
 
 ## Máquinas — ciclo de vida da OS (18/08/2026)
 
-### Migração 29 — pendente de aplicação
+### Migração 29 — aplicada em 18/08/2026 ✅
 
-`supabase/29_maquinas_os_itens.sql` **ainda não rodou**. Rodar no SQL Editor do projeto `pmoc`.
-Sem ela o módulo funciona igual ao que era: cada OS carrega um item só, pelo `maq_os.plano_id` de
-sempre. Verificado no navegador com a migração ausente — 28 máquinas, 4 OS e 28 cartões de
-vencimento renderizaram normalmente, e o detalhe da OS mostrou o item vindo do plano único.
+`supabase/29_maquinas_os_itens.sql` rodou em produção. Conferido contra o banco real, não contra o
+arquivo — a lição da migração 28 é que `create table if not exists` é silencioso numa tabela que já
+existe, então forma se verifica, não se presume:
 
-Depois de aplicar, conferir:
+| Item | Encontrado |
+|------|------------|
+| Colunas | 8, exatamente as do arquivo |
+| Constraints | PK, FK `os_id` com `on delete cascade`, FK `plano_id`, unique `(os_id, plano_id)` |
+| Índices | `maq_os_itens_os_idx`, `maq_os_itens_plano_idx` |
+| RLS | ligado, com `maq_os_itens_leitura` (SELECT) e `maq_os_itens_escrita` (ALL, autenticado) |
+| Linhas | 0 — tabela nova e vazia |
+| `maq_os` | intacta; `plano_id` continua lá, que é o que mantém o caminho antigo válido |
 
-```sql
-select count(*) from maq_os_itens;                 -- 0, tabela nova e vazia
-select conname from pg_constraint
- where conrelid = 'maq_os_itens'::regclass;        -- inclui o unique (os_id, plano_id)
-```
+Antes de aplicar, o módulo foi verificado no navegador **sem** a migração: 28 máquinas, 4 OS e 28
+cartões de vencimento renderizaram normalmente, e o detalhe da OS caiu no plano único. A tolerância
+está provada nos dois estados.
 
 ### Conferido no navegador (servido localmente, cargo Livre)
 
@@ -1067,3 +1071,126 @@ select conname from pg_constraint
       acontece igual — são caminhos diferentes para o mesmo evento
 - [ ] Exportar uma OS em PDF pelo botão e conferir o resultado da impressão do navegador
       (não testável neste ambiente — o painel de navegador não compõe quadros)
+
+---
+
+## Chrome compacto e estoque editável (18/08/2026)
+
+### Base compartilhada — vale para os 6 módulos
+
+`shared/pmoc.css` e `shared/shell.js` mudaram, então **conferir em mais de um módulo**, não só no
+Máquinas: `/maquinas`, `/transportes`, `/eletrica`, `/fonoclama`, `/predial` e `/mapa`.
+
+| # | Verificar | Como |
+|---|-----------|------|
+| 1 | Barra superior em **uma linha**: título, usuário, modo, portal, sair | Em 375px a barra tem 52px de altura e os cinco centros verticais coincidem |
+| 2 | Em 375px o rótulo "Portal" some e fica só a seta | Largura do link cai para ~12px; o título continua inteiro |
+| 3 | Abas com cara de botão, rolando na horizontal | A sombra nas bordas some quando a rolagem chega ao fim — sem setas |
+| 4 | Alvo de toque das abas ≥ 44px | Medido: 44px |
+| 5 | Indicadores em **uma linha**, rolando quando não cabem | 6 cartões, uma linha só, tanto em 1280px quanto em 375px |
+
+### Máquinas
+
+| # | Verificar | Resultado medido |
+|---|-----------|------------------|
+| 6 | Painel corta cada bloco em 5 linhas | ✅ 5 + "Ver os outros 23 →" / "Ver os outros 29 →" (eram 62 linhas soltas) |
+| 7 | Bloco novo de OS em aberto, com indicador próprio | ✅ (vazio hoje — as 4 OS existentes estão concluídas) |
+| 8 | "Ver os outros" leva à aba certa | ✅ leva a `view-materiais` |
+| 9 | Linha do estoque edita quantidade, mínimo e preço | ✅ três campos e os botões Salvar / ✕ |
+| 10 | Clicar num material crítico do painel abre a linha já em edição | ✅ troca para a aba de estoque com a linha aberta |
+
+### Fica para o usuário
+
+- [ ] Salvar uma edição de estoque com a quantidade alterada e conferir que
+      `maq_estoque_movimentos` ganhou a linha de ajuste, com o motivo registrando o valor anterior
+- [ ] Conferir a barra superior nos outros cinco módulos, em celular de verdade — a medição aqui
+      foi por régua no DOM, não por olho
+- [ ] Conferir a sombra de rolagem das abas nos dois temas (claro e escuro)
+
+---
+
+## Custos da OS — peças e serviços (18/08/2026)
+
+### Migração 30 — aplicada em 18/08/2026 ✅
+
+`supabase/30_maquinas_os_custos.sql` rodou em produção. Conferida a **forma**, não só a existência:
+
+| Item | Encontrado |
+|------|------------|
+| `maq_os_materiais` | 7 colunas; 7 constraints — PK, FK `os_id` (cascade), FK `material_id`, unique `(os_id, material_id)`, checks de `origem`, `preco_unit` e `quantidade` |
+| `maq_os_servicos` | 7 colunas; 6 constraints — PK, FKs, checks de `horas` e `valor_hora`, e o `identificacao_chk` (serviço do catálogo **ou** descrição) |
+| `maq_config` | 4 colunas, com a linha `valor_hora_padrao` |
+| RLS | ligado nas três tabelas, com as 6 políticas |
+| `valor_hora_padrao` | `null` — ainda não informado, como projetado |
+| Linhas | 0 nas duas listas |
+
+As três consultas que o app faz (com os joins de `maq_materiais` e `rep_servicos`) respondem 200.
+
+O módulo foi verificado nos **dois** estados: antes da migração, com as listas vazias e custos em
+zero, e depois dela, com as tabelas na carga.
+
+### Cálculo conferido na tela
+
+| Entrada | Resultado |
+|---------|-----------|
+| 3 × R$ 22,50 + 2 × R$ 10,00 | Peças **R$ 87,50** ✅ |
+| 4 h × R$ 60,00 | Mão de obra **R$ 240,00** ✅ |
+| Soma | Total **R$ 327,50** ✅ |
+| Apagar o valor da hora | Mão de obra volta a **0,00** e aparece o aviso explicando que não há hora-homem cadastrada ✅ |
+| Remover uma linha | Recalcula para **R$ 67,50** ✅ |
+
+### Fica para o usuário
+
+- [ ] Definir o **valor da hora-homem** na aba Estoque — enquanto estiver vazio, toda mão de obra
+      fica zerada, de propósito
+- [ ] Abrir uma OS preventiva e conferir que as peças do plano já vieram lançadas na lista, com
+      preço do catálogo
+- [ ] Ajustar quantidade de uma peça, salvar, reabrir e conferir que o valor persistiu
+- [ ] Concluir essa OS e conferir que o estoque baixou **pela lista da OS** (a ajustada), não pela
+      previsão do plano
+- [ ] Numa OS corretiva com diagnóstico, conferir que a peça que aparece no plano **e** no
+      diagnóstico foi debitada **uma vez só**
+- [ ] Reajustar o preço de um material no estoque e conferir que uma OS já fechada **não** mudou de
+      custo
+
+---
+
+## Fluxo de oficina na OS (18/08/2026, noite)
+
+### Migração 31 — aplicada em 18/08/2026 ✅
+
+`supabase/31_maquinas_os_fluxo.sql` rodou em produção — a primeira troca de trava do projeto
+(nada removido, a lista só cresce). Conferido contra o banco:
+
+| Item | Encontrado |
+|------|------------|
+| `maq_os_status_check` | os 6 estados: `pendente`, `delineamento`, `espera`, `em_andamento`, `concluida`, `cancelada` |
+| Colunas de delineamento | `delineado_por text`, `delineado_em timestamptz` |
+| OS existentes | 4, todas `concluida` — válidas sob a trava nova; a troca não invalidou nada |
+
+### O fluxo
+
+| Etapa | Status | O que acontece |
+|-------|--------|----------------|
+| Recepção | `pendente` (Aberta) | OS criada; quem entregou a máquina vai nas observações |
+| Delineamento | `delineamento` | técnico lança materiais e serviços na OS; ao encerrar, grava quem e quando |
+| Espera | `espera` | aguardando material ou técnico; a lista de OS sinaliza ⚠ quando falta peça |
+| Execução | `em_andamento` | **estoque desce aqui** (com confirmação) |
+| Conclusão | `concluida` | sem nova baixa — a guarda de idempotência lê `maq_estoque_movimentos` |
+
+### Conferido no navegador (cargo Livre, sem a migração 31)
+
+- Coluna **Material** na lista de OS (⚠ falta N / EM ESTOQUE / —) ✅
+- Filtro de situações com a opção "⚠ Com falta de material" ✅ (as 4 OS existentes estão
+  concluídas, então o filtro devolve o estado vazio correto)
+- 212 testes em `node --test`, zero falhas
+
+### Fica para o usuário (depois da migração 31, logado com cargo de escrita)
+
+- [ ] Abrir OS corretiva (recepção) → Delinear → lançar 2 peças e 1 serviço no detalhe →
+      Encerrar delineamento → conferir `delineado_por`/`delineado_em` no cabeçalho do detalhe
+- [ ] Com a OS em espera, conferir o ⚠ na lista se alguma peça não tem estoque
+- [ ] Iniciar execução → conferir que o estoque **desceu agora** e que `maq_estoque_movimentos`
+      tem as saídas com o `os_id`
+- [ ] Concluir → conferir que **não** houve segunda baixa (idempotência)
+- [ ] Filtrar por "⚠ Com falta de material" e ver só as OS travadas por peça
