@@ -1194,3 +1194,47 @@ zero, e depois dela, com as tabelas na carga.
       tem as saídas com o `os_id`
 - [ ] Concluir → conferir que **não** houve segunda baixa (idempotência)
 - [ ] Filtrar por "⚠ Com falta de material" e ver só as OS travadas por peça
+
+---
+
+## Ficha da máquina (18/08/2026, noite)
+
+### Migração 32 — aplicada em 18/08/2026 ✅
+
+`supabase/32_maquinas_ficha.sql` rodou em produção. Conferida a forma contra o banco:
+
+| Item | Encontrado |
+|------|------------|
+| `maq_ativo_comentarios` | 5 colunas; PK, FK `ativo_id` (cascade) e o check de texto não vazio |
+| Índice | `maq_ativo_comentarios_ativo_idx` (`ativo_id, criado_em desc`) |
+| RLS | ligado, com as 2 políticas (leitura pública, escrita autenticada) |
+| `maq_ativos.instrucoes` | `text`, no lugar |
+| Linhas | 0 — o diário começa vazio |
+
+A ficha foi verificada nos dois estados: sem a migração (diário vazio, nada quebra) e com ela.
+
+### Conferido no navegador (cargo Livre, sem a migração 32)
+
+| Item | Resultado |
+|------|-----------|
+| Clique na máquina abre a **ficha**, não o formulário | ✅ |
+| Identidade (categoria, fabricante/modelo, patrimônio, local, status) só leitura — zero campos editáveis | ✅ |
+| Uso atual exibido como "calculado dos registros" | ✅ |
+| "Editar cadastro" escondido para observador (só admin/gestor) | ✅ |
+| Caixa de comentário escondida para observador | ✅ |
+| Últimas OS da máquina listadas e clicáveis para o detalhe | ✅ |
+| No cadastro (edição): campo de uso **travado**, com ajuda explicando | ✅ |
+| No cadastro (criação): campo livre, rotulado "Uso inicial" | ✅ |
+
+### Fica para o usuário (depois da migração 32, com cargo de escrita)
+
+- [ ] Abrir a ficha, anotar um comentário e conferir que ele volta datado e assinado
+- [ ] Registrar uso pela ficha e ver o "Uso atual" refletir o novo total
+- [ ] Abrir OS pela ficha e conferir que a máquina já vem selecionada
+- [ ] Preencher instruções no cadastro (admin/gestor) e vê-las na ficha
+- [ ] Como técnico: conferir que "Editar cadastro" **não** aparece
+
+### Deferido
+
+- **Foto da máquina** — exige bucket no Supabase Storage com políticas próprias; fazer quando
+  decidido, como tarefa própria

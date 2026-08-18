@@ -505,18 +505,74 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       </div>
       <div class="fgrid3">
         <div class="frow"><label>Patrimônio</label><input type="text" id="at-pat"/></div>
-        <div class="frow"><label>Uso atual</label><input type="number" id="at-uso" value="0" min="0" step="0.5"/></div>
+        <!-- Uso inicial só na criação: numa máquina existente o uso atual é
+             calculado dos registros de uso, e editá-lo aqui dessincronizaria o
+             horímetro do histórico que o produziu. -->
+        <div class="frow"><label id="at-uso-label">Uso inicial</label><input type="number" id="at-uso" value="0" min="0" step="0.5"/>
+          <div class="help" id="at-uso-ajuda"></div></div>
         <div class="frow">
           <label>Unidade</label>
           <select id="at-uni"><option value="h">Horas (h)</option><option value="km">Km</option><option value="ciclos">Ciclos</option></select>
         </div>
       </div>
       <div class="frow"><label>Local</label><input type="text" id="at-local" placeholder="Galpão Manutenção"/></div>
+      <div class="frow"><label>Instruções de operação/manutenção</label><textarea id="at-instrucoes" placeholder="Ex.: usar mistura 50:1; verificar tensão da lâmina antes de ligar..."></textarea></div>
       <div class="frow"><label>Observações</label><textarea id="at-obs"></textarea></div>
     </div>
     <div class="modal-ft">
       <button class="btn btn-s" onclick="fecharModal('modal-ativo')">Cancelar</button>
       <button class="btn btn-p" onclick="salvarAtivo()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: FICHA DA MÁQUINA
+     Consulta e ação, não edição: o que muda no dia a dia (uso, OS, comentário)
+     tem botão aqui; o que não muda (código, nome, categoria, fabricante,
+     modelo, patrimônio) aparece só como texto, e o cadastro fica atrás de um
+     botão restrito — editar cadastro é exceção, não rotina. -->
+<div class="overlay" id="modal-ficha">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-hd">
+      <h3 id="ficha-titulo">Máquina</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-ficha')" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="ficha-identidade" style="font-size:13px;color:var(--text2);margin-bottom:14px"></div>
+      <div class="section-row">
+        <button class="btn btn-p btn-sm" id="ficha-btn-uso">Registrar uso</button>
+        <button class="btn btn-p btn-sm" id="ficha-btn-os">Abrir OS</button>
+        <button class="btn btn-s btn-sm" id="ficha-btn-cadastro">Editar cadastro</button>
+      </div>
+      <div class="frow" id="ficha-instrucoes-wrap" style="display:none">
+        <label>Instruções</label>
+        <div id="ficha-instrucoes" class="panel-card" style="font-size:12px;color:var(--text2);white-space:pre-wrap"></div>
+      </div>
+      <div class="frow" id="ficha-operacoes-wrap" style="display:none">
+        <label>Operações agendadas</label>
+        <div id="ficha-operacoes" class="stack"></div>
+      </div>
+      <div class="fgrid" style="gap:16px;align-items:start">
+        <div class="frow">
+          <label>Últimas OS</label>
+          <div id="ficha-os" class="stack"></div>
+        </div>
+        <div class="frow">
+          <label>Últimos usos</label>
+          <div id="ficha-usos" class="stack"></div>
+        </div>
+      </div>
+      <div class="frow">
+        <label>Comentários</label>
+        <div id="ficha-comentarios" class="stack" style="margin-bottom:10px"></div>
+        <div id="ficha-comentar-wrap" style="display:flex;gap:8px">
+          <input type="text" id="ficha-comentario" placeholder="Anotar algo sobre esta máquina..."/>
+          <button class="btn btn-p btn-sm" onclick="salvarComentarioAtivo()">Anotar</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-ficha')">Fechar</button>
     </div>
   </div>
 </div>

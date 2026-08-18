@@ -38,6 +38,9 @@ let OS_PLANOS_MARCADOS = []
 let OS_DETALHE_ID = null
 // material com a linha aberta em edição na aba de estoque
 let MATERIAL_EDIT_ID = null
+// máquina aberta na ficha e comentários por máquina (migração 32)
+let FICHA_ATIVO_ID = null
+let COMENTARIOS = []
 // listas de peças e serviços em edição no modal de detalhe da OS — vivem em
 // memória e só vão ao banco no Salvar
 let OSD_PECAS = [], OSD_SERVICOS = []
@@ -121,6 +124,7 @@ async function carregarTudo(){
   await carregarCatalogoReparos()
   await carregarItensOS()
   await carregarCustosOS()
+  await carregarComentarios()
   aplicarPermissoesOperacoes()
   renderPainel(); renderAtivos(); renderVencimentos(); renderOS(); renderMateriais()
   renderConsumo(); renderCiclo(); renderCompras(); renderOperacoes(); renderAgenda()
@@ -194,6 +198,17 @@ function horasDaOS(osId){
 function custoMaoDeObraDaOS(osId){
   return OS_SERVICOS.filter(s => s.os_id === osId)
     .reduce((soma, s) => soma + Number(s.horas || 0) * Number(s.valor_hora || 0), 0)
+}
+
+// ── comentários por máquina (migração 32) ──
+// Fora do Promise.all pelo mesmo motivo das outras cargas tolerantes: sem a
+// migração a lista fica vazia e a ficha só não mostra o diário de bordo.
+async function carregarComentarios(){
+  const { data, error } = await supa
+    .from('maq_ativo_comentarios')
+    .select('*')
+    .order('criado_em', { ascending: false })
+  COMENTARIOS = error ? [] : (data || [])
 }
 
 // itens de uma OS, com fallback para o plano único de maq_os quando a
@@ -342,7 +357,7 @@ function renderAtivos(){
   }
   const statusBadge = s => s==='operante'?'b-ok':s==='inoperante'?'b-red':'b-warn'
   tbody.innerHTML = lista.map(a => `
-    <tr onclick="abrirModalAtivo(${a.id})">
+    <tr onclick="abrirFichaAtivo(${a.id})">
       <td class="hi" style="color:${a.cor||'var(--text)'}">${a.emoji||''} ${a.codigo||'—'}</td>
       <td class="hi">${a.nome}</td>
       <td>
@@ -1896,7 +1911,124 @@ function exportarOSCsv(){
   baixarArquivo('﻿' + csv, 'text/csv;charset=utf-8', nomeDoArquivoOS(os, 'csv'))
 }
 
-// ── MODAL ATIVO ──
+// ── FICHA DA MÁQUINA ──
+// Consulta e ação, não edição. O que muda no dia a dia (uso, OS, comentário)
+// tem botão; a identidade (código, nome, categoria, fabricante, modelo,
+// patrimônio) aparece só como texto, e o uso atual vem calculado dos registros.
+function abrirFichaAtivo(id){
+  const ativo = ATIVOS.find(a => a.id === id)
+  if(!ativo) return
+  FICHA_ATIVO_ID = id
+
+  document.getElementById('ficha-titulo').textContent =
+    `${ativo.emoji || ''} ${ativo.codigo || '?'} — ${ativo.nome}`
+
+  const statusBadge = s => s==='operante'?'b-ok':s==='inoperante'?'b-red':'b-warn'
+  const linha = (rotulo, valor) =>
+    `<div style="display:flex;gap:8px"><span style="color:var(--text3);min-width:110px">${rotulo}</span><span>${valor}</span></div>`
+
+  document.getElementById('ficha-identidade').innerHTML = [
+    linha('Categoria', esc(ativo.categoria || '—')),
+    linha('Fabricante/Modelo', esc([ativo.fabricante, ativo.modelo].filter(Boolean).join(' ') || '—')),
+    linha('Patrimônio', esc(ativo.patrimonio || '—')),
+    linha('Local', esc(ativo.local || '—')),
+    // uso atual é o acumulado dos registros de uso — não se edita, se registra
+    linha('Uso atual', `<strong>${ativo.uso_atual} ${esc(ativo.unidade_uso || 'h')}</strong> <span style="color:var(--text3)">(calculado dos registros)</span>`),
+    linha('Status', `<span class="badge ${statusBadge(ativo.status)}">${esc(ativo.status.toUpperCase())}</span>`),
+    ativo.obs ? linha('Observações', esc(ativo.obs)) : '',
+  ].filter(Boolean).join('')
+
+  // ações do dia a dia — e o cadastro atrás de botão restrito: editar código,
+  // nome ou patrimônio é correção de exceção, não rotina
+  document.getElementById('ficha-btn-uso').onclick = () => { fecharModal('modal-ficha'); abrirModalUso(id) }
+  document.getElementById('ficha-btn-os').onclick = () => { fecharModal('modal-ficha'); abrirModalOS(id) }
+  const btnCadastro = document.getElementById('ficha-btn-cadastro')
+  btnCadastro.style.display = ['admin','gestor'].includes(USUARIO?.role) ? '' : 'none'
+  btnCadastro.onclick = () => { fecharModal('modal-ficha'); abrirModalAtivo(id) }
+
+  // instruções — só aparecem quando existem
+  const insWrap = document.getElementById('ficha-instrucoes-wrap')
+  insWrap.style.display = ativo.instrucoes ? '' : 'none'
+  document.getElementById('ficha-instrucoes').textContent = ativo.instrucoes || ''
+
+  // operações agendadas para esta máquina (programadas e em execução)
+  const operacoes = OPERACOES.filter(o => o.ativo_id === id && ['programada','em_execucao'].includes(o.status))
+  const opWrap = document.getElementById('ficha-operacoes-wrap')
+  opWrap.style.display = operacoes.length ? '' : 'none'
+  document.getElementById('ficha-operacoes').innerHTML = operacoes.slice(0,5).map(o => `
+    <div class="mat-alert">
+      <span class="mat-info">
+        <span class="mat-nome">${esc(o.maq_areas?.nome || 'Área não informada')}</span>
+        <span class="mat-stock">${esc(o.tipo_servico)} · ${esc(o.data_programada || '—')}</span>
+      </span>
+      <span class="badge ${o.status==='em_execucao'?'b-blue':'b-warn'}">${o.status==='em_execucao'?'EM EXECUÇÃO':'PROGRAMADA'}</span>
+    </div>`).join('')
+
+  // últimas OS — clicáveis, abrem o detalhe
+  const osDaMaquina = OS_LIST.filter(o => o.ativo_id === id).slice(0,5)
+  document.getElementById('ficha-os').innerHTML = osDaMaquina.length
+    ? osDaMaquina.map(o => `
+      <div class="mat-alert" style="cursor:pointer" onclick="fecharModal('modal-ficha');abrirDetalheOS('${o.id}')">
+        <span class="mat-info">
+          <span class="mat-nome">${esc(o.data_abertura || '—')} · ${esc(o.tipo)}</span>
+          <span class="mat-stock">${esc(itensDaOS(o)[0]?.maq_planos?.nome || o.sintoma_relatado || '—')}</span>
+        </span>
+        <span class="badge ${badgeStatusOS(o.status)}">${rotuloStatusOS(o.status)}</span>
+      </div>`).join('')
+    : '<div class="tagline">Nenhuma OS registrada.</div>'
+
+  // últimos registros de uso
+  const usosDaMaquina = USOS.filter(u => u.ativo_id === id).slice(0,5)
+  document.getElementById('ficha-usos').innerHTML = usosDaMaquina.length
+    ? usosDaMaquina.map(u => `
+      <div class="mat-alert">
+        <span class="mat-info">
+          <span class="mat-nome">+${u.delta} ${esc(ativo.unidade_uso || 'h')} → ${u.uso_total}</span>
+          <span class="mat-stock">${esc(u.data || '—')}${u.operador ? ' · ' + esc(u.operador) : ''}</span>
+        </span>
+      </div>`).join('')
+    : '<div class="tagline">Nenhum uso registrado.</div>'
+
+  renderComentariosFicha()
+  // observador lê o diário, não escreve nele — mesma regra de escrita do módulo
+  document.getElementById('ficha-comentar-wrap').style.display = podeEscreverNoModulo() ? '' : 'none'
+  document.getElementById('ficha-comentario').value = ''
+
+  document.getElementById('modal-ficha').classList.add('open')
+}
+
+function renderComentariosFicha(){
+  const lista = COMENTARIOS.filter(c => c.ativo_id === FICHA_ATIVO_ID).slice(0,10)
+  document.getElementById('ficha-comentarios').innerHTML = lista.length
+    ? lista.map(c => `
+      <div class="mat-alert">
+        <span class="mat-info">
+          <span class="mat-nome">${esc(c.texto)}</span>
+          <span class="mat-stock">${esc(c.autor || '—')} · ${new Date(c.criado_em).toLocaleString('pt-BR')}</span>
+        </span>
+      </div>`).join('')
+    : '<div class="tagline">Nenhum comentário — o diário de bordo desta máquina começa aqui.</div>'
+}
+
+async function salvarComentarioAtivo(){
+  const campo = document.getElementById('ficha-comentario')
+  const texto = campo.value.trim()
+  if(!texto){ alert('Escreva o comentário antes de anotar.'); return }
+
+  // .select() pelo mesmo motivo de salvarValorHora: sob RLS uma escrita sem
+  // efeito volta sem erro, e a tela mentiria "anotado"
+  const { data, error } = await supa.from('maq_ativo_comentarios')
+    .insert({ ativo_id: FICHA_ATIVO_ID, autor: USUARIO?.nome || null, texto })
+    .select()
+  if(error){ alert('Erro: ' + error.message); return }
+  if(!data || !data.length){ alert('Nada foi anotado: seu cargo não tem permissão de escrita.'); return }
+
+  campo.value = ''
+  await carregarComentarios()
+  renderComentariosFicha()
+}
+
+// ── MODAL ATIVO (cadastro — exceção, não rotina) ──
 function abrirModalAtivo(id){
   ATIVO_EDIT_ID = id || null
   const ativo = id ? ATIVOS.find(a => a.id === id) : null
@@ -1908,10 +2040,22 @@ function abrirModalAtivo(id){
   document.getElementById('at-fab').value     = ativo?.fabricante||''
   document.getElementById('at-mod').value     = ativo?.modelo  || ''
   document.getElementById('at-pat').value     = ativo?.patrimonio||''
-  document.getElementById('at-uso').value     = ativo?.uso_atual||0
   document.getElementById('at-uni').value     = ativo?.unidade_uso||'h'
   document.getElementById('at-local').value   = ativo?.local   || ''
+  document.getElementById('at-instrucoes').value = ativo?.instrucoes || ''
   document.getElementById('at-obs').value     = ativo?.obs     || ''
+
+  // Uso só é digitável na criação (leitura inicial do horímetro). Numa máquina
+  // existente ele é calculado dos registros de uso — editá-lo aqui
+  // dessincronizaria o horímetro do histórico que o produziu.
+  const campoUso = document.getElementById('at-uso')
+  campoUso.value = ativo?.uso_atual || 0
+  campoUso.disabled = !!ativo
+  document.getElementById('at-uso-label').textContent = ativo ? 'Uso atual' : 'Uso inicial'
+  document.getElementById('at-uso-ajuda').textContent = ativo
+    ? 'Calculado dos registros de uso — registre uso na ficha da máquina.'
+    : ''
+
   document.getElementById('modal-ativo').classList.add('open')
 }
 
@@ -1924,12 +2068,18 @@ async function salvarAtivo(){
     fabricante:  document.getElementById('at-fab').value.trim(),
     modelo:      document.getElementById('at-mod').value.trim(),
     patrimonio:  document.getElementById('at-pat').value.trim(),
-    uso_atual:   parseFloat(document.getElementById('at-uso').value) || 0,
     unidade_uso: document.getElementById('at-uni').value,
     local:       document.getElementById('at-local').value.trim(),
+    instrucoes:  document.getElementById('at-instrucoes').value.trim() || null,
     obs:         document.getElementById('at-obs').value.trim(),
   }
   if(!campos.nome){ alert('Nome obrigatório.'); return }
+
+  // uso_atual só entra na criação — depois disso ele pertence aos registros
+  // de uso, nunca mais ao formulário
+  if(!ATIVO_EDIT_ID){
+    campos.uso_atual = parseFloat(document.getElementById('at-uso').value) || 0
+  }
 
   if(ATIVO_EDIT_ID){
     const { error } = await supa.from('maq_ativos').update(campos).eq('id', ATIVO_EDIT_ID)
@@ -2090,6 +2240,7 @@ function exporNoWindow(){
     abrirModalOS,
     abrirModalUso,
     abrirDetalheOS,
+    abrirFichaAtivo,
     abrirOSDosItensMarcados,
     abrirVencMaquina,
     adicionarPecaOS,
@@ -2119,6 +2270,7 @@ function exporNoWindow(){
     salvarAbastecimento,
     salvarArea,
     salvarAtivo,
+    salvarComentarioAtivo,
     salvarMaterial,
     salvarMovimento,
     salvarDetalheOS,
