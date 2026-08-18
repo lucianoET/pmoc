@@ -1071,3 +1071,38 @@ está provada nos dois estados.
       acontece igual — são caminhos diferentes para o mesmo evento
 - [ ] Exportar uma OS em PDF pelo botão e conferir o resultado da impressão do navegador
       (não testável neste ambiente — o painel de navegador não compõe quadros)
+
+---
+
+## Chrome compacto e estoque editável (18/08/2026)
+
+### Base compartilhada — vale para os 6 módulos
+
+`shared/pmoc.css` e `shared/shell.js` mudaram, então **conferir em mais de um módulo**, não só no
+Máquinas: `/maquinas`, `/transportes`, `/eletrica`, `/fonoclama`, `/predial` e `/mapa`.
+
+| # | Verificar | Como |
+|---|-----------|------|
+| 1 | Barra superior em **uma linha**: título, usuário, modo, portal, sair | Em 375px a barra tem 52px de altura e os cinco centros verticais coincidem |
+| 2 | Em 375px o rótulo "Portal" some e fica só a seta | Largura do link cai para ~12px; o título continua inteiro |
+| 3 | Abas com cara de botão, rolando na horizontal | A sombra nas bordas some quando a rolagem chega ao fim — sem setas |
+| 4 | Alvo de toque das abas ≥ 44px | Medido: 44px |
+| 5 | Indicadores em **uma linha**, rolando quando não cabem | 6 cartões, uma linha só, tanto em 1280px quanto em 375px |
+
+### Máquinas
+
+| # | Verificar | Resultado medido |
+|---|-----------|------------------|
+| 6 | Painel corta cada bloco em 5 linhas | ✅ 5 + "Ver os outros 23 →" / "Ver os outros 29 →" (eram 62 linhas soltas) |
+| 7 | Bloco novo de OS em aberto, com indicador próprio | ✅ (vazio hoje — as 4 OS existentes estão concluídas) |
+| 8 | "Ver os outros" leva à aba certa | ✅ leva a `view-materiais` |
+| 9 | Linha do estoque edita quantidade, mínimo e preço | ✅ três campos e os botões Salvar / ✕ |
+| 10 | Clicar num material crítico do painel abre a linha já em edição | ✅ troca para a aba de estoque com a linha aberta |
+
+### Fica para o usuário
+
+- [ ] Salvar uma edição de estoque com a quantidade alterada e conferir que
+      `maq_estoque_movimentos` ganhou a linha de ajuste, com o motivo registrando o valor anterior
+- [ ] Conferir a barra superior nos outros cinco módulos, em celular de verdade — a medição aqui
+      foi por régua no DOM, não por olho
+- [ ] Conferir a sombra de rolagem das abas nos dois temas (claro e escuro)

@@ -96,15 +96,23 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <div class="kpi kc-red"><div class="kpi-n" id="kpi-inop">—</div><div class="kpi-l">Inoperantes</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-venc">—</div><div class="kpi-l">Manutenções vencendo</div></div>
         <div class="kpi kc-red"><div class="kpi-n" id="kpi-estoque-baixo">—</div><div class="kpi-l">Estoque abaixo do mín.</div></div>
+        <div class="kpi kc-blue"><div class="kpi-n" id="kpi-os-abertas">—</div><div class="kpi-l">OS em aberto</div></div>
       </div>
-      <div class="fgrid" style="gap:20px;align-items:start">
-        <div>
-          <h3>Máquinas inoperantes</h3>
-          <div id="painel-inop"><div class="empty"><div class="empty-ico">✅</div><p>Todas operantes</p></div></div>
+      <!-- Três blocos de resumo, cada um com no máximo 5 linhas e um botão para
+           a aba onde a lista inteira mora. O painel responde "o que precisa de
+           mim agora", não "tudo que existe" — para isso existem as outras abas. -->
+      <div class="fgrid3" style="gap:16px;align-items:start">
+        <div class="panel-card">
+          <h3>OS em aberto</h3>
+          <div id="painel-os" class="stack"><div class="empty"><div class="empty-ico">📋</div><p>Carregando...</p></div></div>
         </div>
-        <div>
-          <h3>Materiais críticos (abaixo do mínimo)</h3>
-          <div id="painel-mats"><div class="empty"><div class="empty-ico">📦</div><p>Carregando...</p></div></div>
+        <div class="panel-card">
+          <h3>Máquinas inoperantes</h3>
+          <div id="painel-inop" class="stack"><div class="empty"><div class="empty-ico">✅</div><p>Todas operantes</p></div></div>
+        </div>
+        <div class="panel-card">
+          <h3>Materiais abaixo do mínimo</h3>
+          <div id="painel-mats" class="stack"><div class="empty"><div class="empty-ico">📦</div><p>Carregando...</p></div></div>
         </div>
       </div>
     </div>

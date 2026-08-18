@@ -198,3 +198,46 @@ test('o CSV da OS protege contra injeção de fórmula em planilha', () => {
   assert.match(APP, /function csvSeguro\(valor\)\{[\s\S]*?\/\^\[=\+\\-@\]\/\.test\(texto\)/)
   assert.match(APP, /csvEscape\(csvSeguro\(v\)\)/)
 })
+
+// ── painel como resumo, não relatório ─────────────────────────────────────
+test('cada bloco do painel corta em 5 linhas e manda o resto para a aba', () => {
+  assert.match(APP, /function pintarResumo\(\{ alvo, itens, vazio, aba, linha, teto \}\)/)
+  assert.match(APP, /const TETO = 5/)
+  assert.match(APP, /const visiveis = itens\.slice\(0, teto\)/,
+    'sem o corte, 28 máquinas e 34 materiais viravam três telas de rolagem antes do primeiro dado útil')
+  assert.match(APP, /Ver os outros \$\{restantes\}/)
+  assert.match(APP, /function irParaAba\(id\)/)
+})
+
+test('o painel mostra as OS em aberto — a lista que a situação da OS tornou possível', () => {
+  assert.match(HTML, /id="kpi-os-abertas"/)
+  assert.match(HTML, /id="painel-os"/)
+  assert.match(APP, /o\.status === 'pendente' \|\| o\.status === 'em_andamento'/)
+})
+
+// ── estoque editável em linha ─────────────────────────────────────────────
+test('a linha do estoque edita quantidade, mínimo e preço', () => {
+  assert.match(APP, /function editarMaterial\(id\)/)
+  assert.match(APP, /async function salvarLinhaMaterial\(id\)/)
+  for (const campo of ['ed-atual', 'ed-minimo', 'ed-preco']) {
+    assert.ok(APP.includes(`id="${campo}"`), `o campo ${campo} deveria existir na linha em edição`)
+  }
+  assert.match(APP, /update\(\{ estoque_atual: atual, estoque_minimo: minimo, preco \}\)/)
+})
+
+test('mexer na quantidade à mão deixa rastro em maq_estoque_movimentos', () => {
+  const bloco = APP.match(/async function salvarLinhaMaterial\(id\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /const diferenca = atual - Number\(material\.estoque_atual\)/)
+  assert.match(bloco[1], /tipo: diferenca > 0 \? 'entrada' : 'saida'/)
+  assert.match(bloco[1], /motivo: `Ajuste manual no estoque/,
+    'sem o movimento, o saldo muda e ninguém sabe por quê')
+})
+
+test('a edição em linha valida antes de gravar', () => {
+  const bloco = APP.match(/async function salvarLinhaMaterial\(id\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /if\(!\(atual >= 0\) \|\| !\(minimo >= 0\)\)/,
+    'quantidade e mínimo negativos ou não numéricos não podem chegar ao banco')
+  assert.match(bloco[1], /if\(preco !== null && !\(preco >= 0\)\)/)
+})

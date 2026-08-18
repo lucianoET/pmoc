@@ -32,6 +32,8 @@ let VENC_ATIVO_ID = null
 let OS_PLANOS_MARCADOS = []
 // OS aberta no modal de detalhe
 let OS_DETALHE_ID = null
+// material com a linha aberta em edição na aba de estoque
+let MATERIAL_EDIT_ID = null
 let AGENDA_ANO = new Date().getFullYear()
 let AGENDA_MES = new Date().getMonth()
 
@@ -190,37 +192,89 @@ function renderPainel(){
   document.getElementById('kpi-venc').textContent      = venc
   document.getElementById('kpi-estoque-baixo').textContent = baixo
 
-  // inoperantes
-  const inopList = ATIVOS.filter(a => a.status !== 'operante')
-  const divInop = document.getElementById('painel-inop')
-  if(!inopList.length){
-    divInop.innerHTML = '<div class="empty"><div class="empty-ico">✅</div><p>Todas operantes</p></div>'
-  } else {
-    divInop.innerHTML = inopList.map(a => `
-      <div class="mat-alert">
-        <div class="mat-info">
-          <div class="mat-nome">${a.codigo} — ${a.nome}</div>
-          <div class="mat-stock">${a.local || '—'}</div>
-        </div>
-        <span class="badge ${a.status==='inoperante'?'b-red':'b-warn'}">${a.status.toUpperCase()}</span>
-      </div>`).join('')
-  }
+  const abertas = OS_LIST.filter(o => o.status === 'pendente' || o.status === 'em_andamento')
+  document.getElementById('kpi-os-abertas').textContent = abertas.length
 
-  // materiais críticos
-  const matsLow = MATERIAIS.filter(m => m.estoque_atual < m.estoque_minimo)
-  const divMats = document.getElementById('painel-mats')
-  if(!matsLow.length){
-    divMats.innerHTML = '<div class="empty"><div class="empty-ico">✅</div><p>Estoque OK</p></div>'
-  } else {
-    divMats.innerHTML = matsLow.map(m => `
-      <div class="mat-alert">
-        <div class="mat-info">
-          <div class="mat-nome">${m.nome}</div>
-          <div class="mat-stock">${m.estoque_atual} ${m.unidade} · mín: ${m.estoque_minimo}</div>
-        </div>
-        <span class="badge b-red">BAIXO</span>
-      </div>`).join('')
+  // O painel é resumo, não relatório: cada bloco mostra os primeiros itens e
+  // manda o resto para a aba própria. Sem o corte, com 28 máquinas e 34
+  // materiais a página virava três telas de rolagem antes do primeiro dado útil.
+  const TETO = 5
+
+  // OS em aberto — o bloco novo, que só faz sentido depois de a OS ganhar
+  // situação: antes toda ordem nascia concluída e esta lista seria sempre vazia
+  pintarResumo({
+    alvo: 'painel-os',
+    itens: abertas,
+    vazio: { icone: '✅', texto: 'Nenhuma OS em aberto' },
+    aba: 'os',
+    linha: o => ({
+      nome: `${esc(o.maq_ativos?.codigo || '?')} — ${esc(itensDaOS(o)[0]?.maq_planos?.nome || o.tipo)}`,
+      detalhe: `aberta em ${esc(o.data_abertura || '—')}${o.tecnico ? ' · ' + esc(o.tecnico) : ''}`,
+      selo: `<span class="badge ${badgeStatusOS(o.status)}">${rotuloStatusOS(o.status)}</span>`,
+      acao: `abrirDetalheOS('${o.id}')`,
+    }),
+    teto: TETO,
+  })
+
+  pintarResumo({
+    alvo: 'painel-inop',
+    itens: ATIVOS.filter(a => a.status !== 'operante'),
+    vazio: { icone: '✅', texto: 'Todas operantes' },
+    aba: 'ativos',
+    linha: a => ({
+      nome: `${esc(a.codigo)} — ${esc(a.nome)}`,
+      detalhe: esc(a.local || '—'),
+      selo: `<span class="badge ${a.status==='inoperante'?'b-red':'b-warn'}">${a.status.toUpperCase()}</span>`,
+      acao: `abrirModalAtivo(${a.id})`,
+    }),
+    teto: TETO,
+  })
+
+  pintarResumo({
+    alvo: 'painel-mats',
+    itens: MATERIAIS.filter(m => m.estoque_atual < m.estoque_minimo),
+    vazio: { icone: '✅', texto: 'Estoque OK' },
+    aba: 'materiais',
+    linha: m => ({
+      nome: esc(m.nome),
+      detalhe: `${m.estoque_atual} ${esc(m.unidade)} · mín: ${m.estoque_minimo}`,
+      selo: '<span class="badge b-red">BAIXO</span>',
+      acao: `editarMaterial(${m.id})`,
+    }),
+    teto: TETO,
+  })
+}
+
+// desenha um bloco de resumo do painel: até `teto` linhas e, se sobrou coisa,
+// um botão que leva à aba onde a lista inteira vive
+function pintarResumo({ alvo, itens, vazio, aba, linha, teto }){
+  const div = document.getElementById(alvo)
+  if(!div) return
+  if(!itens.length){
+    div.innerHTML = `<div class="empty"><div class="empty-ico">${vazio.icone}</div><p>${vazio.texto}</p></div>`
+    return
   }
+  const visiveis = itens.slice(0, teto)
+  const restantes = itens.length - visiveis.length
+  div.innerHTML = visiveis.map(item => {
+    const l = linha(item)
+    return `<div class="mat-alert" onclick="${l.acao}" style="cursor:pointer">
+      <div class="mat-info">
+        <div class="mat-nome">${l.nome}</div>
+        <div class="mat-stock">${l.detalhe}</div>
+      </div>
+      ${l.selo}
+    </div>`
+  }).join('') + (restantes > 0
+    ? `<button class="btn btn-s btn-sm" style="width:100%;margin-top:2px"
+         onclick="irParaAba('${aba}')">Ver os outros ${restantes} →</button>`
+    : '')
+}
+
+// leva o usuário à aba pedida pelo mesmo caminho que o clique na faixa de abas
+function irParaAba(id){
+  const botao = document.querySelector(`.nav-btn[data-view="${id}"]`)
+  if(botao) botao.click()
 }
 
 // ── ATIVOS ──
@@ -616,22 +670,93 @@ function renderMateriais(){
   tbody.innerHTML = MATERIAIS.map(m => {
     const ok = m.estoque_atual >= m.estoque_minimo
     const pct = m.estoque_minimo > 0 ? Math.min(100, Math.round((m.estoque_atual/m.estoque_minimo)*100)) : 100
+
+    // linha em edição: os três números que mudam no dia a dia viram campo, e o
+    // resto da linha continua igual, para não perder a referência de qual
+    // material está sendo mexido
+    if(MATERIAL_EDIT_ID === m.id){
+      return `<tr>
+        <td class="hi">${esc(m.codigo||'—')}</td>
+        <td>${esc(m.nome)}</td>
+        <td><span class="badge b-blue">${esc(m.tipo.toUpperCase())}</span></td>
+        <td><input type="number" id="ed-atual" value="${m.estoque_atual}" min="0" step="0.5" style="width:88px"/></td>
+        <td><input type="number" id="ed-minimo" value="${m.estoque_minimo}" min="0" step="0.5" style="width:88px"/></td>
+        <td><input type="number" id="ed-preco" value="${m.preco ?? ''}" min="0" step="0.01" placeholder="0,00" style="width:96px"/></td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-p btn-sm" onclick="salvarLinhaMaterial(${m.id})">Salvar</button>
+            <button class="btn btn-s btn-sm" onclick="cancelarEdicaoMaterial()">✕</button>
+          </div>
+        </td>
+      </tr>`
+    }
+
     return `<tr>
-      <td class="hi">${m.codigo||'—'}</td>
-      <td>${m.nome}</td>
-      <td><span class="badge b-blue">${m.tipo.toUpperCase()}</span></td>
+      <td class="hi">${esc(m.codigo||'—')}</td>
+      <td>${esc(m.nome)}</td>
+      <td><span class="badge b-blue">${esc(m.tipo.toUpperCase())}</span></td>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
-          <span>${m.estoque_atual} ${m.unidade}</span>
+          <span>${m.estoque_atual} ${esc(m.unidade)}</span>
           <div class="uso-bar-wrap" style="width:60px">
             <div class="uso-bar" style="width:${pct}%;background:${ok?'var(--green)':'var(--red)'}"></div>
           </div>
         </div>
       </td>
-      <td>${m.estoque_minimo} ${m.unidade}</td>
+      <td>${m.estoque_minimo} ${esc(m.unidade)}</td>
       <td>${m.preco?('R$ '+Number(m.preco).toFixed(2)):'—'}</td>
-      <td><span class="badge ${ok?'b-ok':'b-red'}">${ok?'OK':'BAIXO'}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="badge ${ok?'b-ok':'b-red'}">${ok?'OK':'BAIXO'}</span>
+          <button class="btn btn-s btn-sm" onclick="editarMaterial(${m.id})" title="Editar quantidade, mínimo e preço">✎</button>
+        </div>
+      </td>
     </tr>`}).join('')
+}
+
+// ── edição em linha do estoque ──
+function editarMaterial(id){
+  MATERIAL_EDIT_ID = id
+  irParaAba('materiais')
+  renderMateriais()
+}
+
+function cancelarEdicaoMaterial(){
+  MATERIAL_EDIT_ID = null
+  renderMateriais()
+}
+
+async function salvarLinhaMaterial(id){
+  const material = MATERIAIS.find(m => m.id === id)
+  if(!material) return
+
+  const atual  = parseFloat(document.getElementById('ed-atual').value)
+  const minimo = parseFloat(document.getElementById('ed-minimo').value)
+  const precoTexto = document.getElementById('ed-preco').value.trim()
+  const preco = precoTexto === '' ? null : parseFloat(precoTexto)
+
+  if(!(atual >= 0) || !(minimo >= 0)){ alert('Quantidade e mínimo precisam ser números não negativos.'); return }
+  if(preco !== null && !(preco >= 0)){ alert('Preço precisa ser um número não negativo.'); return }
+
+  const { error } = await supa.from('maq_materiais')
+    .update({ estoque_atual: atual, estoque_minimo: minimo, preco })
+    .eq('id', id)
+  if(error){ alert('Erro: ' + error.message); return }
+
+  // Mexer na quantidade à mão é movimento de estoque como qualquer outro, e
+  // precisa deixar rastro: sem isso o saldo muda e ninguém sabe por quê.
+  const diferenca = atual - Number(material.estoque_atual)
+  if(diferenca !== 0){
+    await supa.from('maq_estoque_movimentos').insert({
+      material_id: id,
+      tipo: diferenca > 0 ? 'entrada' : 'saida',
+      quantidade: Math.abs(diferenca),
+      motivo: `Ajuste manual no estoque (${material.estoque_atual} → ${atual})`,
+    })
+  }
+
+  MATERIAL_EDIT_ID = null
+  await carregarTudo()
 }
 
 // ── COMPRAS ──
@@ -1535,13 +1660,16 @@ function exporNoWindow(){
     abrirVencMaquina,
     atualizarSelecaoVenc,
     avancarOS,
+    cancelarEdicaoMaterial,
     concluirOperacao,
     concluirOS,
+    editarMaterial,
     exportarComprasCSV,
     exportarOSCsv,
     exportarOSDoc,
     exportarOSPdf,
     fecharModal,
+    irParaAba,
     marcarTodosVenc,
     iniciarOperacao,
     navegarAgenda,
@@ -1553,6 +1681,7 @@ function exporNoWindow(){
     salvarMaterial,
     salvarMovimento,
     salvarDetalheOS,
+    salvarLinhaMaterial,
     salvarOperacao,
     salvarOS,
     salvarUso,
