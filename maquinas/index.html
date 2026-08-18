@@ -129,6 +129,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <option value="">Todas as categorias</option>
           <option value="rocadeira">Roçadeiras</option>
           <option value="minitrator">Mini-tratores</option>
+          <option value="tobata">Tobatas</option>
           <option value="trator">Tratores</option>
           <option value="carrinho">Carrinhos</option>
           <option value="motoserra">Moto-serra</option>
@@ -155,11 +156,10 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <tbody id="tb-ativos"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
-    </div>
 
-    <!-- VENCIMENTOS -->
-    <div class="view" id="view-vencimentos">
-      <div class="view-title">Vencimentos de manutenção</div>
+      <!-- Vencimentos passou a ser seção desta aba, não aba própria (18/08/2026):
+           vencimento é atributo da máquina, então vive onde a máquina já está. -->
+      <h3 class="section-spaced">Vencimentos de manutenção</h3>
       <div class="view-sub">Máquinas com planos próximos do vencimento ou já vencidos</div>
       <div id="venc-content"><div class="empty"><div class="empty-ico">📅</div><p>Carregando...</p></div></div>
     </div>
@@ -168,7 +168,12 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     <div class="view" id="view-os">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div class="view-title">Ordens de Serviço</div>
-        <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
+        <!-- Reparos é o catálogo sintoma → causa que a OS corretiva consome —
+             não um sistema à parte, por isso o link mora aqui e não no portal. -->
+        <div style="display:flex;gap:8px">
+          <a class="btn btn-s btn-sm" href="/reparos" title="Catálogo de diagnóstico sintoma → causa por modelo, usado na OS corretiva">🛠 Catálogo de reparos</a>
+          <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
+        </div>
       </div>
       <div class="view-sub">Clique numa OS para ver o detalhe, editar e exportar</div>
       <div class="filters-inline">
@@ -192,12 +197,12 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <tbody id="tb-os"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
-    </div>
 
-    <!-- OPERAÇÕES -->
-    <div class="view" id="view-operacoes">
+      <!-- Operações passou a ser seção desta aba, não aba própria (18/08/2026):
+           operação é execução de serviço — pertence à aba onde já se abre e
+           acompanha OS. -->
       <div class="view-head">
-        <div class="view-title">Operações de serviço</div>
+        <h3 class="section-spaced">Operações de serviço</h3>
         <div class="ops-actions">
           <button class="btn btn-s btn-sm" id="btn-nova-area" onclick="abrirModalArea()">+ Área</button>
           <button class="btn btn-p btn-sm" id="btn-nova-operacao" onclick="abrirModalOperacao()">+ Operação</button>
@@ -483,6 +488,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <select id="at-cat">
             <option value="rocadeira">Roçadeira</option>
             <option value="minitrator">Mini-trator</option>
+            <option value="tobata">Tobata</option>
             <option value="trator">Trator</option>
             <option value="carrinho">Carrinho</option>
             <option value="motoserra">Moto-serra</option>
@@ -542,11 +548,16 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="section-row">
         <button class="btn btn-p btn-sm" id="ficha-btn-uso">Registrar uso</button>
         <button class="btn btn-p btn-sm" id="ficha-btn-os">Abrir OS</button>
+        <button class="btn btn-p btn-sm" id="ficha-btn-venc">Vencimentos</button>
         <button class="btn btn-s btn-sm" id="ficha-btn-cadastro">Editar cadastro</button>
       </div>
       <div class="frow" id="ficha-instrucoes-wrap" style="display:none">
         <label>Instruções</label>
         <div id="ficha-instrucoes" class="panel-card" style="font-size:12px;color:var(--text2);white-space:pre-wrap"></div>
+      </div>
+      <div class="frow" id="ficha-vencimentos-wrap" style="display:none">
+        <label>Manutenções</label>
+        <div id="ficha-vencimentos" class="stack"></div>
       </div>
       <div class="frow" id="ficha-operacoes-wrap" style="display:none">
         <label>Operações agendadas</label>
@@ -577,11 +588,33 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
   </div>
 </div>
 
+<!-- MODAL: SERVIÇO NOVO — cadastro rápido a partir da OS, sem trocar de módulo -->
+<div class="overlay" id="modal-servico">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hd">
+      <h3>Novo serviço</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-servico')" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="frow"><label>Nome *</label><input type="text" id="sv-nome" placeholder="Troca de lâmina"/></div>
+      <div class="fgrid">
+        <div class="frow"><label>Tempo padrão (h)</label><input type="number" id="sv-tempo" min="0.1" step="0.5" placeholder="1"/></div>
+        <div class="frow"><label>Valor da hora (R$)</label><input type="number" id="sv-valor" min="0" step="0.01"/></div>
+      </div>
+      <div class="help">Entra no catálogo de serviços (módulo Reparos) e já volta selecionado na OS.</div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-servico')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarServicoNovo()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: MATERIAL -->
 <div class="overlay" id="modal-material">
   <div class="modal">
     <div class="modal-hd">
-      <h3>Novo material / peça</h3>
+      <h3 id="modal-material-titulo">Novo material / peça</h3>
       <button class="btn btn-s btn-sm" onclick="fecharModal('modal-material')">✕</button>
     </div>
     <div class="modal-body">
@@ -600,6 +633,11 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         </div>
         <div class="frow"><label>Unidade</label><input type="text" id="mat-uni" value="un"/></div>
         <div class="frow"><label>Estoque mínimo</label><input type="number" id="mat-min" value="2" min="0"/></div>
+      </div>
+      <div class="frow" id="mat-servico-wrap">
+        <label>Serviço vinculado</label>
+        <select id="mat-servico"><option value="">— nenhum —</option></select>
+        <div class="help">Ao lançar esta peça numa OS, o serviço entra junto — e escolher o serviço traz a peça.</div>
       </div>
     </div>
     <div class="modal-ft">
