@@ -255,6 +255,42 @@ Rodar 19, 20 e 21 uma segunda vez deve manter as contagens idênticas.
 
 Ao terminar: `docker rm -f pmoc-teste`.
 
+### Cadeia Máquinas (01 → 02 → 09 → 26 → 27)
+
+O fixture `banco-teste.sql` stuba a cadeia de **locais** e não serve aqui: ele cria
+`maq_ativos` como stub de quatro colunas. Para ensaiar a cadeia de Máquinas use
+`tests/fixtures/banco-teste-auth.sql`, que recria o mínimo do schema `auth` do
+Supabase (`auth.users` e `auth.uid()` lendo o GUC `request.jwt.claim.sub`).
+
+```bash
+docker run -d --name pmoc-teste-reparos -e POSTGRES_PASSWORD=teste -e POSTGRES_DB=pmoc -p 55433:5432 postgres:16-alpine
+export SUPABASE_DB_URL='postgresql://postgres:teste@localhost:55433/pmoc'
+uv run --with "psycopg[binary]" python supabase/aplicar.py \
+  ../tests/fixtures/banco-teste-auth.sql \
+  01_maquinas_schema.sql 02_maquinas_seed.sql 09_importa_frota_28.sql \
+  26_reparos_schema.sql 27_reparos_seed.sql
+```
+
+Validado em 18/08/2026 contra PostgreSQL 16.14:
+
+| Conferência | Esperado |
+|---|---|
+| `rep_modelos` | 7 |
+| `rep_servicos` | 25 |
+| `rep_reparos` | 33 |
+| `rep_reparo_servicos` | 34 |
+| `rep_reparo_materiais` | 30 |
+| `maq_ativos` com `modelo_id is null` | 0 |
+
+Rodar 26 e 27 uma segunda vez deve manter as seis contagens idênticas.
+
+`rep_confirmar_reparo()` verificada nos quatro caminhos: confirma e incrementa
+`frequencia`; segunda chamada na mesma OS é bloqueada e **não** incrementa de novo
+(retentativa de rede não conta duas vezes); OS sem `reparo_id` é rejeitada; causa
+desmentida (`p_confirmado = false`) grava a resposta sem incrementar.
+
+Ao terminar: `docker rm -f pmoc-teste-reparos`.
+
 ## Módulo Mapa (/mapa) — implementação 10/08/2026
 
 > Esta seção descreve o **estado de demonstração** do módulo, anterior à Fase 10 (dados fixos
@@ -922,3 +958,66 @@ A planta vetorial não resolve isso: o extrato OSM nomeia 12 feições (CON, CB0
 ETE, os dois cais) e nenhuma casa com os nomes de edificação do `cmasm_locais` (COMANDO, F21,
 MK48, EXOCET…). Popular `cmasm_locais.lat`/`lon` — que posicionaria os 265 ativos de uma vez pela
 camada herdada — depende de coordenadas reais dos prédios, que não estão em nenhuma fonte do repo.
+
+## Módulo Reparos (/reparos) — implementação 18/08/2026
+
+Catálogo de sintoma → causa provável por **modelo** de máquina, com as peças e serviços que cada
+reparo consome. Complementa Máquinas: lá o disparo é o horímetro (`maq_planos`), aqui é o sintoma.
+
+### Estado do banco — verificado em produção em 18/08/2026
+
+| Conferência | Valor |
+|---|---|
+| `rep_modelos` | 7 |
+| `rep_servicos` | 25 |
+| `rep_reparos` | 33 |
+| `rep_reparo_servicos` | 34 |
+| `rep_reparo_materiais` | 30 |
+| `maq_ativos` com `modelo_id is null` | 0 de 28 |
+| `anon` executa `rep_pode_escrever` / `rep_confirmar_reparo` | não (revogado de `public`) |
+
+### Por que existe a migração 28
+
+As tabelas `rep_*` foram criadas a partir de um **rascunho** de schema antes da migração 26.
+Quando a 26 rodou depois, todo `create table if not exists` virou no-op — as tabelas já existiam,
+numa forma mais estreita — e as definições corretas foram ignoradas **em silêncio**: faltavam
+`rep_modelos.codigo`, `rep_reparos.codigo`, `procedimento`, `obs`, `criado_em` e
+`rep_servicos.origem`, e `sistema`/`gravidade` estavam nullable. Funções, policies, índices,
+grants e os `alter table` aplicaram normalmente, então nada acusou erro.
+
+**Regra que fica:** `create table if not exists` numa migração aditiva garante a existência da
+tabela, não a forma dela. Depois de aplicar, conferir as colunas — não só se o script terminou
+sem exceção. A migração 28 fecha a diferença; num banco novo (26 → 27) ela é inócua.
+
+### Write path — NUNCA exercido
+
+Tudo que foi verificado até aqui é leitura e SQL. Nenhuma gravação passou pelo módulo. Em
+particular, `rep_reparos.frequencia` está **0 nos 33 reparos**: o ranking por confirmação, que é a
+razão de ser do design, nunca executou uma única vez. Mesma situação do write path do `/mapa`.
+
+**Fica para o usuário**, depois do deploy, em `/reparos` e `/maquinas` com cargo de escrita:
+
+- [ ] Em `/reparos` → Reparos, com cargo `tecnico`, cadastrar um reparo novo (testa a RLS de
+      `rep_pode_escrever(array['admin','gestor','tecnico'])` e a coluna `procedimento`)
+- [ ] Com cargo `tecnico`, confirmar que os botões "+ Serviço" e "+ Modelo" **não** aparecem
+      (catálogo estrutural é `admin`/`gestor`) e que o insert é recusado pelo banco se forçado
+- [ ] Com o cargo Livre (observador), confirmar que nenhum botão de cadastro aparece e que a aba
+      Diagnóstico continua legível
+- [ ] Em `/maquinas`, abrir OS **corretiva** na TS114-01, escolher `Não dá partida → Vela suja ou
+      queimada`, conferir que o resumo mostra R$ 47,40 e 0,3 h, e concluir
+- [ ] Conferir depois: `select frequencia from rep_reparos where codigo='RP-TS114-01'` deve dar
+      **1**, e a vela `PE17` deve ter saído do estoque com um movimento `saida` em
+      `maq_estoque_movimentos` amarrado ao `os_id`
+- [ ] Repetir a conclusão da mesma OS e conferir que a segunda confirmação é recusada — a
+      `frequencia` **não** pode ir a 2 (idempotência de `rep_confirmar_reparo`)
+- [ ] Abrir OS **preventiva** e conferir que o bloco de diagnóstico não aparece
+
+### Dívida conhecida
+
+- `RP-TS114-06` (rolamento de roda) e `RP-LGT-03` (filtro de ar do LGT2654) estão sem peça
+  vinculada: os materiais não existem no catálogo de 34 itens. Cadastrar em `maq_materiais` e
+  vincular pela tela de peças e serviços do módulo.
+- `RP-TS114-07` (pneu) tem os dois pneus marcados como não essenciais de propósito — só um costuma
+  ser trocado —, então aparece com custo estimado R$ 0,00. É o comportamento pretendido.
+- `tempo_padrao_h` dos 25 serviços é estimativa de oficina. O real fica em `maq_os.horas_servico`;
+  comparar estimado × executado só faz sentido depois de histórico.
