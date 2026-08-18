@@ -15,12 +15,17 @@
 --   na linha e recebimento parcial por item
 --
 -- Migração aditiva, como todas menos a 31: sem remoção de tabela nem
--- de coluna, sem alter ... drop de espécie alguma. NÃO aplicada em produção na
--- data em que este arquivo subiu (18/08/2026) — a aplicação é passo
--- do orquestrador, depois. Lição da migração 28: "create table if not
--- exists" garante a existência da tabela, não a forma dela — conferir
--- as colunas depois de aplicar, nunca confiar apenas na ausência de
--- erro.
+-- de coluna, sem alter ... drop de espécie alguma. APLICADA em produção
+-- em 18/08/2026 e conferida contra o banco — lição da migração 28: "create
+-- table if not exists" garante a existência da tabela, não a forma dela,
+-- então a conferência olhou a forma, não a ausência de erro: 17 colunas
+-- (2 novas em maq_materiais + 7 em maq_compras_listas + 8 em
+-- maq_compras_itens), 9 constraints (2 FK, 1 unique (lista_id,
+-- material_id), 3 checks em itens, 1 check de status em listas, 2 pkey),
+-- 4 índices e RLS ligada nas duas tabelas com as duas políticas cada.
+-- O fluxo inteiro foi exercido contra o banco real (necessidade →
+-- lista → recebimento parcial → recebimento final → lista fecha
+-- sozinha) e os dados de teste foram removidos depois.
 -- ══════════════════════════════════════════════════════════════════
 
 -- ── material: sistema e aplicação ───────────────────────────────────

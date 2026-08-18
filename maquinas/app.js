@@ -1199,6 +1199,7 @@ function abrirModalListaCompra(){
 
   document.getElementById('lc-titulo').value = `Necessidades ${new Date().toISOString().slice(0,10)}`
   document.getElementById('lc-desc').value = ''
+  document.getElementById('lc-data').value = new Date().toISOString().slice(0,10)
   document.getElementById('lc-resumo').textContent =
     `${LISTA_NOVA_ITENS.length} ${LISTA_NOVA_ITENS.length > 1 ? 'itens' : 'item'} nesta lista.`
   document.getElementById('modal-lista-compra').classList.add('open')
@@ -1212,6 +1213,7 @@ async function salvarListaCompra(){
   const { data: lista, error: erLista } = await supa.from('maq_compras_listas').insert({
     titulo,
     descricao: document.getElementById('lc-desc').value.trim() || null,
+    data: document.getElementById('lc-data').value || new Date().toISOString().slice(0,10),
     criado_por: USUARIO?.nome || USUARIO?.role || null,
   }).select()
   if(erLista){ alert('Erro: ' + erLista.message); return }
