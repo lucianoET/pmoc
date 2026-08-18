@@ -20,9 +20,18 @@ let AREAS = [], OPERACOES = [], OPERACOES_ERRO = null
 // enquanto a migração não rodar em produção, as três listas ficam vazias e o
 // módulo segue funcionando exatamente como antes.
 let REPAROS = [], REP_MATS = [], REP_SERVS = [], SERVICOS = []
+// Itens de manutenção por OS (migração 29). Mesma tolerância do catálogo de
+// reparos: sem a migração a lista fica vazia, a OS volta a ser de um item só e
+// nada quebra.
+let OS_ITENS = []
 let USUARIO = null
 let ATIVO_EDIT_ID = null
 let OPERACAO_CONCLUIR_ID = null
+// máquina aberta no popup de vencimentos e planos que o usuário marcou lá
+let VENC_ATIVO_ID = null
+let OS_PLANOS_MARCADOS = []
+// OS aberta no modal de detalhe
+let OS_DETALHE_ID = null
 let AGENDA_ANO = new Date().getFullYear()
 let AGENDA_MES = new Date().getMonth()
 
@@ -101,6 +110,7 @@ async function carregarTudo(){
   OPERACOES = op.data|| []
   OPERACOES_ERRO = ar.error || op.error || null
   await carregarCatalogoReparos()
+  await carregarItensOS()
   aplicarPermissoesOperacoes()
   renderPainel(); renderAtivos(); renderVencimentos(); renderOS(); renderMateriais()
   renderConsumo(); renderCiclo(); renderCompras(); renderOperacoes(); renderAgenda()
@@ -121,6 +131,33 @@ async function carregarCatalogoReparos(){
   REP_MATS  = indisponivel ? [] : (rm.data || [])
   REP_SERVS = indisponivel ? [] : (rs.data || [])
   SERVICOS  = indisponivel ? [] : (sv.data || [])
+}
+
+// ── itens de manutenção por OS (migração 29) ──
+// Também fora do Promise.all: num banco onde a migração 29 não rodou, a lista
+// fica vazia e cada OS volta a ser de um item só, pelo maq_os.plano_id de
+// sempre. Nenhuma tela quebra — elas só mostram menos.
+async function carregarItensOS(){
+  const { data, error } = await supa
+    .from('maq_os_itens')
+    .select('*, maq_planos(nome,intervalo,unidade)')
+  OS_ITENS = error ? [] : (data || [])
+}
+
+// itens de uma OS, com fallback para o plano único de maq_os quando a
+// migração 29 ainda não rodou
+function itensDaOS(os){
+  const itens = OS_ITENS.filter(i => i.os_id === os.id)
+  if(itens.length) return itens
+  if(!os.plano_id) return []
+  // O plano vem de PLANOS, não do join da OS: o join traz só o nome, e a tela
+  // precisa também de intervalo e unidade — sem isso o detalhe escrevia
+  // "a cada undefined".
+  return [{
+    id: null, os_id: os.id, plano_id: os.plano_id,
+    concluido: os.status === 'concluida',
+    maq_planos: PLANOS.find(p => p.id === os.plano_id) || os.maq_planos || null,
+  }]
 }
 
 // peças essenciais de um reparo, já resolvidas contra maq_materiais
@@ -196,7 +233,7 @@ function renderAtivos(){
   )
   const tbody = document.getElementById('tb-ativos')
   if(!lista.length){
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma máquina encontrada</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma máquina encontrada</td></tr>'
     return
   }
   const statusBadge = s => s==='operante'?'b-ok':s==='inoperante'?'b-red':'b-warn'
@@ -204,8 +241,6 @@ function renderAtivos(){
     <tr onclick="abrirModalAtivo(${a.id})">
       <td class="hi" style="color:${a.cor||'var(--text)'}">${a.emoji||''} ${a.codigo||'—'}</td>
       <td class="hi">${a.nome}</td>
-      <td>${a.categoria||'—'}</td>
-      <td>${[a.fabricante,a.modelo].filter(Boolean).join(' ') || '—'}</td>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
           <span>${a.uso_atual} ${a.unidade_uso}</span>
@@ -214,9 +249,73 @@ function renderAtivos(){
       <td><span class="badge ${statusBadge(a.status)}">${a.status.toUpperCase()}</span></td>
       <td>${a.local||'—'}</td>
       <td>
-        <button class="btn btn-s btn-sm" onclick="event.stopPropagation();abrirModalOS(${a.id})">+ OS</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-s btn-sm" onclick="event.stopPropagation();abrirModalUso(${a.id})" title="Registrar horas ou quilometragem">USO</button>
+          <button class="btn btn-s btn-sm" onclick="event.stopPropagation();abrirModalOS(${a.id})" title="Abrir ordem de serviço">OS</button>
+        </div>
       </td>
     </tr>`).join('')
+}
+
+// ── MODAL: REGISTRO DE USO ──
+// Anotar horímetro não é ordem de serviço: grava em maq_uso_registros e
+// atualiza maq_ativos.uso_atual, e para por aí. Antes só existia embutido no
+// modal de OS, o que obrigava a criar uma OS de mentira para anotar horas.
+function abrirModalUso(ativoId){
+  const sel = document.getElementById('uso-ativo')
+  sel.innerHTML = ATIVOS.filter(a => a.status !== 'baixado')
+    .map(a => `<option value="${a.id}" ${a.id===ativoId?'selected':''}>${esc(a.codigo)} — ${esc(a.nome)}</option>`).join('')
+  sel.onchange = () => atualizarContextoUso()
+
+  document.getElementById('uso-data').value = new Date().toISOString().slice(0,10)
+  document.getElementById('uso-delta').value = ''
+  document.getElementById('uso-operador').value = USUARIO?.nome || ''
+  document.getElementById('uso-obs').value = ''
+  const campoDelta = document.getElementById('uso-delta')
+  campoDelta.oninput = () => atualizarContextoUso()
+
+  atualizarContextoUso()
+  document.getElementById('modal-uso').classList.add('open')
+}
+
+// mostra o uso atual e o total que ficará gravado — o operador confere o
+// número antes de salvar, em vez de descobrir o erro no relatório
+function atualizarContextoUso(){
+  const ativo = ATIVOS.find(a => a.id === parseInt(document.getElementById('uso-ativo').value))
+  if(!ativo) return
+  const unidade = ativo.unidade_uso || 'h'
+  const delta = parseFloat(document.getElementById('uso-delta').value) || 0
+  document.getElementById('uso-atual').textContent = `${ativo.uso_atual} ${unidade}`
+  document.getElementById('uso-delta-label').textContent =
+    unidade === 'km' ? 'Quilômetros rodados *' : `Uso no período (${unidade}) *`
+  document.getElementById('uso-previsto').textContent = delta > 0
+    ? `Novo total: ${(Number(ativo.uso_atual) + delta).toFixed(1)} ${unidade}`
+    : '—'
+}
+
+async function salvarUso(){
+  const ativo_id = parseInt(document.getElementById('uso-ativo').value)
+  const delta    = parseFloat(document.getElementById('uso-delta').value)
+  const data     = document.getElementById('uso-data').value
+  const operador = document.getElementById('uso-operador').value.trim()
+  const obs      = document.getElementById('uso-obs').value.trim()
+
+  if(!ativo_id || !data){ alert('Preencha a máquina e a data.'); return }
+  if(!(delta > 0)){ alert('Informe o uso do período — precisa ser maior que zero.'); return }
+
+  const ativo = ATIVOS.find(a => a.id === ativo_id)
+  const uso_total = Number(ativo?.uso_atual || 0) + delta
+
+  const { error: erUso } = await supa.from('maq_uso_registros').insert({
+    ativo_id, delta, uso_total, data, operador, obs,
+  })
+  if(erUso){ alert('Erro: ' + erUso.message); return }
+
+  const { error: erAtivo } = await supa.from('maq_ativos').update({ uso_atual: uso_total }).eq('id', ativo_id)
+  if(erAtivo){ alert('Erro: ' + erAtivo.message); return }
+
+  fecharModal('modal-uso')
+  await carregarTudo()
 }
 
 // ── VENCIMENTOS ──
@@ -239,35 +338,113 @@ function calcVencimentos(){
   return items.sort((a,b) => b.pct - a.pct)
 }
 
+// Agrupa os itens por máquina. Antes a aba desenhava um cartão por item —
+// 28 máquinas × N planos cada — e a página passava de vinte telas de rolagem.
+// Agora é um cartão por máquina, com o pior item à vista; os demais ficam no
+// popup, onde também se escolhe o que entra na OS.
+function vencimentosPorMaquina(){
+  const porAtivo = new Map()
+  for(const item of calcVencimentos()){
+    if(!porAtivo.has(item.ativo.id)) porAtivo.set(item.ativo.id, { ativo: item.ativo, itens: [] })
+    porAtivo.get(item.ativo.id).itens.push(item)
+  }
+  const grupos = [...porAtivo.values()].map(grupo => ({
+    ...grupo,
+    vencidos: grupo.itens.filter(i => i.pct >= 100).length,
+    proximos: grupo.itens.filter(i => i.pct >= 80 && i.pct < 100).length,
+    pior: Math.max(...grupo.itens.map(i => i.pct)),
+  }))
+  // a máquina mais crítica primeiro, e entre iguais a que tem mais itens vencidos
+  return grupos.sort((a, b) => b.pior - a.pior || b.vencidos - a.vencidos)
+}
+
 function renderVencimentos(){
-  const items = calcVencimentos()
+  const grupos = vencimentosPorMaquina()
   const div = document.getElementById('venc-content')
-  if(!items.length){
+  if(!grupos.length){
     div.innerHTML = '<div class="callout co-ok">Nenhum plano de manutenção configurado para os ativos cadastrados.</div>'
     return
   }
-  const card = v => {
-    const cls = v.pct >= 100 ? 'urgente' : v.pct >= 80 ? 'proximo' : 'ok'
-    const cor = v.pct >= 100 ? 'var(--red)' : v.pct >= 80 ? 'var(--yellow)' : 'var(--green)'
-    const label = v.pct >= 100 ?
-      `<span class="badge b-red">VENCIDO (${Math.abs(v.falta).toFixed(0)} ${v.plano.unidade} atrás)</span>` :
-      v.falta <= 5 ?
-      `<span class="badge b-warn">Falta ${v.falta.toFixed(0)} ${v.plano.unidade}</span>` :
-      `<span style="font-size:11px;color:var(--text3)">Falta ${v.falta.toFixed(0)} ${v.plano.unidade}</span>`
-    return `<div class="venc-card ${cls}">
-      <div class="venc-ativo">${v.ativo.codigo} — ${v.ativo.nome}</div>
-      <div class="venc-plano">${v.plano.nome} · a cada ${v.plano.intervalo} ${v.plano.unidade}</div>
+  const card = g => {
+    const cls = g.pior >= 100 ? 'urgente' : g.pior >= 80 ? 'proximo' : 'ok'
+    const cor = g.pior >= 100 ? 'var(--red)' : g.pior >= 80 ? 'var(--yellow)' : 'var(--green)'
+    const selo = g.vencidos
+      ? `<span class="badge b-red">${g.vencidos} vencido${g.vencidos>1?'s':''}</span>`
+      : g.proximos
+      ? `<span class="badge b-warn">${g.proximos} próximo${g.proximos>1?'s':''}</span>`
+      : '<span class="badge b-ok">EM DIA</span>'
+    return `<div class="venc-card ${cls}" onclick="abrirVencMaquina(${g.ativo.id})" style="cursor:pointer">
+      <div class="venc-ativo">${esc(g.ativo.emoji||'')} ${esc(g.ativo.codigo)} — ${esc(g.ativo.nome)}</div>
+      <div class="venc-plano">${g.itens.length} ${g.itens.length>1?'itens':'item'} de manutenção · ${g.ativo.uso_atual} ${esc(g.ativo.unidade_uso||'h')}</div>
       <div class="uso-bar-wrap" style="margin:8px 0">
-        <div class="uso-bar" style="width:${v.pct}%;background:${cor}"></div>
+        <div class="uso-bar" style="width:${Math.min(100,g.pior)}%;background:${cor}"></div>
       </div>
       <div class="venc-progress">
-        <span>${v.pct}% do intervalo</span> · ${label}
+        ${selo}
         <button class="btn btn-s btn-sm" style="margin-left:auto"
-          onclick="abrirModalOS(${v.ativo.id}, ${v.plano.id})">Registrar OS</button>
+          onclick="event.stopPropagation();abrirVencMaquina(${g.ativo.id})">Ver itens</button>
       </div>
     </div>`
   }
-  div.innerHTML = '<div class="venc-grid">' + items.map(card).join('') + '</div>'
+  div.innerHTML = '<div class="venc-grid">' + grupos.map(card).join('') + '</div>'
+}
+
+// ── POPUP: itens de manutenção de uma máquina ──
+function abrirVencMaquina(ativoId){
+  VENC_ATIVO_ID = ativoId
+  const ativo = ATIVOS.find(a => a.id === ativoId)
+  const itens = calcVencimentos().filter(i => i.ativo.id === ativoId)
+
+  document.getElementById('modal-venc-titulo').textContent =
+    `${ativo?.codigo || '?'} — ${ativo?.nome || ''}`
+
+  document.getElementById('venc-itens').innerHTML = itens.map(v => {
+    const cor = v.pct >= 100 ? 'var(--red)' : v.pct >= 80 ? 'var(--yellow)' : 'var(--green)'
+    const situacao = v.pct >= 100
+      ? `<span class="badge b-red">VENCIDO — ${Math.abs(v.falta).toFixed(0)} ${esc(v.plano.unidade)} atrás</span>`
+      : `<span class="badge ${v.pct>=80?'b-warn':'b-ok'}">Falta ${v.falta.toFixed(0)} ${esc(v.plano.unidade)}</span>`
+    // itens já vencidos ou próximos vêm marcados: é o que o mecânico vai fazer
+    const marcado = v.pct >= 80 ? 'checked' : ''
+    return `<label class="panel-card" style="display:block;cursor:pointer">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <input type="checkbox" class="venc-check" value="${v.plano.id}" ${marcado}
+          onchange="atualizarSelecaoVenc()" style="width:auto;margin-top:3px"/>
+        <div style="flex:1">
+          <div class="hi" style="font-size:13px;color:var(--text);font-weight:500">${esc(v.plano.nome)}</div>
+          <div style="font-size:12px;color:var(--text3);margin:2px 0 6px">a cada ${v.plano.intervalo} ${esc(v.plano.unidade)}</div>
+          <div class="uso-bar-wrap"><div class="uso-bar" style="width:${Math.min(100,v.pct)}%;background:${cor}"></div></div>
+          <div style="margin-top:6px">${situacao}</div>
+        </div>
+      </div>
+    </label>`
+  }).join('')
+
+  atualizarSelecaoVenc()
+  document.getElementById('modal-venc').classList.add('open')
+}
+
+function marcarTodosVenc(marcar){
+  document.querySelectorAll('.venc-check').forEach(c => { c.checked = marcar })
+  atualizarSelecaoVenc()
+}
+
+function planosMarcadosNoVenc(){
+  return [...document.querySelectorAll('.venc-check:checked')].map(c => parseInt(c.value))
+}
+
+function atualizarSelecaoVenc(){
+  const n = planosMarcadosNoVenc().length
+  document.getElementById('venc-selecao').textContent =
+    n === 0 ? 'Nenhum item marcado' : `${n} ${n>1?'itens':'item'} marcado${n>1?'s':''}`
+}
+
+// leva os itens marcados para o modal de OS — uma OS, vários itens
+function abrirOSDosItensMarcados(){
+  const planos = planosMarcadosNoVenc()
+  if(!planos.length){ alert('Marque ao menos um item de manutenção.'); return }
+  const ativoId = VENC_ATIVO_ID
+  fecharModal('modal-venc')
+  abrirModalOS(ativoId, planos[0], planos)
 }
 
 // ── OS ──
@@ -277,17 +454,59 @@ function renderOS(){
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma OS registrada</td></tr>'
     return
   }
-  const sBadge = s => s==='concluida'?'b-ok':s==='pendente'?'b-warn':s==='cancelada'?'b-red':'b-blue'
-  const tBadge = t => t==='preventiva'?'b-blue':t==='corretiva'?'b-red':'b-ok'
-  tbody.innerHTML = OS_LIST.slice(0,100).map(o => `<tr>
-    <td>${o.data_abertura||'—'}</td>
-    <td class="hi">${o.maq_ativos?.codigo||'?'} — ${o.maq_ativos?.nome||'?'}</td>
-    <td><span class="badge ${tBadge(o.tipo)}">${o.tipo.toUpperCase()}</span></td>
-    <td>${o.maq_planos?.nome || (o.tipo==='uso'?'Registro de uso':'Corretiva')}</td>
-    <td>${o.tecnico||'—'}</td>
-    <td><span class="badge ${sBadge(o.status)}">${o.status.toUpperCase()}</span></td>
-    <td>${o.status==='pendente'?`<button class="btn btn-p btn-sm" onclick="concluirOS('${o.id}')">Concluir</button>`:'—'}</td>
-  </tr>`).join('')
+  tbody.innerHTML = OS_LIST.slice(0,100).map(o => {
+    const itens = itensDaOS(o)
+    // uma OS com vários itens mostra o primeiro e quantos mais existem, em vez
+    // de uma célula quilométrica
+    const servico = itens.length > 1
+      ? `${esc(itens[0].maq_planos?.nome || 'Item')} +${itens.length - 1}`
+      : esc(itens[0]?.maq_planos?.nome || (o.tipo === 'uso' ? 'Registro de uso' : 'Corretiva'))
+    const proxima = proximoStatus(o.status)
+    return `<tr onclick="abrirDetalheOS('${o.id}')" style="cursor:pointer">
+      <td>${esc(o.data_abertura||'—')}</td>
+      <td class="hi">${esc(o.maq_ativos?.codigo||'?')} — ${esc(o.maq_ativos?.nome||'?')}</td>
+      <td><span class="badge ${badgeTipoOS(o.tipo)}">${o.tipo.toUpperCase()}</span></td>
+      <td>${servico}</td>
+      <td>${esc(o.tecnico||'—')}</td>
+      <td><span class="badge ${badgeStatusOS(o.status)}">${rotuloStatusOS(o.status)}</span></td>
+      <td>${proxima
+        ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();avancarOS('${o.id}')">${proxima.acao}</button>`
+        : '—'}</td>
+    </tr>`
+  }).join('')
+}
+
+// ── ciclo de vida da OS ──
+// A lista fechada vem do banco (maq_os.status, migração 01). Estes rótulos são
+// só a tradução para a tela — o vocabulário do banco não muda.
+const STATUS_OS = {
+  pendente:     { rotulo: 'ABERTA',      badge: 'b-warn' },
+  em_andamento: { rotulo: 'EM EXECUÇÃO', badge: 'b-blue' },
+  concluida:    { rotulo: 'CONCLUÍDA',   badge: 'b-ok'   },
+  cancelada:    { rotulo: 'CANCELADA',   badge: 'b-red'  },
+}
+
+function rotuloStatusOS(status){ return STATUS_OS[status]?.rotulo || String(status).toUpperCase() }
+function badgeStatusOS(status){ return STATUS_OS[status]?.badge || 'b-blue' }
+function badgeTipoOS(tipo){ return tipo==='preventiva'?'b-blue':tipo==='corretiva'?'b-red':'b-ok' }
+
+// próximo passo do fluxo aberta → execução → concluída. Cancelada e concluída
+// são estados finais: não há botão de avançar.
+function proximoStatus(status){
+  if(status === 'pendente')     return { status: 'em_andamento', acao: 'Iniciar' }
+  if(status === 'em_andamento') return { status: 'concluida',    acao: 'Concluir' }
+  return null
+}
+
+async function avancarOS(id){
+  const os = OS_LIST.find(o => o.id === id)
+  const proxima = os && proximoStatus(os.status)
+  if(!proxima) return
+  if(proxima.status === 'concluida'){ await concluirOS(id); return }
+
+  const { error } = await supa.from('maq_os').update({ status: proxima.status }).eq('id', id)
+  if(error){ alert('Erro: ' + error.message); return }
+  await carregarTudo()
 }
 
 // ── OPERAÇÕES DE SERVIÇO ──
@@ -667,7 +886,12 @@ function renderCiclo(){
 }
 
 // ── MODAL OS ──
-function abrirModalOS(ativoId, planoId){
+function abrirModalOS(ativoId, planoId, planosMarcados){
+  // planosMarcados vem do popup de vencimentos: uma OS com vários itens. Sem
+  // ele o modal se comporta como sempre, com um plano só.
+  OS_PLANOS_MARCADOS = Array.isArray(planosMarcados) ? planosMarcados : (planoId ? [planoId] : [])
+  document.getElementById('os-status').value = 'pendente'
+  renderItensDaNovaOS()
   document.getElementById('os-data').value = new Date().toISOString().slice(0,10)
   // popular select de ativos
   const sel = document.getElementById('os-ativo')
@@ -683,6 +907,19 @@ function abrirModalOS(ativoId, planoId){
   document.getElementById('os-tecnico').value = USUARIO?.nome || ''
   document.getElementById('os-desc').value = ''
   document.getElementById('modal-os').classList.add('open')
+}
+
+// lista os itens que a OS vai levar quando ela nasce do popup de vencimentos
+function renderItensDaNovaOS(){
+  const wrap = document.getElementById('os-itens-wrap')
+  const lista = document.getElementById('os-itens-lista')
+  if(OS_PLANOS_MARCADOS.length < 2){ wrap.style.display = 'none'; return }
+  wrap.style.display = ''
+  lista.innerHTML = OS_PLANOS_MARCADOS
+    .map(id => PLANOS.find(p => p.id === id))
+    .filter(Boolean)
+    .map(p => `<div style="padding:4px 0;border-bottom:1px solid var(--border)">${esc(p.nome)} — a cada ${p.intervalo} ${esc(p.unidade)}</div>`)
+    .join('')
 }
 
 function popularPlanosOS(ativoId, preselect){
@@ -766,14 +1003,10 @@ async function salvarOS(){
   const uso_na_os = (ativo?.uso_atual || 0) + delta
 
   // inserir OS
-  // custo das peças do plano
-  let custo_pecas = 0
-  if(plano_id){
-    for(const item of PLANO_MATS.filter(p=>p.plano_id===plano_id)){
-      const mat = MATERIAIS.find(m=>m.id===item.material_id)
-      if(mat?.preco) custo_pecas += Number(mat.preco) * Number(item.quantidade)
-    }
-  }
+  // custo das peças de todos os planos que entram nesta OS — com um item só,
+  // dá exatamente o mesmo número de antes
+  const planosParaCusto = OS_PLANOS_MARCADOS.length ? OS_PLANOS_MARCADOS : (plano_id ? [plano_id] : [])
+  let custo_pecas = custoDosPlanos(planosParaCusto)
   // diagnóstico do catálogo (só em corretiva, e só se a migração 26 rodou)
   const reparoSel = document.getElementById('os-reparo')
   const reparo_id = (tipo === 'corretiva' && REPAROS.length) ? (parseInt(reparoSel?.value) || null) : null
@@ -781,18 +1014,35 @@ async function salvarOS(){
   const pecasReparo = reparo_id ? pecasEssenciaisDoReparo(reparo_id) : []
   if(reparo) custo_pecas += pecasReparo.reduce((s, p) => s + Number(p.mat.preco || 0) * Number(p.quantidade), 0)
 
+  // A OS nasce na situação escolhida. Só a concluída carrega data de conclusão
+  // e custo de peças: enquanto o serviço não terminou, não há peça consumida.
+  const status = document.getElementById('os-status').value
+  const concluida = status === 'concluida'
+
   // as colunas de reparo só entram no payload quando há diagnóstico: assim o
   // insert continua válido mesmo num banco onde a migração 26 não rodou
   const { data: osNova, error: erOS } = await supa.from('maq_os').insert({
-    ativo_id, plano_id, tipo,
-    status: 'concluida',
-    data_abertura: data, data_conclusao: data,
-    uso_na_os, tecnico, descricao, custo_pecas,
+    ativo_id, plano_id, tipo, status,
+    data_abertura: data,
+    data_conclusao: concluida ? data : null,
+    uso_na_os, tecnico, descricao,
+    custo_pecas: concluida ? custo_pecas : 0,
     ...(reparo ? { reparo_id, sintoma_relatado: reparo.sintoma } : {}),
   }).select('id').single()
   if(erOS){ alert('Erro: ' + erOS.message); return }
 
-  // atualizar horímetro
+  // os itens da OS (migração 29). Falha aqui não invalida a OS, que já está
+  // gravada com o plano_id de sempre — num banco sem a migração 29 este insert
+  // erra e o módulo segue com uma OS de um item só.
+  const planosDaOS = OS_PLANOS_MARCADOS.length ? OS_PLANOS_MARCADOS : (plano_id ? [plano_id] : [])
+  if(planosDaOS.length && osNova?.id){
+    await supa.from('maq_os_itens').insert(planosDaOS.map(pid => ({
+      os_id: osNova.id, plano_id: pid, concluido: concluida, uso_no_item: concluida ? uso_na_os : null,
+    })))
+  }
+
+  // o horímetro sobe junto com o registro de uso, independentemente da situação
+  // da OS: as horas foram trabalhadas de fato, mesmo com o serviço em aberto
   if(delta > 0){
     await supa.from('maq_ativos').update({ uso_atual: uso_na_os }).eq('id', ativo_id)
     await supa.from('maq_uso_registros').insert({
@@ -801,53 +1051,290 @@ async function salvarOS(){
     })
   }
 
-  // debitar materiais do estoque
-  if(plano_id){
-    const pm = PLANO_MATS.filter(p => p.plano_id === plano_id)
-    for(const item of pm){
-      const mat = MATERIAIS.find(m => m.id === item.material_id)
-      if(mat){
-        const novo = Math.max(0, mat.estoque_atual - item.quantidade)
-        await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', mat.id)
-        await supa.from('maq_estoque_movimentos').insert({
-          material_id: mat.id, tipo: 'saida', quantidade: item.quantidade,
-          motivo: 'OS preventiva — ' + (PLANOS.find(p=>p.id===plano_id)?.nome||'')
-        })
-      }
-    }
-  }
-
-  // debitar as peças essenciais do reparo — mesma mecânica da baixa do plano
-  for(const item of pecasReparo){
-    const novo = Math.max(0, item.mat.estoque_atual - item.quantidade)
-    await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', item.mat.id)
-    await supa.from('maq_estoque_movimentos').insert({
-      material_id: item.mat.id, os_id: osNova?.id || null,
-      tipo: 'saida', quantidade: item.quantidade,
-      motivo: 'OS corretiva — ' + (reparo?.causa_provavel || ''),
-    })
-  }
-
-  // É esta chamada que faz o catálogo aprender: a causa confirmada incrementa
-  // rep_reparos.frequencia e sobe no ranking do próximo diagnóstico. A RPC é
-  // idempotente — repetir na mesma OS falha em vez de contar duas vezes.
-  if(reparo && osNova?.id){
-    const confirmado = document.getElementById('os-reparo-confirmado')?.checked ?? true
-    const { error: erConf } = await supa.rpc('rep_confirmar_reparo', {
-      p_os_id: osNova.id, p_confirmado: confirmado,
-    })
-    // falha aqui não invalida a OS, que já está gravada — só avisa
-    if(erConf) alert('OS gravada, mas a confirmação do diagnóstico falhou: ' + erConf.message)
+  // A baixa de estoque só acontece na conclusão. Uma OS aberta que já debitou
+  // peça mentiria o estoque — a peça ainda está na prateleira.
+  if(concluida && osNova?.id){
+    await baixarPecasDaOS(osNova.id, planosDaOS, pecasReparo, reparo)
+    await confirmarDiagnostico(osNova.id, reparo)
   }
 
   fecharModal('modal-os')
   await carregarTudo()
 }
 
+// ── baixa de peças — chamada na conclusão, venha ela da criação ou depois ──
+// Está aqui, numa função só, porque agora existem dois caminhos até a conclusão
+// (criar já concluída, ou concluir uma OS aberta) e eles precisam debitar
+// exatamente do mesmo jeito.
+async function baixarPecasDaOS(osId, planoIds, pecasReparo, reparo){
+  for(const planoId of planoIds){
+    const plano = PLANOS.find(p => p.id === planoId)
+    for(const item of PLANO_MATS.filter(p => p.plano_id === planoId)){
+      const mat = MATERIAIS.find(m => m.id === item.material_id)
+      if(!mat) continue
+      const novo = Math.max(0, mat.estoque_atual - item.quantidade)
+      await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', mat.id)
+      await supa.from('maq_estoque_movimentos').insert({
+        material_id: mat.id, os_id: osId,
+        tipo: 'saida', quantidade: item.quantidade,
+        motivo: 'OS preventiva — ' + (plano?.nome || ''),
+      })
+    }
+  }
+
+  for(const item of pecasReparo){
+    const novo = Math.max(0, item.mat.estoque_atual - item.quantidade)
+    await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', item.mat.id)
+    await supa.from('maq_estoque_movimentos').insert({
+      material_id: item.mat.id, os_id: osId,
+      tipo: 'saida', quantidade: item.quantidade,
+      motivo: 'OS corretiva — ' + (reparo?.causa_provavel || ''),
+    })
+  }
+}
+
+// É esta chamada que faz o catálogo aprender: a causa confirmada incrementa
+// rep_reparos.frequencia e sobe no ranking do próximo diagnóstico. A RPC é
+// idempotente — repetir na mesma OS falha em vez de contar duas vezes.
+async function confirmarDiagnostico(osId, reparo){
+  if(!reparo || !osId) return
+  const confirmado = document.getElementById('os-reparo-confirmado')?.checked ?? true
+  const { error } = await supa.rpc('rep_confirmar_reparo', {
+    p_os_id: osId, p_confirmado: confirmado,
+  })
+  // falha aqui não invalida a OS, que já está gravada — só avisa
+  if(error) alert('OS gravada, mas a confirmação do diagnóstico falhou: ' + error.message)
+}
+
+// custo das peças previstas para os planos de uma OS
+function custoDosPlanos(planoIds){
+  let total = 0
+  for(const planoId of planoIds){
+    for(const item of PLANO_MATS.filter(p => p.plano_id === planoId)){
+      const mat = MATERIAIS.find(m => m.id === item.material_id)
+      if(mat?.preco) total += Number(mat.preco) * Number(item.quantidade)
+    }
+  }
+  return total
+}
+
 async function concluirOS(id){
-  if(!confirm('Marcar OS como concluída?')) return
-  await supa.from('maq_os').update({ status: 'concluida', data_conclusao: new Date().toISOString().slice(0,10) }).eq('id', id)
+  const os = OS_LIST.find(o => o.id === id)
+  if(!os) return
+  if(!confirm('Concluir a OS? As peças previstas serão baixadas do estoque agora.')) return
+
+  const hoje = new Date().toISOString().slice(0,10)
+  const planoIds = itensDaOS(os).map(i => i.plano_id).filter(Boolean)
+  const pecasReparo = os.reparo_id ? pecasEssenciaisDoReparo(os.reparo_id) : []
+  const reparo = os.reparo_id ? REPAROS.find(r => r.id === os.reparo_id) : null
+  const custo = custoDosPlanos(planoIds) +
+    pecasReparo.reduce((soma, p) => soma + Number(p.mat.preco || 0) * Number(p.quantidade), 0)
+
+  const { error } = await supa.from('maq_os').update({
+    status: 'concluida', data_conclusao: hoje,
+    custo_pecas: Number(os.custo_pecas || 0) + custo,
+  }).eq('id', id)
+  if(error){ alert('Erro: ' + error.message); return }
+
+  await supa.from('maq_os_itens').update({ concluido: true }).eq('os_id', id)
+  await baixarPecasDaOS(id, planoIds, pecasReparo, reparo)
+  await confirmarDiagnostico(id, reparo)
   await carregarTudo()
+}
+
+// ── MODAL: DETALHE DA OS ──
+function abrirDetalheOS(id){
+  const os = OS_LIST.find(o => o.id === id)
+  if(!os) return
+  OS_DETALHE_ID = id
+
+  const ativo = ATIVOS.find(a => a.id === os.ativo_id)
+  const itens = itensDaOS(os)
+
+  document.getElementById('modal-os-detalhe-titulo').textContent =
+    `OS ${os.tipo} — ${os.maq_ativos?.codigo || ativo?.codigo || '?'}`
+
+  const linha = (rotulo, valor) =>
+    `<div style="display:flex;gap:8px"><span style="color:var(--text3);min-width:130px">${rotulo}</span><span>${valor}</span></div>`
+
+  document.getElementById('osd-cabecalho').innerHTML = [
+    linha('Máquina', esc(`${os.maq_ativos?.codigo || '?'} — ${os.maq_ativos?.nome || '?'}`)),
+    linha('Abertura', esc(os.data_abertura || '—')),
+    linha('Conclusão', esc(os.data_conclusao || '—')),
+    linha('Uso na OS', os.uso_na_os != null ? `${os.uso_na_os} ${esc(ativo?.unidade_uso || 'h')}` : '—'),
+    os.sintoma_relatado ? linha('Sintoma', esc(os.sintoma_relatado)) : '',
+  ].filter(Boolean).join('')
+
+  document.getElementById('osd-status').value = os.status
+  document.getElementById('osd-tecnico').value = os.tecnico || ''
+  document.getElementById('osd-custo-pecas').value = os.custo_pecas ?? 0
+  document.getElementById('osd-custo-mo').value = os.custo_mo ?? 0
+  document.getElementById('osd-horas').value = os.horas_servico ?? ''
+  document.getElementById('osd-desc').value = os.descricao || ''
+
+  // itens sem id vêm do fallback do plano único (banco sem a migração 29):
+  // aparecem para leitura, mas não têm linha própria para marcar
+  document.getElementById('osd-itens').innerHTML = itens.length
+    ? itens.map(i => `<label class="mat-alert" style="cursor:${i.id ? 'pointer' : 'default'}">
+        <span class="mat-info">
+          <span class="mat-nome">${esc(i.maq_planos?.nome || i.descricao || 'Item de manutenção')}</span>
+          ${i.maq_planos?.intervalo ? `<span class="mat-stock">a cada ${i.maq_planos.intervalo} ${esc(i.maq_planos.unidade)}</span>` : ''}
+        </span>
+        <input type="checkbox" class="osd-item" data-id="${i.id || ''}" ${i.concluido ? 'checked' : ''}
+          ${i.id ? '' : 'disabled'} style="width:auto"/>
+      </label>`).join('')
+    : '<div class="tagline">Sem itens vinculados — OS corretiva ou registro de uso.</div>'
+
+  document.getElementById('modal-os-detalhe').classList.add('open')
+}
+
+async function salvarDetalheOS(){
+  const os = OS_LIST.find(o => o.id === OS_DETALHE_ID)
+  if(!os) return
+
+  const status = document.getElementById('osd-status').value
+  const virouConcluida = status === 'concluida' && os.status !== 'concluida'
+
+  const payload = {
+    status,
+    tecnico: document.getElementById('osd-tecnico').value.trim(),
+    descricao: document.getElementById('osd-desc').value.trim(),
+    custo_pecas: parseFloat(document.getElementById('osd-custo-pecas').value) || 0,
+    custo_mo: parseFloat(document.getElementById('osd-custo-mo').value) || 0,
+    horas_servico: parseFloat(document.getElementById('osd-horas').value) || null,
+  }
+  if(status === 'concluida' && !os.data_conclusao) payload.data_conclusao = new Date().toISOString().slice(0,10)
+
+  const { error } = await supa.from('maq_os').update(payload).eq('id', os.id)
+  if(error){ alert('Erro: ' + error.message); return }
+
+  // marcação item a item — só para os itens que existem em maq_os_itens
+  for(const caixa of document.querySelectorAll('.osd-item')){
+    if(!caixa.dataset.id) continue
+    await supa.from('maq_os_itens').update({ concluido: caixa.checked }).eq('id', caixa.dataset.id)
+  }
+
+  // Concluir pelo detalhe baixa o estoque igual a concluir pela lista: é o
+  // mesmo evento, e deixar um caminho sem baixa seria um furo no estoque.
+  if(virouConcluida){
+    const planoIds = itensDaOS(os).map(i => i.plano_id).filter(Boolean)
+    const pecasReparo = os.reparo_id ? pecasEssenciaisDoReparo(os.reparo_id) : []
+    const reparo = os.reparo_id ? REPAROS.find(r => r.id === os.reparo_id) : null
+    await baixarPecasDaOS(os.id, planoIds, pecasReparo, reparo)
+    await confirmarDiagnostico(os.id, reparo)
+  }
+
+  fecharModal('modal-os-detalhe')
+  await carregarTudo()
+}
+
+// ── exportação da OS ──
+// Zero dependência, por decisão: PDF pela impressão do navegador, Word por
+// blob HTML (o Word abre HTML como documento) e Excel por CSV. A Fase 9 vai
+// unificar exportação em shared/ — quando isso acontecer, estas três funções
+// são as primeiras candidatas a sair daqui.
+function osParaExportar(){
+  const os = OS_LIST.find(o => o.id === OS_DETALHE_ID)
+  if(!os) alert('Nenhuma OS aberta.')
+  return os
+}
+
+function linhasDaOS(os){
+  const ativo = ATIVOS.find(a => a.id === os.ativo_id)
+  const itens = itensDaOS(os)
+  return [
+    ['Máquina',    `${os.maq_ativos?.codigo || ''} — ${os.maq_ativos?.nome || ''}`],
+    ['Tipo',       os.tipo],
+    ['Situação',   rotuloStatusOS(os.status)],
+    ['Abertura',   os.data_abertura || ''],
+    ['Conclusão',  os.data_conclusao || ''],
+    ['Técnico',    os.tecnico || ''],
+    ['Uso na OS',  os.uso_na_os != null ? `${os.uso_na_os} ${ativo?.unidade_uso || 'h'}` : ''],
+    ['Itens',      itens.map(i => i.maq_planos?.nome || i.descricao || 'Item').join(' | ')],
+    ['Sintoma',    os.sintoma_relatado || ''],
+    ['Descrição',  os.descricao || ''],
+    ['Custo de peças (R$)', Number(os.custo_pecas || 0).toFixed(2)],
+    ['Custo de mão de obra (R$)', Number(os.custo_mo || 0).toFixed(2)],
+    ['Horas de serviço', os.horas_servico ?? ''],
+  ]
+}
+
+function htmlDaOS(os){
+  const linhas = linhasDaOS(os)
+    .map(([rotulo, valor]) => `<tr><th align="left" width="200">${esc(rotulo)}</th><td>${esc(valor)}</td></tr>`)
+    .join('')
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+    <title>OS ${esc(os.maq_ativos?.codigo || '')} — ${esc(os.data_abertura || '')}</title>
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px}
+      h1{font-size:18px;margin:0 0 4px} .sub{font-size:12px;color:#555;margin-bottom:20px}
+      table{border-collapse:collapse;width:100%;font-size:13px}
+      th,td{border:1px solid #ccc;padding:7px 9px;vertical-align:top}
+      th{background:#f2f2f2}
+      .assinatura{margin-top:48px;font-size:12px;display:flex;gap:48px}
+      .assinatura div{flex:1;border-top:1px solid #333;padding-top:6px;text-align:center}
+    </style></head><body>
+    <h1>Ordem de Serviço — PMOC Máquinas</h1>
+    <div class="sub">CMASM · Centro de Mísseis e Armas Submarinas · UASG 744030</div>
+    <table>${linhas}</table>
+    <div class="assinatura"><div>Técnico responsável</div><div>Encarregado</div></div>
+    </body></html>`
+}
+
+function baixarArquivo(conteudo, tipo, nome){
+  const blob = new Blob([conteudo], { type: tipo })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = nome
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+function nomeDoArquivoOS(os, extensao){
+  const codigo = (os.maq_ativos?.codigo || 'os').replace(/[^\w-]+/g, '-')
+  return `os-${codigo}-${os.data_abertura || 'sem-data'}.${extensao}`
+}
+
+function exportarOSPdf(){
+  const os = osParaExportar()
+  if(!os) return
+  // sem biblioteca de PDF: a janela de impressão do navegador gera o arquivo,
+  // e o usuário escolhe "Salvar como PDF"
+  const janela = window.open('', '_blank')
+  if(!janela){ alert('O navegador bloqueou a janela de impressão. Libere o pop-up e tente de novo.'); return }
+  janela.document.write(htmlDaOS(os))
+  janela.document.close()
+  janela.focus()
+  janela.print()
+}
+
+function exportarOSDoc(){
+  const os = osParaExportar()
+  if(!os) return
+  baixarArquivo(htmlDaOS(os), 'application/msword', nomeDoArquivoOS(os, 'doc'))
+}
+
+// mesma proteção contra injeção de fórmula que transportes/app.js já aplica:
+// uma célula começando com =, +, - ou @ vira comando ao abrir na planilha
+function csvSeguro(valor){
+  const texto = String(valor ?? '')
+  return /^[=+\-@]/.test(texto) ? `'${texto}` : texto
+}
+
+function csvEscape(valor){
+  const texto = String(valor ?? '')
+  return /[";\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto
+}
+
+function exportarOSCsv(){
+  const os = osParaExportar()
+  if(!os) return
+  const csv = [['Campo', 'Valor'], ...linhasDaOS(os)]
+    .map(colunas => colunas.map(v => csvEscape(csvSeguro(v))).join(';'))
+    .join('\n')
+  // BOM para o Excel em português reconhecer os acentos
+  baixarArquivo('﻿' + csv, 'text/csv;charset=utf-8', nomeDoArquivoOS(os, 'csv'))
 }
 
 // ── MODAL ATIVO ──
@@ -1042,10 +1529,20 @@ function exporNoWindow(){
     abrirModalMovimento,
     abrirModalOperacao,
     abrirModalOS,
+    abrirModalUso,
+    abrirDetalheOS,
+    abrirOSDosItensMarcados,
+    abrirVencMaquina,
+    atualizarSelecaoVenc,
+    avancarOS,
     concluirOperacao,
     concluirOS,
     exportarComprasCSV,
+    exportarOSCsv,
+    exportarOSDoc,
+    exportarOSPdf,
     fecharModal,
+    marcarTodosVenc,
     iniciarOperacao,
     navegarAgenda,
     renderAtivos,
@@ -1055,8 +1552,10 @@ function exporNoWindow(){
     salvarAtivo,
     salvarMaterial,
     salvarMovimento,
+    salvarDetalheOS,
     salvarOperacao,
     salvarOS,
+    salvarUso,
     trocarView,
   })
 }

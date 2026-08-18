@@ -136,11 +136,15 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
+          <!-- Categoria e Fabricante/Modelo saíram da tabela: são atributos de
+               cadastro, consultados no modal da máquina, e em tela estreita
+               empurravam para fora as duas colunas que o mecânico usa em campo
+               (uso atual e status). O filtro por categoria continua acima. -->
           <thead><tr>
-            <th>Código</th><th>Nome</th><th>Categoria</th><th>Fabricante/Modelo</th>
+            <th>Código</th><th>Nome</th>
             <th>Uso atual</th><th>Status</th><th>Local</th><th>Ações</th>
           </tr></thead>
-          <tbody id="tb-ativos"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <tbody id="tb-ativos"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -158,11 +162,11 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <div class="view-title">Ordens de Serviço</div>
         <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
       </div>
-      <div class="view-sub">Registre manutenções preventivas, corretivas e uso de horas</div>
+      <div class="view-sub">Clique numa OS para ver o detalhe, editar e exportar</div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Data</th><th>Máquina</th><th>Tipo</th><th>Plano</th>
+            <th>Data</th><th>Máquina</th><th>Tipo</th><th>Serviço</th>
             <th>Técnico</th><th>Status</th><th>Ações</th>
           </tr></thead>
           <tbody id="tb-os"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
@@ -355,9 +359,27 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <input type="date" id="os-data"/>
         </div>
       </div>
+      <!-- Situação da OS. Até aqui toda OS nascia concluída, o que impedia
+           registrar serviço que foi aberto e ainda não terminou. A baixa de
+           estoque e a atualização do horímetro acontecem na CONCLUSÃO, não na
+           abertura — uma OS aberta que já debitou peça mentiria o estoque. -->
+      <div class="frow">
+        <label>Situação *</label>
+        <select id="os-status">
+          <option value="pendente">Aberta</option>
+          <option value="em_andamento">Em execução</option>
+          <option value="concluida">Concluída</option>
+        </select>
+        <div class="help" id="os-status-ajuda">Peças e horímetro só são baixados quando a OS for concluída.</div>
+      </div>
       <div class="frow" id="os-plano-wrap">
         <label>Plano de manutenção</label>
         <select id="os-plano"><option value="">Selecione...</option></select>
+      </div>
+      <!-- itens extras vindos do popup de vencimentos: uma OS, vários planos -->
+      <div class="frow" id="os-itens-wrap" style="display:none">
+        <label>Itens desta OS</label>
+        <div id="os-itens-lista" style="font-size:12px;color:var(--text2)"></div>
       </div>
       <!-- Diagnóstico do módulo Reparos — só aparece em OS corretiva e só se as
            tabelas rep_* existirem. A lista vem ordenada por rep_reparos.frequencia:
@@ -531,6 +553,126 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     <div class="modal-ft">
       <button class="btn btn-s" onclick="fecharModal('modal-movimento')">Cancelar</button>
       <button class="btn btn-p" onclick="salvarMovimento()">Confirmar entrada</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: REGISTRO DE USO
+     Separado da OS de propósito: anotar horímetro é o gesto mais frequente do
+     operador e não é ordem de serviço nenhuma. Grava em maq_uso_registros e
+     atualiza maq_ativos.uso_atual — não cria OS. -->
+<div class="overlay" id="modal-uso">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hd">
+      <h3 id="modal-uso-titulo">Registrar uso</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-uso')" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="frow">
+        <label>Máquina *</label>
+        <select id="uso-ativo"></select>
+      </div>
+      <div class="frow">
+        <label>Uso atual registrado</label>
+        <div id="uso-atual" class="mono" style="font-size:13px;color:var(--text2)">—</div>
+      </div>
+      <div class="fgrid">
+        <div class="frow">
+          <label id="uso-delta-label">Horas trabalhadas *</label>
+          <input type="number" id="uso-delta" placeholder="Ex: 8" min="0" step="0.5"/>
+        </div>
+        <div class="frow">
+          <label>Data *</label>
+          <input type="date" id="uso-data"/>
+        </div>
+      </div>
+      <div class="frow">
+        <label>Operador</label>
+        <input type="text" id="uso-operador" placeholder="Nome"/>
+      </div>
+      <div class="frow">
+        <label>Observação</label>
+        <textarea id="uso-obs" placeholder="Área trabalhada, condição do terreno..."></textarea>
+      </div>
+      <div class="help" id="uso-previsto">—</div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-uso')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarUso()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ITENS DE MANUTENÇÃO DE UMA MÁQUINA (aba Vencimentos)
+     A aba mostra um cartão por máquina; os itens vivem aqui dentro. Marcar
+     vários e mandar registrar produz UMA OS com todos eles. -->
+<div class="overlay" id="modal-venc">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3 id="modal-venc-titulo">Manutenções da máquina</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-venc')" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="section-row" style="margin-bottom:12px">
+        <button class="btn btn-s btn-sm" onclick="marcarTodosVenc(true)">Marcar todos</button>
+        <button class="btn btn-s btn-sm" onclick="marcarTodosVenc(false)">Desmarcar</button>
+      </div>
+      <div id="venc-itens" class="stack"></div>
+    </div>
+    <div class="modal-ft">
+      <span id="venc-selecao" class="tagline" style="margin-right:auto">Nenhum item marcado</span>
+      <button class="btn btn-s" onclick="fecharModal('modal-venc')">Fechar</button>
+      <button class="btn btn-p" onclick="abrirOSDosItensMarcados()">Registrar OS</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: DETALHE DA OS — ver, editar, exportar -->
+<div class="overlay" id="modal-os-detalhe">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3 id="modal-os-detalhe-titulo">Ordem de Serviço</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-os-detalhe')" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="osd-cabecalho" style="font-size:13px;color:var(--text2);margin-bottom:16px"></div>
+      <div class="fgrid">
+        <div class="frow">
+          <label>Situação</label>
+          <select id="osd-status">
+            <option value="pendente">Aberta</option>
+            <option value="em_andamento">Em execução</option>
+            <option value="concluida">Concluída</option>
+            <option value="cancelada">Cancelada</option>
+          </select>
+        </div>
+        <div class="frow">
+          <label>Técnico</label>
+          <input type="text" id="osd-tecnico"/>
+        </div>
+      </div>
+      <div class="fgrid3">
+        <div class="frow"><label>Custo de peças (R$)</label><input type="number" id="osd-custo-pecas" min="0" step="0.01"/></div>
+        <div class="frow"><label>Custo de mão de obra (R$)</label><input type="number" id="osd-custo-mo" min="0" step="0.01"/></div>
+        <div class="frow"><label>Horas de serviço</label><input type="number" id="osd-horas" min="0" step="0.5"/></div>
+      </div>
+      <div class="frow">
+        <label>Descrição</label>
+        <textarea id="osd-desc"></textarea>
+      </div>
+      <div class="frow" id="osd-itens-wrap">
+        <label>Itens de manutenção</label>
+        <div id="osd-itens" class="stack"></div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <div class="section-row" style="margin:0 auto 0 0">
+        <button class="btn btn-s btn-sm" onclick="exportarOSPdf()">PDF</button>
+        <button class="btn btn-s btn-sm" onclick="exportarOSDoc()">Word</button>
+        <button class="btn btn-s btn-sm" onclick="exportarOSCsv()">Excel</button>
+      </div>
+      <button class="btn btn-s" onclick="fecharModal('modal-os-detalhe')">Fechar</button>
+      <button class="btn btn-p" onclick="salvarDetalheOS()">Salvar</button>
     </div>
   </div>
 </div>

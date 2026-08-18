@@ -1021,3 +1021,49 @@ razão de ser do design, nunca executou uma única vez. Mesma situação do writ
   ser trocado —, então aparece com custo estimado R$ 0,00. É o comportamento pretendido.
 - `tempo_padrao_h` dos 25 serviços é estimativa de oficina. O real fica em `maq_os.horas_servico`;
   comparar estimado × executado só faz sentido depois de histórico.
+
+---
+
+## Máquinas — ciclo de vida da OS (18/08/2026)
+
+### Migração 29 — pendente de aplicação
+
+`supabase/29_maquinas_os_itens.sql` **ainda não rodou**. Rodar no SQL Editor do projeto `pmoc`.
+Sem ela o módulo funciona igual ao que era: cada OS carrega um item só, pelo `maq_os.plano_id` de
+sempre. Verificado no navegador com a migração ausente — 28 máquinas, 4 OS e 28 cartões de
+vencimento renderizaram normalmente, e o detalhe da OS mostrou o item vindo do plano único.
+
+Depois de aplicar, conferir:
+
+```sql
+select count(*) from maq_os_itens;                 -- 0, tabela nova e vazia
+select conname from pg_constraint
+ where conrelid = 'maq_os_itens'::regclass;        -- inclui o unique (os_id, plano_id)
+```
+
+### Conferido no navegador (servido localmente, cargo Livre)
+
+| Item | Resultado |
+|------|-----------|
+| Tabela de máquinas com 6 colunas, sem Categoria e sem Fabricante/Modelo | ✅ |
+| Cada linha com os botões **USO** e **OS** | ✅ |
+| Vencimentos: 28 cartões (um por máquina) em vez de um por item | ✅ |
+| Popup da máquina: 8 itens, 3 já marcados (os vencidos e próximos) | ✅ |
+| "Registrar OS" leva os 3 itens marcados para o modal de OS | ✅ |
+| OS nasce com situação **Aberta** | ✅ |
+| Linha da OS abre o detalhe | ✅ |
+| Exportação CSV: `text/csv;charset=utf-8`, separador `;`, com BOM | ✅ |
+| Exportação Word: `application/msword`, com tabela e bloco de assinatura | ✅ |
+
+### Fica para o usuário
+
+- [ ] Aplicar a migração 29 e repetir o popup de vencimentos: marcar 3 itens, registrar a OS e
+      conferir que **uma** OS foi criada com os 3 itens (hoje, sem a migração, ela nasce com um)
+- [ ] Abrir uma OS, deixar em **Aberta** e conferir no estoque que **nenhuma peça foi baixada**
+- [ ] Avançar a OS para **Em execução** e conferir que continua sem baixa
+- [ ] **Concluir** a OS e conferir que aí sim o estoque caiu, e que `maq_estoque_movimentos`
+      registrou a saída com o `os_id` correto
+- [ ] Repetir a conclusão pelo modal de detalhe (em vez do botão da lista) e conferir que a baixa
+      acontece igual — são caminhos diferentes para o mesmo evento
+- [ ] Exportar uma OS em PDF pelo botão e conferir o resultado da impressão do navegador
+      (não testável neste ambiente — o painel de navegador não compõe quadros)
