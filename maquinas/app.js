@@ -50,10 +50,14 @@ let LINHA_NOVO_MATERIAL = null, LINHA_NOVO_SERVICO = null
 let MATERIAL_MODAL_ID = null
 // migração 34 (sistema/aplicação do material + listas de compra): sonda que
 // diz se as duas tabelas novas estão disponíveis. Definida por
-// carregarCompras() (aba Necessidades) — enquanto essa carga não roda ainda
-// nesta task, fica false e os campos/telas que dependem dela ficam ocultos,
-// exatamente como mat-servico-wrap se comporta sem a migração 26.
+// carregarCompras() — um erro em qualquer uma das duas tabelas zera as duas
+// listas e derruba a sonda, exatamente como mat-servico-wrap se comporta sem
+// a migração 26.
 let MIGRACAO_34 = false
+let COMPRAS_LISTAS = [], COMPRAS_ITENS = []
+// pares material/quantidade/origem escolhidos na aba Necessidades, a
+// caminho de virar uma lista de compra
+let LISTA_NOVA_ITENS = []
 let AGENDA_ANO = new Date().getFullYear()
 let AGENDA_MES = new Date().getMonth()
 
@@ -135,9 +139,10 @@ async function carregarTudo(){
   await carregarItensOS()
   await carregarCustosOS()
   await carregarComentarios()
+  await carregarCompras()
   aplicarPermissoesOperacoes()
   renderPainel(); renderAtivos(); renderVencimentos(); renderOS(); renderMateriais()
-  renderConsumo(); renderCiclo(); renderCompras(); renderOperacoes(); renderAgenda()
+  renderConsumo(); renderCiclo(); renderNecessidades(); renderOperacoes(); renderAgenda()
 }
 
 // ── catálogo de reparos (migração 26) ──
@@ -221,6 +226,24 @@ async function carregarComentarios(){
     .select('*')
     .order('criado_em', { ascending: false })
   COMENTARIOS = error ? [] : (data || [])
+}
+
+// ── listas de compra e sistema/aplicação do material (migração 34) ──
+// As duas tabelas nascem juntas no mesmo arquivo (34_maquinas_compras_
+// necessidades.sql), assim como as duas colunas novas do material — por isso
+// uma sonda só (MIGRACAO_34) responde pelas quatro coisas. Fora do
+// Promise.all pelo mesmo motivo das cargas acima: sem a migração as listas
+// ficam vazias e a aba Necessidades funciona sem coluna de aquisição, sem
+// listas e sem erro (D7).
+async function carregarCompras(){
+  const [cl, ci] = await Promise.all([
+    supa.from('maq_compras_listas').select('*').order('data', { ascending: false }),
+    supa.from('maq_compras_itens').select('*, maq_materiais(nome,codigo,unidade)'),
+  ])
+  const indisponivel = cl.error || ci.error
+  COMPRAS_LISTAS = indisponivel ? [] : (cl.data || [])
+  COMPRAS_ITENS  = indisponivel ? [] : (ci.data || [])
+  MIGRACAO_34 = !indisponivel
 }
 
 // itens de uma OS, com fallback para o plano único de maq_os quando a
@@ -964,91 +987,334 @@ async function salvarLinhaMaterial(id){
   await carregarTudo()
 }
 
-// ── COMPRAS ──
-function renderCompras(){
-  const div = document.getElementById('compras-content')
-  const linhas = []
+// ── NECESSIDADES (ex-"Lista de compras") ──
+// A aba antiga era uma foto: mostrava o que faltava, mas ninguém conseguia
+// dizer "isto já foi pedido" nem dar entrada no que chegou. A necessidade por
+// material vira processo com a migração 34 — cálculo, geração de lista e
+// recebimento item a item.
 
-  // 1. Materiais abaixo do mínimo
-  const baixo = MATERIAIS.filter(m => m.estoque_atual < m.estoque_minimo)
-  for(const m of baixo){
-    const needed = m.estoque_minimo - m.estoque_atual
-    linhas.push({
-      codigo: m.codigo,
-      nome: m.nome,
-      unidade: m.unidade,
-      qtd: needed,
-      preco: m.preco,
-      motivo: `Repor estoque mínimo (atual: ${m.estoque_atual} · mín: ${m.estoque_minimo})`
-    })
+// status da OS ainda não executada — antes da baixa de estoque no início da
+// execução. Mesma fronteira de faltasDaOS(): tudo que não é em_andamento,
+// concluida ou cancelada.
+const OS_NAO_EXECUTADA = ['aberta', 'delineamento', 'espera', 'pendente']
+
+// necessidade por material, pela fórmula travada (D4), implementada
+// literalmente:
+// prev (preventiva) + corr (corretiva) formam a demanda; a reposição de
+// mínimo é PISO dessa demanda (Math.max), não parcela somada — somar
+// contaria a mesma peça duas vezes, uma pela demanda e outra pelo mínimo.
+// aquisição desconta o que já está pedido e ainda não chegou.
+function necessidadePorMaterial(){
+  const linhas = new Map()
+  const linha = materialId => {
+    if(linhas.has(materialId)) return linhas.get(materialId)
+    const material = MATERIAIS.find(m => m.id === materialId)
+    if(!material) return null
+    const nova = { material, prev: 0, corr: 0, min_rep: 0, bruto: 0, aquisicao: 0, a_comprar: 0 }
+    linhas.set(materialId, nova)
+    return nova
   }
 
-  // 2. Materiais dos planos que vão vencer em breve (pct >= 70)
-  const venc = calcVencimentos().filter(v => v.pct >= 70)
-  for(const v of venc){
-    const pm = PLANO_MATS.filter(p => p.plano_id === v.plano.id)
-    for(const pm_item of pm){
-      const mat = MATERIAIS.find(m => m.id === pm_item.material_id)
-      if(!mat) continue
-      // só adiciona se não já coberto pelo estoque
-      if(mat.estoque_atual >= pm_item.quantidade) continue
-      const existe = linhas.find(l => l.codigo === mat.codigo)
-      if(existe){
-        existe.qtd = Math.max(existe.qtd, pm_item.quantidade)
-        existe.motivo += ` + plano "${v.plano.nome}" em ${v.ativo.codigo}`
-      } else {
-        linhas.push({
-          codigo: mat.codigo,
-          nome: mat.nome,
-          unidade: mat.unidade,
-          preco: mat.preco,
-          qtd: pm_item.quantidade,
-          motivo: `Plano "${v.plano.nome}" em ${v.ativo.codigo} (${v.pct}% do intervalo)`
-        })
-      }
+  // preventiva: soma de PLANO_MATS dos planos a 70% ou mais do intervalo —
+  // mesmo corte de pct que já classifica "próximo" no resto do módulo
+  for(const v of calcVencimentos().filter(x => x.pct >= 70)){
+    for(const pm of PLANO_MATS.filter(p => p.plano_id === v.plano.id)){
+      const l = linha(pm.material_id)
+      if(l) l.prev += Number(pm.quantidade)
     }
   }
 
+  // corretiva: peças de pecasParaBaixa() nas OS ainda não executadas — a
+  // mesma lista-da-OS-ou-previsão de sempre, não reimplementada
+  for(const os of OS_LIST.filter(o => OS_NAO_EXECUTADA.includes(o.status))){
+    for(const peca of pecasParaBaixa(os)){
+      const l = linha(peca.material_id)
+      if(l) l.corr += Number(peca.quantidade)
+    }
+  }
+
+  // reposição de mínimo é semeada para todo material abaixo do mínimo, ainda
+  // que sem plano nem OS — senão o estoque baixo não apareceria na aba
+  for(const m of MATERIAIS.filter(x => x.estoque_atual < x.estoque_minimo)) linha(m.id)
+
+  // aquisição: o que já está pedido e não chegou, nas listas ainda abertas
+  const listasAbertas = new Set(COMPRAS_LISTAS.filter(l => ['aberta','enviada'].includes(l.status)).map(l => l.id))
+  for(const item of COMPRAS_ITENS.filter(i => listasAbertas.has(i.lista_id))){
+    const l = linha(item.material_id)
+    if(l) l.aquisicao += Math.max(0, Number(item.quantidade) - Number(item.qtd_recebida))
+  }
+
+  for(const l of linhas.values()){
+    l.min_rep = Math.max(0, Number(l.material.estoque_minimo) - Number(l.material.estoque_atual))
+    l.bruto = Math.max(l.prev + l.corr, l.min_rep)
+    l.a_comprar = Math.max(0, l.bruto - Number(l.material.estoque_atual) - l.aquisicao)
+  }
+
+  return [...linhas.values()]
+    .filter(l => l.a_comprar > 0 || l.aquisicao > 0)
+    .sort((a, b) => a.material.nome.localeCompare(b.material.nome))
+}
+
+function renderNecessidades(){
+  const div = document.getElementById('necessidades-content')
+  const linhas = necessidadePorMaterial()
+  const podeGerar = MIGRACAO_34 && podeEscreverNoModulo()
+  window._necessidadesData = linhas
+
   if(!linhas.length){
-    div.innerHTML = '<div class="callout co-ok">✅ Nenhuma compra necessária no momento. Todos os estoques estão adequados e nenhum plano está próximo do vencimento.</div>'
+    div.innerHTML = '<div class="callout co-ok">✅ Nenhuma necessidade de compra no momento. Todos os estoques estão adequados e nenhum plano está próximo do vencimento.</div>'
+      + renderListasCompra()
     return
   }
 
-  div.innerHTML = `
-    <div class="callout co-warn">⚠ ${linhas.length} ${linhas.length===1?'item':'itens'} a adquirir · <strong>Total estimado: R$ ${linhas.reduce((s,l)=>s+(l.preco||0)*l.qtd,0).toFixed(2)}</strong><br>Lista utilizável como insumo para processo licitatório (CATMAT/Compras.gov).</div>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-      <button class="btn btn-s btn-sm" onclick="exportarComprasCSV()">⬇ Exportar CSV</button>
-    </div>
-    <div class="compra-grid">
-      ${linhas.map(l => `
-        <div class="compra-row">
-          <div>
-            <div class="compra-nome">${l.nome} ${l.codigo?'('+l.codigo+')':''}</div>
-            <div class="compra-det">${l.motivo}</div>
-          </div>
-          <div style="text-align:right">
-            <div class="compra-qtd">${l.qtd.toFixed(1)} ${l.unidade}</div>
-            ${l.preco?`<div style="font-size:11px;color:var(--text3);margin-top:2px">R$ ${(l.preco*l.qtd).toFixed(2)}</div>`:''}
-          </div>
-        </div>`).join('')}
-    </div>`
+  const total = linhas.reduce((s, l) => s + l.a_comprar * Number(l.material.preco || 0), 0)
 
-  // guarda para export
-  window._comprasData = linhas
+  div.innerHTML = `
+    <div class="callout co-warn">⚠ ${linhas.length} ${linhas.length===1?'item':'itens'} com necessidade · <strong>Total estimado: R$ ${total.toFixed(2)}</strong><br>Soma demanda preventiva, corretiva e reposição de mínimo, descontando o que já está em aquisição.</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px">
+      <button class="btn btn-s btn-sm" onclick="exportarComprasCSV()">⬇ Exportar CSV</button>
+      ${podeGerar ? `<button class="btn btn-p btn-sm" onclick="abrirModalListaCompra()">Gerar lista de compra</button>` : ''}
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead><tr>
+          <th>Material</th><th>Sistema</th><th>Aplicação</th><th>Estoque</th>
+          <th>Preventiva</th><th>Corretiva</th><th>Aquisição</th><th>A comprar</th>
+          ${podeGerar ? '<th>Sel.</th><th>Qtd.</th>' : ''}
+        </tr></thead>
+        <tbody>
+          ${linhas.map(l => `<tr>
+            <td><span class="hi">${esc(l.material.codigo||'—')}</span> ${esc(l.material.nome)}</td>
+            <td>${esc(l.material.sistema || '—')}</td>
+            <td>${esc(l.material.aplicacao || '—')}</td>
+            <td>${l.material.estoque_atual} ${esc(l.material.unidade)}</td>
+            <td>${l.prev.toFixed(1)}</td>
+            <td>${l.corr.toFixed(1)}</td>
+            <td>${MIGRACAO_34 ? l.aquisicao.toFixed(1) : '—'}</td>
+            <td class="hi">${l.a_comprar.toFixed(1)} ${esc(l.material.unidade)}</td>
+            ${podeGerar ? `
+              <td><input type="checkbox" id="nec-sel-${l.material.id}"/></td>
+              <td><input type="number" id="nec-qtd-${l.material.id}" value="${l.a_comprar}" min="0.01" step="0.5" style="width:80px"/></td>` : ''}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>` + renderListasCompra()
 }
 
 function exportarComprasCSV(){
-  const linhas = window._comprasData || []
-  const header = 'Codigo,Nome,Quantidade,Unidade,PrecoUnit,Total,Motivo'
-  const rows = linhas.map(l => `${l.codigo||''},${JSON.stringify(l.nome)},${l.qtd},${l.unidade},${l.preco||''},${((l.preco||0)*l.qtd).toFixed(2)},${JSON.stringify(l.motivo)}`)
+  const linhas = window._necessidadesData || []
+  const header = 'Codigo,Nome,Sistema,Aplicacao,Preventiva,Corretiva,Aquisicao,AComprar,Unidade,PrecoUnit,Total'
+  const rows = linhas.map(l => {
+    const preco = Number(l.material.preco || 0)
+    return [
+      l.material.codigo || '',
+      JSON.stringify(l.material.nome),
+      JSON.stringify(l.material.sistema || ''),
+      JSON.stringify(l.material.aplicacao || ''),
+      l.prev, l.corr, l.aquisicao, l.a_comprar,
+      l.material.unidade,
+      preco,
+      (preco * l.a_comprar).toFixed(2),
+    ].join(',')
+  })
   const csv = [header, ...rows].join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url
-  a.download = 'lista-compras-maquinas-' + new Date().toISOString().slice(0,10) + '.csv'
+  a.download = 'necessidades-maquinas-' + new Date().toISOString().slice(0,10) + '.csv'
   a.click()
 }
 
+// ── listas de compra e recebimento item a item (D6, D8, D9) ──
+function renderListasCompra(){
+  if(!MIGRACAO_34) return ''
+  if(!COMPRAS_LISTAS.length){
+    return '<div class="callout co-ok" style="margin-top:16px">Nenhuma lista de compra gerada ainda.</div>'
+  }
+  const badge = s => s==='recebida' ? 'b-ok' : s==='cancelada' ? 'b-red' : s==='enviada' ? 'b-blue' : 'b-warn'
+
+  const cartao = lista => {
+    const itens = COMPRAS_ITENS.filter(i => i.lista_id === lista.id)
+    const total = itens.reduce((s, i) => s + Number(i.quantidade) * Number(i.preco_unit || 0), 0)
+    return `<div class="panel-card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">
+        <div>
+          <div class="hi">${esc(lista.titulo)}</div>
+          <div style="font-size:11px;color:var(--text3)">${esc(lista.data||'—')}${lista.descricao ? ' · ' + esc(lista.descricao) : ''}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="badge ${badge(lista.status)}">${esc(String(lista.status).toUpperCase())}</span>
+          <button class="btn btn-s btn-sm" onclick="exportarListaCompraCSV('${lista.id}')">⬇ CSV</button>
+        </div>
+      </div>
+      ${itens.length ? `<div class="tbl-wrap" style="margin-top:8px"><table class="tbl">
+        <thead><tr><th>Material</th><th>Quantidade</th><th>Recebido</th><th>Pendente</th><th>Preço un.</th><th>Total</th><th></th></tr></thead>
+        <tbody>${itens.map(i => {
+          const pendente = Number(i.quantidade) - Number(i.qtd_recebida)
+          return `<tr>
+            <td>${esc(i.maq_materiais?.nome || '?')}</td>
+            <td>${Number(i.quantidade).toFixed(1)} ${esc(i.maq_materiais?.unidade || 'un')}</td>
+            <td>${Number(i.qtd_recebida).toFixed(1)}</td>
+            <td>${pendente.toFixed(1)}</td>
+            <td>${i.preco_unit != null ? fmtR(i.preco_unit) : '—'}</td>
+            <td>${fmtR(Number(i.quantidade) * Number(i.preco_unit || 0))}</td>
+            <td>${podeEscreverNoModulo() && pendente > 0
+              ? `<button class="btn btn-s btn-sm" onclick="receberItem('${i.id}')">Receber</button>` : ''}</td>
+          </tr>`
+        }).join('')}</tbody>
+      </table></div>
+      <div style="text-align:right;font-size:12px;color:var(--text3);margin-top:4px">Total: ${fmtR(total)}</div>`
+        : '<div class="tagline" style="margin-top:8px">Lista sem itens.</div>'}
+    </div>`
+  }
+
+  return '<h3 class="section-spaced">Listas de compra</h3>' +
+    [...COMPRAS_LISTAS].sort((a, b) => (b.data || '').localeCompare(a.data || '')).map(cartao).join('')
+}
+
+// lê a seleção e as quantidades feitas na tabela de necessidades, direto do
+// DOM — mesmo idioma das demais telas do módulo (venc-check, os-itens etc.)
+function abrirModalListaCompra(){
+  const linhas = window._necessidadesData || []
+  const selecionados = linhas
+    .map(l => {
+      const check = document.getElementById(`nec-sel-${l.material.id}`)
+      if(!check?.checked) return null
+      const quantidade = parseFloat(document.getElementById(`nec-qtd-${l.material.id}`)?.value)
+      return { linha: l, quantidade }
+    })
+    .filter(Boolean)
+
+  if(!selecionados.length){ alert('Selecione ao menos um item.'); return }
+  if(selecionados.some(s => !(s.quantidade > 0))){
+    alert('Toda linha selecionada precisa de uma quantidade maior que zero.')
+    return
+  }
+
+  LISTA_NOVA_ITENS = selecionados.map(s => ({
+    material_id: s.linha.material.id,
+    quantidade: s.quantidade,
+    origem: s.linha.prev > 0 ? 'preventiva' : s.linha.corr > 0 ? 'corretiva' : s.linha.min_rep > 0 ? 'minimo' : 'manual',
+  }))
+
+  document.getElementById('lc-titulo').value = `Necessidades ${new Date().toISOString().slice(0,10)}`
+  document.getElementById('lc-desc').value = ''
+  document.getElementById('lc-resumo').textContent =
+    `${LISTA_NOVA_ITENS.length} ${LISTA_NOVA_ITENS.length > 1 ? 'itens' : 'item'} nesta lista.`
+  document.getElementById('modal-lista-compra').classList.add('open')
+}
+
+async function salvarListaCompra(){
+  const titulo = document.getElementById('lc-titulo').value.trim()
+  if(!titulo){ alert('Título obrigatório.'); return }
+  if(!LISTA_NOVA_ITENS.length){ alert('Nenhum item selecionado.'); return }
+
+  const { data: lista, error: erLista } = await supa.from('maq_compras_listas').insert({
+    titulo,
+    descricao: document.getElementById('lc-desc').value.trim() || null,
+    criado_por: USUARIO?.nome || USUARIO?.role || null,
+  }).select()
+  if(erLista){ alert('Erro: ' + erLista.message); return }
+  if(!lista || !lista.length){
+    alert('A lista não foi gravada: seu cargo não tem permissão de escrita.')
+    return
+  }
+
+  // preço unitário copiado do material no momento da criação — congelado na
+  // linha (D5), mesmo motivo já registrado em 30_maquinas_os_custos.sql
+  const itens = LISTA_NOVA_ITENS.map(item => {
+    const material = MATERIAIS.find(m => m.id === item.material_id)
+    return {
+      lista_id: lista[0].id,
+      material_id: item.material_id,
+      quantidade: item.quantidade,
+      preco_unit: material?.preco ?? null,
+      origem: item.origem,
+    }
+  })
+  const { error: erItens } = await supa.from('maq_compras_itens').insert(itens)
+  if(erItens){ alert('Erro: ' + erItens.message); return }
+
+  LISTA_NOVA_ITENS = []
+  fecharModal('modal-lista-compra')
+  await carregarTudo()
+}
+
+// recebimento item a item — espelho de baixarPecasDaOS(): atualiza o estoque
+// do material e SÓ DEPOIS insere o movimento de entrada
+async function receberItem(itemId){
+  const item = COMPRAS_ITENS.find(i => i.id === itemId)
+  if(!item) return
+  const pendente = Number(item.quantidade) - Number(item.qtd_recebida)
+  const bruto = prompt(`Quantidade recebida (pendente: ${pendente})`, String(pendente))
+  if(bruto === null) return
+  const quantidade = parseFloat(bruto)
+  if(!(quantidade > 0)){ alert('Informe uma quantidade maior que zero.'); return }
+  // D6: qtd_recebida nunca ultrapassa quantidade
+  if(quantidade > pendente){ alert('A quantidade recebida não pode ser maior que o pendente.'); return }
+
+  const novaRecebida = Number(item.qtd_recebida) + quantidade
+  const { data, error } = await supa.from('maq_compras_itens')
+    .update({ qtd_recebida: novaRecebida, recebido_em: new Date().toISOString() })
+    .eq('id', itemId)
+    .select()
+  if(error){ alert('Erro: ' + error.message); return }
+  if(!data || !data.length){
+    alert('Nada foi gravado: seu cargo não tem permissão de escrita.')
+    return
+  }
+
+  const material = MATERIAIS.find(m => m.id === item.material_id)
+  const lista = COMPRAS_LISTAS.find(l => l.id === item.lista_id)
+  if(material){
+    const novoEstoque = Number(material.estoque_atual) + quantidade
+    await supa.from('maq_materiais').update({ estoque_atual: novoEstoque }).eq('id', material.id)
+    await supa.from('maq_estoque_movimentos').insert({
+      material_id: material.id, tipo: 'entrada', quantidade,
+      motivo: `Recebimento da lista "${lista?.titulo || item.lista_id}"`,
+    })
+  }
+
+  // o item recebido some da coluna de aquisição sozinho — aquisição é
+  // derivada de quantidade - qtd_recebida, não há flag para sincronizar
+  const itensDaLista = COMPRAS_ITENS.filter(i => i.lista_id === item.lista_id)
+  const todosRecebidos = itensDaLista.every(i =>
+    i.id === itemId ? novaRecebida >= Number(i.quantidade) : Number(i.qtd_recebida) >= Number(i.quantidade))
+  if(todosRecebidos){
+    await supa.from('maq_compras_listas').update({ status: 'recebida' }).eq('id', item.lista_id)
+  }
+
+  await carregarTudo()
+}
+
+// insumo do processo licitatório (D8): uma lista, um CSV
+function exportarListaCompraCSV(listaId){
+  const lista = COMPRAS_LISTAS.find(l => l.id === listaId)
+  const itens = COMPRAS_ITENS.filter(i => i.lista_id === listaId)
+  const header = 'Codigo,Nome,Quantidade,Unidade,PrecoUnit,Total,Origem,QtdRecebida'
+  const rows = itens.map(i => {
+    const preco = Number(i.preco_unit || 0)
+    return [
+      i.maq_materiais?.codigo || '',
+      JSON.stringify(i.maq_materiais?.nome || ''),
+      i.quantidade,
+      i.maq_materiais?.unidade || 'un',
+      preco,
+      (preco * Number(i.quantidade)).toFixed(2),
+      i.origem || '',
+      i.qtd_recebida,
+    ].join(',')
+  })
+  const csv = [header, ...rows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url
+  const nomeLista = (lista?.titulo || 'lista').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+  a.download = `lista-compra-${nomeLista}-${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+}
 
 // ══ CONSUMO ══════════════════════════════════════════════
 const fmtR = v => 'R$ ' + Number(v||0).toFixed(2)
@@ -2428,6 +2694,7 @@ function exporNoWindow(){
     abrirModalArea,
     abrirModalAtivo,
     abrirModalHoraHomem,
+    abrirModalListaCompra,
     abrirModalMaterial,
     abrirModalMovimento,
     abrirModalOperacao,
@@ -2448,12 +2715,14 @@ function exporNoWindow(){
     concluirOS,
     editarMaterial,
     exportarComprasCSV,
+    exportarListaCompraCSV,
     exportarOSCsv,
     exportarOSDoc,
     exportarOSPdf,
     fecharModal,
     irParaAba,
     marcarTodosVenc,
+    receberItem,
     removerPecaOS,
     removerServicoOS,
     iniciarOperacao,
@@ -2469,6 +2738,7 @@ function exporNoWindow(){
     salvarMovimento,
     salvarDetalheOS,
     salvarLinhaMaterial,
+    salvarListaCompra,
     salvarValorHora,
     salvarOperacao,
     salvarOS,
@@ -2507,7 +2777,7 @@ async function boot(){
       { id: 'materiais', icone: '📦', label: 'Estoque' },
       { id: 'consumo', icone: '⛽', label: 'Consumo' },
       { id: 'ciclo', icone: '📈', label: 'Ciclo de vida' },
-      { id: 'compras', icone: '🛒', label: 'Lista de compras' },
+      { id: 'necessidades', icone: '🛒', label: 'Necessidades' },
     ],
   })
 

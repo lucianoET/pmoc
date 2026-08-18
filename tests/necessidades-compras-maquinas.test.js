@@ -107,3 +107,107 @@ test('salvarMaterial() só envia sistema/aplicação quando a migração 34 est�
   assert.match(salvar[1], /if\(MIGRACAO_34\)\{[\s\S]*?campos\.sistema[\s\S]*?campos\.aplicacao/,
     'num banco sem a migração, mandar coluna inexistente derrubaria todo o cadastro de material')
 })
+
+// ── aba Necessidades: renomeação (D3) ───────────────────────────────────────
+test('a aba se chama Necessidades e tem id necessidades; nenhum id antigo de compras sobrou', () => {
+  assert.match(HTML, /id="view-necessidades"/)
+  assert.match(HTML, /id="necessidades-content"/)
+  assert.match(APP, /id: 'necessidades', icone: '🛒', label: 'Necessidades'/)
+  assert.doesNotMatch(HTML, /view-compras|compras-content/)
+  assert.doesNotMatch(APP, /id: 'compras'/)
+  assert.doesNotMatch(APP, /function renderCompras\(/)
+  assert.match(APP, /function renderNecessidades\(\)\{/)
+})
+
+test('exportarComprasCSV mantém o nome (D8), mas lê o novo estado', () => {
+  assert.match(APP, /function exportarComprasCSV\(\)\{/)
+  const bloco = APP.match(/function exportarComprasCSV\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /window\._necessidadesData/)
+  assert.match(bloco[1], /'necessidades-maquinas-'/)
+})
+
+// ── carga tolerante (D7) ────────────────────────────────────────────────────
+test('carregarCompras() está fora do Promise.all principal e zera as listas em caso de erro', () => {
+  const promiseAll = APP.match(/const \[a, o, m, p, pm, ab, ur, ar, op\] = await Promise\.all\(\[([\s\S]*?)\]\)/)
+  assert.ok(promiseAll)
+  assert.ok(!promiseAll[1].includes('maq_compras_listas') && !promiseAll[1].includes('maq_compras_itens'),
+    'maq_compras_listas/maq_compras_itens fora do Promise.all principal — senão a ausência das tabelas derruba a carga inteira')
+
+  const bloco = APP.match(/async function carregarCompras\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'maquinas/app.js deveria declarar carregarCompras')
+  assert.match(bloco[1], /COMPRAS_LISTAS = indisponivel \? \[\] : /)
+  assert.match(bloco[1], /COMPRAS_ITENS\s+= indisponivel \? \[\] : /)
+  assert.match(bloco[1], /MIGRACAO_34 = !indisponivel/)
+
+  assert.match(APP, /await carregarComentarios\(\)\s*\n\s*await carregarCompras\(\)/,
+    'carregarCompras() entra logo depois de carregarComentarios(), no molde de carregarCustosOS()')
+})
+
+// ── cálculo (D4) ─────────────────────────────────────────────────────────────
+test('necessidadePorMaterial() implementa a fórmula travada', () => {
+  const bloco = APP.match(/function necessidadePorMaterial\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'maquinas/app.js deveria declarar necessidadePorMaterial')
+  const corpo = bloco[1]
+
+  // reposição de mínimo entra por Math.max (piso), não somada
+  assert.match(corpo, /l\.bruto = Math\.max\(l\.prev \+ l\.corr, l\.min_rep\)/,
+    'a reposição de mínimo é PISO da demanda, não parcela somada — somar contaria a peça duas vezes')
+  // a_comprar desconta estoque e aquisição
+  assert.match(corpo, /l\.a_comprar = Math\.max\(0, l\.bruto - Number\(l\.material\.estoque_atual\) - l\.aquisicao\)/)
+  // a linha aparece quando há o que comprar ou algo em aquisição
+  assert.match(corpo, /\.filter\(l => l\.a_comprar > 0 \|\| l\.aquisicao > 0\)/)
+})
+
+test('corr sai de pecasParaBaixa() e considera exatamente os quatro status não executados', () => {
+  assert.match(APP, /const OS_NAO_EXECUTADA = \['aberta', 'delineamento', 'espera', 'pendente'\]/)
+  const bloco = APP.match(/function necessidadePorMaterial\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /OS_LIST\.filter\(o => OS_NAO_EXECUTADA\.includes\(o\.status\)\)/)
+  assert.match(bloco[1], /pecasParaBaixa\(os\)/)
+})
+
+test('prev usa o mesmo corte de 70% de calcVencimentos()', () => {
+  const bloco = APP.match(/function necessidadePorMaterial\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /calcVencimentos\(\)\.filter\(x => x\.pct >= 70\)/)
+})
+
+// ── geração de lista (D5) ────────────────────────────────────────────────────
+test('preco_unit do item é copiado do material na criação da lista', () => {
+  const salvar = APP.match(/async function salvarListaCompra\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(salvar, 'maquinas/app.js deveria declarar salvarListaCompra')
+  assert.match(salvar[1], /preco_unit: material\?\.preco \?\? null/)
+})
+
+// ── recebimento item a item (D6) ─────────────────────────────────────────────
+test('receberItem() recusa acima do pendente, dá entrada no estoque e fecha a lista sozinha', () => {
+  const bloco = APP.match(/async function receberItem\(itemId\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'maquinas/app.js deveria declarar receberItem')
+  assert.match(bloco[1], /if\(quantidade > pendente\)\{/,
+    'qtd_recebida nunca pode ultrapassar quantidade — D6')
+  assert.match(bloco[1], /tipo: 'entrada'/)
+  assert.match(bloco[1], /estoque_atual: novoEstoque/)
+  assert.match(bloco[1], /todosRecebidos/)
+  assert.match(bloco[1], /status: 'recebida'/)
+})
+
+// ── permissões (D9) ──────────────────────────────────────────────────────────
+test('criar lista e receber item são oferecidos por podeEscreverNoModulo(), sem lista de cargos nova', () => {
+  const podeGerar = APP.match(/const podeGerar = MIGRACAO_34 && podeEscreverNoModulo\(\)/)
+  assert.ok(podeGerar, 'o botão de gerar lista depende de podeEscreverNoModulo()')
+  assert.match(APP, /podeEscreverNoModulo\(\) && pendente > 0/,
+    'o botão de receber depende de podeEscreverNoModulo()')
+  // nenhum array de cargos novo — só a função existente é reutilizada
+  const declaracoesDeCargos = APP.match(/const CARGOS\w* = \[/g) || []
+  assert.equal(declaracoesDeCargos.length, 0,
+    'nenhuma lista de cargos nova deveria ter sido introduzida no módulo Máquinas')
+})
+
+// ── export (D8) ───────────────────────────────────────────────────────────────
+test('existe export CSV por lista, além do export da aba', () => {
+  assert.match(APP, /function exportarListaCompraCSV\(listaId\)\{/)
+  assert.match(APP, /function exportarComprasCSV\(\)\{/)
+  assert.match(APP, /onclick="exportarListaCompraCSV\('\$\{lista\.id\}'\)"/,
+    'o cartão de cada lista precisa do botão de export próprio')
+})

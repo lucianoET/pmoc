@@ -251,7 +251,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       </div>
     </div>
 
-    <!-- COMPRAS -->
+    <!-- CONSUMO -->
     <div class="view" id="view-consumo">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
         <div class="view-title">Consumo de combustível</div>
@@ -292,10 +292,11 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div id="ciclo-timeline"></div>
     </div>
 
-    <div class="view" id="view-compras">
-      <div class="view-title">Lista de Compras</div>
-      <div class="view-sub">Materiais abaixo do estoque mínimo + demanda projetada pelos planos de manutenção</div>
-      <div id="compras-content"><div class="empty"><div class="empty-ico">🛒</div><p>Carregando...</p></div></div>
+    <!-- NECESSIDADES (migração 34) -->
+    <div class="view" id="view-necessidades">
+      <div class="view-title">Necessidades</div>
+      <div class="view-sub">Cada linha soma demanda preventiva, corretiva e reposição de mínimo, descontando o que já está em aquisição</div>
+      <div id="necessidades-content"><div class="empty"><div class="empty-ico">🛒</div><p>Carregando...</p></div></div>
     </div>
 
   </div><!-- main -->
@@ -679,6 +680,31 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     <div class="modal-ft">
       <button class="btn btn-s" onclick="fecharModal('modal-material')">Cancelar</button>
       <button class="btn btn-p" onclick="salvarMaterial()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: GERAR LISTA DE COMPRA (migração 34) -->
+<div class="overlay" id="modal-lista-compra">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-hd">
+      <h3>Nova lista de compra</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-lista-compra')" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="frow">
+        <label for="lc-titulo">Título *</label>
+        <input type="text" id="lc-titulo" placeholder="Ex: Processo 2026.08 — reposição de peças"/>
+      </div>
+      <div class="frow">
+        <label for="lc-desc">Descrição</label>
+        <textarea id="lc-desc"></textarea>
+      </div>
+      <div class="help" id="lc-resumo">—</div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-lista-compra')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarListaCompra()">Gerar lista</button>
     </div>
   </div>
 </div>
