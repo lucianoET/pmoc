@@ -52,7 +52,10 @@ html,body{height:100%}
    folha comum (D-01 da Fase 6: mapa/xmap.css nao e aberto). Preenchido em
    tempo de execucao por mapa/mapa-editor.js; aqui so o conteiner e o
    estilo. Comeca oculto (sem a classe .aberto). */
-#editor-painel{display:none;position:absolute;top:0;right:0;bottom:0;width:300px;background:var(--surface);border-left:1px solid var(--border);padding:16px;overflow-y:auto;z-index:900}
+/* Largura limitada pela tela, no mesmo padrão da .sidebar acima (Fase 7): em
+   375px um painel fixo de 300px cobre o mapa inteiro e o usuário perde a
+   referência do que está posicionando. */
+#editor-painel{display:none;position:absolute;top:0;right:0;bottom:0;width:min(300px,90vw);background:var(--surface);border-left:1px solid var(--border);padding:16px;overflow-y:auto;z-index:900}
 #editor-painel.aberto{display:block}
 .ed-fg{margin-bottom:12px}
 .ed-fg label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px}

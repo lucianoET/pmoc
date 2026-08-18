@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Consolidação da plataforma
-current_phase: 10
-current_phase_name: mapa-operacional
+current_phase: 7
+current_phase_name: ui-ux-mobile
 status: verifying
-stopped_at: Completed 10-08-PLAN.md — Fase 10 (mapa operacional) fechada
-last_updated: "2026-08-12T10:26:24.949Z"
-last_activity: 2026-08-12
-last_activity_desc: Phase 10 execution started
+stopped_at: Completed 07-01-PLAN.md — Fase 7 (UI/UX mobile) executada; migração 25 rodou e o UAT de leitura da Fase 10 passou, falta exercitar a escrita no app
+last_updated: "2026-08-18T13:30:00.000Z"
+last_activity: 2026-08-18
+last_activity_desc: Módulo Reparos entregue fora do fluxo de fases (164 testes verdes; migrações 26-28 em produção)
 progress:
   total_phases: 8
-  completed_phases: 3
-  total_plans: 19
-  completed_plans: 19
-  percent: 38
+  completed_phases: 4
+  total_plans: 20
+  completed_plans: 20
+  percent: 50
 ---
 
 # Project State
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supabase + login por cargo), com os dados legados consolidados e importados — sem quebrar os módulos em produção.
-**Current focus:** Phase 10 — mapa-operacional
+**Current focus:** Phase 7 — ui-ux-mobile
 
 ## Current Position
 
-Phase: 10 (mapa-operacional) — EXECUTING
-Plan: 8 of 8
-Status: Phase complete — ready for verification
-Last activity: 2026-08-12 — Phase 10 execution started
+Phase: 7 (ui-ux-mobile) — EXECUTED
+Plan: 1 of 1
+Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
+Last activity: 2026-08-18 — Fase 7 executada; UAT da Fase 10 registrado; módulo Reparos entregue fora do fluxo de fases
 
 Progress: [██████████] 100% (v2.0)
 
@@ -87,6 +87,17 @@ Progress: [██████████] 100% (v2.0)
 ## Accumulated Context
 
 ### Decisions
+
+- [Reparos 18/08/2026]: o módulo foi entregue **fora do fluxo de fases do GSD** — sem
+  `.planning/phases/`, sem PLAN/SUMMARY. Decisões e requisito estão em PROJECT.md; roteiro de
+  teste manual em TESTES.md. Uma fase futura que reorganizar isso não deve tratar como lacuna.
+- [Reparos 18/08/2026]: `create table if not exists` numa migração aditiva garante a **existência**
+  da tabela, não a **forma** dela. As `rep_*` foram criadas de um rascunho antes da 26; quando a 26
+  rodou, os `create table` viraram no-op e as definições corretas foram ignoradas em silêncio, sem
+  erro nenhum. A migração 28 fecha a diferença. Conferir colunas depois de aplicar, não só se o
+  script terminou sem exceção.
+- [Reparos 18/08/2026]: o write path do módulo **nunca foi exercido** — `rep_reparos.frequencia`
+  está 0 nos 33 reparos. Mesma pendência do `/mapa` na Fase 10. Checklist em TESTES.md.
 
 Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 

@@ -16,6 +16,10 @@ let auth = null
 // ── estado global ──
 let ATIVOS = [], OS_LIST = [], MATERIAIS = [], PLANOS = [], PLANO_MATS = [], ABASTS = [], USOS = []
 let AREAS = [], OPERACOES = [], OPERACOES_ERRO = null
+// Catálogo de reparos (migração 26). Carregado à parte e tolerante a ausência:
+// enquanto a migração não rodar em produção, as três listas ficam vazias e o
+// módulo segue funcionando exatamente como antes.
+let REPAROS = [], REP_MATS = [], REP_SERVS = [], SERVICOS = []
 let USUARIO = null
 let ATIVO_EDIT_ID = null
 let OPERACAO_CONCLUIR_ID = null
@@ -96,9 +100,35 @@ async function carregarTudo(){
   AREAS     = ar.data|| []
   OPERACOES = op.data|| []
   OPERACOES_ERRO = ar.error || op.error || null
+  await carregarCatalogoReparos()
   aplicarPermissoesOperacoes()
   renderPainel(); renderAtivos(); renderVencimentos(); renderOS(); renderMateriais()
   renderConsumo(); renderCiclo(); renderCompras(); renderOperacoes(); renderAgenda()
+}
+
+// ── catálogo de reparos (migração 26) ──
+// Fora do Promise.all de carregarTudo() de propósito: se as tabelas rep_* ainda
+// não existirem, o erro fica contido aqui e o módulo continua igual ao que era.
+async function carregarCatalogoReparos(){
+  const [rp, rm, rs, sv] = await Promise.all([
+    supa.from('rep_reparos').select('*').eq('ativo', true).order('frequencia', {ascending:false}),
+    supa.from('rep_reparo_materiais').select('*'),
+    supa.from('rep_reparo_servicos').select('*'),
+    supa.from('rep_servicos').select('*').eq('ativo', true),
+  ])
+  const indisponivel = rp.error || rm.error || rs.error || sv.error
+  REPAROS   = indisponivel ? [] : (rp.data || [])
+  REP_MATS  = indisponivel ? [] : (rm.data || [])
+  REP_SERVS = indisponivel ? [] : (rs.data || [])
+  SERVICOS  = indisponivel ? [] : (sv.data || [])
+}
+
+// peças essenciais de um reparo, já resolvidas contra maq_materiais
+function pecasEssenciaisDoReparo(reparoId){
+  return REP_MATS
+    .filter(x => x.reparo_id === reparoId && x.essencial)
+    .map(x => ({ ...x, mat: MATERIAIS.find(m => m.id === x.material_id) }))
+    .filter(x => x.mat)
 }
 
 // ── views ──
@@ -643,8 +673,12 @@ function abrirModalOS(ativoId, planoId){
   const sel = document.getElementById('os-ativo')
   sel.innerHTML = ATIVOS.map(a => `<option value="${a.id}" ${a.id===ativoId?'selected':''}>${a.codigo} — ${a.nome}</option>`).join('')
   popularPlanosOS(ativoId, planoId)
-  sel.onchange = () => popularPlanosOS(parseInt(sel.value))
-  document.getElementById('os-tipo').value = planoId ? 'preventiva' : 'corretiva'
+  sel.onchange = () => { popularPlanosOS(parseInt(sel.value)); popularReparosOS(parseInt(sel.value)) }
+  const selTipo = document.getElementById('os-tipo')
+  selTipo.value = planoId ? 'preventiva' : 'corretiva'
+  selTipo.onchange = () => alternarBlocoReparo(parseInt(sel.value))
+  popularReparosOS(ativoId)
+  alternarBlocoReparo(ativoId)
   document.getElementById('os-delta').value = ''
   document.getElementById('os-tecnico').value = USUARIO?.nome || ''
   document.getElementById('os-desc').value = ''
@@ -671,6 +705,52 @@ function mostrarMateriaisPlano(planoId){
     ${p.maq_materiais?.nome || '?'} — ${p.quantidade} ${p.maq_materiais?.unidade||'un'}</div>`).join('')
 }
 
+// ── diagnóstico na OS corretiva (módulo Reparos) ──
+function alternarBlocoReparo(ativoId){
+  const corretiva = document.getElementById('os-tipo').value === 'corretiva'
+  // sem catálogo (migração 26 ainda não rodou) o bloco nunca aparece
+  const mostrar = corretiva && REPAROS.length > 0
+  document.getElementById('os-reparo-wrap').style.display = mostrar ? '' : 'none'
+  if(mostrar) popularReparosOS(ativoId)
+  else mostrarResumoReparo(null)
+}
+
+function popularReparosOS(ativoId){
+  const sel = document.getElementById('os-reparo')
+  if(!sel) return
+  const ativo = ATIVOS.find(a => a.id === ativoId)
+  // reparo sem modelo vale para qualquer máquina — nunca é filtrado fora
+  const lista = REPAROS.filter(r => !r.modelo_id || r.modelo_id === ativo?.modelo_id)
+  sel.innerHTML = '<option value="">— sem diagnóstico do catálogo —</option>' +
+    lista.map(r => `<option value="${r.id}">${esc(r.sintoma)} → ${esc(r.causa_provavel)}${r.frequencia ? ` (${r.frequencia}×)` : ''}</option>`).join('')
+  sel.onchange = () => mostrarResumoReparo(parseInt(sel.value) || null)
+  mostrarResumoReparo(null)
+}
+
+function mostrarResumoReparo(reparoId){
+  const wrap = document.getElementById('os-reparo-resumo-wrap')
+  const confirma = document.getElementById('os-reparo-confirma-wrap')
+  if(!wrap) return
+  if(!reparoId){ wrap.style.display = 'none'; confirma.style.display = 'none'; return }
+
+  const pecas = pecasEssenciaisDoReparo(reparoId)
+  const servs = REP_SERVS.filter(x => x.reparo_id === reparoId)
+    .map(x => SERVICOS.find(s => s.id === x.servico_id)).filter(Boolean)
+  const custo = pecas.reduce((soma, p) => soma + Number(p.mat.preco || 0) * Number(p.quantidade), 0)
+  const horas = servs.reduce((soma, s) => soma + Number(s.tempo_padrao_h || 0), 0)
+  const falta = pecas.filter(p => p.mat.estoque_atual < p.quantidade)
+
+  wrap.style.display = ''
+  confirma.style.display = ''
+  document.getElementById('os-reparo-confirmado').checked = true
+  document.getElementById('os-reparo-resumo').innerHTML = [
+    pecas.map(p => `${esc(p.mat.nome)} — ${p.quantidade} ${esc(p.mat.unidade || 'un')}`).join('<br>') || 'Sem peça vinculada',
+    servs.map(s => `${esc(s.nome)} — ${Number(s.tempo_padrao_h || 0).toFixed(1)} h`).join('<br>') || 'Sem serviço vinculado',
+    `<strong>Total: R$ ${custo.toFixed(2)} · ${horas.toFixed(1)} h</strong>`,
+    falta.length ? `<span style="color:var(--red)">Sem estoque: ${falta.map(p => esc(p.mat.nome)).join(', ')}</span>` : '',
+  ].filter(Boolean).join('<br>')
+}
+
 async function salvarOS(){
   const ativo_id  = parseInt(document.getElementById('os-ativo').value)
   const plano_id  = parseInt(document.getElementById('os-plano').value) || null
@@ -694,12 +774,22 @@ async function salvarOS(){
       if(mat?.preco) custo_pecas += Number(mat.preco) * Number(item.quantidade)
     }
   }
-  const { error: erOS } = await supa.from('maq_os').insert({
+  // diagnóstico do catálogo (só em corretiva, e só se a migração 26 rodou)
+  const reparoSel = document.getElementById('os-reparo')
+  const reparo_id = (tipo === 'corretiva' && REPAROS.length) ? (parseInt(reparoSel?.value) || null) : null
+  const reparo = reparo_id ? REPAROS.find(r => r.id === reparo_id) : null
+  const pecasReparo = reparo_id ? pecasEssenciaisDoReparo(reparo_id) : []
+  if(reparo) custo_pecas += pecasReparo.reduce((s, p) => s + Number(p.mat.preco || 0) * Number(p.quantidade), 0)
+
+  // as colunas de reparo só entram no payload quando há diagnóstico: assim o
+  // insert continua válido mesmo num banco onde a migração 26 não rodou
+  const { data: osNova, error: erOS } = await supa.from('maq_os').insert({
     ativo_id, plano_id, tipo,
     status: 'concluida',
     data_abertura: data, data_conclusao: data,
-    uso_na_os, tecnico, descricao, custo_pecas
-  })
+    uso_na_os, tecnico, descricao, custo_pecas,
+    ...(reparo ? { reparo_id, sintoma_relatado: reparo.sintoma } : {}),
+  }).select('id').single()
   if(erOS){ alert('Erro: ' + erOS.message); return }
 
   // atualizar horímetro
@@ -725,6 +815,29 @@ async function salvarOS(){
         })
       }
     }
+  }
+
+  // debitar as peças essenciais do reparo — mesma mecânica da baixa do plano
+  for(const item of pecasReparo){
+    const novo = Math.max(0, item.mat.estoque_atual - item.quantidade)
+    await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', item.mat.id)
+    await supa.from('maq_estoque_movimentos').insert({
+      material_id: item.mat.id, os_id: osNova?.id || null,
+      tipo: 'saida', quantidade: item.quantidade,
+      motivo: 'OS corretiva — ' + (reparo?.causa_provavel || ''),
+    })
+  }
+
+  // É esta chamada que faz o catálogo aprender: a causa confirmada incrementa
+  // rep_reparos.frequencia e sobe no ranking do próximo diagnóstico. A RPC é
+  // idempotente — repetir na mesma OS falha em vez de contar duas vezes.
+  if(reparo && osNova?.id){
+    const confirmado = document.getElementById('os-reparo-confirmado')?.checked ?? true
+    const { error: erConf } = await supa.rpc('rep_confirmar_reparo', {
+      p_os_id: osNova.id, p_confirmado: confirmado,
+    })
+    // falha aqui não invalida a OS, que já está gravada — só avisa
+    if(erConf) alert('OS gravada, mas a confirmação do diagnóstico falhou: ' + erConf.message)
   }
 
   fecharModal('modal-os')

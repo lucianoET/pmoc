@@ -33,6 +33,11 @@ Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supaba
 - ✓ Módulo Máquinas: 7 ativos, planos por `tipo_modelo`, estoque com baixa automática, combustível, depreciação, lista de compras CSV — existing
 - ✓ Auth por cargo (admin/gestor/tecnico/observador) via Supabase + tabela `usuarios`, RLS como segurança real — existing
 - ✓ Migrações SQL aditivas numeradas em `supabase/` — existing
+- ✓ Módulo **Reparos**: catálogo de sintoma → causa provável por modelo de máquina, com peças
+  (`maq_materiais`) e serviços vinculados; diagnóstico ranqueado por confirmação real
+  (`rep_reparos.frequencia`, alimentada por `rep_confirmar_reparo` na conclusão da OS corretiva
+  em Máquinas). Migrações 26–28 aplicadas em produção em 18/08/2026: 7 modelos, 25 serviços,
+  33 reparos, 28 ativos com `modelo_id`. **Write path ainda não exercido** — roteiro em TESTES.md
 
 ### Active
 
@@ -82,6 +87,11 @@ Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supaba
 | Contratação pública fora dos módulos novos | Necessidade ainda não confirmada; reduz escopo | — Pending |
 | Ordem: Transportes → Elétrica → Fonoclama | Prioridade declarada pelo usuário | — Pending |
 | Dados legados: analisar → consolidar → importar via SQL seed | Repete o fluxo comprovado da importação das 171 unidades | — Pending |
+| Reparo corretivo em tabelas `rep_*` próprias, **não** como `maq_planos` com `intervalo = 0` | Preventivo é determinístico e disparado por uso; corretivo é disparado por sintoma e ranqueado por probabilidade. Misturar quebraria a query "o que vence agora", que está em produção, e ainda assim não responderia bem ao diagnóstico | ✓ 18/08/2026 |
+| Conhecimento indexado por **modelo** (`rep_modelos`), não por ativo nem por organização | É o que torna o catálogo reaproveitável fora do CMASM. `maq_ativos.tipo_modelo` continua como texto; `modelo_id` é a FK nova, nullable e aditiva | ✓ 18/08/2026 |
+| `rep_reparo_materiais` aponta para `maq_materiais` em vez de ter catálogo próprio (oposto de D-06 em transportes) | Duplicar as 34 peças quebraria a baixa automática de estoque de `maquinas/app.js`, que é justamente o fluxo que já funciona. Custo aceito: acoplamento entre os dois módulos | ✓ 18/08/2026 |
+| Escrita em dois níveis: modelos/serviços = `admin`,`gestor`; reparos e vínculos = + `tecnico` | O técnico precisa cadastrar o reparo que acabou de descobrir; se depender do gestor, o conhecimento não é registrado e o catálogo não cresce. Espelha a distinção da migração 12 entre `maq_areas` e `maq_operacoes` | ✓ 18/08/2026 |
+| Não extrair `reparos/` para repositório próprio agora | As tabelas `maq_*` e `rep_*` já são genéricas — nenhuma coluna específica de Marinha. O acoplamento real é marca e `usuarios.posto_graduacao`. Sair agora custaria `shared/` + suíte + pipeline sem entregar nada | ✓ 18/08/2026 |
 
 ## Evolution
 

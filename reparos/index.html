@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#1a1a18"/>
+<script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t!=='claro'&&t!=='escuro'){t=(typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','escuro')}})()/* script classico de proposito: modulo ES e adiado, rodaria depois do primeiro desenho e reintroduziria a piscada de tema */</script>
+<title>PMOC Reparos</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
+<style>
+:root{--accent:#c96f4c}
+.main{max-width:1200px}
+.modal{max-width:560px}
+h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.diag-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px;border-left:3px solid var(--border)}
+.diag-card.g-alta{border-left-color:var(--red)}
+.diag-card.g-media{border-left-color:var(--yellow)}
+.diag-card.g-baixa{border-left-color:var(--green)}
+.diag-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.diag-sintoma{font-size:14px;font-weight:600;color:var(--text)}
+.diag-causa{font-size:12px;color:var(--text2);margin-top:2px}
+.diag-metricas{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--text2);margin-bottom:10px}
+.diag-metricas b{color:var(--text);font-weight:600}
+.diag-linha{font-size:12px;color:var(--text2);padding:3px 0}
+.diag-col{flex:1;min-width:220px}
+.diag-cols{display:flex;gap:20px;flex-wrap:wrap}
+@media(max-width:640px){.diag-metricas{gap:10px}}
+</style>
+</head>
+<body>
+<div id="login-screen"></div>
+<div id="app">
+  <div class="main">
+
+    <!-- DIAGNÓSTICO -->
+    <div class="view active" id="view-diagnostico">
+      <div class="view-title">Diagnóstico</div>
+      <div class="view-sub">Do sintoma às peças e serviços necessários, na ordem do que mais se confirma na oficina</div>
+      <div class="fgrid3" style="margin-bottom:16px">
+        <div class="frow"><label>Modelo</label><select id="dg-modelo" onchange="renderDiagnostico()"></select></div>
+        <div class="frow"><label>Sistema</label><select id="dg-sistema" onchange="renderDiagnostico()"></select></div>
+        <div class="frow"><label>Buscar sintoma</label><input type="text" id="dg-busca" placeholder="não pega, perda de força..." oninput="renderDiagnostico()"/></div>
+      </div>
+      <div id="dg-lista"></div>
+    </div>
+
+    <!-- REPAROS -->
+    <div class="view" id="view-reparos">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div class="view-title">Reparos</div>
+        <button class="btn btn-p btn-sm" id="btn-novo-reparo" onclick="abrirModalReparo()">+ Reparo</button>
+      </div>
+      <div class="view-sub">Cada linha é um par sintoma → causa provável, com as peças e serviços que consome</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Código</th><th>Modelo</th><th>Sistema</th><th>Sintoma</th><th>Causa provável</th>
+            <th>Gravidade</th><th>Confirmado</th><th>Peças / serviços</th>
+          </tr></thead>
+          <tbody id="tb-reparos"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SERVIÇOS -->
+    <div class="view" id="view-servicos">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div class="view-title">Serviços</div>
+        <button class="btn btn-p btn-sm" id="btn-novo-servico" onclick="abrirModalServico()">+ Serviço</button>
+      </div>
+      <div class="view-sub">Operações de mão de obra. O tempo padrão é estimativa; o real fica em maq_os.horas_servico</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Código</th><th>Nome</th><th>Especialidade</th><th>Tempo padrão</th><th>Valor/hora</th><th>Usado em</th>
+          </tr></thead>
+          <tbody id="tb-servicos"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MODELOS -->
+    <div class="view" id="view-modelos">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div class="view-title">Modelos</div>
+        <button class="btn btn-p btn-sm" id="btn-novo-modelo" onclick="abrirModalModelo()">+ Modelo</button>
+      </div>
+      <div class="view-sub">O conhecimento é indexado por modelo, não por máquina — é o que permite reaproveitá-lo em outra oficina</div>
+      <div class="tbl-wrap">
+        <table class="tbl">
+          <thead><tr>
+            <th>Código</th><th>Fabricante</th><th>Modelo</th><th>Categoria</th><th>Motor</th><th>Máquinas</th><th>Reparos</th>
+          </tr></thead>
+          <tbody id="tb-modelos"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL REPARO -->
+<div class="overlay" id="modal-reparo">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3 id="modal-reparo-titulo">Novo reparo</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-reparo')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Código *</label><input type="text" id="rp-codigo" placeholder="RP-TS114-09"/></div>
+        <div class="frow"><label>Modelo</label><select id="rp-modelo"></select></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Sistema *</label><select id="rp-sistema"></select></div>
+        <div class="frow"><label>Gravidade</label><select id="rp-gravidade">
+          <option value="baixa">Baixa</option><option value="media" selected>Média</option><option value="alta">Alta</option>
+        </select></div>
+      </div>
+      <div class="frow"><label>Sintoma *</label><input type="text" id="rp-sintoma" placeholder="Não dá partida"/></div>
+      <div class="frow"><label>Causa provável *</label><input type="text" id="rp-causa" placeholder="Vela suja ou queimada"/></div>
+      <div class="frow"><label>Procedimento</label><textarea id="rp-proc" rows="3" placeholder="Passos, torques, cuidados"></textarea></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-reparo')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarReparo()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SERVIÇO -->
+<div class="overlay" id="modal-servico">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3>Novo serviço</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-servico')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Código *</label><input type="text" id="sv-codigo" placeholder="SV26"/></div>
+        <div class="frow"><label>Especialidade</label><select id="sv-esp"></select></div>
+      </div>
+      <div class="frow"><label>Nome *</label><input type="text" id="sv-nome" placeholder="Substituir rolamento de roda"/></div>
+      <div class="fgrid">
+        <div class="frow"><label>Tempo padrão (h)</label><input type="number" id="sv-tempo" step="0.1" min="0.1" value="0.5"/></div>
+        <div class="frow"><label>Valor/hora (R$)</label><input type="number" id="sv-valor" step="0.01" min="0"/></div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-servico')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarServico()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MODELO -->
+<div class="overlay" id="modal-modelo">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3>Novo modelo</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-modelo')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Código</label><input type="text" id="md-codigo" placeholder="TS114"/></div>
+        <div class="frow"><label>Categoria</label><input type="text" id="md-cat" placeholder="trator"/></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Fabricante *</label><input type="text" id="md-fab" placeholder="Husqvarna"/></div>
+        <div class="frow"><label>Modelo *</label><input type="text" id="md-mod" placeholder="TS114"/></div>
+      </div>
+      <div class="frow"><label>Motor</label><input type="text" id="md-motor" placeholder="HS452AE"/></div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-modelo')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarModelo()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL VÍNCULO — peças e serviços de um reparo -->
+<div class="overlay" id="modal-vinculo">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3 id="modal-vinculo-titulo">Peças e serviços</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('modal-vinculo')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="vc-atuais" style="margin-bottom:16px"></div>
+      <div class="fgrid3">
+        <div class="frow"><label>Adicionar</label><select id="vc-tipo" onchange="popularVinculoAlvo()">
+          <option value="material">Peça</option><option value="servico">Serviço</option>
+        </select></div>
+        <div class="frow"><label>Item</label><select id="vc-alvo"></select></div>
+        <div class="frow"><label>Quantidade</label><input type="number" id="vc-qtd" step="0.1" min="0.1" value="1"/></div>
+      </div>
+      <div class="frow" id="vc-essencial-wrap">
+        <label style="display:flex;align-items:center;gap:8px;font-weight:400">
+          <input type="checkbox" id="vc-essencial" checked style="width:auto"/>
+          Peça essencial (desmarque para "verificar se precisa trocar")
+        </label>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('modal-vinculo')">Fechar</button>
+      <button class="btn btn-p" onclick="salvarVinculo()">Adicionar</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// resolve app.js tanto em /reparos (rewrite do Vercel) quanto em /reparos/index.html
+const base = location.pathname.replace(/\/[^/]*\.[^/]*$/, '').replace(/\/$/, '')
+import(`${base}/app.js`)
+</script>
+</body>
+</html>

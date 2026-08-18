@@ -359,6 +359,25 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <label>Plano de manutenção</label>
         <select id="os-plano"><option value="">Selecione...</option></select>
       </div>
+      <!-- Diagnóstico do módulo Reparos — só aparece em OS corretiva e só se as
+           tabelas rep_* existirem. A lista vem ordenada por rep_reparos.frequencia:
+           o que mais se confirmou nesta oficina fica no topo. -->
+      <div id="os-reparo-wrap" style="display:none">
+        <div class="frow">
+          <label>Sintoma → causa provável</label>
+          <select id="os-reparo"><option value="">— sem diagnóstico do catálogo —</option></select>
+        </div>
+        <div class="frow" id="os-reparo-resumo-wrap" style="display:none">
+          <label>Consumo previsto</label>
+          <div id="os-reparo-resumo" style="font-size:12px;color:var(--text2)"></div>
+        </div>
+        <div class="frow" id="os-reparo-confirma-wrap" style="display:none">
+          <label style="display:flex;align-items:center;gap:8px;font-weight:400">
+            <input type="checkbox" id="os-reparo-confirmado" checked style="width:auto"/>
+            A causa se confirmou — alimenta o ranking do diagnóstico
+          </label>
+        </div>
+      </div>
       <div class="fgrid">
         <div class="frow">
           <label>Horas registradas (delta)</label>

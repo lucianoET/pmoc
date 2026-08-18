@@ -24,7 +24,7 @@ const RAIZ = path.join(__dirname, '..')
 // Modulos com reescrita no vercel.json. `refrigeracao` fica de fora: e um arquivo
 // unico de ~436 KB com JS embutido (D-04, congelada), onde uma varredura por
 // `src=`/`href=` casa fragmentos de template literal, nao marcacao real.
-const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'mapa', 'calibracao']
+const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'calibracao']
 
 function referenciasLocais(html) {
   const refs = []

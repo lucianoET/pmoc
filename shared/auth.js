@@ -96,6 +96,13 @@ export class Auth {
         </div>
       </div>
 
+      <!-- Os três campos de digitação desta tela (senha do cargo, e-mail e senha
+           do admin) estão em 16px, não em 14px como o resto do texto: abaixo de
+           16px o navegador do iOS aplica zoom automático ao focar o campo, e o
+           usuário perde o enquadramento da tela logo no login. Mesma razão da
+           regra de celular em shared/pmoc.css (Fase 7, D-05) — aqui repetida
+           porque o estilo é embutido e a folha comum não o alcança. -->
+
       <!-- step 2: senha (após selecionar cargo) -->
       <div id="step-senha" style="display:none">
         <div id="cargo-chip"
@@ -111,7 +118,7 @@ export class Auth {
                         color:var(--text2,#a09a88);margin-bottom:6px">Senha</label>
           <input id="auth-senha" type="password" placeholder="••••••••" autocomplete="current-password"
             style="width:100%;background:var(--surface2,#2e2e2a);border:1px solid var(--border,#38382f);
-                   border-radius:6px;padding:9px 11px;font-size:14px;color:var(--text,#e8e4d8);
+                   border-radius:6px;padding:9px 11px;font-size:16px;color:var(--text,#e8e4d8);
                    outline:none;font-family:inherit;box-sizing:border-box"/>
         </div>
         <div id="auth-erro" style="font-size:12px;color:var(--red,#b85c4a);
@@ -131,7 +138,7 @@ export class Auth {
                         color:var(--text2,#a09a88);margin-bottom:6px">E-mail</label>
           <input id="auth-email" type="email" placeholder="admin@marinha.mil.br"
             style="width:100%;background:var(--surface2,#2e2e2a);border:1px solid var(--border,#38382f);
-                   border-radius:6px;padding:9px 11px;font-size:14px;color:var(--text,#e8e4d8);
+                   border-radius:6px;padding:9px 11px;font-size:16px;color:var(--text,#e8e4d8);
                    outline:none;font-family:inherit;box-sizing:border-box"/>
         </div>
         <div style="margin-bottom:16px">
@@ -139,7 +146,7 @@ export class Auth {
                         color:var(--text2,#a09a88);margin-bottom:6px">Senha</label>
           <input id="auth-email-senha" type="password" placeholder="••••••••"
             style="width:100%;background:var(--surface2,#2e2e2a);border:1px solid var(--border,#38382f);
-                   border-radius:6px;padding:9px 11px;font-size:14px;color:var(--text,#e8e4d8);
+                   border-radius:6px;padding:9px 11px;font-size:16px;color:var(--text,#e8e4d8);
                    outline:none;font-family:inherit;box-sizing:border-box"/>
         </div>
         <div id="auth-email-erro" style="font-size:12px;color:var(--red,#b85c4a);
