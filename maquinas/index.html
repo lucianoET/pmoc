@@ -232,8 +232,8 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
             <label for="cfg-valor-hora">Valor da hora-homem (R$)</label>
             <input type="number" id="cfg-valor-hora" min="0" step="0.01" placeholder="não informado"/>
           </div>
-          <button class="btn btn-p btn-sm" onclick="salvarValorHora()">Salvar</button>
-          <div class="help" style="flex:1 1 260px;margin:0">
+          <button class="btn btn-p btn-sm" id="btn-valor-hora" onclick="salvarValorHora()">Salvar</button>
+          <div class="help" id="cfg-hora-ajuda" style="flex:1 1 260px;margin:0">
             Usado como padrão no custo de mão de obra das OS. Enquanto estiver vazio,
             o custo de mão de obra fica zerado.
           </div>

@@ -717,6 +717,7 @@ function renderMateriais(){
   if(campoHora && document.activeElement !== campoHora){
     campoHora.value = valorHoraPadrao() ?? ''
   }
+  aplicarPermissoesConfig()
 
   const tbody = document.getElementById('tb-materiais')
   if(!MATERIAIS.length){
@@ -764,13 +765,39 @@ function renderMateriais(){
       <td>
         <div style="display:flex;align-items:center;gap:8px">
           <span class="badge ${ok?'b-ok':'b-red'}">${ok?'OK':'BAIXO'}</span>
-          <button class="btn btn-s btn-sm" onclick="editarMaterial(${m.id})" title="Editar quantidade, mínimo e preço">✎</button>
+          ${podeEscreverNoModulo()
+            ? `<button class="btn btn-s btn-sm" onclick="editarMaterial(${m.id})" title="Editar quantidade, mínimo e preço">✎</button>`
+            : ''}
         </div>
       </td>
     </tr>`}).join('')
 }
 
 // ── valor da hora-homem (maq_config, migração 30) ──
+// Conferido contra as políticas reais em 18/08/2026: TODA escrita do módulo
+// Máquinas (maq_os, maq_materiais, maq_estoque_movimentos, maq_config) está
+// escopada a `authenticated`, e o acesso Livre nunca autentica. Uma regra só,
+// portanto — a tela não oferece controle que o banco vai recusar, mesmo
+// princípio dos cargos do editor de zona no mapa.
+function podeEscreverNoModulo(){
+  return ['admin','gestor','tecnico'].includes(USUARIO?.role)
+}
+
+// observador vê o valor vigente, mas em leitura: o número é informação útil
+// para ele; o campo editável seria promessa falsa
+function aplicarPermissoesConfig(){
+  const campo = document.getElementById('cfg-valor-hora')
+  const botao = document.getElementById('btn-valor-hora')
+  const aviso = document.getElementById('cfg-hora-ajuda')
+  if(!campo || !botao) return
+  const pode = podeEscreverNoModulo()
+  campo.disabled = !pode
+  botao.style.display = pode ? '' : 'none'
+  if(aviso) aviso.textContent = pode
+    ? 'Usado como padrão no custo de mão de obra das OS. Enquanto estiver vazio, o custo de mão de obra fica zerado.'
+    : 'Somente leitura — seu cargo não altera a configuração do módulo.'
+}
+
 async function salvarValorHora(){
   const campo = document.getElementById('cfg-valor-hora')
   const texto = campo.value.trim()
@@ -779,9 +806,17 @@ async function salvarValorHora(){
   const valor = texto === '' ? null : Number(texto)
   if(valor !== null && !(valor >= 0)){ alert('Valor da hora precisa ser um número não negativo.'); return }
 
-  const { error } = await supa.from('maq_config')
+  // .select() não é enfeite: sob RLS, um update que não alcança nenhuma linha
+  // permitida volta SEM erro e sem efeito. Sem conferir a linha de retorno, a
+  // tela diria "salvo" enquanto o banco continuava com o valor antigo.
+  const { data, error } = await supa.from('maq_config')
     .upsert({ chave: 'valor_hora_padrao', valor: valor === null ? null : String(valor) }, { onConflict: 'chave' })
+    .select()
   if(error){ alert('Erro: ' + error.message); return }
+  if(!data || !data.length){
+    alert('O valor não foi gravado: seu cargo não tem permissão de escrita na configuração do módulo.')
+    return
+  }
   await carregarTudo()
 }
 
@@ -809,10 +844,17 @@ async function salvarLinhaMaterial(id){
   if(!(atual >= 0) || !(minimo >= 0)){ alert('Quantidade e mínimo precisam ser números não negativos.'); return }
   if(preco !== null && !(preco >= 0)){ alert('Preço precisa ser um número não negativo.'); return }
 
-  const { error } = await supa.from('maq_materiais')
+  // .select() pelo mesmo motivo de salvarValorHora(): sob RLS um update que não
+  // alcança linha permitida volta sem erro e sem efeito, e a tela diria "salvo"
+  const { data, error } = await supa.from('maq_materiais')
     .update({ estoque_atual: atual, estoque_minimo: minimo, preco })
     .eq('id', id)
+    .select()
   if(error){ alert('Erro: ' + error.message); return }
+  if(!data || !data.length){
+    alert('Nada foi gravado: seu cargo não tem permissão de escrita no estoque.')
+    return
+  }
 
   // Mexer na quantidade à mão é movimento de estoque como qualquer outro, e
   // precisa deixar rastro: sem isso o saldo muda e ninguém sabe por quê.

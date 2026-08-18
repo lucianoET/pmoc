@@ -155,3 +155,33 @@ test('as duas listas aparecem no modal de detalhe, com botão de adicionar', () 
     assert.ok(APP.includes(`function ${fn}(`), `${fn} deveria existir`)
   }
 })
+
+// ── a tela não promete o que a política do banco recusa ───────────────────
+// Encontrado testando em 18/08/2026: o campo do valor da hora aparecia no modo
+// Livre, e gravar devolvia "42501 — new row violates row-level security policy"
+// direto do PostgREST. Toda escrita do módulo exige sessão autenticada, e o
+// acesso Livre nunca autentica.
+test('só quem o banco deixa escrever recebe os controles de escrita', () => {
+  assert.match(APP, /function podeEscreverNoModulo\(\)/)
+  assert.match(APP, /\['admin','gestor','tecnico'\]\.includes\(USUARIO\?\.role\)/)
+
+  const permissoes = APP.match(/function aplicarPermissoesConfig\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(permissoes, 'maquinas/app.js deveria declarar aplicarPermissoesConfig')
+  assert.match(permissoes[1], /campo\.disabled = !pode/)
+  assert.match(permissoes[1], /botao\.style\.display = pode \? '' : 'none'/)
+
+  assert.match(APP, /\$\{podeEscreverNoModulo\(\)\s*\n?\s*\? `<button[^`]*editarMaterial/,
+    'o lápis de editar linha do estoque também é escrita — não aparece para o observador')
+})
+
+test('escrita sem efeito não é relatada como sucesso', () => {
+  // sob RLS, um update que não alcança nenhuma linha permitida volta SEM erro e
+  // com zero linhas; sem conferir o retorno a tela diria "salvo"
+  for (const fn of ['salvarValorHora', 'salvarLinhaMaterial']) {
+    const bloco = APP.match(new RegExp(`async function ${fn}\\(\\w*\\)\\{([\\s\\S]*?)\\n\\}`))
+    assert.ok(bloco, `${fn} deveria existir`)
+    assert.match(bloco[1], /\.select\(\)/, `${fn} precisa pedir o retorno para saber se gravou`)
+    assert.match(bloco[1], /if\(!data \|\| !data\.length\)\{/,
+      `${fn} precisa tratar o caso de zero linhas gravadas`)
+  }
+})
