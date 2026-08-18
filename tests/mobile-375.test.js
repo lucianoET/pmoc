@@ -18,7 +18,7 @@ const FOLHA = path.join(RAIZ, 'shared', 'pmoc.css')
 
 // os 6 módulos da base unificada — refrigeracao fica de fora por decisão
 // (PLAT-15: congelada, nem lida para modificação)
-const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'mapa']
+const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa']
 
 // Renderizadores dos 4 módulos no escopo da fase. maquinas e transportes não
 // entram aqui: o critério de sucesso 5 pede que eles não regridam, não que
