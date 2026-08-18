@@ -13,8 +13,10 @@
 -- · maq_ativos.instrucoes — instruções de operação/manutenção da
 --   máquina, parte do cadastro, exibidas na ficha
 --
--- Migração aditiva, como todas menos a 31. Aplicada em produção:
--- (preencher a data ao rodar)
+-- Migração aditiva, como todas menos a 31. Aplicada em produção em
+-- 18/08/2026 — conferida contra o banco: 5 colunas, o check de texto não
+-- vazio, a FK com cascade, o índice (ativo_id, criado_em desc), RLS ligado
+-- com as duas políticas, e maq_ativos.instrucoes text no lugar.
 -- ══════════════════════════════════════════════════════════════════
 
 create table if not exists maq_ativo_comentarios (

@@ -1199,19 +1199,19 @@ zero, e depois dela, com as tabelas na carga.
 
 ## Ficha da máquina (18/08/2026, noite)
 
-### Migração 32 — pendente de aplicação
+### Migração 32 — aplicada em 18/08/2026 ✅
 
-`supabase/32_maquinas_ficha.sql` **ainda não rodou**. Cria `maq_ativo_comentarios` (diário de
-bordo por máquina) e a coluna `maq_ativos.instrucoes`. Aditiva; sem ela a ficha funciona e só o
-diário fica vazio — verificado no navegador com a migração ausente.
+`supabase/32_maquinas_ficha.sql` rodou em produção. Conferida a forma contra o banco:
 
-Depois de aplicar:
+| Item | Encontrado |
+|------|------------|
+| `maq_ativo_comentarios` | 5 colunas; PK, FK `ativo_id` (cascade) e o check de texto não vazio |
+| Índice | `maq_ativo_comentarios_ativo_idx` (`ativo_id, criado_em desc`) |
+| RLS | ligado, com as 2 políticas (leitura pública, escrita autenticada) |
+| `maq_ativos.instrucoes` | `text`, no lugar |
+| Linhas | 0 — o diário começa vazio |
 
-```sql
-select count(*) from maq_ativo_comentarios;   -- 0, tabela nova
-select column_name from information_schema.columns
- where table_name='maq_ativos' and column_name='instrucoes';   -- 1 linha
-```
+A ficha foi verificada nos dois estados: sem a migração (diário vazio, nada quebra) e com ela.
 
 ### Conferido no navegador (cargo Livre, sem a migração 32)
 
