@@ -88,19 +88,32 @@ test('nos dois arquivos, a função de deep link não vaza para o escopo global'
   }
 })
 
-// A lista de nomes publicados em exporNoWindow() de maquinas/app.js é
-// conferida por gate de extração dinâmica desde o plano 05-06 (contagem
-// dos handlers inline extraídos da marcação, 22 nomes). O número abaixo
-// (24) é deliberadamente diferente: é o tamanho da LISTA PUBLICADA em
-// exporNoWindow(), não a contagem de handlers extraídos do HTML — mexer
-// nele sem necessidade quebraria um gate de outra fase sem relação
-// nenhuma com este plano.
-test('a lista de nomes publicados em maquinas/app.js continua com 24 entradas', () => {
+// Este caso já foi uma contagem fixa (24 nomes publicados em exporNoWindow()).
+// Número fixo protege pouco e atrapalha muito: quebra em toda fase que adiciona
+// um handler legítimo, e não pega o erro que importa — publicar de menos, que é
+// o que produz "função não definida" no clique do usuário. Agora afirma o
+// contrato de verdade, no mesmo formato de tests/integracao-reparos.test.js:
+// todo handler chamado na marcação existe na lista publicada.
+function handlersInline(html) {
+  const nomes = new Set()
+  for (const m of html.matchAll(/\son[a-z]+="([A-Za-z_$][\w$]*)\(/g)) nomes.add(m[1])
+  return [...nomes].sort()
+}
+
+test('maquinas publica no window todo handler inline do próprio markup', () => {
   const conteudo = conteudoDe(MAQUINAS_APP)
-  const bloco = conteudo.match(/function exporNoWindow\(\)\{([\s\S]*?)\n\}/)
-  assert.ok(bloco, 'maquinas/app.js deveria ter exporNoWindow()')
-  const nomes = bloco[1].match(/^ +[a-zA-Z_][a-zA-Z0-9_]*,$/gm) || []
-  assert.equal(nomes.length, 24, 'lista de exporNoWindow() de maquinas/app.js mudou de tamanho')
+  const bloco = conteudo.match(/Object\.assign\(window,\s*\{([\s\S]*?)\}\)/)
+  assert.ok(bloco, 'maquinas/app.js deveria ter o Object.assign(window, {...}) de exporNoWindow()')
+  const publicados = new Set(bloco[1].split(',').map(s => s.trim()).filter(Boolean))
+
+  const html = conteudoDe(path.join(RAIZ, 'maquinas', 'index.html'))
+  // handlers da marcação e também os que nascem dentro de literal de gabarito
+  // no próprio app.js — os dois viram atributo inline no DOM do usuário
+  const usados = [...new Set([...handlersInline(html), ...handlersInline(conteudo)])]
+  assert.ok(usados.length > 0, 'o markup deve usar handlers inline — é o padrão do repo')
+  for (const nome of usados) {
+    assert.ok(publicados.has(nome), `${nome}() é chamado no markup mas não está em exporNoWindow()`)
+  }
 })
 
 test('a API pública do motor compartilhado (iniciarModulo) está intacta', () => {

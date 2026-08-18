@@ -60,14 +60,22 @@ test('OS corretiva com diagnóstico dá baixa e alimenta o ranking', () => {
   assert.match(maqApp, /pecasEssenciaisDoReparo\(reparo_id\)/)
   assert.match(maqApp, /x\.reparo_id === reparoId && x\.essencial/,
     'só peça essencial é debitada — a opcional é "verificar se precisa trocar"')
-  assert.match(maqApp, /supa\.rpc\('rep_confirmar_reparo', \{[\s\S]*?p_os_id: osNova\.id/)
+  // A chamada saiu de dentro de salvarOS() e virou confirmarDiagnostico(), porque
+  // agora existem três caminhos até a conclusão de uma OS — criar já concluída,
+  // concluir pela lista e concluir pelo detalhe — e os três precisam alimentar o
+  // ranking do mesmo jeito. O que o gate protege continua sendo o mesmo: a RPC é
+  // chamada com o id da OS gravada.
+  assert.match(maqApp, /async function confirmarDiagnostico\(osId, reparo\)/)
+  assert.match(maqApp, /supa\.rpc\('rep_confirmar_reparo', \{[\s\S]*?p_os_id: osId/)
+  assert.match(maqApp, /confirmarDiagnostico\(osNova\.id, reparo\)/,
+    'a criação de OS já concluída precisa continuar confirmando o diagnóstico')
   assert.match(maqApp, /\.select\('id'\)\.single\(\)/,
     'o id da OS é necessário para a RPC e para os_id do movimento de estoque')
   assert.match(maqApp, /motivo: 'OS corretiva/)
 
   // falha na confirmação não pode invalidar a OS, que já está gravada
-  assert.match(maqApp, /if\(erConf\) alert\(/)
-  assert.doesNotMatch(maqApp, /if\(erConf\)\s*\{?\s*return/)
+  assert.match(maqApp, /if\(error\) alert\('OS gravada, mas a confirmação do diagnóstico falhou/)
+  assert.doesNotMatch(maqApp, /if\(error\)\s*\{?\s*return\s*\}?\s*\n\s*\/\/ falha aqui não invalida/)
 })
 
 test('o modal de OS tem o bloco de diagnóstico e ele nasce escondido', () => {
