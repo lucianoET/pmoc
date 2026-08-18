@@ -865,3 +865,60 @@ pode cobrir o mapa inteiro nem sair da tela.
 **Não regressão** (critério de sucesso 5): repetir os itens 1 a 4 em `/maquinas` e `/transportes`
 e confirmar que estão **iguais ao que já eram** — inclusive o kanban e o calendário do
 `/maquinas`, que rolam na horizontal por desenho e continuam assim até a Fase 8.
+
+---
+
+## Fase 10 — UAT do mapa operacional (2026-08-18)
+
+A migração `supabase/25_mapa_geometria_posicao.sql` **rodou em produção**. Conferido contra o banco
+real (projeto `pmoc`, `thoaqipyhfmromsgzmjs`):
+
+### Schema — ✅
+
+| Item | Esperado | Encontrado |
+|------|----------|------------|
+| Colunas de posição (`lat`/`lon`) | 6 tabelas × 2 | 12 (`cmasm_locais`, `maq_ativos`, `transp_ativos`, `elet_ativos`, `fono_ativos`, `equipamentos`), todas `double precision` |
+| `maq_areas.geom` | `jsonb` | `jsonb` |
+| Atributos de terreno | 3 listas fechadas | `flora` (gramado/capim_colonial/mata_fechada), `inclinacao` (plano/moderado/acentuado), `limpeza` (limpa/media/densa) |
+| Envelope geográfico | 1 check por tabela, lat e lon num `AND` só | 6 × `*_posicao_envelope_chk`, `-23.2/-22.5` e `-43.5/-42.7` |
+| Par completo | 1 check por tabela | 6 × `*_posicao_par_chk`, `num_nulls(lat,lon) <> 1` |
+
+### Leitura no app — ✅
+
+`/mapa` com sessão de técnico, servido localmente:
+
+- Módulo autentica, monta o shell e instancia o Leaflet
+- Lista de "não localizados" traz **41 ativos** — 28 de Máquinas e 13 de Elétrica, batendo com
+  `count(*)` das duas tabelas
+- `mapa/planta-cmasm.geojson` carrega (200); os tiles raster locais dão 404 e o mapa cai para o
+  basemap online — **comportamento projetado**, não falha (D-02 e `mapa/tiles/GERAR-TILES.md`)
+- Modo "Mover ativos" aparece para o técnico; o editor de zona **não** aparece — espelha
+  `CARGOS_ZONA` (admin/gestor) contra `CARGOS_POSICAO` (admin/gestor/técnico), como projetado
+
+### Escrita — ⏳ não exercitada
+
+Nenhuma gravação foi feita. Duas razões independentes, nenhuma delas do código:
+
+1. O painel de navegador desta sessão não compõe quadros — sem captura de tela não há clique por
+   coordenada, e a barra lateral não aparece na árvore de acessibilidade
+2. Escrita direta em produção foi barrada pela política de permissão da sessão
+
+**Fica para o usuário**, no `/mapa` em produção, com cargo de escrita:
+
+- [ ] Posicionar um ativo pela lista de "não localizados" e recarregar a página — ele volta no
+      mesmo lugar
+- [ ] Reposicionar esse mesmo ativo e conferir que a posição nova substitui a antiga
+- [ ] Com cargo admin ou gestor, desenhar uma zona, escolher flora/inclinação/limpeza e conferir
+      a área em m² e a lista de máquinas compatíveis; recarregar e ver o polígono voltar igual
+- [ ] Com o cargo Livre (observador), confirmar que nenhum dos dois modos aparece
+
+### Estado dos dados — 0 posições
+
+311 `cmasm_locais`, 28 `maq_ativos`, 43 `transp_ativos`, 13 `elet_ativos`, 10 `fono_ativos` e 171
+`equipamentos`: **nenhum com `lat`/`lon`**. `maq_areas` sem zonas. O mapa abre vazio até alguém
+posicionar.
+
+A planta vetorial não resolve isso: o extrato OSM nomeia 12 feições (CON, CB01-03, CIE, CAV, CBIF,
+ETE, os dois cais) e nenhuma casa com os nomes de edificação do `cmasm_locais` (COMANDO, F21,
+MK48, EXOCET…). Popular `cmasm_locais.lat`/`lon` — que posicionaria os 265 ativos de uma vez pela
+camada herdada — depende de coordenadas reais dos prédios, que não estão em nenhuma fonte do repo.
