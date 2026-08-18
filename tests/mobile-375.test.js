@@ -129,12 +129,18 @@ test('toda tabela dos módulos no escopo nasce dentro de .tbl-wrap', () => {
 // abas fica onde está e o alcance do polegar é resolvido por área de toque.
 test('a faixa de abas não vira barra fixa inferior', () => {
   const css = ler(FOLHA)
-  const regraNav = css.match(/\.nav\{[^}]*\}/)
-  assert.ok(regraNav, 'shared/pmoc.css precisa continuar declarando .nav')
-  assert.ok(
-    !/position:\s*fixed/.test(regraNav[0]),
-    'D-01 da Fase 7: a faixa de abas permanece no topo, rolando na horizontal — não vira barra fixa',
-  )
+  // Todas as regras `.nav{...}`, não só a primeira: a folha declara `.nav` fora
+  // e dentro da faixa de celular, e olhar só a de fora deixaria a segunda livre
+  // para virar barra fixa sem o gate perceber.
+  const regrasNav = [...css.matchAll(/\.nav\{([^}]*)\}/g)]
+  assert.ok(regrasNav.length > 0, 'shared/pmoc.css precisa continuar declarando .nav')
+
+  for (const [, corpo] of regrasNav) {
+    assert.ok(
+      !/position:\s*fixed/.test(corpo),
+      'D-01 da Fase 7: a faixa de abas permanece no topo, rolando na horizontal — não vira barra fixa',
+    )
+  }
 
   const shell = ler(path.join(RAIZ, 'shared', 'shell.js'))
   assert.ok(
@@ -177,7 +183,14 @@ test('maquinas mantém a própria @media', () => {
 
 // ── PLAT-15: refrigeracao congelada ───────────────────────────────────────
 test('nenhum arquivo tocado pela Fase 7 referencia refrigeracao/', () => {
-  const tocados = [FOLHA, path.join(RAIZ, 'mapa', 'index.html')]
+  // Os três arquivos que a Fase 7 de fato alterou — shared/auth.js inclusive,
+  // que subiu os campos do login para 16px e ficou de fora desta lista na
+  // primeira versão do gate.
+  const tocados = [
+    FOLHA,
+    path.join(RAIZ, 'shared', 'auth.js'),
+    path.join(RAIZ, 'mapa', 'index.html'),
+  ]
   for (const arquivo of tocados) {
     const texto = ler(arquivo)
     const relativo = path.relative(RAIZ, arquivo)

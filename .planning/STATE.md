@@ -5,7 +5,7 @@ milestone_name: Consolidação da plataforma
 current_phase: 7
 current_phase_name: ui-ux-mobile
 status: verifying
-stopped_at: Completed 07-01-PLAN.md — Fase 7 (UI/UX mobile) executada; Fase 10 aguarda a migração 25 rodar em produção para o UAT
+stopped_at: Completed 07-01-PLAN.md — Fase 7 (UI/UX mobile) executada; migração 25 rodou e o UAT de leitura da Fase 10 passou, falta exercitar a escrita no app
 last_updated: "2026-08-18T13:30:00.000Z"
 last_activity: 2026-08-18
 last_activity_desc: Módulo Reparos entregue fora do fluxo de fases (164 testes verdes; migrações 26-28 em produção)
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 7 (ui-ux-mobile) — EXECUTED
 Plan: 1 of 1
-Status: Fase 7 completa. Fase 10 completa, mas o UAT dela está bloqueado até a migração 25 rodar em produção
-Last activity: 2026-08-18 — Fase 7 executada
+Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
+Last activity: 2026-08-18 — Fase 7 executada; UAT da Fase 10 registrado; módulo Reparos entregue fora do fluxo de fases
 
 Progress: [██████████] 100% (v2.0)
 
