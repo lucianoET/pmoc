@@ -6,9 +6,9 @@ current_phase: 7
 current_phase_name: ui-ux-mobile
 status: verifying
 stopped_at: Completed 07-01-PLAN.md — Fase 7 (UI/UX mobile) executada; migração 25 rodou e o UAT de leitura da Fase 10 passou, falta exercitar a escrita no app
-last_updated: "2026-08-18T13:30:00.000Z"
+last_updated: "2026-08-18T21:56:34.000Z"
 last_activity: 2026-08-18
-last_activity_desc: Módulo Reparos entregue fora do fluxo de fases (164 testes verdes; migrações 26-28 em produção)
+last_activity_desc: Quick task 260818-pzq — Reparos alcançado de dentro do Máquinas, categoria Tobata, ficha com vencimentos (227 testes verdes)
 progress:
   total_phases: 8
   completed_phases: 4
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 7 (ui-ux-mobile) — EXECUTED
 Plan: 1 of 1
 Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
-Last activity: 2026-08-18 — Fase 7 executada; UAT da Fase 10 registrado; módulo Reparos entregue fora do fluxo de fases
+Last activity: 2026-08-18 — Quick task 260818-pzq concluída: Reparos alcançado de dentro do Máquinas, categoria Tobata, vencimentos na ficha e abas unificadas (10→8)
 
 Progress: [██████████] 100% (v2.0)
 
@@ -202,9 +202,10 @@ painel) segue pendente.
 | 2026-08-10 | renumera-migracoes-fase1 | Migrações da Fase 1 renumeradas de 14/15 para 22/23 (14 e 15 já ocupados por elétrica/fonoclama) |
 | 2026-08-10 | importar-csv-programacao-vtr-emb-em-transportes | Módulo /mapa portado do legado cmms-mapa (Leaflet + xMap) no padrão pmoc, roteado no vercel.json e no portal; import do CSV VTR/EMB já concluído, apenas consulta de conferência documentada em TESTES.md |
 | 2026-08-11 | importar-modulo-calibracao | App legado de calibração (single-file, localStorage, sem Supabase) copiado como módulo independente em /calibracao com assets próprios; rewrite no vercel.json e card ativado no portal — sem unificação com shared/ nem locais (commits 240cfa6, eb1e342) |
+| 2026-08-18 | 260818-pzq-reparos-link-sai-do-portal-e-entra-no-m | Reparos sai do portal e é alcançado de dentro do Máquinas (âncora no cabeçalho da view de OS); categoria Tobata nos dois selects de máquinas; faixa de abas cai de 10 para 8 — Vencimentos vira seção da aba Máquinas e Operações vira seção da aba OS; ficha da máquina ganha bloco de manutenções derivado de calcVencimentos(); node --test 227/227 (commits d0d1b9c, 7630212, 7564dbe) |
 
 ## Session Continuity
 
-Last session: 2026-08-12T10:26:24.909Z
-Stopped at: Completed 10-08-PLAN.md — Fase 10 (mapa operacional) fechada
+Last session: 2026-08-18T21:56:34.000Z
+Stopped at: Completed quick task 260818-pzq-reparos-link-sai-do-portal-e-entra-no-m — Reparos alcançado de dentro do Máquinas, categoria Tobata e ficha da máquina com vencimentos
 Resume file: None
