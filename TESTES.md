@@ -838,3 +838,30 @@ base-offline.test.js` (10 casos, plano 10-04, PLAT-19/D-02), `tests/mapa-camadas
 casos, plano 10-05, porta única de dados), `tests/mapa-editor.test.js` (8 casos, plano 10-06,
 cargo de zona) e `tests/mapa-posicionamento.test.js` (8 casos, plano 10-07, cargo de posição e
 envelope) — 9+23+4+7+10+8+8+8 = 77).
+
+---
+
+## Fase 7 — UI/UX mobile (roteiro manual de 375 px)
+
+O gate `tests/mobile-375.test.js` prova o que se lê no texto dos arquivos: medida, tamanho de
+fonte e onde a tabela está. **Ausência de rolagem horizontal em 375 px não se prova assim** — o
+repo é zero-build, sem npm e sem navegador controlável (D-03 da fase). Esta é a metade humana.
+
+Abrir cada módulo com a janela em **375 px de largura** (DevTools → iPhone SE, ou
+`python -m http.server` e o navegador do celular na rede local).
+
+| # | Verificar | `/eletrica` | `/fonoclama` | `/predial` | `/mapa` |
+|---|-----------|-------------|--------------|------------|---------|
+| 1 | A página **não** rola na horizontal (só na vertical) | ☐ | ☐ | ☐ | ☐ |
+| 2 | Tabela larga rola **dentro do quadro**, sem empurrar a página | ☐ | ☐ | ☐ | n/a |
+| 3 | Abrir um modal, preencher e salvar **sem o navegador dar zoom** ao focar o campo | ☐ | ☐ | ☐ | ☐ |
+| 4 | As abas do topo são alcançáveis e rolam na horizontal quando não cabem | ☐ | ☐ | ☐ | n/a |
+| 5 | A barra superior cabe na tela (o link "← Portal" some; o rodapé mantém o mesmo link) | ☐ | ☐ | ☐ | ☐ |
+| 6 | Nos dois temas (claro e escuro) tudo continua legível | ☐ | ☐ | ☐ | ☐ |
+
+Específico do `/mapa`: abrir a barra de módulos e o painel do editor de zona — nenhum dos dois
+pode cobrir o mapa inteiro nem sair da tela.
+
+**Não regressão** (critério de sucesso 5): repetir os itens 1 a 4 em `/maquinas` e `/transportes`
+e confirmar que estão **iguais ao que já eram** — inclusive o kanban e o calendário do
+`/maquinas`, que rolam na horizontal por desenho e continuam assim até a Fase 8.

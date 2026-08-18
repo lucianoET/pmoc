@@ -144,3 +144,32 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
 
 @media(max-width:900px){.section-split{grid-template-columns:1fr}}
 @media(max-width:700px){.fgrid,.fgrid3{grid-template-columns:1fr}.kpi-row{grid-template-columns:1fr 1fr}}
+
+/* ── celular (Fase 7) ──
+   Faixa estreita de verdade: 375 px é o alvo da fase (o menor aparelho realista
+   de uso em campo). Só medida, espaçamento e tamanho de fonte — nenhuma cor, para
+   as duas regras de tema continuarem valendo sem exceção.
+
+   Duas escolhas que parecem arbitrárias sem explicação:
+   · 16px nos campos não é gosto — abaixo disso o navegador do iOS aplica zoom
+     automático ao focar o campo, e o usuário perde o enquadramento da tela no
+     meio do preenchimento.
+   · o link do portal sai da barra superior porque ele já existe no rodapé do
+     shell; em 375 px cinco elementos na barra estouram a largura, e este é o
+     único que está duplicado.
+
+   A faixa de abas continua no topo e rolando na horizontal (D-01 da fase): o que
+   muda é a área de toque, que sobe para 44 px, não o lugar da navegação. */
+@media(max-width:480px){
+  input,select,textarea{font-size:16px}
+  .topbar{height:auto;min-height:52px;padding:8px 12px;flex-wrap:wrap;gap:8px}
+  .topbar-back{display:none}
+  .nav{padding:0 12px}
+  .nav-btn{padding:12px 14px;min-height:44px}
+  .main{padding:16px 12px}
+  .kpi-row{grid-template-columns:1fr}
+  .overlay{padding:8px}
+  .modal{max-height:94vh}
+  .modal-hd,.modal-ft{padding:12px 14px}
+  .modal-body{padding:14px}
+}
