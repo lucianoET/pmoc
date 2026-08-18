@@ -93,3 +93,25 @@ test('a ficha mostra as últimas OS, os últimos usos e as operações agendadas
   assert.match(bloco[1], /OPERACOES\.filter\(o => o\.ativo_id === id && \['programada','em_execucao'\]\.includes\(o\.status\)\)/)
   assert.match(bloco[1], /abrirDetalheOS\('\$\{o\.id\}'\)/, 'a OS listada na ficha abre o próprio detalhe')
 })
+
+// ── vencimentos na ficha (18/08/2026) ──────────────────────────────────────
+// Decisão: a ficha mostra o que está vencido/próximo daquela máquina sem
+// trocar de aba. abrirFichaAtivo() não repete a conta de vencimento — ela já
+// existe em calcVencimentos() (usada pela seção "Vencimentos de manutenção"
+// e pelo popup abrirVencMaquina) — só filtra o resultado pelo ativo da ficha.
+test('a ficha tem o contêiner de manutenções e o botão para o popup de itens', () => {
+  assert.match(HTML, /id="ficha-vencimentos-wrap"/)
+  assert.match(HTML, /id="ficha-vencimentos"/)
+  assert.match(HTML, /id="ficha-btn-venc"/)
+})
+
+test('abrirFichaAtivo deriva os vencimentos filtrando calcVencimentos() pelo ativo, sem repetir a conta', () => {
+  const bloco = APP.match(/function abrirFichaAtivo\(id\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco)
+  assert.match(bloco[1], /calcVencimentos\(\)\.filter\(i => i\.ativo\.id === id\)/,
+    'a ficha reaproveita calcVencimentos() em vez de recalcular vencimento')
+  assert.match(bloco[1], /ficha-vencimentos-wrap/)
+  assert.match(bloco[1], /document\.getElementById\('ficha-vencimentos'\)\.innerHTML/)
+  assert.match(bloco[1], /abrirVencMaquina\(id\)/,
+    'o botão da ficha leva ao popup de itens já existente, não a uma tela nova')
+})

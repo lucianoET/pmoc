@@ -16,7 +16,6 @@ test('carrega o domínio antes da aplicação', () => {
 
 test('expõe operações, agenda e os três formulários do fluxo', () => {
   for (const trecho of [
-    'id="view-operacoes"',
     'id="view-agenda"',
     'id="operacoes-kanban"',
     'id="agenda-calendario"',
@@ -26,10 +25,24 @@ test('expõe operações, agenda e os três formulários do fluxo', () => {
   ]) assert.match(html, new RegExp(trecho))
   // Desde a Fase 5 Plano 6, a faixa de abas (com data-view) é gerada em
   // tempo de execução por shared/shell.js (aplicarShell), não é mais
-  // markup estático em maquinas/index.html — a exposição de operações e
-  // agenda passa a ser verificada pela configuração de abas em app.js.
-  assert.match(app, /id:\s*'operacoes'/)
+  // markup estático em maquinas/index.html — a exposição de agenda passa a
+  // ser verificada pela configuração de abas em app.js.
+  //
+  // Decisão (18/08/2026): Operações deixou de ter view/aba própria — passou
+  // a ser seção dentro da aba OS (operação é execução de serviço, pertence
+  // onde o serviço já é acompanhado). A configuração de abas não declara
+  // mais nem 'operacoes' nem 'vencimentos' (esta virou seção da aba
+  // Máquinas). Uma fase futura não deve devolver nenhuma das duas à faixa.
+  assert.doesNotMatch(app, /id:\s*'operacoes'/)
+  assert.doesNotMatch(app, /id:\s*'vencimentos'/)
   assert.match(app, /id:\s*'agenda'/)
+
+  const inicioOs = html.indexOf('id="view-os"')
+  const fimOs = html.indexOf('id="view-agenda"')
+  assert.ok(inicioOs >= 0 && fimOs > inicioOs, 'view-os precisa existir e vir antes de view-agenda')
+  const blocoOs = html.slice(inicioOs, fimOs)
+  assert.match(blocoOs, /id="operacoes-kanban"/,
+    'a marcação de operações precisa estar dentro do bloco da view de OS')
 })
 
 test('carrega áreas e operações e conclui por RPC', () => {

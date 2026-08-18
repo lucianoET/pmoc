@@ -156,11 +156,10 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <tbody id="tb-ativos"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
-    </div>
 
-    <!-- VENCIMENTOS -->
-    <div class="view" id="view-vencimentos">
-      <div class="view-title">Vencimentos de manutenção</div>
+      <!-- Vencimentos passou a ser seção desta aba, não aba própria (18/08/2026):
+           vencimento é atributo da máquina, então vive onde a máquina já está. -->
+      <h3 class="section-spaced">Vencimentos de manutenção</h3>
       <div class="view-sub">Máquinas com planos próximos do vencimento ou já vencidos</div>
       <div id="venc-content"><div class="empty"><div class="empty-ico">📅</div><p>Carregando...</p></div></div>
     </div>
@@ -198,12 +197,12 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <tbody id="tb-os"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
-    </div>
 
-    <!-- OPERAÇÕES -->
-    <div class="view" id="view-operacoes">
+      <!-- Operações passou a ser seção desta aba, não aba própria (18/08/2026):
+           operação é execução de serviço — pertence à aba onde já se abre e
+           acompanha OS. -->
       <div class="view-head">
-        <div class="view-title">Operações de serviço</div>
+        <h3 class="section-spaced">Operações de serviço</h3>
         <div class="ops-actions">
           <button class="btn btn-s btn-sm" id="btn-nova-area" onclick="abrirModalArea()">+ Área</button>
           <button class="btn btn-p btn-sm" id="btn-nova-operacao" onclick="abrirModalOperacao()">+ Operação</button>
@@ -549,11 +548,16 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="section-row">
         <button class="btn btn-p btn-sm" id="ficha-btn-uso">Registrar uso</button>
         <button class="btn btn-p btn-sm" id="ficha-btn-os">Abrir OS</button>
+        <button class="btn btn-p btn-sm" id="ficha-btn-venc">Vencimentos</button>
         <button class="btn btn-s btn-sm" id="ficha-btn-cadastro">Editar cadastro</button>
       </div>
       <div class="frow" id="ficha-instrucoes-wrap" style="display:none">
         <label>Instruções</label>
         <div id="ficha-instrucoes" class="panel-card" style="font-size:12px;color:var(--text2);white-space:pre-wrap"></div>
+      </div>
+      <div class="frow" id="ficha-vencimentos-wrap" style="display:none">
+        <label>Manutenções</label>
+        <div id="ficha-vencimentos" class="stack"></div>
       </div>
       <div class="frow" id="ficha-operacoes-wrap" style="display:none">
         <label>Operações agendadas</label>

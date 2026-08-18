@@ -2047,6 +2047,27 @@ function abrirFichaAtivo(id){
   insWrap.style.display = ativo.instrucoes ? '' : 'none'
   document.getElementById('ficha-instrucoes').textContent = ativo.instrucoes || ''
 
+  // vencimentos da própria máquina — reaproveita calcVencimentos() em vez de
+  // repetir a conta; já vem ordenado por pct decrescente, o pior primeiro
+  const itensFicha = calcVencimentos().filter(i => i.ativo.id === id)
+  const vencWrap = document.getElementById('ficha-vencimentos-wrap')
+  vencWrap.style.display = itensFicha.length ? '' : 'none'
+  document.getElementById('ficha-vencimentos').innerHTML = itensFicha.slice(0, 5).map(v => {
+    const cor = v.pct >= 100 ? 'var(--red)' : v.pct >= 80 ? 'var(--yellow)' : 'var(--green)'
+    const situacao = v.pct >= 100
+      ? `<span class="badge b-red">VENCIDO — ${Math.abs(v.falta).toFixed(0)} ${esc(v.plano.unidade)} atrás</span>`
+      : `<span class="badge ${v.pct>=80?'b-warn':'b-ok'}">Falta ${v.falta.toFixed(0)} ${esc(v.plano.unidade)}</span>`
+    return `<div class="panel-card">
+      <div class="hi" style="font-size:13px;color:var(--text);font-weight:500">${esc(v.plano.nome)}</div>
+      <div style="font-size:12px;color:var(--text3);margin:2px 0 6px">a cada ${v.plano.intervalo} ${esc(v.plano.unidade)}</div>
+      <div class="uso-bar-wrap"><div class="uso-bar" style="width:${Math.min(100,v.pct)}%;background:${cor}"></div></div>
+      <div style="margin-top:6px">${situacao}</div>
+    </div>`
+  }).join('')
+  const btnVenc = document.getElementById('ficha-btn-venc')
+  btnVenc.style.display = itensFicha.length ? '' : 'none'
+  btnVenc.onclick = () => { fecharModal('modal-ficha'); abrirVencMaquina(id) }
+
   // operações agendadas para esta máquina (programadas e em execução)
   const operacoes = OPERACOES.filter(o => o.ativo_id === id && ['programada','em_execucao'].includes(o.status))
   const opWrap = document.getElementById('ficha-operacoes-wrap')
@@ -2429,12 +2450,13 @@ async function boot(){
     nome: 'Máquinas',
     accent: '#c9a84c',
     versao: '1.0',
+    // Vencimentos e Operações saíram da faixa de abas (18/08/2026): vencimento
+    // é atributo da máquina e operação é execução de serviço — cada uma passa
+    // a ser seção da aba onde já se estava trabalhando (Máquinas e OS).
     navItems: [
       { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
       { id: 'ativos', icone: '🔧', label: 'Máquinas' },
-      { id: 'vencimentos', icone: '📅', label: 'Vencimentos' },
       { id: 'os', icone: '📋', label: 'OS' },
-      { id: 'operacoes', icone: '▶', label: 'Operações' },
       { id: 'agenda', icone: '▦', label: 'Agenda' },
       { id: 'materiais', icone: '📦', label: 'Estoque' },
       { id: 'consumo', icone: '⛽', label: 'Consumo' },
