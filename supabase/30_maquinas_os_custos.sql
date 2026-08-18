@@ -13,7 +13,10 @@
 -- pode mudar de custo porque o catálogo foi reajustado em setembro. A FK diz
 -- de onde veio; a coluna de valor diz por quanto saiu.
 --
--- Aplicada em produção: (preencher a data ao rodar)
+-- Aplicada em produção: 18/08/2026 — conferida contra o banco: as três tabelas
+-- com a forma exata, 7 constraints em maq_os_materiais (inclusive o unique e o
+-- check de origem), 6 em maq_os_servicos (inclusive o identificacao_chk), RLS
+-- ligado nas três com as 6 políticas, e valor_hora_padrao em null.
 -- ══════════════════════════════════════════════════════════════════
 
 -- ── Peças consumidas na OS ──

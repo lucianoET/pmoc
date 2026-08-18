@@ -1111,22 +1111,23 @@ Máquinas: `/maquinas`, `/transportes`, `/eletrica`, `/fonoclama`, `/predial` e 
 
 ## Custos da OS — peças e serviços (18/08/2026)
 
-### Migração 30 — pendente de aplicação
+### Migração 30 — aplicada em 18/08/2026 ✅
 
-`supabase/30_maquinas_os_custos.sql` **ainda não rodou**. Rodar no SQL Editor do projeto `pmoc`.
-Cria `maq_os_materiais`, `maq_os_servicos` e `maq_config`.
+`supabase/30_maquinas_os_custos.sql` rodou em produção. Conferida a **forma**, não só a existência:
 
-Verificado no navegador **sem** a migração: 28 máquinas carregaram, o detalhe da OS abriu com as
-duas listas vazias e os custos em zero. Nada quebra — o módulo só mostra menos.
+| Item | Encontrado |
+|------|------------|
+| `maq_os_materiais` | 7 colunas; 7 constraints — PK, FK `os_id` (cascade), FK `material_id`, unique `(os_id, material_id)`, checks de `origem`, `preco_unit` e `quantidade` |
+| `maq_os_servicos` | 7 colunas; 6 constraints — PK, FKs, checks de `horas` e `valor_hora`, e o `identificacao_chk` (serviço do catálogo **ou** descrição) |
+| `maq_config` | 4 colunas, com a linha `valor_hora_padrao` |
+| RLS | ligado nas três tabelas, com as 6 políticas |
+| `valor_hora_padrao` | `null` — ainda não informado, como projetado |
+| Linhas | 0 nas duas listas |
 
-Depois de aplicar, conferir a forma (não só a existência — a lição da migração 28):
+As três consultas que o app faz (com os joins de `maq_materiais` e `rep_servicos`) respondem 200.
 
-```sql
-select table_name, count(*) from information_schema.columns
- where table_schema='public' and table_name in ('maq_os_materiais','maq_os_servicos','maq_config')
- group by table_name;
-select valor from maq_config where chave='valor_hora_padrao';   -- null, ainda não informado
-```
+O módulo foi verificado nos **dois** estados: antes da migração, com as listas vazias e custos em
+zero, e depois dela, com as tabelas na carga.
 
 ### Cálculo conferido na tela
 
