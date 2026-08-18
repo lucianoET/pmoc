@@ -1152,3 +1152,53 @@ zero, e depois dela, com as tabelas na carga.
       diagnóstico foi debitada **uma vez só**
 - [ ] Reajustar o preço de um material no estoque e conferir que uma OS já fechada **não** mudou de
       custo
+
+---
+
+## Fluxo de oficina na OS (18/08/2026, noite)
+
+### Migração 31 — pendente de aplicação
+
+`supabase/31_maquinas_os_fluxo.sql` **ainda não rodou**. Ela troca o check de `maq_os.status`
+(primeira troca de trava do projeto — nada é removido, a lista só cresce) e adiciona
+`delineado_por`/`delineado_em`.
+
+**Atenção — a tolerância aqui é diferente das migrações 26/29/30:** não é tabela nova, é trava
+alargada. Sem a 31, avançar uma OS para *Delineamento* ou *Em espera* falha com o alerta cru do
+check constraint. Todo o resto (abrir, executar, concluir, listas, custos) continua funcionando.
+
+Depois de aplicar, conferir:
+
+```sql
+select pg_get_constraintdef(oid) from pg_constraint where conname='maq_os_status_check';
+-- deve listar os 6 estados: pendente, delineamento, espera, em_andamento, concluida, cancelada
+select column_name from information_schema.columns
+ where table_name='maq_os' and column_name like 'delineado%';   -- 2 linhas
+```
+
+### O fluxo
+
+| Etapa | Status | O que acontece |
+|-------|--------|----------------|
+| Recepção | `pendente` (Aberta) | OS criada; quem entregou a máquina vai nas observações |
+| Delineamento | `delineamento` | técnico lança materiais e serviços na OS; ao encerrar, grava quem e quando |
+| Espera | `espera` | aguardando material ou técnico; a lista de OS sinaliza ⚠ quando falta peça |
+| Execução | `em_andamento` | **estoque desce aqui** (com confirmação) |
+| Conclusão | `concluida` | sem nova baixa — a guarda de idempotência lê `maq_estoque_movimentos` |
+
+### Conferido no navegador (cargo Livre, sem a migração 31)
+
+- Coluna **Material** na lista de OS (⚠ falta N / EM ESTOQUE / —) ✅
+- Filtro de situações com a opção "⚠ Com falta de material" ✅ (as 4 OS existentes estão
+  concluídas, então o filtro devolve o estado vazio correto)
+- 212 testes em `node --test`, zero falhas
+
+### Fica para o usuário (depois da migração 31, logado com cargo de escrita)
+
+- [ ] Abrir OS corretiva (recepção) → Delinear → lançar 2 peças e 1 serviço no detalhe →
+      Encerrar delineamento → conferir `delineado_por`/`delineado_em` no cabeçalho do detalhe
+- [ ] Com a OS em espera, conferir o ⚠ na lista se alguma peça não tem estoque
+- [ ] Iniciar execução → conferir que o estoque **desceu agora** e que `maq_estoque_movimentos`
+      tem as saídas com o `os_id`
+- [ ] Concluir → conferir que **não** houve segunda baixa (idempotência)
+- [ ] Filtrar por "⚠ Com falta de material" e ver só as OS travadas por peça

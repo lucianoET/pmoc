@@ -171,13 +171,25 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
       </div>
       <div class="view-sub">Clique numa OS para ver o detalhe, editar e exportar</div>
+      <div class="filters-inline">
+        <select id="filtro-os" onchange="renderOS()" class="control-auto">
+          <option value="">Todas as situações</option>
+          <option value="falta">⚠ Com falta de material</option>
+          <option value="pendente">Abertas</option>
+          <option value="delineamento">Em delineamento</option>
+          <option value="espera">Em espera</option>
+          <option value="em_andamento">Em execução</option>
+          <option value="concluida">Concluídas</option>
+          <option value="cancelada">Canceladas</option>
+        </select>
+      </div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
             <th>Data</th><th>Máquina</th><th>Tipo</th><th>Serviço</th>
-            <th>Técnico</th><th>Status</th><th>Ações</th>
+            <th>Material</th><th>Técnico</th><th>Status</th><th>Ações</th>
           </tr></thead>
-          <tbody id="tb-os"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <tbody id="tb-os"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -383,18 +395,21 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <input type="date" id="os-data"/>
         </div>
       </div>
-      <!-- Situação da OS. Até aqui toda OS nascia concluída, o que impedia
-           registrar serviço que foi aberto e ainda não terminou. A baixa de
-           estoque e a atualização do horímetro acontecem na CONCLUSÃO, não na
-           abertura — uma OS aberta que já debitou peça mentiria o estoque. -->
+      <!-- Situação da OS — o fluxo da oficina: aberta (recepção; quem entregou
+           a máquina vai nas observações) → delineamento (diagnóstico) → espera
+           (aguardando material ou técnico) → execução → concluída. A baixa de
+           estoque acontece no INÍCIO DA EXECUÇÃO — uma OS em espera que já
+           debitou peça mentiria o estoque. -->
       <div class="frow">
         <label>Situação *</label>
         <select id="os-status">
-          <option value="pendente">Aberta</option>
+          <option value="pendente">Aberta (recepção)</option>
+          <option value="delineamento">Em delineamento</option>
+          <option value="espera">Em espera</option>
           <option value="em_andamento">Em execução</option>
           <option value="concluida">Concluída</option>
         </select>
-        <div class="help" id="os-status-ajuda">Peças e horímetro só são baixados quando a OS for concluída.</div>
+        <div class="help" id="os-status-ajuda">As peças são descontadas do estoque quando a execução inicia.</div>
       </div>
       <div class="frow" id="os-plano-wrap">
         <label>Plano de manutenção</label>
@@ -664,7 +679,9 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <div class="frow">
           <label>Situação</label>
           <select id="osd-status">
-            <option value="pendente">Aberta</option>
+            <option value="pendente">Aberta (recepção)</option>
+            <option value="delineamento">Em delineamento</option>
+            <option value="espera">Em espera</option>
             <option value="em_andamento">Em execução</option>
             <option value="concluida">Concluída</option>
             <option value="cancelada">Cancelada</option>

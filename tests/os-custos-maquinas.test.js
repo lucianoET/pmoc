@@ -124,12 +124,18 @@ test('a mesma peça não é debitada duas vezes quando está no plano e no diagn
     'peça repetida soma quantidade em vez de virar duas linhas de baixa')
 })
 
-test('a conclusão debita a lista da OS, com fallback para as OS anteriores à migração 30', () => {
-  const bloco = APP.match(/async function concluirOS\(id\)\{([\s\S]*?)\n\}/)
-  assert.ok(bloco)
-  assert.match(bloco[1], /const daOS = OS_MATERIAIS\.filter\(m => m\.os_id === id\)/)
-  assert.match(bloco[1], /daOS\.length\s*\n?\s*\? daOS\s*\n?\s*: pecasPrevistasDaOS\(/,
+test('a baixa sai da lista da própria OS, com fallback para as OS anteriores à migração 30', () => {
+  // a lógica lista-da-OS-ou-previsão mora em pecasParaBaixa, usada por todos
+  // os caminhos que debitam
+  const helper = APP.match(/function pecasParaBaixa\(os\)\{([\s\S]*?)\n\}/)
+  assert.ok(helper, 'maquinas/app.js deveria declarar pecasParaBaixa')
+  assert.match(helper[1], /const daOS = OS_MATERIAIS\.filter\(m => m\.os_id === os\.id\)/)
+  assert.match(helper[1], /daOS\.length\s*\n?\s*\? daOS\s*\n?\s*: pecasPrevistasDaOS\(/,
     'OS gravada antes da migração 30 não tem lista — a previsão é resolvida na hora para ela não ficar sem baixa')
+
+  const conclui = APP.match(/async function concluirOS\(id\)\{([\s\S]*?)\n\}/)
+  assert.ok(conclui)
+  assert.match(conclui[1], /pecasParaBaixa\(os\)/)
 })
 
 // ── tolerância ────────────────────────────────────────────────────────────

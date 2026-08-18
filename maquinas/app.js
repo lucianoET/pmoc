@@ -242,7 +242,7 @@ function renderPainel(){
   document.getElementById('kpi-venc').textContent      = venc
   document.getElementById('kpi-estoque-baixo').textContent = baixo
 
-  const abertas = OS_LIST.filter(o => o.status === 'pendente' || o.status === 'em_andamento')
+  const abertas = OS_LIST.filter(o => !['concluida','cancelada'].includes(o.status))
   document.getElementById('kpi-os-abertas').textContent = abertas.length
 
   // O painel é resumo, não relatório: cada bloco mostra os primeiros itens e
@@ -552,13 +552,30 @@ function abrirOSDosItensMarcados(){
 }
 
 // ── OS ──
+// peças que faltam no estoque para uma OS que ainda não executou — é o sinal
+// de "necessidade de material" da lista. Depois que a execução começou (ou
+// terminou), a pergunta perde o sentido: as peças já saíram da prateleira.
+function faltasDaOS(os){
+  if(['em_andamento','concluida','cancelada'].includes(os.status)) return []
+  return pecasParaBaixa(os).filter(p => {
+    const mat = MATERIAIS.find(m => m.id === p.material_id)
+    return mat && Number(mat.estoque_atual) < Number(p.quantidade)
+  })
+}
+
 function renderOS(){
   const tbody = document.getElementById('tb-os')
-  if(!OS_LIST.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma OS registrada</td></tr>'
+  const filtro = document.getElementById('filtro-os')?.value || ''
+
+  let lista = OS_LIST
+  if(filtro === 'falta') lista = lista.filter(o => faltasDaOS(o).length > 0)
+  else if(filtro) lista = lista.filter(o => o.status === filtro)
+
+  if(!lista.length){
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma OS nesta situação</td></tr>'
     return
   }
-  tbody.innerHTML = OS_LIST.slice(0,100).map(o => {
+  tbody.innerHTML = lista.slice(0,100).map(o => {
     const itens = itensDaOS(o)
     // uma OS com vários itens mostra o primeiro e quantos mais existem, em vez
     // de uma célula quilométrica
@@ -566,11 +583,21 @@ function renderOS(){
       ? `${esc(itens[0].maq_planos?.nome || 'Item')} +${itens.length - 1}`
       : esc(itens[0]?.maq_planos?.nome || (o.tipo === 'uso' ? 'Registro de uso' : 'Corretiva'))
     const proxima = proximoStatus(o.status)
+
+    const faltas = faltasDaOS(o)
+    const pecas = pecasParaBaixa(o)
+    const material = ['em_andamento','concluida','cancelada'].includes(o.status) || !pecas.length
+      ? '<span style="color:var(--text3)">—</span>'
+      : faltas.length
+      ? `<span class="badge b-red" title="${esc(faltas.map(f => MATERIAIS.find(m => m.id === f.material_id)?.nome).filter(Boolean).join(', '))}">⚠ falta ${faltas.length}</span>`
+      : '<span class="badge b-ok">EM ESTOQUE</span>'
+
     return `<tr onclick="abrirDetalheOS('${o.id}')" style="cursor:pointer">
       <td>${esc(o.data_abertura||'—')}</td>
       <td class="hi">${esc(o.maq_ativos?.codigo||'?')} — ${esc(o.maq_ativos?.nome||'?')}</td>
       <td><span class="badge ${badgeTipoOS(o.tipo)}">${o.tipo.toUpperCase()}</span></td>
       <td>${servico}</td>
+      <td>${material}</td>
       <td>${esc(o.tecnico||'—')}</td>
       <td><span class="badge ${badgeStatusOS(o.status)}">${rotuloStatusOS(o.status)}</span></td>
       <td>${proxima
@@ -581,23 +608,28 @@ function renderOS(){
 }
 
 // ── ciclo de vida da OS ──
-// A lista fechada vem do banco (maq_os.status, migração 01). Estes rótulos são
-// só a tradução para a tela — o vocabulário do banco não muda.
+// A lista fechada vem do banco (maq_os.status, migração 01 alargada pela 31).
+// Estes rótulos são só a tradução para a tela — o vocabulário do banco não muda.
 const STATUS_OS = {
-  pendente:     { rotulo: 'ABERTA',      badge: 'b-warn' },
-  em_andamento: { rotulo: 'EM EXECUÇÃO', badge: 'b-blue' },
-  concluida:    { rotulo: 'CONCLUÍDA',   badge: 'b-ok'   },
-  cancelada:    { rotulo: 'CANCELADA',   badge: 'b-red'  },
+  pendente:     { rotulo: 'ABERTA',        badge: 'b-warn'   },
+  delineamento: { rotulo: 'DELINEAMENTO',  badge: 'b-accent' },
+  espera:       { rotulo: 'EM ESPERA',     badge: 'b-gold'   },
+  em_andamento: { rotulo: 'EM EXECUÇÃO',   badge: 'b-blue'   },
+  concluida:    { rotulo: 'CONCLUÍDA',     badge: 'b-ok'     },
+  cancelada:    { rotulo: 'CANCELADA',     badge: 'b-red'    },
 }
 
 function rotuloStatusOS(status){ return STATUS_OS[status]?.rotulo || String(status).toUpperCase() }
 function badgeStatusOS(status){ return STATUS_OS[status]?.badge || 'b-blue' }
 function badgeTipoOS(tipo){ return tipo==='preventiva'?'b-blue':tipo==='corretiva'?'b-red':'b-ok' }
 
-// próximo passo do fluxo aberta → execução → concluída. Cancelada e concluída
-// são estados finais: não há botão de avançar.
+// O fluxo da oficina: aberta (recepção) → delineamento (diagnóstico com
+// materiais e serviços lançados) → espera (aguardando material ou técnico) →
+// execução (estoque desce aqui) → concluída. Cancelada e concluída são finais.
 function proximoStatus(status){
-  if(status === 'pendente')     return { status: 'em_andamento', acao: 'Iniciar' }
+  if(status === 'pendente')     return { status: 'delineamento', acao: 'Delinear' }
+  if(status === 'delineamento') return { status: 'espera',       acao: 'Encerrar delineamento' }
+  if(status === 'espera')       return { status: 'em_andamento', acao: 'Iniciar execução' }
   if(status === 'em_andamento') return { status: 'concluida',    acao: 'Concluir' }
   return null
 }
@@ -608,8 +640,31 @@ async function avancarOS(id){
   if(!proxima) return
   if(proxima.status === 'concluida'){ await concluirOS(id); return }
 
-  const { error } = await supa.from('maq_os').update({ status: proxima.status }).eq('id', id)
+  const payload = { status: proxima.status }
+
+  // encerrar o delineamento registra quem diagnosticou e quando — é o que a
+  // oficina audita depois ("quem disse que precisava dessas peças?")
+  if(proxima.status === 'espera'){
+    const pecas = OS_MATERIAIS.filter(m => m.os_id === id)
+    const servicos = OS_SERVICOS.filter(s => s.os_id === id)
+    if(!pecas.length && !servicos.length &&
+       !confirm('Nenhum material ou serviço foi lançado no delineamento. Encerrar mesmo assim?')) return
+    payload.delineado_por = USUARIO?.nome || os.tecnico || null
+    payload.delineado_em = new Date().toISOString()
+  }
+
+  if(proxima.status === 'em_andamento' &&
+     !confirm('Iniciar a execução? Os materiais da OS serão descontados do estoque agora.')) return
+
+  const { error } = await supa.from('maq_os').update(payload).eq('id', id)
   if(error){ alert('Erro: ' + error.message); return }
+
+  // a baixa acontece no início da execução: a peça sai da prateleira quando o
+  // serviço começa, não quando termina
+  if(proxima.status === 'em_andamento'){
+    const reparo = os.reparo_id ? REPAROS.find(r => r.id === os.reparo_id) : null
+    await baixarPecasDaOS(id, pecasParaBaixa(os), reparo)
+  }
   await carregarTudo()
 }
 
@@ -1262,10 +1317,13 @@ async function salvarOS(){
   const horas_servico = servicosPrevistos.reduce((s, x) => s + x.horas, 0)
   const custo_mo = servicosPrevistos.reduce((s, x) => s + x.horas * Number(x.valor_hora || 0), 0)
 
-  // A OS nasce na situação escolhida. Só a concluída carrega data de conclusão
-  // e custo de peças: enquanto o serviço não terminou, não há peça consumida.
+  // A OS nasce na situação escolhida. Os custos são a previsão calculada das
+  // listas (o delineamento precisa exibir o valor antes de executar); a baixa
+  // de estoque, essa sim, só acontece quando a execução começa.
   const status = document.getElementById('os-status').value
   const concluida = status === 'concluida'
+  // nascer já executando (ou concluída) consome as peças na hora
+  const executando = status === 'em_andamento' || concluida
 
   // as colunas de reparo só entram no payload quando há diagnóstico: assim o
   // insert continua válido mesmo num banco onde a migração 26 não rodou
@@ -1274,8 +1332,7 @@ async function salvarOS(){
     data_abertura: data,
     data_conclusao: concluida ? data : null,
     uso_na_os, tecnico, descricao,
-    custo_pecas: concluida ? custo_pecas : 0,
-    custo_mo: concluida ? custo_mo : 0,
+    custo_pecas, custo_mo,
     horas_servico: horas_servico > 0 ? horas_servico : null,
     ...(reparo ? { reparo_id, sintoma_relatado: reparo.sintoma } : {}),
   }).select('id').single()
@@ -1312,10 +1369,13 @@ async function salvarOS(){
     })
   }
 
-  // A baixa de estoque só acontece na conclusão. Uma OS aberta que já debitou
-  // peça mentiria o estoque — a peça ainda está na prateleira.
-  if(concluida && osNova?.id){
+  // A baixa de estoque acontece quando a execução começa. Uma OS aberta, em
+  // delineamento ou em espera que já debitou peça mentiria o estoque — a peça
+  // ainda está na prateleira.
+  if(executando && osNova?.id){
     await baixarPecasDaOS(osNova.id, pecasPrevistas, reparo)
+  }
+  if(concluida && osNova?.id){
     await confirmarDiagnostico(osNova.id, reparo)
   }
 
@@ -1350,11 +1410,35 @@ function pecasPrevistasDaOS(planoIds, reparoId){
   return [...porMaterial.values()]
 }
 
-// ── baixa de peças — chamada na conclusão, venha ela de onde vier ──
-// Recebe a lista já resolvida. Está numa função só porque existem três
-// caminhos até a conclusão (criar já concluída, concluir pela lista, concluir
-// pelo detalhe) e os três precisam debitar exatamente do mesmo jeito.
+// ── peças de uma OS para efeito de baixa e de necessidade ──
+// A lista da própria OS é a fonte. Só quando a OS não tem lista — porque
+// nasceu antes da migração 30 — é que a previsão do plano e do diagnóstico é
+// resolvida na hora, para essas OS antigas não ficarem sem baixa.
+function pecasParaBaixa(os){
+  const daOS = OS_MATERIAIS.filter(m => m.os_id === os.id)
+    .map(m => ({ material_id: m.material_id, quantidade: Number(m.quantidade), preco_unit: m.preco_unit, origem: m.origem }))
+  return daOS.length
+    ? daOS
+    : pecasPrevistasDaOS(itensDaOS(os).map(i => i.plano_id).filter(Boolean), os.reparo_id)
+}
+
+// A baixa aconteceu se existe movimento de saída com o id desta OS. É o
+// registro do próprio estoque respondendo, não uma flag paralela que poderia
+// dessincronizar dele.
+async function estoqueJaBaixadoDaOS(osId){
+  const { data } = await supa.from('maq_estoque_movimentos')
+    .select('id').eq('os_id', osId).eq('tipo', 'saida').limit(1)
+  return !!(data && data.length)
+}
+
+// ── baixa de peças — no INÍCIO DA EXECUÇÃO, venha ele de onde vier ──
+// Recebe a lista já resolvida. Está numa função só porque vários caminhos
+// levam a executar (iniciar pela lista, criar já executando, mudar a situação
+// no detalhe, concluir OS antiga que nunca executou) e todos precisam debitar
+// exatamente do mesmo jeito. A guarda no topo torna a chamada idempotente:
+// quem concluir uma OS cujo estoque já desceu na execução não debita de novo.
 async function baixarPecasDaOS(osId, pecas, reparo){
+  if(await estoqueJaBaixadoDaOS(osId)) return
   for(const peca of pecas || []){
     const mat = MATERIAIS.find(m => m.id === peca.material_id)
     if(!mat || !(Number(peca.quantidade) > 0)) continue
@@ -1386,19 +1470,14 @@ async function confirmarDiagnostico(osId, reparo){
 async function concluirOS(id){
   const os = OS_LIST.find(o => o.id === id)
   if(!os) return
-  if(!confirm('Concluir a OS? As peças previstas serão baixadas do estoque agora.')) return
+  if(!confirm('Concluir a OS?')) return
 
   const hoje = new Date().toISOString().slice(0,10)
   const reparo = os.reparo_id ? REPAROS.find(r => r.id === os.reparo_id) : null
-
-  // As peças da própria OS são a fonte. Só quando a OS não tem lista — porque
-  // nasceu antes da migração 30 — é que a previsão do plano e do diagnóstico
-  // é resolvida na hora, para essas OS antigas não ficarem sem baixa.
-  const daOS = OS_MATERIAIS.filter(m => m.os_id === id)
-    .map(m => ({ material_id: m.material_id, quantidade: Number(m.quantidade), preco_unit: m.preco_unit, origem: m.origem }))
-  const pecas = daOS.length
-    ? daOS
-    : pecasPrevistasDaOS(itensDaOS(os).map(i => i.plano_id).filter(Boolean), os.reparo_id)
+  // se a OS seguiu o fluxo, o estoque já desceu no início da execução e a
+  // baixa abaixo vira no-op pela guarda; se ela pulou etapas (OS antiga,
+  // concluída direto), a baixa acontece agora
+  const pecas = pecasParaBaixa(os)
 
   const custoPecas = pecas.reduce((soma, p) => soma + Number(p.quantidade) * Number(p.preco_unit || 0), 0)
   const custoMO = custoMaoDeObraDaOS(id)
@@ -1439,6 +1518,7 @@ function abrirDetalheOS(id){
     linha('Conclusão', esc(os.data_conclusao || '—')),
     linha('Uso na OS', os.uso_na_os != null ? `${os.uso_na_os} ${esc(ativo?.unidade_uso || 'h')}` : '—'),
     os.sintoma_relatado ? linha('Sintoma', esc(os.sintoma_relatado)) : '',
+    os.delineado_em ? linha('Delineamento', esc(`${os.delineado_por || '?'} — ${new Date(os.delineado_em).toLocaleString('pt-BR')}`)) : '',
   ].filter(Boolean).join('')
 
   document.getElementById('osd-status').value = os.status
@@ -1661,6 +1741,10 @@ async function salvarDetalheOS(){
   if(!os) return
 
   const status = document.getElementById('osd-status').value
+  const EXECUTADOS = ['em_andamento','concluida']
+  // entrou em execução (ou foi direto a concluída) por aqui: o estoque desce —
+  // a guarda dentro da baixa evita débito duplo se já desceu em outro caminho
+  const virouExecucao = EXECUTADOS.includes(status) && !EXECUTADOS.includes(os.status)
   const virouConcluida = status === 'concluida' && os.status !== 'concluida'
 
   // as listas vão primeiro: os custos gravados em maq_os têm de ser a soma do
@@ -1690,15 +1774,13 @@ async function salvarDetalheOS(){
     await supa.from('maq_os_itens').update({ concluido: caixa.checked }).eq('id', caixa.dataset.id)
   }
 
-  // Concluir pelo detalhe baixa o estoque igual a concluir pela lista: é o
-  // mesmo evento, e deixar um caminho sem baixa seria um furo no estoque.
-  // A lista de peças da própria OS já foi gravada acima, então é dela que a
-  // baixa sai — as peças do plano e do diagnóstico entraram nela na criação.
-  if(virouConcluida){
-    const reparo = os.reparo_id ? REPAROS.find(r => r.id === os.reparo_id) : null
-    await baixarPecasDaOS(os.id, OSD_PECAS, reparo)
-    await confirmarDiagnostico(os.id, reparo)
-  }
+  // Iniciar a execução pelo detalhe baixa o estoque igual a iniciar pela
+  // lista: é o mesmo evento, e deixar um caminho sem baixa seria um furo no
+  // estoque. A lista de peças da própria OS já foi gravada acima, então é
+  // dela que a baixa sai.
+  const reparo = os.reparo_id ? REPAROS.find(r => r.id === os.reparo_id) : null
+  if(virouExecucao) await baixarPecasDaOS(os.id, OSD_PECAS, reparo)
+  if(virouConcluida) await confirmarDiagnostico(os.id, reparo)
 
   fecharModal('modal-os-detalhe')
   await carregarTudo()
@@ -1728,6 +1810,7 @@ function linhasDaOS(os){
     ['Uso na OS',  os.uso_na_os != null ? `${os.uso_na_os} ${ativo?.unidade_uso || 'h'}` : ''],
     ['Itens',      itens.map(i => i.maq_planos?.nome || i.descricao || 'Item').join(' | ')],
     ['Sintoma',    os.sintoma_relatado || ''],
+    ['Delineamento', os.delineado_em ? `${os.delineado_por || '?'} — ${new Date(os.delineado_em).toLocaleString('pt-BR')}` : ''],
     ['Descrição',  os.descricao || ''],
     ['Custo de peças (R$)', Number(os.custo_pecas || 0).toFixed(2)],
     ['Custo de mão de obra (R$)', Number(os.custo_mo || 0).toFixed(2)],
@@ -2031,6 +2114,7 @@ function exporNoWindow(){
     iniciarOperacao,
     navegarAgenda,
     renderAtivos,
+    renderOS,
     sair,
     salvarAbastecimento,
     salvarArea,
