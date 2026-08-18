@@ -223,6 +223,22 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         </div>
       </div>
       <div class="view-sub">Consumíveis, peças e ferramentas</div>
+      <!-- O valor da hora-homem mora aqui porque é o outro preço do módulo: o
+           estoque diz quanto custa a peça, este campo diz quanto custa a hora.
+           Os dois juntos são o custo de uma OS. -->
+      <div class="panel-card" style="margin-bottom:16px">
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:0 1 200px">
+            <label for="cfg-valor-hora">Valor da hora-homem (R$)</label>
+            <input type="number" id="cfg-valor-hora" min="0" step="0.01" placeholder="não informado"/>
+          </div>
+          <button class="btn btn-p btn-sm" onclick="salvarValorHora()">Salvar</button>
+          <div class="help" style="flex:1 1 260px;margin:0">
+            Usado como padrão no custo de mão de obra das OS. Enquanto estiver vazio,
+            o custo de mão de obra fica zerado.
+          </div>
+        </div>
+      </div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
@@ -659,11 +675,18 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <input type="text" id="osd-tecnico"/>
         </div>
       </div>
-      <div class="fgrid3">
-        <div class="frow"><label>Custo de peças (R$)</label><input type="number" id="osd-custo-pecas" min="0" step="0.01"/></div>
-        <div class="frow"><label>Custo de mão de obra (R$)</label><input type="number" id="osd-custo-mo" min="0" step="0.01"/></div>
-        <div class="frow"><label>Horas de serviço</label><input type="number" id="osd-horas" min="0" step="0.5"/></div>
+      <!-- Os três números deixaram de ser digitados: saem das duas listas
+           abaixo. Peça é quantidade × preço; mão de obra é horas × valor da
+           hora. Ficam só de leitura para que ninguém "conserte" o total sem
+           corrigir a linha que o produziu. -->
+      <div class="kpi-row" style="margin:16px 0">
+        <div class="kpi kc-blue"><div class="kpi-n" id="osd-custo-pecas">—</div><div class="kpi-l">Peças (R$)</div></div>
+        <div class="kpi kc-gold"><div class="kpi-n" id="osd-custo-mo">—</div><div class="kpi-l">Mão de obra (R$)</div></div>
+        <div class="kpi kc-accent"><div class="kpi-n" id="osd-horas">—</div><div class="kpi-l">Horas de serviço</div></div>
+        <div class="kpi kc-ok"><div class="kpi-n" id="osd-custo-total">—</div><div class="kpi-l">Total (R$)</div></div>
       </div>
+      <div class="help" id="osd-aviso-hora" style="display:none;margin-bottom:12px"></div>
+
       <div class="frow">
         <label>Descrição</label>
         <textarea id="osd-desc"></textarea>
@@ -671,6 +694,22 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="frow" id="osd-itens-wrap">
         <label>Itens de manutenção</label>
         <div id="osd-itens" class="stack"></div>
+      </div>
+
+      <div class="frow">
+        <div class="view-head" style="margin-bottom:8px">
+          <label style="margin:0">Peças consumidas</label>
+          <button class="btn btn-s btn-sm" onclick="adicionarPecaOS()">+ Peça</button>
+        </div>
+        <div id="osd-pecas" class="stack"></div>
+      </div>
+
+      <div class="frow">
+        <div class="view-head" style="margin-bottom:8px">
+          <label style="margin:0">Serviços executados</label>
+          <button class="btn btn-s btn-sm" onclick="adicionarServicoOS()">+ Serviço</button>
+        </div>
+        <div id="osd-servicos" class="stack"></div>
       </div>
     </div>
     <div class="modal-ft">

@@ -57,7 +57,14 @@ test('máquinas continua funcionando se a migração 26 não tiver rodado', () =
 })
 
 test('OS corretiva com diagnóstico dá baixa e alimenta o ranking', () => {
-  assert.match(maqApp, /pecasEssenciaisDoReparo\(reparo_id\)/)
+  // A resolução das peças do diagnóstico saiu de salvarOS e virou
+  // pecasPrevistasDaOS(), que junta plano e diagnóstico numa lista só. O que o
+  // gate protege segue igual: as peças do diagnóstico entram na OS, e só as
+  // essenciais.
+  assert.match(maqApp, /function pecasPrevistasDaOS\(planoIds, reparoId\)/)
+  assert.match(maqApp, /pecasEssenciaisDoReparo\(reparoId\)/)
+  assert.match(maqApp, /pecasPrevistasDaOS\(planosDaOS, reparo_id\)/,
+    'a criação da OS precisa continuar resolvendo as peças do diagnóstico')
   assert.match(maqApp, /x\.reparo_id === reparoId && x\.essencial/,
     'só peça essencial é debitada — a opcional é "verificar se precisa trocar"')
   // A chamada saiu de dentro de salvarOS() e virou confirmarDiagnostico(), porque
@@ -71,7 +78,9 @@ test('OS corretiva com diagnóstico dá baixa e alimenta o ranking', () => {
     'a criação de OS já concluída precisa continuar confirmando o diagnóstico')
   assert.match(maqApp, /\.select\('id'\)\.single\(\)/,
     'o id da OS é necessário para a RPC e para os_id do movimento de estoque')
-  assert.match(maqApp, /motivo: 'OS corretiva/)
+  // o motivo do movimento de estoque passou a sair da origem da peça, mas a
+  // peça do diagnóstico continua sendo registrada como corretiva
+  assert.match(maqApp, /peca\.origem === 'reparo'\s*\n\s*\? 'OS corretiva — ' \+ \(reparo\?\.causa_provavel \|\| ''\)/)
 
   // falha na confirmação não pode invalidar a OS, que já está gravada
   assert.match(maqApp, /if\(error\) alert\('OS gravada, mas a confirmação do diagnóstico falhou/)

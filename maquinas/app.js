@@ -24,6 +24,10 @@ let REPAROS = [], REP_MATS = [], REP_SERVS = [], SERVICOS = []
 // reparos: sem a migração a lista fica vazia, a OS volta a ser de um item só e
 // nada quebra.
 let OS_ITENS = []
+// Peças e serviços escolhidos na OS, e a configuração do módulo (migração 30).
+// Mesma tolerância: sem a migração as listas ficam vazias, o custo volta a ser
+// o número digitado à mão e nada quebra.
+let OS_MATERIAIS = [], OS_SERVICOS = [], CONFIG = {}
 let USUARIO = null
 let ATIVO_EDIT_ID = null
 let OPERACAO_CONCLUIR_ID = null
@@ -34,6 +38,9 @@ let OS_PLANOS_MARCADOS = []
 let OS_DETALHE_ID = null
 // material com a linha aberta em edição na aba de estoque
 let MATERIAL_EDIT_ID = null
+// listas de peças e serviços em edição no modal de detalhe da OS — vivem em
+// memória e só vão ao banco no Salvar
+let OSD_PECAS = [], OSD_SERVICOS = []
 let AGENDA_ANO = new Date().getFullYear()
 let AGENDA_MES = new Date().getMonth()
 
@@ -113,6 +120,7 @@ async function carregarTudo(){
   OPERACOES_ERRO = ar.error || op.error || null
   await carregarCatalogoReparos()
   await carregarItensOS()
+  await carregarCustosOS()
   aplicarPermissoesOperacoes()
   renderPainel(); renderAtivos(); renderVencimentos(); renderOS(); renderMateriais()
   renderConsumo(); renderCiclo(); renderCompras(); renderOperacoes(); renderAgenda()
@@ -144,6 +152,48 @@ async function carregarItensOS(){
     .from('maq_os_itens')
     .select('*, maq_planos(nome,intervalo,unidade)')
   OS_ITENS = error ? [] : (data || [])
+}
+
+// ── peças, serviços e configuração (migração 30) ──
+// Fora do Promise.all pelo mesmo motivo das duas cargas acima: sem a migração
+// as listas ficam vazias e a OS volta a se comportar como antes.
+async function carregarCustosOS(){
+  const [mt, sv, cf] = await Promise.all([
+    supa.from('maq_os_materiais').select('*, maq_materiais(nome,unidade,preco,estoque_atual)'),
+    supa.from('maq_os_servicos').select('*, rep_servicos(nome,especialidade,tempo_padrao_h)'),
+    supa.from('maq_config').select('*'),
+  ])
+  OS_MATERIAIS = mt.error ? [] : (mt.data || [])
+  OS_SERVICOS  = sv.error ? [] : (sv.data || [])
+  CONFIG = cf.error ? {} : Object.fromEntries((cf.data || []).map(l => [l.chave, l.valor]))
+}
+
+// valor da hora-homem do módulo. Sem valor informado devolve null — e null não
+// é zero: zero afirmaria que a mão de obra não custa nada, null diz que ninguém
+// informou ainda, e a tela avisa.
+function valorHoraPadrao(){
+  const bruto = CONFIG.valor_hora_padrao
+  if(bruto === null || bruto === undefined || String(bruto).trim() === '') return null
+  const numero = Number(bruto)
+  return Number.isFinite(numero) && numero >= 0 ? numero : null
+}
+
+// ── custos derivados das listas ──
+// A regra pedida: custo de peça é quantidade × preço; custo de mão de obra é
+// horas × valor da hora. Nenhum dos dois é digitado à mão.
+function custoPecasDaOS(osId){
+  return OS_MATERIAIS.filter(m => m.os_id === osId)
+    .reduce((soma, m) => soma + Number(m.quantidade || 0) * Number(m.preco_unit || 0), 0)
+}
+
+function horasDaOS(osId){
+  return OS_SERVICOS.filter(s => s.os_id === osId)
+    .reduce((soma, s) => soma + Number(s.horas || 0), 0)
+}
+
+function custoMaoDeObraDaOS(osId){
+  return OS_SERVICOS.filter(s => s.os_id === osId)
+    .reduce((soma, s) => soma + Number(s.horas || 0) * Number(s.valor_hora || 0), 0)
 }
 
 // itens de uma OS, com fallback para o plano único de maq_os quando a
@@ -662,6 +712,12 @@ function navegarAgenda(direcao){
 
 // ── MATERIAIS ──
 function renderMateriais(){
+  const campoHora = document.getElementById('cfg-valor-hora')
+  // não sobrescreve o que o usuário está digitando agora
+  if(campoHora && document.activeElement !== campoHora){
+    campoHora.value = valorHoraPadrao() ?? ''
+  }
+
   const tbody = document.getElementById('tb-materiais')
   if(!MATERIAIS.length){
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum material cadastrado</td></tr>'
@@ -712,6 +768,21 @@ function renderMateriais(){
         </div>
       </td>
     </tr>`}).join('')
+}
+
+// ── valor da hora-homem (maq_config, migração 30) ──
+async function salvarValorHora(){
+  const campo = document.getElementById('cfg-valor-hora')
+  const texto = campo.value.trim()
+  // vazio apaga o valor: é diferente de zero, e zero afirmaria que a hora não
+  // custa nada em vez de "ainda não informado"
+  const valor = texto === '' ? null : Number(texto)
+  if(valor !== null && !(valor >= 0)){ alert('Valor da hora precisa ser um número não negativo.'); return }
+
+  const { error } = await supa.from('maq_config')
+    .upsert({ chave: 'valor_hora_padrao', valor: valor === null ? null : String(valor) }, { onConflict: 'chave' })
+  if(error){ alert('Erro: ' + error.message); return }
+  await carregarTudo()
 }
 
 // ── edição em linha do estoque ──
@@ -1127,17 +1198,27 @@ async function salvarOS(){
   const ativo = ATIVOS.find(a => a.id === ativo_id)
   const uso_na_os = (ativo?.uso_atual || 0) + delta
 
-  // inserir OS
-  // custo das peças de todos os planos que entram nesta OS — com um item só,
-  // dá exatamente o mesmo número de antes
-  const planosParaCusto = OS_PLANOS_MARCADOS.length ? OS_PLANOS_MARCADOS : (plano_id ? [plano_id] : [])
-  let custo_pecas = custoDosPlanos(planosParaCusto)
   // diagnóstico do catálogo (só em corretiva, e só se a migração 26 rodou)
   const reparoSel = document.getElementById('os-reparo')
   const reparo_id = (tipo === 'corretiva' && REPAROS.length) ? (parseInt(reparoSel?.value) || null) : null
   const reparo = reparo_id ? REPAROS.find(r => r.id === reparo_id) : null
-  const pecasReparo = reparo_id ? pecasEssenciaisDoReparo(reparo_id) : []
-  if(reparo) custo_pecas += pecasReparo.reduce((s, p) => s + Number(p.mat.preco || 0) * Number(p.quantidade), 0)
+
+  // A OS nasce com as peças que o plano e o diagnóstico preveem, já gravadas
+  // como linhas dela — o usuário ajusta depois no detalhe. O custo é a soma
+  // dessa lista, não uma conta paralela: uma conta só, um número só.
+  const planosDaOS = OS_PLANOS_MARCADOS.length ? OS_PLANOS_MARCADOS : (plano_id ? [plano_id] : [])
+  const pecasPrevistas = pecasPrevistasDaOS(planosDaOS, reparo_id)
+  const custo_pecas = pecasPrevistas.reduce((s, p) => s + Number(p.quantidade) * Number(p.preco_unit || 0), 0)
+
+  // serviços que o diagnóstico prevê, com o valor da hora do módulo
+  const servicosPrevistos = (reparo_id ? REP_SERVS.filter(x => x.reparo_id === reparo_id) : [])
+    .map(x => SERVICOS.find(s => s.id === x.servico_id)).filter(Boolean)
+    .map(s => ({
+      servico_id: s.id, horas: Number(s.tempo_padrao_h) || 1,
+      valor_hora: s.valor_hora != null ? Number(s.valor_hora) : valorHoraPadrao(),
+    }))
+  const horas_servico = servicosPrevistos.reduce((s, x) => s + x.horas, 0)
+  const custo_mo = servicosPrevistos.reduce((s, x) => s + x.horas * Number(x.valor_hora || 0), 0)
 
   // A OS nasce na situação escolhida. Só a concluída carrega data de conclusão
   // e custo de peças: enquanto o serviço não terminou, não há peça consumida.
@@ -1152,6 +1233,8 @@ async function salvarOS(){
     data_conclusao: concluida ? data : null,
     uso_na_os, tecnico, descricao,
     custo_pecas: concluida ? custo_pecas : 0,
+    custo_mo: concluida ? custo_mo : 0,
+    horas_servico: horas_servico > 0 ? horas_servico : null,
     ...(reparo ? { reparo_id, sintoma_relatado: reparo.sintoma } : {}),
   }).select('id').single()
   if(erOS){ alert('Erro: ' + erOS.message); return }
@@ -1159,11 +1242,22 @@ async function salvarOS(){
   // os itens da OS (migração 29). Falha aqui não invalida a OS, que já está
   // gravada com o plano_id de sempre — num banco sem a migração 29 este insert
   // erra e o módulo segue com uma OS de um item só.
-  const planosDaOS = OS_PLANOS_MARCADOS.length ? OS_PLANOS_MARCADOS : (plano_id ? [plano_id] : [])
   if(planosDaOS.length && osNova?.id){
     await supa.from('maq_os_itens').insert(planosDaOS.map(pid => ({
       os_id: osNova.id, plano_id: pid, concluido: concluida, uso_no_item: concluida ? uso_na_os : null,
     })))
+  }
+
+  // peças e serviços previstos (migração 30). Mesma tolerância: sem a migração
+  // estes inserts erram, a OS segue gravada e o custo continua no número que
+  // já foi para maq_os.
+  if(osNova?.id){
+    if(pecasPrevistas.length){
+      await supa.from('maq_os_materiais').insert(pecasPrevistas.map(p => ({ os_id: osNova.id, ...p })))
+    }
+    if(servicosPrevistos.length){
+      await supa.from('maq_os_servicos').insert(servicosPrevistos.map(x => ({ os_id: osNova.id, ...x })))
+    }
   }
 
   // o horímetro sobe junto com o registro de uso, independentemente da situação
@@ -1179,7 +1273,7 @@ async function salvarOS(){
   // A baixa de estoque só acontece na conclusão. Uma OS aberta que já debitou
   // peça mentiria o estoque — a peça ainda está na prateleira.
   if(concluida && osNova?.id){
-    await baixarPecasDaOS(osNova.id, planosDaOS, pecasReparo, reparo)
+    await baixarPecasDaOS(osNova.id, pecasPrevistas, reparo)
     await confirmarDiagnostico(osNova.id, reparo)
   }
 
@@ -1187,33 +1281,49 @@ async function salvarOS(){
   await carregarTudo()
 }
 
-// ── baixa de peças — chamada na conclusão, venha ela da criação ou depois ──
-// Está aqui, numa função só, porque agora existem dois caminhos até a conclusão
-// (criar já concluída, ou concluir uma OS aberta) e eles precisam debitar
-// exatamente do mesmo jeito.
-async function baixarPecasDaOS(osId, planoIds, pecasReparo, reparo){
-  for(const planoId of planoIds){
-    const plano = PLANOS.find(p => p.id === planoId)
-    for(const item of PLANO_MATS.filter(p => p.plano_id === planoId)){
-      const mat = MATERIAIS.find(m => m.id === item.material_id)
-      if(!mat) continue
-      const novo = Math.max(0, mat.estoque_atual - item.quantidade)
-      await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', mat.id)
-      await supa.from('maq_estoque_movimentos').insert({
-        material_id: mat.id, os_id: osId,
-        tipo: 'saida', quantidade: item.quantidade,
-        motivo: 'OS preventiva — ' + (plano?.nome || ''),
-      })
-    }
+// ── peças previstas para uma OS ──
+// Uma lista só, resolvida a partir do plano e do diagnóstico, com a origem
+// marcada. É ela que a criação grava em maq_os_materiais e que a baixa
+// consome — e é por existir uma lista única que a mesma peça não é debitada
+// duas vezes quando ela aparece no plano e no diagnóstico ao mesmo tempo.
+function pecasPrevistasDaOS(planoIds, reparoId){
+  const porMaterial = new Map()
+
+  const somar = (materialId, quantidade, origem) => {
+    const mat = MATERIAIS.find(m => m.id === materialId)
+    if(!mat) return
+    const atual = porMaterial.get(materialId)
+    if(atual) atual.quantidade += Number(quantidade)
+    else porMaterial.set(materialId, {
+      material_id: materialId, quantidade: Number(quantidade),
+      preco_unit: mat.preco ?? null, origem,
+    })
   }
 
-  for(const item of pecasReparo){
-    const novo = Math.max(0, item.mat.estoque_atual - item.quantidade)
-    await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', item.mat.id)
+  for(const planoId of planoIds || []){
+    for(const item of PLANO_MATS.filter(p => p.plano_id === planoId)) somar(item.material_id, item.quantidade, 'plano')
+  }
+  for(const item of (reparoId ? pecasEssenciaisDoReparo(reparoId) : [])) somar(item.material_id, item.quantidade, 'reparo')
+
+  return [...porMaterial.values()]
+}
+
+// ── baixa de peças — chamada na conclusão, venha ela de onde vier ──
+// Recebe a lista já resolvida. Está numa função só porque existem três
+// caminhos até a conclusão (criar já concluída, concluir pela lista, concluir
+// pelo detalhe) e os três precisam debitar exatamente do mesmo jeito.
+async function baixarPecasDaOS(osId, pecas, reparo){
+  for(const peca of pecas || []){
+    const mat = MATERIAIS.find(m => m.id === peca.material_id)
+    if(!mat || !(Number(peca.quantidade) > 0)) continue
+    const novo = Math.max(0, Number(mat.estoque_atual) - Number(peca.quantidade))
+    await supa.from('maq_materiais').update({ estoque_atual: novo }).eq('id', mat.id)
     await supa.from('maq_estoque_movimentos').insert({
-      material_id: item.mat.id, os_id: osId,
-      tipo: 'saida', quantidade: item.quantidade,
-      motivo: 'OS corretiva — ' + (reparo?.causa_provavel || ''),
+      material_id: mat.id, os_id: osId,
+      tipo: 'saida', quantidade: Number(peca.quantidade),
+      motivo: peca.origem === 'reparo'
+        ? 'OS corretiva — ' + (reparo?.causa_provavel || '')
+        : peca.origem === 'plano' ? 'OS preventiva — peça do plano' : 'OS — peça lançada na ordem',
     })
   }
 }
@@ -1231,38 +1341,37 @@ async function confirmarDiagnostico(osId, reparo){
   if(error) alert('OS gravada, mas a confirmação do diagnóstico falhou: ' + error.message)
 }
 
-// custo das peças previstas para os planos de uma OS
-function custoDosPlanos(planoIds){
-  let total = 0
-  for(const planoId of planoIds){
-    for(const item of PLANO_MATS.filter(p => p.plano_id === planoId)){
-      const mat = MATERIAIS.find(m => m.id === item.material_id)
-      if(mat?.preco) total += Number(mat.preco) * Number(item.quantidade)
-    }
-  }
-  return total
-}
-
 async function concluirOS(id){
   const os = OS_LIST.find(o => o.id === id)
   if(!os) return
   if(!confirm('Concluir a OS? As peças previstas serão baixadas do estoque agora.')) return
 
   const hoje = new Date().toISOString().slice(0,10)
-  const planoIds = itensDaOS(os).map(i => i.plano_id).filter(Boolean)
-  const pecasReparo = os.reparo_id ? pecasEssenciaisDoReparo(os.reparo_id) : []
   const reparo = os.reparo_id ? REPAROS.find(r => r.id === os.reparo_id) : null
-  const custo = custoDosPlanos(planoIds) +
-    pecasReparo.reduce((soma, p) => soma + Number(p.mat.preco || 0) * Number(p.quantidade), 0)
+
+  // As peças da própria OS são a fonte. Só quando a OS não tem lista — porque
+  // nasceu antes da migração 30 — é que a previsão do plano e do diagnóstico
+  // é resolvida na hora, para essas OS antigas não ficarem sem baixa.
+  const daOS = OS_MATERIAIS.filter(m => m.os_id === id)
+    .map(m => ({ material_id: m.material_id, quantidade: Number(m.quantidade), preco_unit: m.preco_unit, origem: m.origem }))
+  const pecas = daOS.length
+    ? daOS
+    : pecasPrevistasDaOS(itensDaOS(os).map(i => i.plano_id).filter(Boolean), os.reparo_id)
+
+  const custoPecas = pecas.reduce((soma, p) => soma + Number(p.quantidade) * Number(p.preco_unit || 0), 0)
+  const custoMO = custoMaoDeObraDaOS(id)
+  const horas = horasDaOS(id)
 
   const { error } = await supa.from('maq_os').update({
     status: 'concluida', data_conclusao: hoje,
-    custo_pecas: Number(os.custo_pecas || 0) + custo,
+    custo_pecas: custoPecas,
+    custo_mo: custoMO,
+    horas_servico: horas > 0 ? horas : os.horas_servico,
   }).eq('id', id)
   if(error){ alert('Erro: ' + error.message); return }
 
   await supa.from('maq_os_itens').update({ concluido: true }).eq('os_id', id)
-  await baixarPecasDaOS(id, planoIds, pecasReparo, reparo)
+  await baixarPecasDaOS(id, pecas, reparo)
   await confirmarDiagnostico(id, reparo)
   await carregarTudo()
 }
@@ -1292,10 +1401,21 @@ function abrirDetalheOS(id){
 
   document.getElementById('osd-status').value = os.status
   document.getElementById('osd-tecnico').value = os.tecnico || ''
-  document.getElementById('osd-custo-pecas').value = os.custo_pecas ?? 0
-  document.getElementById('osd-custo-mo').value = os.custo_mo ?? 0
-  document.getElementById('osd-horas').value = os.horas_servico ?? ''
   document.getElementById('osd-desc').value = os.descricao || ''
+
+  // as duas listas viram estado de edição em memória e só vão ao banco no
+  // Salvar — assim dá para montar a OS inteira e desistir sem sujar nada
+  OSD_PECAS = OS_MATERIAIS.filter(m => m.os_id === id).map(m => ({
+    material_id: m.material_id, quantidade: Number(m.quantidade),
+    preco_unit: m.preco_unit == null ? null : Number(m.preco_unit),
+    origem: m.origem || 'manual',
+  }))
+  OSD_SERVICOS = OS_SERVICOS.filter(s => s.os_id === id).map(s => ({
+    servico_id: s.servico_id, descricao: s.descricao || '',
+    horas: Number(s.horas), valor_hora: s.valor_hora == null ? null : Number(s.valor_hora),
+  }))
+  renderPecasOS()
+  renderServicosOS()
 
   // itens sem id vêm do fallback do plano único (banco sem a migração 29):
   // aparecem para leitura, mas não têm linha própria para marcar
@@ -1313,6 +1433,187 @@ function abrirDetalheOS(id){
   document.getElementById('modal-os-detalhe').classList.add('open')
 }
 
+// ── peças e serviços da OS (edição no modal de detalhe) ──
+function renderPecasOS(){
+  const div = document.getElementById('osd-pecas')
+  if(!OSD_PECAS.length){
+    div.innerHTML = '<div class="tagline">Nenhuma peça lançada.</div>'
+    recalcularCustosOS()
+    return
+  }
+  const rotuloOrigem = { plano: 'do plano', reparo: 'do diagnóstico', manual: '' }
+  div.innerHTML = OSD_PECAS.map((peca, i) => {
+    const mat = MATERIAIS.find(m => m.id === peca.material_id)
+    const total = Number(peca.quantidade || 0) * Number(peca.preco_unit || 0)
+    const semEstoque = mat && Number(mat.estoque_atual) < Number(peca.quantidade)
+    return `<div class="panel-card" style="padding:10px 12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select onchange="trocarPecaOS(${i}, this.value)" style="flex:1 1 180px;min-width:0">
+          ${MATERIAIS.map(m => `<option value="${m.id}" ${m.id===peca.material_id?'selected':''}>${esc(m.nome)}</option>`).join('')}
+        </select>
+        <input type="number" value="${peca.quantidade}" min="0.01" step="0.5" title="Quantidade"
+          oninput="atualizarPecaOS(${i}, 'quantidade', this.value)" style="width:82px"/>
+        <input type="number" value="${peca.preco_unit ?? ''}" min="0" step="0.01" placeholder="preço" title="Preço unitário"
+          oninput="atualizarPecaOS(${i}, 'preco_unit', this.value)" style="width:96px"/>
+        <span class="mono" style="font-size:12px;color:var(--text2);min-width:80px;text-align:right">R$ ${total.toFixed(2)}</span>
+        <button class="btn btn-d btn-sm" onclick="removerPecaOS(${i})" aria-label="Remover peça">✕</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">
+        ${esc(mat?.unidade || 'un')}${rotuloOrigem[peca.origem] ? ' · ' + rotuloOrigem[peca.origem] : ''}
+        ${semEstoque ? ` · <span style="color:var(--red)">estoque atual: ${mat.estoque_atual}</span>` : ''}
+      </div>
+    </div>`
+  }).join('')
+  recalcularCustosOS()
+}
+
+function renderServicosOS(){
+  const div = document.getElementById('osd-servicos')
+  if(!OSD_SERVICOS.length){
+    div.innerHTML = '<div class="tagline">Nenhum serviço lançado.</div>'
+    recalcularCustosOS()
+    return
+  }
+  div.innerHTML = OSD_SERVICOS.map((servico, i) => {
+    const total = Number(servico.horas || 0) * Number(servico.valor_hora || 0)
+    // sem catálogo (migração 26 ausente) sobra a descrição livre, que é o
+    // caminho previsto para o serviço combinado na hora
+    const seletor = SERVICOS.length
+      ? `<select onchange="trocarServicoOS(${i}, this.value)" style="flex:1 1 180px;min-width:0">
+           <option value="">— serviço avulso —</option>
+           ${SERVICOS.map(s => `<option value="${s.id}" ${s.id===servico.servico_id?'selected':''}>${esc(s.nome)}</option>`).join('')}
+         </select>`
+      : ''
+    return `<div class="panel-card" style="padding:10px 12px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        ${seletor}
+        <input type="number" value="${servico.horas}" min="0.1" step="0.5" title="Horas"
+          oninput="atualizarServicoOS(${i}, 'horas', this.value)" style="width:78px"/>
+        <input type="number" value="${servico.valor_hora ?? ''}" min="0" step="0.01" placeholder="R$/h" title="Valor da hora"
+          oninput="atualizarServicoOS(${i}, 'valor_hora', this.value)" style="width:92px"/>
+        <span class="mono" style="font-size:12px;color:var(--text2);min-width:80px;text-align:right">R$ ${total.toFixed(2)}</span>
+        <button class="btn btn-d btn-sm" onclick="removerServicoOS(${i})" aria-label="Remover serviço">✕</button>
+      </div>
+      ${servico.servico_id ? '' : `<input type="text" value="${esc(servico.descricao)}" placeholder="Descreva o serviço"
+        oninput="atualizarServicoOS(${i}, 'descricao', this.value)" style="margin-top:6px"/>`}
+    </div>`
+  }).join('')
+  recalcularCustosOS()
+}
+
+// o total da tela é o mesmo cálculo que vai para o banco no Salvar — não há
+// uma conta para exibir e outra para gravar
+function recalcularCustosOS(){
+  const pecas = OSD_PECAS.reduce((s, p) => s + Number(p.quantidade || 0) * Number(p.preco_unit || 0), 0)
+  const horas = OSD_SERVICOS.reduce((s, x) => s + Number(x.horas || 0), 0)
+  const mo    = OSD_SERVICOS.reduce((s, x) => s + Number(x.horas || 0) * Number(x.valor_hora || 0), 0)
+
+  document.getElementById('osd-custo-pecas').textContent = pecas.toFixed(2)
+  document.getElementById('osd-custo-mo').textContent    = mo.toFixed(2)
+  document.getElementById('osd-horas').textContent       = horas.toFixed(1)
+  document.getElementById('osd-custo-total').textContent = (pecas + mo).toFixed(2)
+
+  // horas lançadas sem valor da hora produzem mão de obra zero — o usuário
+  // precisa saber que o número está zerado por falta de cadastro, não por
+  // não ter havido serviço
+  const semValor = OSD_SERVICOS.some(x => Number(x.horas || 0) > 0 && !(Number(x.valor_hora) > 0))
+  const aviso = document.getElementById('osd-aviso-hora')
+  aviso.style.display = semValor ? '' : 'none'
+  aviso.innerHTML = semValor
+    ? (valorHoraPadrao() === null
+      ? '⚠ Nenhum valor de hora-homem cadastrado no módulo — o custo de mão de obra fica zerado. Defina o valor na aba Estoque.'
+      : '⚠ Há serviço sem valor da hora; o custo de mão de obra desconsidera essas linhas.')
+    : ''
+}
+
+function adicionarPecaOS(){
+  const material = MATERIAIS[0]
+  if(!material){ alert('Nenhum material cadastrado no estoque.'); return }
+  OSD_PECAS.push({ material_id: material.id, quantidade: 1, preco_unit: material.preco ?? null, origem: 'manual' })
+  renderPecasOS()
+}
+
+function trocarPecaOS(indice, materialId){
+  const material = MATERIAIS.find(m => m.id === parseInt(materialId))
+  if(!material) return
+  OSD_PECAS[indice].material_id = material.id
+  // o preço acompanha a peça escolhida; se o usuário já tinha ajustado à mão,
+  // trocar de peça troca o preço junto — é peça outra, preço outro
+  OSD_PECAS[indice].preco_unit = material.preco ?? null
+  renderPecasOS()
+}
+
+function atualizarPecaOS(indice, campo, valor){
+  OSD_PECAS[indice][campo] = valor === '' ? null : Number(valor)
+  recalcularCustosOS()
+}
+
+function removerPecaOS(indice){
+  OSD_PECAS.splice(indice, 1)
+  renderPecasOS()
+}
+
+function adicionarServicoOS(){
+  const servico = SERVICOS[0] || null
+  OSD_SERVICOS.push({
+    servico_id: servico?.id ?? null,
+    descricao: servico ? '' : '',
+    horas: Number(servico?.tempo_padrao_h) || 1,
+    valor_hora: (servico?.valor_hora != null ? Number(servico.valor_hora) : valorHoraPadrao()),
+  })
+  renderServicosOS()
+}
+
+function trocarServicoOS(indice, servicoId){
+  const servico = SERVICOS.find(s => s.id === parseInt(servicoId)) || null
+  OSD_SERVICOS[indice].servico_id = servico?.id ?? null
+  if(servico){
+    OSD_SERVICOS[indice].horas = Number(servico.tempo_padrao_h) || OSD_SERVICOS[indice].horas
+    OSD_SERVICOS[indice].valor_hora = servico.valor_hora != null ? Number(servico.valor_hora) : valorHoraPadrao()
+    OSD_SERVICOS[indice].descricao = ''
+  }
+  renderServicosOS()
+}
+
+function atualizarServicoOS(indice, campo, valor){
+  OSD_SERVICOS[indice][campo] = campo === 'descricao' ? valor : (valor === '' ? null : Number(valor))
+  if(campo === 'descricao') recalcularCustosOS()
+  else recalcularCustosOS()
+}
+
+function removerServicoOS(indice){
+  OSD_SERVICOS.splice(indice, 1)
+  renderServicosOS()
+}
+
+// grava as duas listas: apaga e reinsere, que é o jeito honesto de salvar uma
+// lista editada inteira sem inventar identidade para linha que o usuário mexeu
+async function gravarListasDaOS(osId){
+  await supa.from('maq_os_materiais').delete().eq('os_id', osId)
+  await supa.from('maq_os_servicos').delete().eq('os_id', osId)
+
+  const pecas = OSD_PECAS.filter(p => p.material_id && Number(p.quantidade) > 0)
+  if(pecas.length){
+    const { error } = await supa.from('maq_os_materiais').insert(pecas.map(p => ({
+      os_id: osId, material_id: p.material_id,
+      quantidade: Number(p.quantidade), preco_unit: p.preco_unit,
+      origem: p.origem || 'manual',
+    })))
+    if(error){ alert('Erro ao gravar as peças: ' + error.message); return false }
+  }
+
+  const servicos = OSD_SERVICOS.filter(s => Number(s.horas) > 0 && (s.servico_id || (s.descricao || '').trim()))
+  if(servicos.length){
+    const { error } = await supa.from('maq_os_servicos').insert(servicos.map(s => ({
+      os_id: osId, servico_id: s.servico_id || null,
+      descricao: s.servico_id ? null : (s.descricao || '').trim(),
+      horas: Number(s.horas), valor_hora: s.valor_hora,
+    })))
+    if(error){ alert('Erro ao gravar os serviços: ' + error.message); return false }
+  }
+  return true
+}
+
 async function salvarDetalheOS(){
   const os = OS_LIST.find(o => o.id === OS_DETALHE_ID)
   if(!os) return
@@ -1320,13 +1621,21 @@ async function salvarDetalheOS(){
   const status = document.getElementById('osd-status').value
   const virouConcluida = status === 'concluida' && os.status !== 'concluida'
 
+  // as listas vão primeiro: os custos gravados em maq_os têm de ser a soma do
+  // que ficou gravado nelas, não de um estado de tela que ainda pode falhar
+  if(!(await gravarListasDaOS(os.id))) return
+
+  const custoPecas = OSD_PECAS.reduce((s, p) => s + Number(p.quantidade || 0) * Number(p.preco_unit || 0), 0)
+  const horas      = OSD_SERVICOS.reduce((s, x) => s + Number(x.horas || 0), 0)
+  const custoMO    = OSD_SERVICOS.reduce((s, x) => s + Number(x.horas || 0) * Number(x.valor_hora || 0), 0)
+
   const payload = {
     status,
     tecnico: document.getElementById('osd-tecnico').value.trim(),
     descricao: document.getElementById('osd-desc').value.trim(),
-    custo_pecas: parseFloat(document.getElementById('osd-custo-pecas').value) || 0,
-    custo_mo: parseFloat(document.getElementById('osd-custo-mo').value) || 0,
-    horas_servico: parseFloat(document.getElementById('osd-horas').value) || null,
+    custo_pecas: custoPecas,
+    custo_mo: custoMO,
+    horas_servico: horas > 0 ? horas : null,
   }
   if(status === 'concluida' && !os.data_conclusao) payload.data_conclusao = new Date().toISOString().slice(0,10)
 
@@ -1341,11 +1650,11 @@ async function salvarDetalheOS(){
 
   // Concluir pelo detalhe baixa o estoque igual a concluir pela lista: é o
   // mesmo evento, e deixar um caminho sem baixa seria um furo no estoque.
+  // A lista de peças da própria OS já foi gravada acima, então é dela que a
+  // baixa sai — as peças do plano e do diagnóstico entraram nela na criação.
   if(virouConcluida){
-    const planoIds = itensDaOS(os).map(i => i.plano_id).filter(Boolean)
-    const pecasReparo = os.reparo_id ? pecasEssenciaisDoReparo(os.reparo_id) : []
     const reparo = os.reparo_id ? REPAROS.find(r => r.id === os.reparo_id) : null
-    await baixarPecasDaOS(os.id, planoIds, pecasReparo, reparo)
+    await baixarPecasDaOS(os.id, OSD_PECAS, reparo)
     await confirmarDiagnostico(os.id, reparo)
   }
 
@@ -1658,7 +1967,11 @@ function exporNoWindow(){
     abrirDetalheOS,
     abrirOSDosItensMarcados,
     abrirVencMaquina,
+    adicionarPecaOS,
+    adicionarServicoOS,
+    atualizarPecaOS,
     atualizarSelecaoVenc,
+    atualizarServicoOS,
     avancarOS,
     cancelarEdicaoMaterial,
     concluirOperacao,
@@ -1671,6 +1984,8 @@ function exporNoWindow(){
     fecharModal,
     irParaAba,
     marcarTodosVenc,
+    removerPecaOS,
+    removerServicoOS,
     iniciarOperacao,
     navegarAgenda,
     renderAtivos,
@@ -1682,9 +1997,12 @@ function exporNoWindow(){
     salvarMovimento,
     salvarDetalheOS,
     salvarLinhaMaterial,
+    salvarValorHora,
     salvarOperacao,
     salvarOS,
     salvarUso,
+    trocarPecaOS,
+    trocarServicoOS,
     trocarView,
   })
 }

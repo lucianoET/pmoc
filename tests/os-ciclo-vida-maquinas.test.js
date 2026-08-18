@@ -77,7 +77,9 @@ test('o fluxo é aberta → execução → concluída, e os estados finais não 
 
 // ── baixa de estoque só na conclusão ──────────────────────────────────────
 test('a baixa de peças mora numa função só, chamada pelos caminhos de conclusão', () => {
-  assert.match(APP, /async function baixarPecasDaOS\(osId, planoIds, pecasReparo, reparo\)/)
+  // a função passou a receber a lista de peças já resolvida, em vez de montar
+  // a lista por dentro a partir de plano e diagnóstico
+  assert.match(APP, /async function baixarPecasDaOS\(osId, pecas, reparo\)/)
 
   // três caminhos levam à conclusão e os três precisam debitar igual
   const chamadas = APP.match(/await baixarPecasDaOS\(/g) || []

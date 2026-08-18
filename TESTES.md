@@ -1106,3 +1106,48 @@ Máquinas: `/maquinas`, `/transportes`, `/eletrica`, `/fonoclama`, `/predial` e 
 - [ ] Conferir a barra superior nos outros cinco módulos, em celular de verdade — a medição aqui
       foi por régua no DOM, não por olho
 - [ ] Conferir a sombra de rolagem das abas nos dois temas (claro e escuro)
+
+---
+
+## Custos da OS — peças e serviços (18/08/2026)
+
+### Migração 30 — pendente de aplicação
+
+`supabase/30_maquinas_os_custos.sql` **ainda não rodou**. Rodar no SQL Editor do projeto `pmoc`.
+Cria `maq_os_materiais`, `maq_os_servicos` e `maq_config`.
+
+Verificado no navegador **sem** a migração: 28 máquinas carregaram, o detalhe da OS abriu com as
+duas listas vazias e os custos em zero. Nada quebra — o módulo só mostra menos.
+
+Depois de aplicar, conferir a forma (não só a existência — a lição da migração 28):
+
+```sql
+select table_name, count(*) from information_schema.columns
+ where table_schema='public' and table_name in ('maq_os_materiais','maq_os_servicos','maq_config')
+ group by table_name;
+select valor from maq_config where chave='valor_hora_padrao';   -- null, ainda não informado
+```
+
+### Cálculo conferido na tela
+
+| Entrada | Resultado |
+|---------|-----------|
+| 3 × R$ 22,50 + 2 × R$ 10,00 | Peças **R$ 87,50** ✅ |
+| 4 h × R$ 60,00 | Mão de obra **R$ 240,00** ✅ |
+| Soma | Total **R$ 327,50** ✅ |
+| Apagar o valor da hora | Mão de obra volta a **0,00** e aparece o aviso explicando que não há hora-homem cadastrada ✅ |
+| Remover uma linha | Recalcula para **R$ 67,50** ✅ |
+
+### Fica para o usuário
+
+- [ ] Definir o **valor da hora-homem** na aba Estoque — enquanto estiver vazio, toda mão de obra
+      fica zerada, de propósito
+- [ ] Abrir uma OS preventiva e conferir que as peças do plano já vieram lançadas na lista, com
+      preço do catálogo
+- [ ] Ajustar quantidade de uma peça, salvar, reabrir e conferir que o valor persistiu
+- [ ] Concluir essa OS e conferir que o estoque baixou **pela lista da OS** (a ajustada), não pela
+      previsão do plano
+- [ ] Numa OS corretiva com diagnóstico, conferir que a peça que aparece no plano **e** no
+      diagnóstico foi debitada **uma vez só**
+- [ ] Reajustar o preço de um material no estoque e conferir que uma OS já fechada **não** mudou de
+      custo
