@@ -1026,20 +1026,24 @@ razão de ser do design, nunca executou uma única vez. Mesma situação do writ
 
 ## Máquinas — ciclo de vida da OS (18/08/2026)
 
-### Migração 29 — pendente de aplicação
+### Migração 29 — aplicada em 18/08/2026 ✅
 
-`supabase/29_maquinas_os_itens.sql` **ainda não rodou**. Rodar no SQL Editor do projeto `pmoc`.
-Sem ela o módulo funciona igual ao que era: cada OS carrega um item só, pelo `maq_os.plano_id` de
-sempre. Verificado no navegador com a migração ausente — 28 máquinas, 4 OS e 28 cartões de
-vencimento renderizaram normalmente, e o detalhe da OS mostrou o item vindo do plano único.
+`supabase/29_maquinas_os_itens.sql` rodou em produção. Conferido contra o banco real, não contra o
+arquivo — a lição da migração 28 é que `create table if not exists` é silencioso numa tabela que já
+existe, então forma se verifica, não se presume:
 
-Depois de aplicar, conferir:
+| Item | Encontrado |
+|------|------------|
+| Colunas | 8, exatamente as do arquivo |
+| Constraints | PK, FK `os_id` com `on delete cascade`, FK `plano_id`, unique `(os_id, plano_id)` |
+| Índices | `maq_os_itens_os_idx`, `maq_os_itens_plano_idx` |
+| RLS | ligado, com `maq_os_itens_leitura` (SELECT) e `maq_os_itens_escrita` (ALL, autenticado) |
+| Linhas | 0 — tabela nova e vazia |
+| `maq_os` | intacta; `plano_id` continua lá, que é o que mantém o caminho antigo válido |
 
-```sql
-select count(*) from maq_os_itens;                 -- 0, tabela nova e vazia
-select conname from pg_constraint
- where conrelid = 'maq_os_itens'::regclass;        -- inclui o unique (os_id, plano_id)
-```
+Antes de aplicar, o módulo foi verificado no navegador **sem** a migração: 28 máquinas, 4 OS e 28
+cartões de vencimento renderizaram normalmente, e o detalhe da OS caiu no plano único. A tolerância
+está provada nos dois estados.
 
 ### Conferido no navegador (servido localmente, cargo Livre)
 
