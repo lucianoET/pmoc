@@ -996,7 +996,7 @@ async function salvarLinhaMaterial(id){
 // status da OS ainda não executada — antes da baixa de estoque no início da
 // execução. Mesma fronteira de faltasDaOS(): tudo que não é em_andamento,
 // concluida ou cancelada.
-const OS_NAO_EXECUTADA = ['aberta', 'delineamento', 'espera', 'pendente']
+const OS_NAO_EXECUTADA = ['pendente', 'delineamento', 'espera']
 
 // necessidade por material, pela fórmula travada (D4), implementada
 // literalmente:

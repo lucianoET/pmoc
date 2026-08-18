@@ -160,7 +160,7 @@ test('necessidadePorMaterial() implementa a fórmula travada', () => {
 })
 
 test('corr sai de pecasParaBaixa() e considera exatamente os quatro status não executados', () => {
-  assert.match(APP, /const OS_NAO_EXECUTADA = \['aberta', 'delineamento', 'espera', 'pendente'\]/)
+  assert.match(APP, /const OS_NAO_EXECUTADA = \['pendente', 'delineamento', 'espera'\]/)
   const bloco = APP.match(/function necessidadePorMaterial\(\)\{([\s\S]*?)\n\}/)
   assert.ok(bloco)
   assert.match(bloco[1], /OS_LIST\.filter\(o => OS_NAO_EXECUTADA\.includes\(o\.status\)\)/)
