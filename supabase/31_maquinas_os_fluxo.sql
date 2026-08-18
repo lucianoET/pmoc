@@ -16,7 +16,9 @@
 -- ser aceito; a lista só cresce. O nome do constraint foi conferido em
 -- produção (maq_os_status_check) antes de escrever o drop.
 --
--- Aplicada em produção: (preencher a data ao rodar)
+-- Aplicada em produção: 18/08/2026 — conferida contra o banco: o check com os
+-- 6 estados, as duas colunas de delineamento no lugar, e as 4 OS existentes
+-- (todas concluídas) válidas sob a trava nova.
 -- ══════════════════════════════════════════════════════════════════
 
 alter table maq_os drop constraint if exists maq_os_status_check;

@@ -1157,24 +1157,16 @@ zero, e depois dela, com as tabelas na carga.
 
 ## Fluxo de oficina na OS (18/08/2026, noite)
 
-### Migração 31 — pendente de aplicação
+### Migração 31 — aplicada em 18/08/2026 ✅
 
-`supabase/31_maquinas_os_fluxo.sql` **ainda não rodou**. Ela troca o check de `maq_os.status`
-(primeira troca de trava do projeto — nada é removido, a lista só cresce) e adiciona
-`delineado_por`/`delineado_em`.
+`supabase/31_maquinas_os_fluxo.sql` rodou em produção — a primeira troca de trava do projeto
+(nada removido, a lista só cresce). Conferido contra o banco:
 
-**Atenção — a tolerância aqui é diferente das migrações 26/29/30:** não é tabela nova, é trava
-alargada. Sem a 31, avançar uma OS para *Delineamento* ou *Em espera* falha com o alerta cru do
-check constraint. Todo o resto (abrir, executar, concluir, listas, custos) continua funcionando.
-
-Depois de aplicar, conferir:
-
-```sql
-select pg_get_constraintdef(oid) from pg_constraint where conname='maq_os_status_check';
--- deve listar os 6 estados: pendente, delineamento, espera, em_andamento, concluida, cancelada
-select column_name from information_schema.columns
- where table_name='maq_os' and column_name like 'delineado%';   -- 2 linhas
-```
+| Item | Encontrado |
+|------|------------|
+| `maq_os_status_check` | os 6 estados: `pendente`, `delineamento`, `espera`, `em_andamento`, `concluida`, `cancelada` |
+| Colunas de delineamento | `delineado_por text`, `delineado_em timestamptz` |
+| OS existentes | 4, todas `concluida` — válidas sob a trava nova; a troca não invalidou nada |
 
 ### O fluxo
 
