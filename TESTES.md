@@ -1194,3 +1194,47 @@ zero, e depois dela, com as tabelas na carga.
       tem as saídas com o `os_id`
 - [ ] Concluir → conferir que **não** houve segunda baixa (idempotência)
 - [ ] Filtrar por "⚠ Com falta de material" e ver só as OS travadas por peça
+
+---
+
+## Ficha da máquina (18/08/2026, noite)
+
+### Migração 32 — pendente de aplicação
+
+`supabase/32_maquinas_ficha.sql` **ainda não rodou**. Cria `maq_ativo_comentarios` (diário de
+bordo por máquina) e a coluna `maq_ativos.instrucoes`. Aditiva; sem ela a ficha funciona e só o
+diário fica vazio — verificado no navegador com a migração ausente.
+
+Depois de aplicar:
+
+```sql
+select count(*) from maq_ativo_comentarios;   -- 0, tabela nova
+select column_name from information_schema.columns
+ where table_name='maq_ativos' and column_name='instrucoes';   -- 1 linha
+```
+
+### Conferido no navegador (cargo Livre, sem a migração 32)
+
+| Item | Resultado |
+|------|-----------|
+| Clique na máquina abre a **ficha**, não o formulário | ✅ |
+| Identidade (categoria, fabricante/modelo, patrimônio, local, status) só leitura — zero campos editáveis | ✅ |
+| Uso atual exibido como "calculado dos registros" | ✅ |
+| "Editar cadastro" escondido para observador (só admin/gestor) | ✅ |
+| Caixa de comentário escondida para observador | ✅ |
+| Últimas OS da máquina listadas e clicáveis para o detalhe | ✅ |
+| No cadastro (edição): campo de uso **travado**, com ajuda explicando | ✅ |
+| No cadastro (criação): campo livre, rotulado "Uso inicial" | ✅ |
+
+### Fica para o usuário (depois da migração 32, com cargo de escrita)
+
+- [ ] Abrir a ficha, anotar um comentário e conferir que ele volta datado e assinado
+- [ ] Registrar uso pela ficha e ver o "Uso atual" refletir o novo total
+- [ ] Abrir OS pela ficha e conferir que a máquina já vem selecionada
+- [ ] Preencher instruções no cadastro (admin/gestor) e vê-las na ficha
+- [ ] Como técnico: conferir que "Editar cadastro" **não** aparece
+
+### Deferido
+
+- **Foto da máquina** — exige bucket no Supabase Storage com políticas próprias; fazer quando
+  decidido, como tarefa própria
