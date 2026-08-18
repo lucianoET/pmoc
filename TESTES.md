@@ -1238,3 +1238,47 @@ A ficha foi verificada nos dois estados: sem a migração (diário vazio, nada q
 
 - **Foto da máquina** — exige bucket no Supabase Storage com políticas próprias; fazer quando
   decidido, como tarefa própria
+
+---
+
+## OS: duplicata de peça, cadastro na hora e vínculo material ↔ serviço (18/08/2026, noite)
+
+### Bug corrigido — chave duplicada ao salvar as peças
+
+Reportado em produção: `duplicate key value violates unique constraint
+"maq_os_materiais_os_id_material_id_key"`. Causa: "+ Peça" empurrava sempre o primeiro material
+do estoque — dois cliques, duas linhas da mesma peça, e o unique recusava. Três defesas agora:
+
+1. A linha nova nasce **sem peça escolhida** ("— escolher peça —")
+2. Escolher uma peça que já está na OS **funde** na linha existente (soma quantidades) — conferido
+   no navegador: 2 linhas com a mesma peça viraram 1 com quantidade 2
+3. `consolidarPecas()` soma por material antes do insert — rede de segurança com gate
+
+### Cadastro na hora
+
+Os dois seletores da OS ganharam "➕ Cadastrar novo…": peça abre o modal de material, serviço abre
+um modal novo (`rep_servicos`); o item criado volta selecionado na linha que pediu.
+
+### Migração 33 — pendente de aplicação
+
+`supabase/33_maquinas_material_servico.sql` (aditiva): `maq_materiais.servico_id` → o serviço
+padrão da peça. Ao lançar a peça numa OS o serviço entra junto; ao lançar o serviço, as peças
+vinculadas entram juntas — os dois sentidos saem da mesma coluna. O vínculo é gerenciado no
+cadastro do material (clicar no **nome** do material no estoque abre o cadastro, que agora também
+edita — só para cargo de escrita). Sem a migração, nada quebra: a coluna ausente vem como
+`undefined` e o vínculo simplesmente não dispara.
+
+Depois de aplicar:
+
+```sql
+select column_name from information_schema.columns
+ where table_name='maq_materiais' and column_name='servico_id';   -- 1 linha
+```
+
+### Fica para o usuário (com cargo de escrita)
+
+- [ ] Na OS: "+ Peça" duas vezes, escolher a mesma peça nas duas → vira uma linha; salvar sem erro
+- [ ] "+ Peça → Cadastrar nova peça…" → salvar → a peça volta selecionada na linha
+- [ ] "+ Serviço → Cadastrar novo serviço…" → idem
+- [ ] (Após migração 33) Vincular um serviço a uma peça no estoque; na OS, escolher a peça e ver o
+      serviço entrar sozinho; remover tudo, escolher o serviço e ver a peça entrar

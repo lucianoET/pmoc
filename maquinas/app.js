@@ -44,6 +44,10 @@ let COMENTARIOS = []
 // listas de peças e serviços em edição no modal de detalhe da OS — vivem em
 // memória e só vão ao banco no Salvar
 let OSD_PECAS = [], OSD_SERVICOS = []
+// linha da OS aguardando um cadastro rápido (peça ou serviço criado na hora)
+let LINHA_NOVO_MATERIAL = null, LINHA_NOVO_SERVICO = null
+// material aberto no modal de cadastro (null = criação)
+let MATERIAL_MODAL_ID = null
 let AGENDA_ANO = new Date().getFullYear()
 let AGENDA_MES = new Date().getMonth()
 
@@ -820,7 +824,9 @@ function renderMateriais(){
 
     return `<tr>
       <td class="hi">${esc(m.codigo||'—')}</td>
-      <td>${esc(m.nome)}</td>
+      <td>${podeEscreverNoModulo()
+        ? `<a href="#" onclick="event.preventDefault();abrirModalMaterial(${m.id})" style="color:var(--text)" title="Editar cadastro e serviço vinculado">${esc(m.nome)}</a>`
+        : esc(m.nome)}</td>
       <td><span class="badge b-blue">${esc(m.tipo.toUpperCase())}</span></td>
       <td>
         <div style="display:flex;align-items:center;gap:8px">
@@ -1586,7 +1592,9 @@ function renderPecasOS(){
     return `<div class="panel-card" style="padding:10px 12px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select onchange="trocarPecaOS(${i}, this.value)" style="flex:1 1 180px;min-width:0">
+          <option value="" ${peca.material_id?'':'selected'}>— escolher peça —</option>
           ${MATERIAIS.map(m => `<option value="${m.id}" ${m.id===peca.material_id?'selected':''}>${esc(m.nome)}</option>`).join('')}
+          <option value="novo">➕ Cadastrar nova peça…</option>
         </select>
         <input type="number" value="${peca.quantidade}" min="0.01" step="0.5" title="Quantidade"
           oninput="atualizarPecaOS(${i}, 'quantidade', this.value)" style="width:82px"/>
@@ -1619,6 +1627,7 @@ function renderServicosOS(){
       ? `<select onchange="trocarServicoOS(${i}, this.value)" style="flex:1 1 180px;min-width:0">
            <option value="">— serviço avulso —</option>
            ${SERVICOS.map(s => `<option value="${s.id}" ${s.id===servico.servico_id?'selected':''}>${esc(s.nome)}</option>`).join('')}
+           <option value="novo">➕ Cadastrar novo serviço…</option>
          </select>`
       : ''
     return `<div class="panel-card" style="padding:10px 12px">
@@ -1664,19 +1673,53 @@ function recalcularCustosOS(){
 }
 
 function adicionarPecaOS(){
-  const material = MATERIAIS[0]
-  if(!material){ alert('Nenhum material cadastrado no estoque.'); return }
-  OSD_PECAS.push({ material_id: material.id, quantidade: 1, preco_unit: material.preco ?? null, origem: 'manual' })
+  // a linha nasce SEM peça escolhida: era o push automático do primeiro
+  // material do estoque que produzia duas linhas iguais e o erro de chave
+  // duplicada ao salvar
+  OSD_PECAS.push({ material_id: null, quantidade: 1, preco_unit: null, origem: 'manual' })
   renderPecasOS()
 }
 
 function trocarPecaOS(indice, materialId){
+  if(materialId === 'novo'){
+    // cadastrar a peça sem sair da OS: guarda a linha, abre o cadastro e o
+    // salvarMaterial devolve o id para cá
+    LINHA_NOVO_MATERIAL = indice
+    renderPecasOS()
+    abrirModalMaterial()
+    return
+  }
   const material = MATERIAIS.find(m => m.id === parseInt(materialId))
   if(!material) return
+
+  // a peça já está em outra linha? funde nela em vez de criar a duplicata que
+  // o unique do banco recusaria
+  const existente = OSD_PECAS.findIndex((p, i) => i !== indice && p.material_id === material.id)
+  if(existente >= 0){
+    OSD_PECAS[existente].quantidade = Number(OSD_PECAS[existente].quantidade) + Number(OSD_PECAS[indice].quantidade || 1)
+    OSD_PECAS.splice(indice, 1)
+    renderPecasOS()
+    return
+  }
+
   OSD_PECAS[indice].material_id = material.id
   // o preço acompanha a peça escolhida; se o usuário já tinha ajustado à mão,
   // trocar de peça troca o preço junto — é peça outra, preço outro
   OSD_PECAS[indice].preco_unit = material.preco ?? null
+
+  // vínculo material → serviço (migração 33): a peça traz o serviço que a
+  // instala, se ele ainda não estiver na OS
+  if(material.servico_id && !OSD_SERVICOS.some(x => x.servico_id === material.servico_id)){
+    const servico = SERVICOS.find(x => x.id === material.servico_id)
+    if(servico){
+      OSD_SERVICOS.push({
+        servico_id: servico.id, descricao: '',
+        horas: Number(servico.tempo_padrao_h) || 1,
+        valor_hora: servico.valor_hora != null ? Number(servico.valor_hora) : valorHoraPadrao(),
+      })
+      renderServicosOS()
+    }
+  }
   renderPecasOS()
 }
 
@@ -1691,25 +1734,65 @@ function removerPecaOS(indice){
 }
 
 function adicionarServicoOS(){
-  const servico = SERVICOS[0] || null
-  OSD_SERVICOS.push({
-    servico_id: servico?.id ?? null,
-    descricao: servico ? '' : '',
-    horas: Number(servico?.tempo_padrao_h) || 1,
-    valor_hora: (servico?.valor_hora != null ? Number(servico.valor_hora) : valorHoraPadrao()),
-  })
+  // mesma regra da peça: a linha nasce sem serviço escolhido — o usuário
+  // seleciona do catálogo, escreve um avulso ou cadastra um novo
+  OSD_SERVICOS.push({ servico_id: null, descricao: '', horas: 1, valor_hora: valorHoraPadrao() })
   renderServicosOS()
 }
 
 function trocarServicoOS(indice, servicoId){
+  if(servicoId === 'novo'){
+    LINHA_NOVO_SERVICO = indice
+    renderServicosOS()
+    abrirModalServicoNovo()
+    return
+  }
   const servico = SERVICOS.find(s => s.id === parseInt(servicoId)) || null
   OSD_SERVICOS[indice].servico_id = servico?.id ?? null
   if(servico){
     OSD_SERVICOS[indice].horas = Number(servico.tempo_padrao_h) || OSD_SERVICOS[indice].horas
     OSD_SERVICOS[indice].valor_hora = servico.valor_hora != null ? Number(servico.valor_hora) : valorHoraPadrao()
     OSD_SERVICOS[indice].descricao = ''
+
+    // vínculo serviço → materiais (migração 33): o serviço traz as peças que
+    // consome, as que ainda não estiverem na OS
+    for(const material of MATERIAIS.filter(m => m.servico_id === servico.id)){
+      if(!OSD_PECAS.some(p => p.material_id === material.id)){
+        OSD_PECAS.push({ material_id: material.id, quantidade: 1, preco_unit: material.preco ?? null, origem: 'manual' })
+      }
+    }
+    renderPecasOS()
   }
   renderServicosOS()
+}
+
+// ── cadastro rápido de serviço, sem sair da OS ──
+function abrirModalServicoNovo(){
+  document.getElementById('sv-nome').value = ''
+  document.getElementById('sv-tempo').value = ''
+  document.getElementById('sv-valor').value = valorHoraPadrao() ?? ''
+  document.getElementById('modal-servico').classList.add('open')
+}
+
+async function salvarServicoNovo(){
+  const nome = document.getElementById('sv-nome').value.trim()
+  if(!nome){ alert('Nome obrigatório.'); return }
+  const tempo = parseFloat(document.getElementById('sv-tempo').value) || null
+  const valor = parseFloat(document.getElementById('sv-valor').value) || null
+
+  const { data, error } = await supa.from('rep_servicos')
+    .insert({ nome, tempo_padrao_h: tempo, valor_hora: valor })
+    .select().single()
+  if(error){ alert('Erro: ' + error.message); return }
+  if(!data){ alert('Nada foi gravado: seu cargo não tem permissão de escrita.'); return }
+
+  fecharModal('modal-servico')
+  await carregarCatalogoReparos()
+  // devolve o serviço recém-criado para a linha que pediu o cadastro
+  if(LINHA_NOVO_SERVICO !== null && OSD_SERVICOS[LINHA_NOVO_SERVICO]){
+    trocarServicoOS(LINHA_NOVO_SERVICO, String(data.id))
+  }
+  LINHA_NOVO_SERVICO = null
 }
 
 function atualizarServicoOS(indice, campo, valor){
@@ -1725,11 +1808,24 @@ function removerServicoOS(indice){
 
 // grava as duas listas: apaga e reinsere, que é o jeito honesto de salvar uma
 // lista editada inteira sem inventar identidade para linha que o usuário mexeu
+// A mesma peça em duas linhas vira UMA linha com as quantidades somadas — o
+// banco tem unique (os_id, material_id) e recusaria o insert; consolidar aqui
+// é o que transforma o erro de constraint em comportamento esperado.
+function consolidarPecas(pecas){
+  const porMaterial = new Map()
+  for(const p of pecas){
+    const atual = porMaterial.get(p.material_id)
+    if(atual) atual.quantidade += Number(p.quantidade)
+    else porMaterial.set(p.material_id, { ...p, quantidade: Number(p.quantidade) })
+  }
+  return [...porMaterial.values()]
+}
+
 async function gravarListasDaOS(osId){
   await supa.from('maq_os_materiais').delete().eq('os_id', osId)
   await supa.from('maq_os_servicos').delete().eq('os_id', osId)
 
-  const pecas = OSD_PECAS.filter(p => p.material_id && Number(p.quantidade) > 0)
+  const pecas = consolidarPecas(OSD_PECAS.filter(p => p.material_id && Number(p.quantidade) > 0))
   if(pecas.length){
     const { error } = await supa.from('maq_os_materiais').insert(pecas.map(p => ({
       os_id: osId, material_id: p.material_id,
@@ -2093,29 +2189,60 @@ async function salvarAtivo(){
 }
 
 // ── MODAL MATERIAL ──
-function abrirModalMaterial(){
-  ['mat-cod','mat-nome','mat-uni'].forEach(id => {
-    document.getElementById(id).value = id==='mat-uni'?'un':''
-  })
-  document.getElementById('mat-tipo').value = 'consumivel'
-  document.getElementById('mat-min').value  = '2'
+function abrirModalMaterial(id){
+  MATERIAL_MODAL_ID = id || null
+  const material = id ? MATERIAIS.find(m => m.id === id) : null
+
+  document.getElementById('modal-material-titulo').textContent =
+    material ? 'Editar material / peça' : 'Novo material / peça'
+  document.getElementById('mat-cod').value  = material?.codigo || ''
+  document.getElementById('mat-nome').value = material?.nome || ''
+  document.getElementById('mat-tipo').value = material?.tipo || 'consumivel'
+  document.getElementById('mat-uni').value  = material?.unidade || 'un'
+  document.getElementById('mat-min').value  = material?.estoque_minimo ?? 2
+
+  // serviço vinculado (migração 33): o serviço que esta peça costuma exigir.
+  // Sem catálogo carregado o campo some — não há o que vincular.
+  const wrap = document.getElementById('mat-servico-wrap')
+  wrap.style.display = SERVICOS.length ? '' : 'none'
+  document.getElementById('mat-servico').innerHTML =
+    '<option value="">— nenhum —</option>' +
+    SERVICOS.map(x => `<option value="${x.id}" ${x.id===material?.servico_id?'selected':''}>${esc(x.nome)}</option>`).join('')
+
   document.getElementById('modal-material').classList.add('open')
 }
 
 async function salvarMaterial(){
   const nome = document.getElementById('mat-nome').value.trim()
   if(!nome){ alert('Nome obrigatório.'); return }
-  const { error } = await supa.from('maq_materiais').insert({
+  const campos = {
     codigo:          document.getElementById('mat-cod').value.trim().toUpperCase() || null,
     nome,
     tipo:            document.getElementById('mat-tipo').value,
     unidade:         document.getElementById('mat-uni').value.trim() || 'un',
     estoque_minimo:  parseFloat(document.getElementById('mat-min').value) || 0,
-    estoque_atual:   0,
-  })
+    servico_id:      parseInt(document.getElementById('mat-servico').value) || null,
+  }
+
+  // .select() pela mesma razão de sempre: sob RLS, escrita sem efeito volta
+  // sem erro — e aqui o id retornado é o que devolve a peça à linha da OS
+  const consulta = MATERIAL_MODAL_ID
+    ? supa.from('maq_materiais').update(campos).eq('id', MATERIAL_MODAL_ID)
+    : supa.from('maq_materiais').insert({ ...campos, estoque_atual: 0 })
+  const { data, error } = await consulta.select()
   if(error){ alert('Erro: '+error.message); return }
+  if(!data || !data.length){ alert('Nada foi gravado: seu cargo não tem permissão de escrita.'); return }
+
   fecharModal('modal-material')
   await carregarTudo()
+
+  // se o cadastro nasceu de um "+ Peça → Cadastrar nova", a peça recém-criada
+  // entra na linha que pediu
+  if(LINHA_NOVO_MATERIAL !== null && OSD_PECAS[LINHA_NOVO_MATERIAL] !== undefined && !MATERIAL_MODAL_ID){
+    trocarPecaOS(LINHA_NOVO_MATERIAL, String(data[0].id))
+  }
+  LINHA_NOVO_MATERIAL = null
+  MATERIAL_MODAL_ID = null
 }
 
 // ── MODAL MOVIMENTO ──
@@ -2278,6 +2405,7 @@ function exporNoWindow(){
     salvarValorHora,
     salvarOperacao,
     salvarOS,
+    salvarServicoNovo,
     salvarUso,
     trocarPecaOS,
     trocarServicoOS,

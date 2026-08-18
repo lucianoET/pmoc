@@ -191,3 +191,70 @@ test('escrita sem efeito não é relatada como sucesso', () => {
       `${fn} precisa tratar o caso de zero linhas gravadas`)
   }
 })
+
+// ── duplicata de peça e cadastro na hora (18/08/2026, noite) ──────────────
+// Encontrado em produção: "+ Peça" empurrava sempre o primeiro material do
+// estoque — dois cliques, duas linhas da mesma peça, e o unique
+// (os_id, material_id) recusava o insert com erro de chave duplicada.
+test('a mesma peça em duas linhas é consolidada antes do insert', () => {
+  assert.match(APP, /function consolidarPecas\(pecas\)\{[\s\S]*?atual\.quantidade \+= Number\(p\.quantidade\)/,
+    'consolidar soma quantidades — é o que transforma o erro de constraint em comportamento esperado')
+  assert.match(APP, /const pecas = consolidarPecas\(OSD_PECAS\.filter/,
+    'gravarListasDaOS precisa consolidar antes de inserir')
+})
+
+test('a linha nova nasce sem peça escolhida, e trocar para uma peça repetida funde as linhas', () => {
+  const adicionar = APP.match(/function adicionarPecaOS\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(adicionar)
+  assert.match(adicionar[1], /material_id: null/,
+    'era o push automático do primeiro material que produzia a duplicata')
+
+  const trocar = APP.match(/function trocarPecaOS\(indice, materialId\)\{([\s\S]*?)\n\}/)
+  assert.ok(trocar)
+  assert.match(trocar[1], /const existente = OSD_PECAS\.findIndex/)
+  assert.match(trocar[1], /OSD_PECAS\.splice\(indice, 1\)/,
+    'escolher uma peça que já está na OS soma na linha existente em vez de duplicar')
+})
+
+test('os seletores da OS têm a opção de cadastrar item novo na hora', () => {
+  assert.match(APP, /<option value="novo">➕ Cadastrar nova peça…<\/option>/)
+  assert.match(APP, /<option value="novo">➕ Cadastrar novo serviço…<\/option>/)
+  assert.match(APP, /if\(materialId === 'novo'\)\{[\s\S]*?LINHA_NOVO_MATERIAL = indice/)
+  assert.match(APP, /if\(servicoId === 'novo'\)\{[\s\S]*?LINHA_NOVO_SERVICO = indice/)
+  assert.match(HTML, /id="modal-servico"/)
+  assert.match(APP, /async function salvarServicoNovo\(\)\{[\s\S]*?from\('rep_servicos'\)/)
+  // o recém-criado volta selecionado na linha que pediu o cadastro
+  assert.match(APP, /trocarPecaOS\(LINHA_NOVO_MATERIAL, String\(data\[0\]\.id\)\)/)
+  assert.match(APP, /trocarServicoOS\(LINHA_NOVO_SERVICO, String\(data\.id\)\)/)
+})
+
+// ── vínculo material ↔ serviço (migração 33) ──────────────────────────────
+test('a migração 33 dá o vínculo por uma coluna só, e é aditiva', () => {
+  const arquivo = path.join(RAIZ, 'supabase', '33_maquinas_material_servico.sql')
+  assert.ok(fs.existsSync(arquivo))
+  const sql = fs.readFileSync(arquivo, 'utf8')
+  assert.match(sql, /add column if not exists servico_id bigint references rep_servicos\(id\)/)
+  assert.doesNotMatch(sql, /drop\s+(table|column)/i)
+})
+
+test('escolher a peça traz o serviço vinculado, e escolher o serviço traz as peças', () => {
+  const peca = APP.match(/function trocarPecaOS\(indice, materialId\)\{([\s\S]*?)\n\}/)
+  assert.match(peca[1], /material\.servico_id && !OSD_SERVICOS\.some\(x => x\.servico_id === material\.servico_id\)/,
+    'material → serviço: entra só se ainda não estiver na OS')
+
+  const servico = APP.match(/function trocarServicoOS\(indice, servicoId\)\{([\s\S]*?)\n\}/)
+  assert.match(servico[1], /MATERIAIS\.filter\(m => m\.servico_id === servico\.id\)/,
+    'serviço → materiais: a volta sai da mesma coluna, por consulta')
+  assert.match(servico[1], /!OSD_PECAS\.some\(p => p\.material_id === material\.id\)/)
+})
+
+test('o vínculo é gerenciado no cadastro do material, que agora também edita', () => {
+  assert.match(HTML, /id="mat-servico"/)
+  assert.match(APP, /function abrirModalMaterial\(id\)\{[\s\S]*?MATERIAL_MODAL_ID = id \|\| null/)
+  const salvar = APP.match(/async function salvarMaterial\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(salvar)
+  assert.match(salvar[1], /servico_id:\s*parseInt\(document\.getElementById\('mat-servico'\)\.value\) \|\| null/)
+  assert.match(salvar[1], /MATERIAL_MODAL_ID\s*\n?\s*\? supa\.from\('maq_materiais'\)\.update/,
+    'o mesmo modal cria e edita — o vínculo das 34 peças existentes precisa de um caminho')
+  assert.match(salvar[1], /\.select\(\)/, 'escrita sem efeito sob RLS não passa por sucesso')
+})
