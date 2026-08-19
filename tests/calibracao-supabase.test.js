@@ -67,17 +67,25 @@ test('RLS ligado nas cinco tabelas', () => {
   }
 })
 
-test('as políticas aceitam anon — e o arquivo diz por quê, em letras grandes', () => {
-  // Não é descuido: o módulo segue sem login por decisão do usuário
-  // (18/08/2026). Se algum dia ganhar shared/auth.js, este teste é o
-  // lembrete de que a migração de políticas faz parte do trabalho.
+test('as políticas que a 35 escreveu aceitam anon — e o arquivo aponta para quem fechou isso', () => {
+  // Este teste mudou de conteúdo porque o FATO mudou: em 18/08/2026 o
+  // módulo subiu sem login e estas policies aceitavam anon para tudo; em
+  // 19/08 a migração 39 restringiu as cinco a `authenticated` e devolveu
+  // só o SELECT a `public` (decisão D-06 fechada, gate em
+  // tests/calibracao-login.test.js).
+  //
+  // O arquivo 35 continua sendo o histórico do que ele criou — migração
+  // aplicada não se reescreve —, mas o aviso no topo tem de mandar quem
+  // aplicar num banco novo rodar a 39 em seguida. Sem isso, um banco
+  // novo nasceria com o buraco que já foi fechado no de produção.
   for (const t of TABELAS) {
     assert.match(SCHEMA, new RegExp(`create policy "${t}_tudo" on ${t}\\s+for all to anon, authenticated`),
-      `política de ${t} deveria aceitar anon enquanto o módulo não tem login`)
+      `a 35 criou a policy de ${t} assim; é o registro histórico dela`)
   }
   assert.match(SCHEMA, /⚠ SEGURANÇA/,
-    'a consequência de não ter login fica escrita no topo da migração')
-  assert.match(SCHEMA, /QUALQUER PESSOA COM A URL/)
+    'o aviso continua no topo, agora dizendo que foi substituído')
+  assert.match(SCHEMA, /39_calibracao_rls_autenticada/,
+    'o topo da 35 precisa nomear a migração que fechou a escrita anônima')
 })
 
 test('a ata não virou tabela: só é lida, nunca gravada', () => {

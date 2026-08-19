@@ -166,6 +166,19 @@ html[data-theme="light"]{
 </head>
 <body class="erp-calibracao-body">
 <a href="/" class="calib-home" title="Portal CMASM">⇚ CMASM</a>
+<!-- Tela de login (D-06). shared/auth.js desenha com os nomes de token da
+     plataforma (--surface, --border, --text…); este módulo tem os seus
+     (--sf, --bd, --tx…). Sem esta ponte o cartão sai escuro sobre o tema
+     claro. É CSS, não cor nova: cada linha aponta para um token daqui. -->
+<style>
+#login-cal{
+  --surface:var(--sf); --surface2:var(--sf2); --border:var(--bd);
+  --text:var(--tx); --text2:var(--tx2); --text3:var(--tx3);
+  --yellow:var(--blue);
+  --ff:'DM Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+</style>
+<div id="login-cal"></div>
 <div id="root"></div>
 
 <!-- React e ReactDOM carregados de forma síncrona ANTES do app -->
@@ -5395,12 +5408,18 @@ function Lotes({
 // controle de calibração, e cada computador via um dado diferente.
 // Agora lê e grava nas tabelas cal_* (migrações 35 e 36).
 //
-// ⚠ O módulo continua sem login, por decisão do usuário — as políticas
-// aceitam anon, então quem tem a URL altera o dado de todos. Está
-// registrado como pendência conhecida no CLAUDE.md.
+// Login por cargo desde 19/08/2026 (decisão D-06 fechada): a migração 39
+// deixou a ESCRITA nas cinco tabelas cal_* só para sessão autenticada. A
+// leitura segue pública, como nas outras seis famílias de tabela — é o que
+// mantém o cargo "Livre" (observador sem senha) funcionando.
 const SUPA_URL = 'https://thoaqipyhfmromsgzmjs.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRob2FxaXB5aGZtcm9tc2d6bWpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjk5NTksImV4cCI6MjEwMTY0NTk1OX0.1Ig6ijb6SKgeQRgGwM54MyzlVr-n_feSAxaFTwbHRGY';
 const supa = window.supabase ? window.supabase.createClient(SUPA_URL, SUPA_KEY) : null;
+// O módulo ES do login precisa do MESMO client: dois clients teriam duas
+// sessões, e a sessão em que o usuário digitou a senha não seria a sessão
+// que faz as consultas — a escrita voltaria a sair como anon e o Postgres
+// recusaria, sem nada na tela explicando por quê.
+window.__calSupa = supa;
 
 // Chave antiga. Não é mais lida nem escrita — fica declarada só para a
 // tela Dados poder avisar quem ainda tem dado preso no navegador.
@@ -9145,7 +9164,19 @@ function App() {
     className: "thm",
     title: "Alternar tema",
     onClick: () => setTheme(t => t === 'dark' ? 'light' : 'dark')
-  }, theme === 'dark' ? '☀️ Claro' : '🌙 Escuro')), /*#__PURE__*/React.createElement("div", {
+  }, theme === 'dark' ? '☀️ Claro' : '🌙 Escuro'),
+  // O cargo Livre é observador: entra sem senha, logo continua sendo anon,
+  // e desde a migração 39 o Postgres recusa a escrita dele. Dizer isso aqui
+  // custa uma linha; descobrir clicando em Salvar custa um alerta de erro
+  // de banco no meio do trabalho.
+  window.CAL_USUARIO?.role === 'observador' && /*#__PURE__*/React.createElement("span", {
+    className: "tb-s",
+    title: 'Entrou como observador — pode consultar, não pode gravar. Saia e escolha um cargo com senha para editar.'
+  }, "somente leitura"), /*#__PURE__*/React.createElement("button", {
+    className: "thm",
+    title: window.CAL_USUARIO?.nome || 'Sair',
+    onClick: () => window.__calSair()
+  }, "\u21A9 ", window.CAL_USUARIO?.cargo || window.CAL_USUARIO?.funcao || 'Sair')), /*#__PURE__*/React.createElement("div", {
     className: "content"
   },
   // Sem as migrações 35/36 aplicadas, ou com a rede fora, o módulo diz o
@@ -9199,7 +9230,51 @@ function App() {
     s: s
   }), pg === 'ajuda' && /*#__PURE__*/React.createElement(AjudaPage, null))));
 }
-ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
+// O app não monta mais na carga: quem chama é o módulo de login abaixo,
+// depois que há sessão (ou depois do cargo Livre, que é observador). Sem
+// isso as consultas sairiam antes do signIn e a tela abriria vazia.
+window.__calIniciar = function (usuario) {
+  window.CAL_USUARIO = usuario || null;
+  ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
+};
+window.__calSair = async function () {
+  try { await window.__calSupa.auth.signOut(); } catch (e) {}
+  location.reload();
+};
+</script>
+
+<!-- Login por cargo (D-06). Módulo ES, então roda depois do script clássico
+     acima — `__calIniciar` e `__calSupa` já existem quando isto executa. -->
+<script type="module">
+import { Auth } from '../shared/auth.js';
+
+// O tema é aplicado pelo React, que só monta depois do login: sem estas
+// duas linhas a tela de login pisca no tema errado para quem escolheu claro.
+try {
+  const t = localStorage.getItem('cmasm_erp_theme');
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+} catch (e) {}
+
+const alvo = document.getElementById('login-cal');
+if (!window.__calSupa) {
+  // SDK fora do ar: sem client não há login nem dado. Abrir o app aqui
+  // mostraria onze telas vazias, que é pior do que dizer o que houve.
+  alvo.innerHTML = '<div style="padding:40px;text-align:center;color:var(--tx)">' +
+    'Não foi possível carregar o SDK do Supabase. Verifique a conexão e recarregue.</div>';
+} else {
+  // `mount` checa a sessão salva E escuta onAuthStateChange: com sessão
+  // válida no navegador, onLogin chega duas vezes para o mesmo login. Sem
+  // esta trava seriam dois createRoot no mesmo nó.
+  let iniciado = false;
+  new Auth(window.__calSupa, { appNome: 'Calibração', appIcone: '⚓' })
+    .onLogin((usuario) => {
+      if (iniciado) return;
+      iniciado = true;
+      alvo.remove();
+      window.__calIniciar(usuario);
+    })
+    .mount('#login-cal');
+}
 </script>
 </body>
 </html>

@@ -15,16 +15,16 @@
 -- em escrita, e não estão em nenhuma das duas chaves de localStorage.
 -- Tabela para dado que ninguém edita é peso morto.
 --
--- ⚠ SEGURANÇA — LEIA ANTES DE APLICAR
--- Este módulo não tem login, por decisão do usuário (18/08/2026). Todas
--- as políticas abaixo aceitam `anon`, então QUALQUER PESSOA COM A URL
--- /calibracao LÊ E ALTERA ESTES DADOS. Isso é um degrau abaixo dos
--- outros seis módulos, onde a escrita exige sessão autenticada.
--- Enquanto o dado morava no navegador o estrago era local; a partir
--- daqui é compartilhado. Fechar isso depois exige `shared/auth.js` no
--- módulo mais uma migração trocando as políticas de escrita para
--- `to authenticated`. Está registrado como pendência conhecida no
--- CLAUDE.md — não é configuração esquecida.
+-- ⚠ SEGURANÇA — AS POLICIES DESTE ARQUIVO FORAM SUBSTITUÍDAS
+-- Como escrito abaixo, as cinco policies aceitam `anon` para TUDO —
+-- qualquer pessoa com a URL /calibracao lia e ALTERAVA estes dados. Era
+-- a consequência de o módulo ter subido sem login (decisão de
+-- 18/08/2026). Corrigido em 19/08/2026 por
+-- `39_calibracao_rls_autenticada.sql`, que restringe estas mesmas
+-- policies a `authenticated` e devolve o SELECT a `public` — leitura
+-- aberta, escrita autenticada, como nas outras seis famílias de tabela.
+-- Se você está aplicando esta migração num banco novo, rode a 39 logo
+-- em seguida: o estado descrito neste arquivo é o de 18/08, não o atual.
 --
 -- Migração aditiva: nenhuma tabela existente é tocada, nada é dropado.
 -- ⚠ `create table if not exists` é no-op em tabela que já existe — se
@@ -172,8 +172,8 @@ create index if not exists cal_equipamentos_prox_idx
 
 -- ── RLS ──
 -- Leitura e escrita abertas a anon: ver o aviso de segurança no topo
--- deste arquivo. Não é descuido, é a consequência de o módulo seguir
--- sem login.
+-- deste arquivo. Não é descuido, é a consequência de o módulo ter subido
+-- sem login — e é o que a migração 39 corrigiu no dia seguinte.
 alter table cal_labs         enable row level security;
 alter table cal_equipamentos enable row level security;
 alter table cal_ps           enable row level security;
