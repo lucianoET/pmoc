@@ -5468,6 +5468,21 @@ function daLinha(linha, campos, datas = []) {
   return obj;
 }
 
+// Com o host inalcançável, uma consulta do supabase-js NÃO rejeita nem
+// resolve: ela retenta o fetch indefinidamente (conferido no navegador —
+// 8,8 s sem qualquer desfecho, console cheio de ERR_NAME_NOT_RESOLVED).
+// try/catch não pega isso; só prazo pega. Sem ele o módulo ficava preso
+// em "Carregando dados do banco…" para sempre e uma gravação perdida
+// jamais avisava — a tela mostrando salvo e o banco sem receber nada.
+const PRAZO_MS = 15000;
+function comPrazo(p) {
+  return Promise.race([
+    Promise.resolve(p),
+    new Promise((_, rej) =>
+      setTimeout(() => rej(new Error('O banco não respondeu em 15 s — verifique a conexão.')), PRAZO_MS))
+  ]);
+}
+
 function useStore() {
   const [eqs, setEqs] = useState([]);
   const [labs, setLabs] = useState([]);
@@ -5481,7 +5496,21 @@ function useStore() {
   // resto do pmoc.
   async function carregarTudo() {
     if (!supa) { setErroCarga('SDK do Supabase não carregou.'); setCarregando(false); return; }
-    const [rl, re, rp, rt, rc] = await Promise.all([
+    setCarregando(true);
+    try {
+      await _carregar();
+    } catch (e) {
+      // Tabela ausente devolve {error}; rede fora REJEITA a promessa. Sem
+      // este catch a função morria antes de setCarregando(false) e o
+      // módulo ficava preso em "Carregando dados do banco…" para sempre —
+      // era exatamente o caso que o aviso existia para cobrir.
+      setErroCarga(e && e.message ? e.message : String(e));
+      setCarregando(false);
+    }
+  }
+
+  async function _carregar() {
+    const [rl, re, rp, rt, rc] = await comPrazo(Promise.all([
       // `order` em tudo, sempre. Sem ele o Postgres devolve na ordem que
       // quiser, e um UPDATE reescreve a linha noutra posição do heap: a
       // lista de instrumentos se reembaralhava sozinha a cada edição.
@@ -5492,7 +5521,7 @@ function useStore() {
       supa.from('cal_ps').select('*').order('id'),
       supa.from('cal_lotes').select('*').order('id'),
       supa.from('cal_catalogo').select('*').order('equip_tipo').order('ord')
-    ]);
+    ]));
     const falha = [rl, re, rp, rt, rc].find(r => r.error);
     if (falha) {
       // Sem as migrações 35/36 o módulo avisa em vez de mostrar tela
@@ -5524,8 +5553,14 @@ function useStore() {
   // 11 páginas React, que consomem estes mutators de forma síncrona.
   function gravar(q, oque) {
     if (!supa) return;
-    Promise.resolve(q).then(({ error }) => {
+    comPrazo(q).then(({ error }) => {
       if (error) { alert(`Erro ao salvar ${oque}: ${error.message}`); carregarTudo(); }
+    }).catch(e => {
+      // Rede fora rejeita em vez de devolver {error}. Sem este catch a
+      // rejeição era engolida: a tela mostrava a alteração salva e o
+      // banco nunca recebia nada — a pior falha possível aqui.
+      alert(`Erro ao salvar ${oque}: ${e && e.message ? e.message : e}`);
+      carregarTudo();
     });
   }
 

@@ -127,7 +127,7 @@ test('o estado do módulo não é mais gravado no navegador', () => {
 })
 
 test('a carga lê as cinco tabelas em paralelo', () => {
-  const bloco = /async function carregarTudo\(\)\s*\{([\s\S]*?)\n  \}/.exec(HTML)
+  const bloco = /async function _carregar\(\)\s*\{([\s\S]*?)\n  \}/.exec(HTML)
   assert.ok(bloco, 'carregarTudo() deveria existir em useStore')
   for (const t of TABELAS) {
     assert.ok(bloco[1].includes(`from('${t}')`), `carregarTudo deveria ler ${t}`)
@@ -141,12 +141,28 @@ test('toda leitura é ordenada — senão a lista se reembaralha a cada edição
   // posição do heap. Na prática o instrumento editado saltava de lugar na
   // tabela. É invisível em banco recém-carregado e só aparece depois da
   // primeira edição — exatamente o que um gate precisa segurar.
-  const bloco = /async function carregarTudo\(\)\s*\{([\s\S]*?)\n  \}/.exec(HTML)
+  const bloco = /async function _carregar\(\)\s*\{([\s\S]*?)\n  \}/.exec(HTML)
   assert.ok(bloco)
   for (const t of TABELAS) {
     const sel = new RegExp(`from\\('${t}'\\)\\.select\\([^)]*\\)((\\.order\\('[a-z_]+'\\))+)`)
     assert.match(bloco[1], sel, `a leitura de ${t} precisa de order`)
   }
+})
+
+test('leitura e escrita têm prazo — o SDK não rejeita com o host fora do ar', () => {
+  // Conferido no navegador contra um host inexistente: uma consulta do
+  // supabase-js não rejeita NEM resolve — retenta o fetch indefinidamente
+  // (8,8 s sem desfecho). try/catch não pega isso. Sem prazo o módulo
+  // ficava preso em "Carregando dados do banco…" para sempre, e uma
+  // gravação perdida nunca avisava: a tela dizia salvo e o banco não
+  // recebia nada.
+  assert.match(HTML, /function comPrazo\(p\)/)
+  assert.match(HTML, /Promise\.race\(\[/)
+  assert.match(HTML, /await comPrazo\(Promise\.all\(\[/,
+    'a carga inteira precisa correr contra o prazo')
+  assert.match(HTML, /comPrazo\(q\)\.then\(\(\{ error \}\)/,
+    'toda gravação também — perder um save em silêncio é a pior falha aqui')
+  assert.match(HTML, /\.catch\(e => \{/)
 })
 
 test('falha de carga avisa em vez de mostrar telas vazias', () => {
