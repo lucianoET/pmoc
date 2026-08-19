@@ -23,6 +23,11 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 /* ── login (id ainda referenciado por shared/auth.js) ── */
 #login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 
+/* ── cabeçalho ordenável/filtrável do estoque (D3) ── */
+.th-rotulo{display:inline-flex;align-items:center;gap:4px}
+.th-acao{background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:1px 3px;font-family:var(--ff)}
+.th-acao.ativo{color:var(--accent-texto)}
+
 /* ── uso bar ── */
 .uso-bar-wrap{width:100%;background:var(--surface2);border-radius:4px;height:6px;overflow:hidden}
 .uso-bar{height:6px;border-radius:4px;background:var(--green);transition:.3s}
@@ -233,9 +238,11 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 
     <!-- MATERIAIS -->
     <div class="view" id="view-materiais">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px">
         <div class="view-title">Estoque</div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="mat-contagem" class="tagline"></span>
+          <button id="btn-limpar-filtros" class="btn btn-s btn-sm" style="display:none" onclick="limparFiltrosMateriais()">Limpar filtros</button>
           <button class="btn btn-s btn-sm" onclick="abrirModalMovimento('entrada')">+ Entrada</button>
           <button class="btn btn-p btn-sm" onclick="abrirModalMaterial()">+ Material</button>
         </div>
@@ -243,9 +250,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="view-sub">Consumíveis, peças e ferramentas</div>
       <div class="tbl-wrap">
         <table class="tbl">
-          <thead><tr>
-            <th>Código</th><th>Nome</th><th>Tipo</th><th>Sistema</th><th>Aplicação</th><th>Estoque atual</th><th>Mínimo</th><th>Preço un.</th><th>Status</th>
-          </tr></thead>
+          <thead id="th-materiais"></thead>
           <tbody id="tb-materiais"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
