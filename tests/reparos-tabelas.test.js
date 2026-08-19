@@ -267,3 +267,176 @@ test('CSS compacto vive no <style> do módulo, shared/pmoc.css não foi tocado',
   assert.doesNotMatch(pmocCss, /\.cel-sub/, 'shared/pmoc.css é consumida por seis módulos — o CSS compacto de reparos não pode ir para lá')
   assert.doesNotMatch(pmocCss, /\.th-rotulo/, 'shared/pmoc.css não pode ganhar as classes de cabeçalho ordenável — isso é escopo de módulo')
 })
+
+// ── D4: vocabulário, opções e predicados de filtro por tipo de máquina ──
+const {
+  rotuloTipo, opcoesTipoMaquina,
+  filtroTipoReparos, filtroTipoModelos, filtroTipoServicos,
+  agrupar, chaveGrupoReparos, chaveGrupoModelos, chaveGrupoServicos,
+} = require('../reparos/tabelas.js')
+
+test('rotuloTipo() traduz as quatro categorias em produção com acento e capitalização, e cai para a capitalização simples numa categoria desconhecida', () => {
+  assert.equal(rotuloTipo('rocadeira'), 'Roçadeira')
+  assert.equal(rotuloTipo('trator'), 'Trator')
+  assert.equal(rotuloTipo('motoserra'), 'Motosserra')
+  assert.equal(rotuloTipo('minitrator'), 'Minitrator')
+  assert.equal(rotuloTipo('categoria-nova'), 'Categoria-nova', 'categoria fora do mapa não pode sumir — cai na capitalização simples do valor bruto')
+})
+
+const MODELOS_D4 = [
+  { id: 1, fabricante: 'Husqvarna', modelo: 'TS114', categoria: 'trator' },
+  { id: 2, fabricante: 'Toro', modelo: 'X1', categoria: 'rocadeira' },
+  { id: 3, fabricante: 'Stihl', modelo: 'MS250', categoria: 'motoserra' },
+]
+
+test('opcoesTipoMaquina() constrói as opções a partir dos dados — um grupo de categorias distintas, outro de modelos', () => {
+  const { categorias, modelos } = opcoesTipoMaquina(MODELOS_D4)
+  assert.deepEqual(categorias.map(c => c.rotulo), ['Motosserra', 'Roçadeira', 'Trator'], 'ordem pt-BR pelo rótulo')
+  assert.deepEqual(categorias.map(c => c.valor), ['categoria:motoserra', 'categoria:rocadeira', 'categoria:trator'])
+  assert.equal(modelos.length, 3)
+  assert.ok(modelos.every(m => m.valor.startsWith('modelo:')))
+})
+
+test('filtroTipoModelos: passa quando é o modelo escolhido ou tem a categoria escolhida', () => {
+  assert.equal(filtroTipoModelos(MODELOS_D4[0], ''), true, 'sem seleção, tudo passa')
+  assert.equal(filtroTipoModelos(MODELOS_D4[0], 'modelo:1'), true)
+  assert.equal(filtroTipoModelos(MODELOS_D4[1], 'modelo:1'), false)
+  assert.equal(filtroTipoModelos(MODELOS_D4[0], 'categoria:trator'), true)
+  assert.equal(filtroTipoModelos(MODELOS_D4[1], 'categoria:trator'), false)
+})
+
+const REPAROS_D4 = [
+  { id: 1, modelo_id: 1, sistema: 'motor' }, // TS114, trator
+  { id: 2, modelo_id: 2, sistema: 'corte' }, // X1, rocadeira
+  { id: 3, modelo_id: null, sistema: 'motor' }, // sem modelo
+]
+
+test('filtroTipoReparos: reparo sem modelo passa sempre; com modelo, passa pelo modelo ou pela categoria escolhida', () => {
+  assert.equal(filtroTipoReparos(REPAROS_D4[2], MODELOS_D4, 'categoria:trator'), true, 'reparo sem modelo nunca é filtrado fora')
+  assert.equal(filtroTipoReparos(REPAROS_D4[0], MODELOS_D4, 'categoria:trator'), true)
+  assert.equal(filtroTipoReparos(REPAROS_D4[1], MODELOS_D4, 'categoria:trator'), false)
+  assert.equal(filtroTipoReparos(REPAROS_D4[0], MODELOS_D4, 'modelo:1'), true)
+  assert.equal(filtroTipoReparos(REPAROS_D4[1], MODELOS_D4, 'modelo:1'), false)
+})
+
+test('filtroTipoServicos: passa quando algum reparo que sobrevive ao filtro o consome; sem vínculo só passa com filtro vazio', () => {
+  const repServs = [{ id: 1, reparo_id: 1, servico_id: 100 }, { id: 2, reparo_id: 2, servico_id: 200 }]
+  const reparosDoTipoTrator = REPAROS_D4.filter(r => filtroTipoReparos(r, MODELOS_D4, 'categoria:trator'))
+  assert.equal(filtroTipoServicos({ id: 100 }, 'categoria:trator', reparosDoTipoTrator, repServs), true, 'serviço 100 é consumido pelo reparo 1 (trator)')
+  assert.equal(filtroTipoServicos({ id: 200 }, 'categoria:trator', reparosDoTipoTrator, repServs), false, 'serviço 200 só é consumido pelo reparo 2 (roçadeira), fora do filtro')
+  assert.equal(filtroTipoServicos({ id: 999 }, 'categoria:trator', reparosDoTipoTrator, repServs), false, 'serviço sem vínculo nenhum não passa com filtro ativo')
+  assert.equal(filtroTipoServicos({ id: 999 }, '', reparosDoTipoTrator, repServs), true, 'sem seleção, serviço sem vínculo passa')
+})
+
+test('agrupar(): ordena os grupos pelo rótulo em pt-BR, grupo de ausência por último, ordem de entrada preservada dentro do grupo', () => {
+  const linhas = [
+    { id: 1, cat: 'trator' }, { id: 2, cat: 'rocadeira' }, { id: 3, cat: null },
+    { id: 4, cat: 'trator' }, { id: 5, cat: 'motoserra' },
+  ]
+  const grupos = agrupar(linhas, l => l.cat
+    ? { chave: l.cat, rotulo: rotuloTipo(l.cat) }
+    : { chave: null, rotulo: 'Sem categoria' })
+  assert.deepEqual(grupos.map(g => g.rotulo), ['Motosserra', 'Roçadeira', 'Trator', 'Sem categoria'])
+  assert.deepEqual(grupos.find(g => g.rotulo === 'Trator').linhas.map(l => l.id), [1, 4], 'ordem de entrada preservada dentro do grupo')
+})
+
+test('chaveGrupoReparos: agrupa pela categoria do modelo; reparo sem modelo cai no grupo de ausência', () => {
+  const linhasReparosD4 = linhasReparos(REPAROS_D4.map(r => ({ ...r, codigo: `R${r.id}`, sintoma: 's', causa_provavel: 'c', gravidade: 'baixa', frequencia: 0 })), MODELOS_D4, [], [])
+  const semModelo = linhasReparosD4.find(l => l.registro.id === 3)
+  assert.equal(chaveGrupoReparos(semModelo, MODELOS_D4).chave, null)
+  const comModelo = linhasReparosD4.find(l => l.registro.id === 1)
+  assert.equal(chaveGrupoReparos(comModelo, MODELOS_D4).chave, 'trator')
+})
+
+test('chaveGrupoModelos: agrupa pela própria categoria do modelo', () => {
+  const linhasModelosD4 = linhasModelos(MODELOS_D4, [], [])
+  assert.equal(chaveGrupoModelos(linhasModelosD4[0]).chave, 'trator')
+  assert.equal(chaveGrupoModelos(linhasModelosD4[0]).rotulo, 'Trator')
+})
+
+test('chaveGrupoServicos: serviço usado por mais de uma categoria cai em "Vários tipos"; sem vínculo, no grupo de ausência', () => {
+  const servicos = [{ id: 10, codigo: 'S1', nome: 'Multi' }, { id: 20, codigo: 'S2', nome: 'Único' }, { id: 30, codigo: 'S3', nome: 'Sem vínculo' }]
+  const reparos = [{ id: 1, modelo_id: 1 }, { id: 2, modelo_id: 2 }]
+  const repServs = [
+    { id: 1, reparo_id: 1, servico_id: 10 }, { id: 2, reparo_id: 2, servico_id: 10 }, // S1: trator + rocadeira
+    { id: 3, reparo_id: 1, servico_id: 20 }, // S2: só trator
+  ]
+  const linhas = linhasServicos(servicos, repServs)
+  assert.equal(chaveGrupoServicos(linhas.find(l => l.registro.id === 10), reparos, MODELOS_D4, repServs).chave, '__varios__')
+  assert.equal(chaveGrupoServicos(linhas.find(l => l.registro.id === 20), reparos, MODELOS_D4, repServs).chave, 'trator')
+  assert.equal(chaveGrupoServicos(linhas.find(l => l.registro.id === 30), reparos, MODELOS_D4, repServs).chave, null)
+})
+
+// ── D4: fiação em reparos/app.js e reparos/index.html ───────────────────
+test('os três controles de tipo/modelo existem no markup, um por aba', () => {
+  assert.match(HTML, /id="tipo-reparos"[^>]*onchange="selecionarTipoMaquina\(this\.value\)"/)
+  assert.match(HTML, /id="tipo-servicos"[^>]*onchange="selecionarTipoMaquina\(this\.value\)"/)
+  assert.match(HTML, /id="tipo-modelos"[^>]*onchange="selecionarTipoMaquina\(this\.value\)"/)
+})
+
+test('os três botões de agrupar por tipo existem no markup, um por aba', () => {
+  assert.match(HTML, /id="btn-agrupar-reparos"[^>]*onclick="alternarAgrupamentoTipo\(\)"/)
+  assert.match(HTML, /id="btn-agrupar-servicos"[^>]*onclick="alternarAgrupamentoTipo\(\)"/)
+  assert.match(HTML, /id="btn-agrupar-modelos"[^>]*onclick="alternarAgrupamentoTipo\(\)"/)
+})
+
+test('TIPO_SELECIONADO e AGRUPAR_POR_TIPO são um só par de estado — compartilhado pelas três abas', () => {
+  assert.match(APP, /let TIPO_SELECIONADO = ''/)
+  assert.match(APP, /let AGRUPAR_POR_TIPO = false/)
+  // só uma ocorrência de cada — não pode ter virado um estado por aba
+  assert.equal((APP.match(/let TIPO_SELECIONADO/g) || []).length, 1)
+  assert.equal((APP.match(/let AGRUPAR_POR_TIPO/g) || []).length, 1)
+})
+
+test('selecionarTipoMaquina() ressincroniza os três controles e redesenha as três tabelas', () => {
+  const bloco = APP.match(/function selecionarTipoMaquina\(valor\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'selecionarTipoMaquina() deveria existir')
+  assert.match(bloco[1], /TIPO_SELECIONADO = valor/)
+  assert.match(bloco[1], /'tipo-reparos','tipo-servicos','tipo-modelos'/)
+  assert.match(bloco[1], /renderReparos\(\)/)
+  assert.match(bloco[1], /renderServicos\(\)/)
+  assert.match(bloco[1], /renderModelos\(\)/)
+})
+
+test('limparFiltrosTabelaReparos() zera igualmente a escolha de tipo', () => {
+  const bloco = APP.match(/function limparFiltrosTabelaReparos\(tabela\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'limparFiltrosTabelaReparos() deveria existir')
+  assert.match(bloco[1], /selecionarTipoMaquina\(''\)/)
+})
+
+test('o contador de linhas visíveis considera também o filtro por tipo', () => {
+  const bloco = APP.match(/function _atualizarContagemTabela\(tabela, visiveis, total\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, '_atualizarContagemTabela() deveria existir')
+  assert.match(bloco[1], /!!TIPO_SELECIONADO/)
+})
+
+test('as três funções de corpo aplicam o predicado de tipo antes de aplicarOrdemEFiltro', () => {
+  const casos = [
+    { fn: 'renderLinhasReparos', predicado: 'filtroTipoReparos' },
+    { fn: 'renderLinhasServicos', predicado: 'filtroTipoServicos' },
+    { fn: 'renderLinhasModelos', predicado: 'filtroTipoModelos' },
+  ]
+  for (const c of casos) {
+    const bloco = APP.match(new RegExp(`function ${c.fn}\\(\\)\\{([\\s\\S]*?)\\n\\}\\n`))
+    assert.ok(bloco, `${c.fn}() deveria existir`)
+    const posPredicado = bloco[1].indexOf(c.predicado)
+    const posAplicar = bloco[1].indexOf('aplicarOrdemEFiltro(')
+    assert.ok(posPredicado > -1 && posAplicar > -1, `${c.fn} deveria chamar ${c.predicado} e aplicarOrdemEFiltro`)
+    assert.ok(posPredicado < posAplicar, `${c.fn} deveria aplicar o predicado de tipo antes de aplicarOrdemEFiltro`)
+  }
+})
+
+test('alternarAgrupamentoTipo() inverte o sinalizador e redesenha as três tabelas', () => {
+  const bloco = APP.match(/function alternarAgrupamentoTipo\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'alternarAgrupamentoTipo() deveria existir')
+  assert.match(bloco[1], /AGRUPAR_POR_TIPO = !AGRUPAR_POR_TIPO/)
+  assert.match(bloco[1], /renderReparos\(\)/)
+  assert.match(bloco[1], /renderServicos\(\)/)
+  assert.match(bloco[1], /renderModelos\(\)/)
+})
+
+test('nenhum arquivo em supabase/ foi criado ou alterado por esta quick task', () => {
+  const { execSync } = require('node:child_process')
+  const alterados = execSync('git status --porcelain supabase/', { cwd: RAIZ }).toString().trim()
+  assert.equal(alterados, '', 'D5: rep_modelos.categoria já existe e já está preenchida — nenhuma migração nova')
+})

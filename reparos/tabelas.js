@@ -135,6 +135,10 @@ export function linhasModelos(modelos, ativos, reparos) {
     modelo: m.modelo,
     fabricanteModelo: `${m.fabricante} ${m.modelo}`,
     categoria: m.categoria || '—',
+    // rótulo acentuado e capitalizado do vocabulário de tipo (D4) — a
+    // mesma tradução usada no controle de tipo/modelo e no agrupamento,
+    // para que a coluna "Tipo" da tabela e o filtro falem a mesma língua
+    tipoRotulo: m.categoria ? rotuloTipo(m.categoria) : '—',
     motor: m.motor || '—',
     maquinas: ativos.filter(a => a.modelo_id === m.id).length,
     reparos: reparos.filter(r => r.modelo_id === m.id).length,
@@ -149,8 +153,8 @@ export const COLUNAS_MODELOS = [
   },
   {
     id: 'tipo', rotulo: 'Tipo', tipo: 'texto',
-    valor: l => l.categoria,
-    texto: l => l.categoria,
+    valor: l => l.tipoRotulo,
+    texto: l => l.tipoRotulo,
   },
   {
     id: 'motor', rotulo: 'Motor', tipo: 'texto',
@@ -167,3 +171,154 @@ export const COLUNAS_MODELOS = [
     texto: l => `${l.maquinas} máquinas ${l.reparos} reparos`,
   },
 ]
+
+// ══════════════════════════════════════════════════════════════════
+// Filtro e agrupamento por tipo de máquina (quick-260818-vtm, D4).
+// ══════════════════════════════════════════════════════════════════
+
+// mapa fechado das categorias gravadas (sem acento, migração 27) para o
+// rótulo acentuado e capitalizado que a tela mostra. Categoria fora do
+// mapa cai para a capitalização simples do valor bruto — uma categoria
+// nova cadastrada amanhã tem que aparecer na tela, não sumir.
+const VOCAB_TIPO = {
+  rocadeira: 'Roçadeira',
+  trator: 'Trator',
+  motoserra: 'Motosserra',
+  minitrator: 'Minitrator',
+}
+
+export function rotuloTipo(categoria) {
+  if (!categoria) return categoria
+  return VOCAB_TIPO[categoria] || (categoria.charAt(0).toUpperCase() + categoria.slice(1))
+}
+
+// opções do controle único de tipo/modelo, construídas a partir dos
+// modelos carregados — nenhum valor fixo no código. Um grupo com as
+// categorias distintas presentes em rep_modelos, outro com os modelos
+// (fabricante + modelo). O valor de cada opção carrega o próprio tipo
+// ("categoria:trator" ou "modelo:7"), para que o predicado saiba qual
+// dos dois está selecionado sem precisar de um segundo campo de estado.
+export function opcoesTipoMaquina(modelos) {
+  const categorias = [...new Set(modelos.map(m => m.categoria).filter(Boolean))]
+    .sort((a, b) => rotuloTipo(a).localeCompare(rotuloTipo(b), 'pt-BR'))
+    .map(c => ({ valor: `categoria:${c}`, rotulo: rotuloTipo(c) }))
+
+  const modelosOrdenados = modelos
+    .slice()
+    .sort((a, b) => `${a.fabricante} ${a.modelo}`.localeCompare(`${b.fabricante} ${b.modelo}`, 'pt-BR'))
+    .map(m => ({ valor: `modelo:${m.id}`, rotulo: `${m.fabricante} ${m.modelo}` }))
+
+  return { categorias, modelos: modelosOrdenados }
+}
+
+// decompõe o valor do controle ("categoria:trator" | "modelo:7" | "") no
+// tipo de seleção e no valor comparável. Vazio devolve null — "nenhuma
+// seleção" é tratado à parte em cada predicado, não como um tipo próprio.
+function _parseSelecao(selecao) {
+  if (!selecao) return null
+  const i = selecao.indexOf(':')
+  const tipo = selecao.slice(0, i)
+  const valor = selecao.slice(i + 1)
+  return { tipo, valor: tipo === 'modelo' ? Number(valor) : valor }
+}
+
+// filtro da aba Modelos: passa quando é o modelo escolhido ou tem a
+// categoria escolhida.
+export function filtroTipoModelos(modelo, selecao) {
+  const sel = _parseSelecao(selecao)
+  if (!sel) return true
+  if (sel.tipo === 'modelo') return modelo.id === sel.valor
+  if (sel.tipo === 'categoria') return modelo.categoria === sel.valor
+  return true
+}
+
+// filtro da aba Reparos: reparo sem modelo passa sempre — regra que já
+// existia em reparosFiltrados() do Diagnóstico e se preserva aqui
+// literalmente, porque "aplica a qualquer máquina" é o próprio sentido do
+// campo modelo_id nulo. Com modelo, passa quando o modelo é o escolhido ou
+// tem a categoria escolhida.
+export function filtroTipoReparos(reparo, modelos, selecao) {
+  const sel = _parseSelecao(selecao)
+  if (!sel) return true
+  if (!reparo.modelo_id) return true
+  const modelo = modelos.find(m => m.id === reparo.modelo_id)
+  if (!modelo) return true
+  if (sel.tipo === 'modelo') return modelo.id === sel.valor
+  if (sel.tipo === 'categoria') return modelo.categoria === sel.valor
+  return true
+}
+
+// filtro da aba Serviços: passa quando algum reparo que sobreviveu ao
+// filtro de tipo (já calculado por quem chama, via filtroTipoReparos) o
+// consome. Serviço sem nenhum vínculo só passa com o filtro vazio — sem
+// seleção nenhuma linha é reprovada.
+export function filtroTipoServicos(servico, selecao, reparosFiltrados, repServs) {
+  if (!selecao) return true
+  const idsReparosFiltrados = new Set(reparosFiltrados.map(r => r.id))
+  return repServs.some(x => x.servico_id === servico.id && idsReparosFiltrados.has(x.reparo_id))
+}
+
+// agrupa linhas já ordenadas e filtradas por uma função de chave, que
+// devolve { chave, rotulo } por linha — chave nula é o grupo de ausência,
+// consolidado num só grupo e sempre por último. Os demais grupos saem
+// ordenados pelo rótulo em pt-BR; dentro de cada grupo, a ordem de entrada
+// (a ordenação de coluna já aplicada antes) é preservada.
+export function agrupar(linhas, funcaoChave) {
+  const grupos = new Map()
+  for (const linha of linhas) {
+    const { chave, rotulo } = funcaoChave(linha)
+    const chaveMapa = chave === null ? '__ausencia__' : chave
+    if (!grupos.has(chaveMapa)) grupos.set(chaveMapa, { chave, rotulo, linhas: [] })
+    grupos.get(chaveMapa).linhas.push(linha)
+  }
+  const lista = [...grupos.values()]
+  const comChave = lista.filter(g => g.chave !== null).sort((a, b) => a.rotulo.localeCompare(b.rotulo, 'pt-BR'))
+  const ausencia = lista.filter(g => g.chave === null)
+  return [...comChave, ...ausencia]
+}
+
+// chave de agrupamento de Modelos: a própria categoria (dado bruto, não o
+// rótulo já acentuado de linha.categoria, que usa '—' como marcador de
+// tela e viraria uma "categoria" fantasma se usado aqui).
+export function chaveGrupoModelos(linha) {
+  const cat = linha.registro.categoria
+  if (!cat) return { chave: null, rotulo: 'Sem categoria' }
+  return { chave: cat, rotulo: rotuloTipo(cat) }
+}
+
+// chave de agrupamento de Reparos: a categoria do modelo, ou o grupo de
+// ausência quando o reparo não tem modelo (mesma regra do filtro).
+export function chaveGrupoReparos(linha, modelos) {
+  const r = linha.registro
+  if (!r.modelo_id) return { chave: null, rotulo: 'Sem modelo' }
+  const modelo = modelos.find(m => m.id === r.modelo_id)
+  const cat = modelo?.categoria
+  if (!cat) return { chave: null, rotulo: 'Sem modelo' }
+  return { chave: cat, rotulo: rotuloTipo(cat) }
+}
+
+// chave de agrupamento de Serviços: a categoria dos reparos que o
+// consomem. Duplicar o serviço em vários grupos seria a alternativa mais
+// óbvia, mas mentiria sobre a contagem de cada grupo — por isso um serviço
+// usado por mais de uma categoria cai num grupo único "Vários tipos", não
+// em cada categoria que o usa. Reparo sem modelo (ou modelo sem categoria)
+// não contribui categoria nenhuma; um serviço só ligado a reparos assim
+// cai em "Sem vínculo" — não há vínculo categorizável, mesmo caso de um
+// serviço sem vínculo nenhum.
+export function chaveGrupoServicos(linha, reparos, modelos, repServs) {
+  const s = linha.registro
+  const vinculos = repServs.filter(x => x.servico_id === s.id)
+  if (!vinculos.length) return { chave: null, rotulo: 'Sem vínculo' }
+
+  const categorias = new Set()
+  for (const v of vinculos) {
+    const reparo = reparos.find(r => r.id === v.reparo_id)
+    const modelo = reparo?.modelo_id ? modelos.find(m => m.id === reparo.modelo_id) : null
+    if (modelo?.categoria) categorias.add(modelo.categoria)
+  }
+
+  if (categorias.size === 0) return { chave: null, rotulo: 'Sem vínculo' }
+  if (categorias.size > 1) return { chave: '__varios__', rotulo: 'Vários tipos' }
+  const unica = [...categorias][0]
+  return { chave: unica, rotulo: rotuloTipo(unica) }
+}

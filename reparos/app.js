@@ -6,6 +6,8 @@ import {
   COLUNAS_REPAROS, linhasReparos,
   COLUNAS_SERVICOS, linhasServicos,
   COLUNAS_MODELOS, linhasModelos,
+  opcoesTipoMaquina, filtroTipoReparos, filtroTipoModelos, filtroTipoServicos,
+  agrupar, chaveGrupoReparos, chaveGrupoModelos, chaveGrupoServicos,
 } from './tabelas.js'
 
 // ══════════════════════════════════════════════════════════════════
@@ -43,6 +45,12 @@ let TAB_SERVICOS_FILTROS_ABERTO = false
 let TAB_MODELOS_ORD = { coluna: null, dir: null }
 let TAB_MODELOS_FILTROS = {}
 let TAB_MODELOS_FILTROS_ABERTO = false
+
+// controle único de tipo/modelo (D4) — um só par de estado para as três
+// abas, porque é uma única apresentação com três telas. TIPO_SELECIONADO
+// carrega o valor cru do <select> ("categoria:trator" | "modelo:7" | "").
+let TIPO_SELECIONADO = ''
+let AGRUPAR_POR_TIPO = false
 
 const SISTEMAS = ['motor','combustivel','transmissao','corte','eletrico','hidraulico','estrutura']
 const ESPECIALIDADES = ['mecanica','eletrica','solda','usinagem','pintura','hidraulica']
@@ -140,6 +148,7 @@ async function carregarTudo(){
   MATERIAIS = mt.data || []; ATIVOS = at.data || []
 
   popularFiltros()
+  popularControleTipo()
   renderDiagnostico()
   renderReparos()
   renderServicos()
@@ -186,6 +195,59 @@ function popularFiltros(){
   sis.innerHTML = '<option value="">Todos os sistemas</option>' +
     SISTEMAS.map(s => `<option value="${s}">${s}</option>`).join('')
   sis.value = anteriorSis
+}
+
+// ── controle único de tipo/modelo (D4) ──
+// popula os três <select> (um por aba) a partir dos modelos carregados,
+// sempre que os dados são recarregados — as opções saem dos dados, nunca
+// de uma lista fixa. Preserva a escolha atual (TIPO_SELECIONADO), porque
+// um recarregar de fundo não pode derrubar o filtro que o usuário escolheu.
+function popularControleTipo(){
+  const { categorias, modelos } = opcoesTipoMaquina(MODELOS)
+  const optgroups =
+    (categorias.length ? `<optgroup label="Tipo">${categorias.map(o => `<option value="${o.valor}">${esc(o.rotulo)}</option>`).join('')}</optgroup>` : '') +
+    (modelos.length ? `<optgroup label="Modelo">${modelos.map(o => `<option value="${o.valor}">${esc(o.rotulo)}</option>`).join('')}</optgroup>` : '')
+
+  for(const id of ['tipo-reparos','tipo-servicos','tipo-modelos']){
+    const sel = document.getElementById(id)
+    if(!sel) continue
+    sel.innerHTML = '<option value="">Todos os tipos</option>' + optgroups
+    sel.value = TIPO_SELECIONADO
+  }
+}
+
+// o handler grava a escolha, ressincroniza os outros dois controles com o
+// mesmo valor (é um controle único com três apresentações) e redesenha as
+// três tabelas — a seleção de tipo entra antes da ordem e do filtro de
+// coluna em cada uma.
+function selecionarTipoMaquina(valor){
+  TIPO_SELECIONADO = valor
+  for(const id of ['tipo-reparos','tipo-servicos','tipo-modelos']){
+    const sel = document.getElementById(id)
+    if(sel) sel.value = valor
+  }
+  renderReparos()
+  renderServicos()
+  renderModelos()
+}
+
+function alternarAgrupamentoTipo(){
+  AGRUPAR_POR_TIPO = !AGRUPAR_POR_TIPO
+  for(const id of ['btn-agrupar-reparos','btn-agrupar-servicos','btn-agrupar-modelos']){
+    const btn = document.getElementById(id)
+    if(btn) btn.classList.toggle('ativo', AGRUPAR_POR_TIPO)
+  }
+  renderReparos()
+  renderServicos()
+  renderModelos()
+}
+
+// linha de cabeçalho de grupo (D4) — ocupa a largura inteira da tabela,
+// entre as linhas do grupo anterior e as do próximo; convive com a
+// ordenação (que passa a ordenar dentro de cada grupo) e com o filtro de
+// coluna (que já rodou antes do agrupamento).
+function _linhaGrupo(rotulo, contagem, colspan){
+  return `<tr class="linha-grupo"><td colspan="${colspan}">${esc(rotulo)} <span class="tagline">(${contagem})</span></td></tr>`
 }
 
 function reparosFiltrados(){
@@ -336,14 +398,17 @@ function _cabecalhoTabela(tabela, colunas, ord, filtros, aberto){
   return linhaRotulos + linhaFiltros
 }
 
-// mostra "N de total" e o botão de limpar só quando há ordem ou filtro
-// ativos — mesma razão de atualizarContagemMateriais() em maquinas/app.js:
-// sem isso a tela sempre mostraria "33 de 33", ruído no caso comum.
+// mostra "N de total" e o botão de limpar só quando há ordem, filtro de
+// coluna ou seleção de tipo ativos — mesma razão de
+// atualizarContagemMateriais() em maquinas/app.js: sem isso a tela sempre
+// mostraria "33 de 33", ruído no caso comum. A seleção de tipo entra aqui
+// porque é o mesmo "há recorte na tela" que justifica mostrar o contador
+// e liberar o botão de limpar (D4).
 function _atualizarContagemTabela(tabela, visiveis, total){
   const t = _estadoTabela(tabela)
   const contagem = document.getElementById(`rep-contagem-${tabela}`)
   const btnLimpar = document.getElementById(`btn-limpar-${tabela}`)
-  const ativo = t.getOrd().coluna !== null || Object.values(t.getFiltros()).some(Boolean)
+  const ativo = t.getOrd().coluna !== null || Object.values(t.getFiltros()).some(Boolean) || !!TIPO_SELECIONADO
   if(contagem) contagem.textContent = ativo ? `${visiveis} de ${total}` : ''
   if(btnLimpar) btnLimpar.style.display = ativo ? '' : 'none'
 }
@@ -364,17 +429,21 @@ function renderLinhasReparos(){
     return
   }
 
-  const todas = linhasReparos(REPAROS, MODELOS, REP_MATS, REP_SERVS)
-  const visiveis = aplicarOrdemEFiltro(todas, TAB_REPAROS_ORD, TAB_REPAROS_FILTROS, COLUNAS_REPAROS)
+  // filtro de tipo (D4) roda antes da ordem e do filtro de coluna — a
+  // regra de reparo sem modelo nunca ser filtrado fora vive dentro de
+  // filtroTipoReparos()
+  const doTipo = linhasReparos(REPAROS, MODELOS, REP_MATS, REP_SERVS)
+    .filter(l => filtroTipoReparos(l.registro, MODELOS, TIPO_SELECIONADO))
+  const visiveis = aplicarOrdemEFiltro(doTipo, TAB_REPAROS_ORD, TAB_REPAROS_FILTROS, COLUNAS_REPAROS)
 
   if(!visiveis.length){
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum reparo corresponde ao filtro</td></tr>'
-    _atualizarContagemTabela('reparos', 0, todas.length)
+    _atualizarContagemTabela('reparos', 0, REPAROS.length)
     return
   }
 
   const badgeGrav = { alta:'b-red', media:'b-warn', baixa:'b-ok' }
-  tbody.innerHTML = visiveis.map(l => {
+  const linha = l => {
     const r = l.registro
     return `<tr onclick="abrirModalVinculo(${r.id})">
       <td class="hi">${esc(l.codigo)}<div class="cel-sub">${l.modelo ? esc(l.modeloTexto) : 'qualquer modelo'}</div></td>
@@ -386,9 +455,17 @@ function renderLinhasReparos(){
         ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();abrirModalReparo(${r.id})" title="Editar cadastro do reparo" aria-label="Editar cadastro do reparo">⚙</button>`
         : ''}</td>
     </tr>`
-  }).join('')
+  }
 
-  _atualizarContagemTabela('reparos', visiveis.length, todas.length)
+  // agrupamento (D4): intercala cabeçalhos de grupo entre as linhas —
+  // convive com a ordenação, que passou a ordenar dentro de cada grupo
+  tbody.innerHTML = AGRUPAR_POR_TIPO
+    ? agrupar(visiveis, l => chaveGrupoReparos(l, MODELOS))
+        .map(g => _linhaGrupo(g.rotulo, g.linhas.length, 6) + g.linhas.map(linha).join(''))
+        .join('')
+    : visiveis.map(linha).join('')
+
+  _atualizarContagemTabela('reparos', visiveis.length, REPAROS.length)
 }
 
 function renderCabecalhoServicos(){
@@ -407,16 +484,20 @@ function renderLinhasServicos(){
     return
   }
 
-  const todas = linhasServicos(SERVICOS, REP_SERVS)
-  const visiveis = aplicarOrdemEFiltro(todas, TAB_SERVICOS_ORD, TAB_SERVICOS_FILTROS, COLUNAS_SERVICOS)
+  // serviço aparece quando algum reparo do tipo escolhido o consome — a
+  // lista de reparos "do tipo escolhido" é a mesma regra de renderLinhasReparos()
+  const reparosDoTipo = REPAROS.filter(r => filtroTipoReparos(r, MODELOS, TIPO_SELECIONADO))
+  const doTipo = linhasServicos(SERVICOS, REP_SERVS)
+    .filter(l => filtroTipoServicos(l.registro, TIPO_SELECIONADO, reparosDoTipo, REP_SERVS))
+  const visiveis = aplicarOrdemEFiltro(doTipo, TAB_SERVICOS_ORD, TAB_SERVICOS_FILTROS, COLUNAS_SERVICOS)
 
   if(!visiveis.length){
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum serviço corresponde ao filtro</td></tr>'
-    _atualizarContagemTabela('servicos', 0, todas.length)
+    _atualizarContagemTabela('servicos', 0, SERVICOS.length)
     return
   }
 
-  tbody.innerHTML = visiveis.map(l => {
+  const linha = l => {
     const s = l.registro
     return `<tr>
       <td class="hi">${esc(l.codigo)}<div class="cel-sub">${esc(l.nome)}</div></td>
@@ -427,9 +508,15 @@ function renderLinhasServicos(){
         ? `<button class="btn btn-s btn-sm" onclick="abrirModalServico(${s.id})" title="Editar cadastro do serviço" aria-label="Editar cadastro do serviço">⚙</button>`
         : ''}</td>
     </tr>`
-  }).join('')
+  }
 
-  _atualizarContagemTabela('servicos', visiveis.length, todas.length)
+  tbody.innerHTML = AGRUPAR_POR_TIPO
+    ? agrupar(visiveis, l => chaveGrupoServicos(l, REPAROS, MODELOS, REP_SERVS))
+        .map(g => _linhaGrupo(g.rotulo, g.linhas.length, 5) + g.linhas.map(linha).join(''))
+        .join('')
+    : visiveis.map(linha).join('')
+
+  _atualizarContagemTabela('servicos', visiveis.length, SERVICOS.length)
 }
 
 function renderCabecalhoModelos(){
@@ -448,29 +535,36 @@ function renderLinhasModelos(){
     return
   }
 
-  const todas = linhasModelos(MODELOS, ATIVOS, REPAROS)
-  const visiveis = aplicarOrdemEFiltro(todas, TAB_MODELOS_ORD, TAB_MODELOS_FILTROS, COLUNAS_MODELOS)
+  const doTipo = linhasModelos(MODELOS, ATIVOS, REPAROS)
+    .filter(l => filtroTipoModelos(l.registro, TIPO_SELECIONADO))
+  const visiveis = aplicarOrdemEFiltro(doTipo, TAB_MODELOS_ORD, TAB_MODELOS_FILTROS, COLUNAS_MODELOS)
 
   if(!visiveis.length){
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum modelo corresponde ao filtro</td></tr>'
-    _atualizarContagemTabela('modelos', 0, todas.length)
+    _atualizarContagemTabela('modelos', 0, MODELOS.length)
     return
   }
 
-  tbody.innerHTML = visiveis.map(l => {
+  const linha = l => {
     const m = l.registro
     return `<tr>
       <td class="hi">${esc(l.codigo)}<div class="cel-sub">${esc(l.fabricanteModelo)}</div></td>
-      <td>${esc(l.categoria)}</td>
+      <td>${esc(l.tipoRotulo)}</td>
       <td>${esc(l.motor)}</td>
       <td>${l.maquinas} máquinas / ${l.reparos} reparos</td>
       <td>${podeCatalogo()
         ? `<button class="btn btn-s btn-sm" onclick="abrirModalModelo(${m.id})" title="Editar cadastro do modelo" aria-label="Editar cadastro do modelo">⚙</button>`
         : ''}</td>
     </tr>`
-  }).join('')
+  }
 
-  _atualizarContagemTabela('modelos', visiveis.length, todas.length)
+  tbody.innerHTML = AGRUPAR_POR_TIPO
+    ? agrupar(visiveis, chaveGrupoModelos)
+        .map(g => _linhaGrupo(g.rotulo, g.linhas.length, 5) + g.linhas.map(linha).join(''))
+        .join('')
+    : visiveis.map(linha).join('')
+
+  _atualizarContagemTabela('modelos', visiveis.length, MODELOS.length)
 }
 
 // ── ordenação e filtro por coluna (D2) — tudo de tela, nada de Supabase ──
@@ -513,12 +607,15 @@ function aplicarFiltroTabelaReparos(tabela, coluna, valor){
   t.renderCorpo()
 }
 
+// Limpar filtros zera igualmente a escolha de tipo (D4) — é um controle
+// único para as três abas, então limpar a partir de qualquer uma delas
+// redesenha as três, não só a que tinha o botão clicado.
 function limparFiltrosTabelaReparos(tabela){
   const t = _estadoTabela(tabela)
   t.setFiltros({})
   t.setOrd({ coluna: null, dir: null })
   t.setAberto(false)
-  t.render()
+  selecionarTipoMaquina('')
 }
 
 // ── MODAL REPARO ──
@@ -737,6 +834,7 @@ function exporNoWindow(){
     abrirModalReparo,
     abrirModalServico,
     abrirModalVinculo,
+    alternarAgrupamentoTipo,
     aplicarFiltroTabelaReparos,
     fecharModal,
     filtrarColunaTabelaReparos,
@@ -750,6 +848,7 @@ function exporNoWindow(){
     salvarReparo,
     salvarServico,
     salvarVinculo,
+    selecionarTipoMaquina,
     trocarView,
   })
 }
