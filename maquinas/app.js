@@ -850,7 +850,7 @@ function renderMateriais(){
 
     return `<tr>
       <td class="hi">${esc(m.codigo||'—')}</td>
-      <td>${podeEscreverNoModulo()
+      <td>${podeEditarCadastro()
         ? `<a href="#" onclick="event.preventDefault();abrirModalMaterial(${m.id})" style="color:var(--text)" title="Editar cadastro e serviço vinculado">${esc(m.nome)}</a>`
         : esc(m.nome)}</td>
       <td><span class="badge b-blue">${esc(m.tipo.toUpperCase())}</span></td>
@@ -871,6 +871,9 @@ function renderMateriais(){
           <span class="badge ${ok?'b-ok':'b-red'}">${ok?'OK':'BAIXO'}</span>
           ${podeEscreverNoModulo()
             ? `<button class="btn btn-s btn-sm" onclick="editarMaterial(${m.id})" title="Editar quantidade, mínimo e preço">✎</button>`
+            : ''}
+          ${podeEditarCadastro()
+            ? `<button class="btn btn-s btn-sm" onclick="abrirModalMaterial(${m.id})" title="Editar cadastro do material" aria-label="Editar cadastro do material">⚙</button>`
             : ''}
         </div>
       </td>
@@ -895,6 +898,16 @@ function abrirModalHoraHomem(){
 // princípio dos cargos do editor de zona no mapa.
 function podeEscreverNoModulo(){
   return ['admin','gestor','tecnico'].includes(USUARIO?.role)
+}
+
+// ── cadastro do material (D1) ──
+// Mexer no cadastro (nome, tipo, unidade, sistema/aplicação, serviço vinculado)
+// é exceção, não rotina do dia a dia: quem opera o estoque (técnico) ajusta
+// quantidade, mínimo e preço pelo ✎, não a identidade da peça. Mesma regra já
+// aplicada ao cadastro da máquina (ficha-btn-cadastro) — helper nomeado para
+// não espalhar a lista literal de cargos por vários pontos do arquivo.
+function podeEditarCadastro(){
+  return ['admin','gestor'].includes(USUARIO?.role)
 }
 
 // observador vê o valor vigente, mas em leitura: o número é informação útil
@@ -2323,7 +2336,7 @@ function abrirFichaAtivo(id){
   document.getElementById('ficha-btn-uso').onclick = () => { fecharModal('modal-ficha'); abrirModalUso(id) }
   document.getElementById('ficha-btn-os').onclick = () => { fecharModal('modal-ficha'); abrirModalOS(id) }
   const btnCadastro = document.getElementById('ficha-btn-cadastro')
-  btnCadastro.style.display = ['admin','gestor'].includes(USUARIO?.role) ? '' : 'none'
+  btnCadastro.style.display = podeEditarCadastro() ? '' : 'none'
   btnCadastro.onclick = () => { fecharModal('modal-ficha'); abrirModalAtivo(id) }
 
   // instruções — só aparecem quando existem
@@ -2539,6 +2552,11 @@ function abrirModalMaterial(id){
 }
 
 async function salvarMaterial(){
+  // guarda só o ramo de edição (D1): criar material novo continua liberado a
+  // quem escreve no módulo, é editar o cadastro de um já existente que é
+  // exceção reservada a Direção e gestor
+  if(MATERIAL_MODAL_ID && !podeEditarCadastro()){ alert('Seu cargo não altera o cadastro do material.'); return }
+
   const nome = document.getElementById('mat-nome').value.trim()
   if(!nome){ alert('Nome obrigatório.'); return }
   const campos = {

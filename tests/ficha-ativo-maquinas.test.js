@@ -48,7 +48,10 @@ test('as ações do dia a dia têm botão na ficha; o cadastro é restrito a adm
   assert.match(HTML, /id="ficha-btn-uso"/)
   assert.match(HTML, /id="ficha-btn-os"/)
   assert.match(HTML, /id="ficha-btn-cadastro"/)
-  assert.match(APP, /btnCadastro\.style\.display = \['admin','gestor'\]\.includes\(USUARIO\?\.role\) \? '' : 'none'/,
+  // quick-260818-twm: a lista literal de cargos deu lugar ao helper nomeado
+  // podeEditarCadastro() (D1) — mesma regra, mesmo cargo, um só lugar no
+  // arquivo em vez de repetida aqui e no botão de cadastro do material.
+  assert.match(APP, /btnCadastro\.style\.display = podeEditarCadastro\(\) \? '' : 'none'/,
     'editar código, nome ou patrimônio é correção de exceção — não aparece para técnico nem observador')
 })
 
