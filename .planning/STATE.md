@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 7 (ui-ux-mobile) — EXECUTED
 Plan: 1 of 1
 Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
-Last activity: 2026-08-18 — Quick task 260818-r65 concluída: hora-homem sai do Estoque, material ganha sistema/aplicação, aba Necessidades com listas de compra e recebimento item a item (migração 34 aplicada e conferida em produção)
+Last activity: 2026-08-18 — Quick task 260818-twm concluída: botão de editar cadastro do material restrito a Direção/gestor e cabeçalho do Estoque com ordenação e filtro por coluna
 
 Progress: [██████████] 100% (v2.0)
 
@@ -204,9 +204,10 @@ painel) segue pendente.
 | 2026-08-11 | importar-modulo-calibracao | App legado de calibração (single-file, localStorage, sem Supabase) copiado como módulo independente em /calibracao com assets próprios; rewrite no vercel.json e card ativado no portal — sem unificação com shared/ nem locais (commits 240cfa6, eb1e342) |
 | 2026-08-18 | 260818-pzq-reparos-link-sai-do-portal-e-entra-no-m | Reparos sai do portal e é alcançado de dentro do Máquinas (âncora no cabeçalho da view de OS); categoria Tobata nos dois selects de máquinas; faixa de abas cai de 10 para 8 — Vencimentos vira seção da aba Máquinas e Operações vira seção da aba OS; ficha da máquina ganha bloco de manutenções derivado de calcVencimentos(); node --test 227/227 (commits d0d1b9c, 7630212, 7564dbe) |
 | 2026-08-18 | 260818-r65-estoque-e-necessidades-hora-homem-sai-do | Valor da hora-homem sai da aba Estoque para um modal aberto do cabeçalho da aba OS, onde o custo de mão de obra é consumido; `maq_materiais` ganha `sistema` e `aplicacao` (com "Vários" para peça de mais de um modelo), editáveis no modal e visíveis na tabela do estoque; aba "Lista de compras" vira "Necessidades", com preventiva/corretiva/aquisição/a comprar por material, geração de lista de compra (BOM: título, descrição, data, preço congelado na linha) e recebimento item a item que dá entrada no estoque; migração 34 **aplicada em produção em 18/08/2026** e conferida contra o banco (forma, constraints, índices, RLS); o fluxo inteiro foi exercido com dados reais e os artefatos de teste removidos; sem a migração o módulo continua funcionando como antes (D7, conferido antes de aplicar); node --test 253/253 (commits 4591abc, 14c1b30, e260f80, 4c2151d) |
+| 2026-08-18 | 260818-twm-estoque-botao-de-editar-cadastro-do-mate | Editar o cadastro do material sai do link escondido no nome e vira botão `⚙` explícito na linha, restrito a `admin`/`gestor` pelo helper `podeEditarCadastro()` — o mesmo que já governa "Editar cadastro" na ficha da máquina, agora escrito num lugar só; o `✎` de quantidade/mínimo/preço fica intocado em `podeEscreverNoModulo()`, que é a ação do técnico. Cada coluna do Estoque ganha ordenação (⇅/↑/↓, `aria-sort`, numérica ou `localeCompare` pt-BR, vazios sempre no fim) e filtro (substring sem acento/caixa, acumulável, com contador "N de 35" e "Limpar filtros"); estado de tela, sem consulta ao Supabase. Núcleo puro em `maquinas/estoque-tabela.js` (padrão de `shared/tema.js`), `renderMateriais()` dividido em cabeçalho + linhas para não matar o foco do campo ao digitar; node --test 279/279 (commits a336cfb, d2c95e2) |
 
 ## Session Continuity
 
 Last session: 2026-08-18T21:56:34.000Z
-Stopped at: Completed quick task 260818-r65-estoque-e-necessidades-hora-homem-sai-do — Necessidades e listas de compra no ar, migração 34 aplicada e conferida em produção
+Stopped at: Completed quick task 260818-twm-estoque-botao-de-editar-cadastro-do-mate — Estoque com botão de cadastro restrito e cabeçalho ordenável/filtrável; conferido no navegador por cargo
 Resume file: None
