@@ -243,12 +243,16 @@ function montarLayout() {
     accent: CFG.accent,
     versao: CFG.versao,
     navItems: [
-      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
-      { id: 'ativos', icone: CFG.icone, label: 'Ativos' },
-      { id: 'vencimentos', icone: '⏱️', label: 'Vencimentos' },
-      { id: 'os', icone: '🔧', label: 'Ordens de serviço' },
-      { id: 'planos', icone: '📋', label: 'Planos' },
-      { id: 'estoque', icone: '📦', label: 'Estoque' },
+      // Ícones pelo NOME do conjunto comum (shared/icones.js). `CFG.icone`
+      // continua sendo o emoji do módulo — ele identifica o app na tela de
+      // login (Auth#appIcone), que é outra superfície; a aba usa
+      // `CFG.iconeAba`, e cai em 'maquina' se o módulo não declarar.
+      { id: 'painel', icone: 'painel', label: 'Painel', ativo: true },
+      { id: 'ativos', icone: CFG.iconeAba || 'maquina', label: 'Ativos' },
+      { id: 'vencimentos', icone: 'prazo', label: 'Vencimentos' },
+      { id: 'os', icone: 'chave', label: 'Ordens de serviço' },
+      { id: 'planos', icone: 'plano', label: 'Planos' },
+      { id: 'estoque', icone: 'estoque', label: 'Estoque' },
     ],
   })
 

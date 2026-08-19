@@ -1080,12 +1080,13 @@ async function boot() {
     accent: '#8a7f5c',
     versao: '1.0',
     navItems: [
-      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
-      { id: 'locais', icone: '🏛️', label: 'Locais' },
-      { id: 'inspecoes', icone: '📋', label: 'Inspeções' },
-      { id: 'checklist', icone: '📝', label: 'Checklist' },
-      { id: 'templates', icone: '🗂️', label: 'Templates' },
-      { id: 'laudos', icone: '🧾', label: 'Laudos' },
+      // Ícones pelo NOME do conjunto comum (shared/icones.js).
+      { id: 'painel', icone: 'painel', label: 'Painel', ativo: true },
+      { id: 'locais', icone: 'predio', label: 'Locais' },
+      { id: 'inspecoes', icone: 'os', label: 'Inspeções' },
+      { id: 'checklist', icone: 'checklist', label: 'Checklist' },
+      { id: 'templates', icone: 'modelo', label: 'Templates' },
+      { id: 'laudos', icone: 'relatorio', label: 'Laudos' },
     ],
   })
 

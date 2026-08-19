@@ -17,6 +17,7 @@ iniciarModulo({
   prefixo: 'fono',
   nome: 'Fonoclama',
   icone: '📢',
+  iconeAba: 'som',   // nome do conjunto comum; `icone` acima segue sendo o emoji da tela de login
   versao: '1.0',
   accent: '#4a7fa0',
   descricao: 'Amplificação, consoles, zonas de alto-falantes e linhas 70V — testes por horas de operação',

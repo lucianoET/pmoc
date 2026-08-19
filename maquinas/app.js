@@ -2,6 +2,19 @@ import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
 import { COLUNAS_ESTOQUE, proximaOrdem, aplicarOrdemEFiltro } from './estoque-tabela.js'
+import { pilula, seletor, chips as chipsHTML, regua, vazio } from '../shared/componentes.js'
+import { FLUXO_CONTRATACAO } from './contratacoes.js'
+import {
+  RECORTES,
+  filtrarPorRecorte,
+  contagensPorRecorte,
+  estadosPossiveis,
+  rotuloEstado,
+  tomEstado,
+  progressoDe,
+  totalDosItens,
+  proximoNumero,
+} from './contratacoes.js'
 import {
   COLUNAS_AREAS,
   rotuloDoTipo,
@@ -54,6 +67,11 @@ let MAT_FILTROS_ABERTO = false
 // Mesmo trio para a tabela de áreas de serviço (aba Operações), mais o id
 // da área em edição. Ordem e filtro são estado de TELA: nenhuma consulta
 // nova, nenhum carregarTudo().
+// Contratações (migração 38). Como o catálogo de reparos e os itens de OS,
+// carregam FORA do Promise.all principal e toleram a ausência da migração:
+// sem ela a lista fica vazia, o seletor não aparece e a aba se comporta
+// exatamente como antes.
+let CONTRATACOES = [], CT_ITENS = [], CT_LISTA_MODO = 'manutencao', CT_RECORTE = 'todas', CT_ABERTA = null
 let AREA_ORD = { coluna: null, dir: null }
 let AREA_FILTROS = {}
 let AREA_FILTROS_ABERTO = false
@@ -160,9 +178,11 @@ async function carregarTudo(){
   await carregarCustosOS()
   await carregarComentarios()
   await carregarCompras()
+  await carregarContratacoes()
   aplicarPermissoesOperacoes()
   renderPainel(); renderAtivos(); renderVencimentos(); renderOS(); renderMateriais()
   renderConsumo(); renderCiclo(); renderNecessidades(); renderOperacoes(); renderAgenda()
+  renderSeletorOS(); if(CT_LISTA_MODO === 'contratacoes') renderContratacoes()
 }
 
 // ── catálogo de reparos (migração 26) ──
@@ -787,6 +807,214 @@ function renderOperacoes(){
       </section>`).join('')
   }
   renderAreas()
+}
+
+// ── CONTRATAÇÃO DE EMPRESA (migração 38) ──
+// A aba de OS-Manutenção passa a ter duas listas: a OS interna, da oficina,
+// e a contratação de serviço externo. São a mesma pergunta — "o que está
+// sendo feito nesta máquina?" — com dois recortes, e é por isso que dividem
+// a aba em vez de virarem duas.
+//
+// O ciclo é o da contratação pública, o mesmo de Refrigeração; o que se
+// reaproveita é o FLUXO (shared/fluxo.js), não a tabela — `os_contratacao` é
+// do módulo congelado e aponta para `equipamentos`.
+async function carregarContratacoes(){
+  const [ct, itens] = await Promise.all([
+    supa.from('maq_contratacoes').select('*').eq('ativo', true).order('criado_em', {ascending:false}),
+    supa.from('maq_contratacao_itens').select('*'),
+  ])
+  // Erro aqui não é alarme: enquanto a migração 38 não rodar, a tela
+  // simplesmente não oferece contratação.
+  CONTRATACOES = ct.error ? [] : (ct.data || [])
+  CT_ITENS = itens.error ? [] : (itens.data || [])
+}
+
+function podeContratar(){
+  // Espelha a policy de maq_contratacoes (migração 38): contratar empresa é
+  // ato de gestão, não de oficina. Mesma lista de podeEditarAreas, tabela
+  // diferente — declarada à parte de propósito, para uma mudar sem a outra.
+  return ['admin','gestor'].includes(USUARIO?.role)
+}
+
+function renderSeletorOS(){
+  const alvo = document.getElementById('os-seletor')
+  if(!alvo) return
+  // Sem a migração aplicada não há o que selecionar: a aba fica como era.
+  if(!CONTRATACOES.length && !podeContratar()){ alvo.innerHTML = ''; return }
+  alvo.innerHTML = seletor([
+    { id:'manutencao', rotulo:'Manutenção' },
+    { id:'contratacoes', rotulo:`Contratações${CONTRATACOES.length ? ` (${CONTRATACOES.length})` : ''}` },
+  ], CT_LISTA_MODO, 'trocarListaOS')
+}
+
+function trocarListaOS(modo){
+  CT_LISTA_MODO = modo
+  document.getElementById('os-bloco-manutencao').hidden = modo !== 'manutencao'
+  document.getElementById('os-bloco-contratacoes').hidden = modo !== 'contratacoes'
+  renderSeletorOS()
+  if(modo === 'contratacoes') renderContratacoes()
+}
+
+function renderContratacoes(){
+  const caixaChips = document.getElementById('ct-chips')
+  const lista = document.getElementById('ct-lista')
+  if(!caixaChips || !lista) return
+  const contagens = contagensPorRecorte(CONTRATACOES)
+  caixaChips.innerHTML = chipsHTML(
+    RECORTES.map(r => ({ ...r, contagem: contagens[r.id] })), CT_RECORTE, 'filtrarContratacoes'
+  )
+  const visiveis = filtrarPorRecorte(CONTRATACOES, CT_RECORTE)
+  const novaBtn = podeContratar()
+    ? '<button class="btn btn-p btn-sm" onclick="abrirModalContratacao()">+ Contratação</button>'
+    : ''
+  if(!visiveis.length){
+    lista.innerHTML = (novaBtn ? `<div class="view-head">${novaBtn}</div>` : '') +
+      vazio(CONTRATACOES.length ? 'Nenhuma contratação neste recorte.' : 'Nenhuma contratação registrada.',
+            CONTRATACOES.length ? 'Troque o filtro acima.' : 'Contratação de empresa para serviço em máquina ou área.')
+    return
+  }
+  lista.innerHTML = (novaBtn ? `<div class="view-head">${novaBtn}</div>` : '') + visiveis.map(linhaContratacao).join('')
+}
+
+function linhaContratacao(ct){
+  const objeto = ct.ativo_id
+    ? (ATIVOS.find(a => a.id === ct.ativo_id)?.nome || `Máquina #${ct.ativo_id}`)
+    : ct.area_id ? (AREAS.find(a => String(a.id) === String(ct.area_id))?.nome || 'Área') : 'Sem objeto vinculado'
+  const total = totalDosItens(CT_ITENS.filter(i => String(i.contratacao_id) === String(ct.id)))
+  const valor = total || Number(ct.valor_contratado || ct.valor_estimado || 0)
+  const { passo, total: etapas } = progressoDe(ct.status)
+  return `<article class="ct-linha" onclick="abrirContratacao('${esc(ct.id)}')">
+    <div class="ct-linha-topo">
+      <div>
+        <div class="ct-num">${esc(ct.numero || '—')}</div>
+        <div class="ct-obj">${esc(objeto)}</div>
+      </div>
+      ${pilula(rotuloEstado(ct.status), tomEstado(ct.status))}
+    </div>
+    <div class="ct-linha-meta">
+      <span>${esc(ct.empresa || 'Empresa não definida')}</span>
+      <span>${esc(ct.data_solicitacao || '—')}</span>
+      ${valor ? `<span class="ct-valor">${fmtR(valor)}</span>` : ''}
+      ${ct.ne ? `<span class="tag-mapa">${esc(ct.ne)}</span>` : ''}
+      <span class="tagline">etapa ${passo}/${etapas}</span>
+    </div>
+    <div class="ct-desc">${esc(ct.objeto)}</div>
+  </article>`
+}
+
+function filtrarContratacoes(recorte){
+  CT_RECORTE = recorte
+  renderContratacoes()
+}
+
+function abrirContratacao(id){
+  const ct = CONTRATACOES.find(c => String(c.id) === String(id))
+  if(!ct) return
+  CT_ABERTA = ct.id
+  const itens = CT_ITENS.filter(i => String(i.contratacao_id) === String(ct.id))
+  const { passo } = progressoDe(ct.status)
+  const avancos = podeContratar()
+    ? estadosPossiveis(ct.status).map(e =>
+        `<button class="btn btn-s btn-sm" onclick="mudarEstadoContratacao('${esc(ct.id)}','${esc(e)}')">${esc(rotuloEstado(e))}</button>`
+      ).join('')
+    : ''
+  document.getElementById('modal-ct-detalhe-titulo').textContent = ct.numero || 'Contratação'
+  document.getElementById('ct-detalhe-corpo').innerHTML = `
+    ${regua(FLUXO_CONTRATACAO.etapas, passo)}
+    <div class="ed-compat" style="margin-bottom:12px">${esc(ct.objeto)}</div>
+    <div class="fgrid3">
+      <div><div class="tagline">Empresa</div><div>${esc(ct.empresa || '—')}</div></div>
+      <div><div class="tagline">CNPJ</div><div>${esc(ct.cnpj || '—')}</div></div>
+      <div><div class="tagline">Fiscal</div><div>${esc(ct.fiscal || '—')}</div></div>
+    </div>
+    <div class="fgrid3" style="margin-top:10px">
+      <div><div class="tagline">Solicitante</div><div>${esc(ct.solicitante || '—')}</div></div>
+      <div><div class="tagline">Nota de empenho</div><div>${esc(ct.ne || '—')}</div></div>
+      <div><div class="tagline">Valor</div><div>${fmtR(totalDosItens(itens) || ct.valor_estimado || 0)}</div></div>
+    </div>
+    <h3 class="section-spaced">Itens do orçamento</h3>
+    ${itens.length
+      ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Descrição</th><th>Un.</th><th>Qtd.</th><th>Valor un.</th><th>Total</th></tr></thead><tbody>${
+          itens.map(i => `<tr><td>${esc(i.descricao)}</td><td>${esc(i.unidade || '—')}</td><td>${esc(i.quantidade)}</td><td>${fmtR(i.valor_unitario)}</td><td>${fmtR(Number(i.quantidade) * Number(i.valor_unitario || 0))}</td></tr>`).join('')
+        }</tbody></table></div>`
+      : vazio('Nenhum item de orçamento.', 'O orçamento da empresa entra como itens desta contratação.')}
+    ${avancos ? `<h3 class="section-spaced">Avançar etapa</h3><div class="ed-actions">${avancos}</div>` : ''}
+  `
+  document.getElementById('modal-ct-detalhe').classList.add('open')
+}
+
+// A mudança de estado grava a data da etapa correspondente e registra o
+// evento na trilha: sem autor e data, "aprovada" é uma palavra sem
+// responsável — e contratação pública precisa responder quem aprovou.
+const DATA_POR_ESTADO = { aprovada: 'data_aprovacao', em_execucao: 'data_execucao', encerrada: 'data_certificacao' }
+
+async function mudarEstadoContratacao(id, destino){
+  if(!podeContratar()) return
+  const ct = CONTRATACOES.find(c => String(c.id) === String(id))
+  if(!ct) return
+  if(!estadosPossiveis(ct.status).includes(destino)){
+    alert('Erro: esta etapa não pode vir depois da atual.')
+    return
+  }
+  const patch = { status: destino }
+  const coluna = DATA_POR_ESTADO[destino]
+  if(coluna && !ct[coluna]) patch[coluna] = new Date().toISOString().slice(0,10)
+  const { error } = await supa.from('maq_contratacoes').update(patch).eq('id', id)
+  if(error){ alert('Erro ao mudar a etapa: '+error.message); return }
+  // A trilha é gravada depois da mudança e o erro dela NÃO desfaz a
+  // mudança: perder uma linha de histórico é ruim, deixar a contratação num
+  // estado que a tela já mostrou como novo é pior.
+  const { error: erroEvento } = await supa.from('maq_contratacao_eventos').insert({
+    contratacao_id: id, de: ct.status, para: destino, quem: USUARIO?.nome || USUARIO?.role || null,
+  })
+  if(erroEvento) console.warn('trilha da contratação não registrada:', erroEvento.message)
+  fecharModal('modal-ct-detalhe')
+  await carregarContratacoes()
+  renderContratacoes()
+  renderSeletorOS()
+}
+
+function abrirModalContratacao(){
+  if(!podeContratar()) return
+  ;['ct-objeto','ct-empresa','ct-cnpj','ct-fiscal','ct-ne','ct-valor','ct-obs'].forEach(id => document.getElementById(id).value = '')
+  document.getElementById('ct-solicitante').value = USUARIO?.nome || ''
+  document.getElementById('ct-ativo').innerHTML = '<option value="">— nenhuma —</option>'+
+    ATIVOS.filter(a => a.ativo !== false).map(a => `<option value="${a.id}">${esc(a.codigo)} — ${esc(a.nome)}</option>`).join('')
+  document.getElementById('ct-area').innerHTML = '<option value="">— nenhuma —</option>'+
+    AREAS.map(a => `<option value="${esc(a.id)}">${esc(a.nome)}</option>`).join('')
+  document.getElementById('modal-contratacao').classList.add('open')
+}
+
+// Máquina OU área, nunca as duas — é o `check` num_nonnulls <= 1 da
+// migração 38. Escolher uma limpa a outra na tela, para o usuário não
+// descobrir a regra pelo erro do banco.
+function ctLimparOutroObjeto(escolhido){
+  if(escolhido === 'ativo' && document.getElementById('ct-ativo').value) document.getElementById('ct-area').value = ''
+  if(escolhido === 'area' && document.getElementById('ct-area').value) document.getElementById('ct-ativo').value = ''
+}
+
+async function salvarContratacao(){
+  if(!podeContratar()) return
+  const objeto = document.getElementById('ct-objeto').value.trim()
+  if(!objeto){ alert('Descreva o objeto da contratação.'); return }
+  const { error } = await supa.from('maq_contratacoes').insert({
+    numero: proximoNumero(CONTRATACOES, new Date().getFullYear()),
+    ativo_id: parseInt(document.getElementById('ct-ativo').value, 10) || null,
+    area_id: document.getElementById('ct-area').value || null,
+    objeto,
+    solicitante: document.getElementById('ct-solicitante').value.trim() || null,
+    empresa: document.getElementById('ct-empresa').value.trim() || null,
+    cnpj: document.getElementById('ct-cnpj').value.trim() || null,
+    fiscal: document.getElementById('ct-fiscal').value.trim() || null,
+    ne: document.getElementById('ct-ne').value.trim() || null,
+    valor_estimado: parseFloat(document.getElementById('ct-valor').value) || null,
+    obs: document.getElementById('ct-obs').value.trim() || null,
+  })
+  if(error){ alert('Erro ao salvar contratação: '+error.message); return }
+  fecharModal('modal-contratacao')
+  await carregarContratacoes()
+  renderContratacoes()
+  renderSeletorOS()
 }
 
 // ── ÁREAS DE SERVIÇO ──
@@ -3051,6 +3279,13 @@ function exporNoWindow(){
     ordenarAreas,
     filtrarColunaAreas,
     aplicarFiltroArea,
+    trocarListaOS,
+    filtrarContratacoes,
+    abrirContratacao,
+    mudarEstadoContratacao,
+    abrirModalContratacao,
+    ctLimparOutroObjeto,
+    salvarContratacao,
     receberItem,
     removerPecaOS,
     removerServicoOS,
@@ -3098,15 +3333,19 @@ async function boot(){
     // Vencimentos e Operações saíram da faixa de abas (18/08/2026): vencimento
     // é atributo da máquina e operação é execução de serviço — cada uma passa
     // a ser seção da aba onde já se estava trabalhando (Máquinas e OS).
+    // Ícones pelo NOME do conjunto comum (shared/icones.js): saem como SVG
+    // monocromático que herda a cor do texto. Emoji trazia a própria paleta,
+    // mudava de desenho em cada sistema e impedia qualquer padronização.
     navItems: [
-      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
-      { id: 'ativos', icone: '🔧', label: 'Máquinas' },
-      { id: 'os', icone: '📋', label: 'OS' },
-      { id: 'agenda', icone: '▦', label: 'Agenda' },
-      { id: 'materiais', icone: '📦', label: 'Estoque' },
-      { id: 'consumo', icone: '⛽', label: 'Consumo' },
-      { id: 'ciclo', icone: '📈', label: 'Ciclo de vida' },
-      { id: 'necessidades', icone: '🛒', label: 'Necessidades' },
+      { id: 'painel', icone: 'painel', label: 'Painel', ativo: true },
+      { id: 'ativos', icone: 'maquina', label: 'Máquinas' },
+      { id: 'os', icone: 'os', label: 'OS-Manutenção' },
+      { id: 'corte', icone: 'corte', label: 'OS-Corte' },
+      { id: 'agenda', icone: 'agenda', label: 'Agenda' },
+      { id: 'materiais', icone: 'estoque', label: 'Estoque' },
+      { id: 'consumo', icone: 'consumo', label: 'Consumo' },
+      { id: 'ciclo', icone: 'ciclo', label: 'Ciclo de vida' },
+      { id: 'necessidades', icone: 'compras', label: 'Necessidades' },
     ],
   })
 

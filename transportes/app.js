@@ -1515,13 +1515,16 @@ async function boot() {
     accent: '#4aa0a0',
     versao: '1.0',
     navItems: [
-      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
-      { id: 'ativos', icone: '🚚', label: 'Frota' },
-      { id: 'viagens', icone: '🗺️', label: 'Viagens' },
-      { id: 'manutencao', icone: '🔧', label: 'Manutenção' },
-      { id: 'planos', icone: '🗓️', label: 'Planos' },
-      { id: 'estoque', icone: '📦', label: 'Estoque' },
-      { id: 'relatorios', icone: '🧾', label: 'Relatórios' },
+      // Ícones pelo NOME do conjunto comum (shared/icones.js): SVG
+      // monocromático que herda a cor do texto. Emoji trazia a própria
+      // paleta e mudava de desenho em cada sistema.
+      { id: 'painel', icone: 'painel', label: 'Painel', ativo: true },
+      { id: 'ativos', icone: 'veiculo', label: 'Frota' },
+      { id: 'viagens', icone: 'rota', label: 'Viagens' },
+      { id: 'manutencao', icone: 'chave', label: 'Manutenção' },
+      { id: 'planos', icone: 'plano', label: 'Planos' },
+      { id: 'estoque', icone: 'estoque', label: 'Estoque' },
+      { id: 'relatorios', icone: 'relatorio', label: 'Relatórios' },
     ],
   })
 
