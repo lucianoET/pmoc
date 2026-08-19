@@ -108,12 +108,19 @@ let _modoPainel = null // 'criar' | 'editar'
 let _camadaSelecionada = null
 let _btnZona = null
 let _zonaAlvo = null // zona sem contorno esperando o próximo polígono desenhado
+// Aviso curto e não bloqueante, publicado por mapa/app.js. Instrução em
+// alert() é modal: ela engole o clique seguinte, que é justamente o clique
+// no mapa que a instrução está pedindo. Erro continua em alert — erro
+// precisa parar o usuário. Padrão sem efeito, para o editor nunca depender
+// de a tela ter passado a função.
+let _aviso = () => {}
 
-export function iniciarEditorZonas(mapa, usuario) {
+export function iniciarEditorZonas(mapa, usuario, aviso) {
   // Sai sem fazer nada quando o cargo não está na lista de escrita de zona
   // — nenhum botão, nenhum manipulador global, nada. O banco recusaria a
   // escrita de qualquer forma; a tela não promete o que ele não aceita.
   if (!CARGOS_ZONA.includes(usuario?.role)) return
+  if (typeof aviso === 'function') _aviso = aviso
   _mapa = mapa
   exporManipuladores()
   criarBotaoAlternar(mapa)
@@ -429,13 +436,13 @@ function exporManipuladores() {
     }
     if (!_modoAtivo && _mapa && _btnZona) await alternarModoEdicao(_mapa, _btnZona)
     _zonaAlvo = zona
-    alert(`Desenhe o contorno de "${zona.nome}" no mapa: clique nos vértices e feche o polígono.`)
+    _aviso(`Desenhe o contorno de "${zona.nome}" no mapa: clique nos vértices e feche o polígono no primeiro ponto.`)
   }
 
   window.edHabilitarArraste = () => {
     if (_camadaSelecionada?.editing) {
       _camadaSelecionada.editing.enable()
-      alert('Arraste os vértices no mapa e clique em Salvar quando terminar.')
+      _aviso('Arraste os vértices no mapa e clique em Salvar quando terminar.')
     }
   }
 }
@@ -469,11 +476,12 @@ let _aoMudarPosicaoAtivo = () => {}
 
 const FAIXA_AGUARDANDO_ID = 'mapa-editor-aguardando-clique'
 
-export function iniciarEditorAtivos(mapa, usuario, aoMudarPosicao) {
+export function iniciarEditorAtivos(mapa, usuario, aoMudarPosicao, aviso) {
   // Sai sem fazer nada quando o cargo não está em CARGOS_POSICAO — a
   // constante importada de mapa-dados.js, nunca redeclarada aqui: o gate
   // de tests/mapa-posicionamento.test.js confere a origem única.
   if (!CARGOS_POSICAO.includes(usuario?.role)) return
+  if (typeof aviso === 'function') _aviso = aviso
   _mapaPosicao = mapa
   _aoMudarPosicaoAtivo = typeof aoMudarPosicao === 'function' ? aoMudarPosicao : () => {}
   criarBotaoPosicionar(mapa)
@@ -730,7 +738,7 @@ function desenharContornoDoPredio(id) {
     // prédios, que é registrada uma vez no boot (xmap-layers-predios.js).
     // Recarregar a página inteira aqui seria perder o estado do mapa; a
     // faixa avisa, e o polígono aparece na próxima abertura.
-    alert(`Contorno de "${nome}" gravado. Ele aparece desenhado na próxima abertura do mapa.`)
+    _aviso(`Contorno de "${nome}" gravado. Ele aparece desenhado na próxima abertura do mapa.`)
   }
 
   _mapaPosicao.on(L.Draw.Event.CREATED, aoCriar)
