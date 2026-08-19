@@ -104,3 +104,140 @@ test('ficha-btn-cadastro usa podeEditarCadastro()', () => {
   assert.match(HTML, /id="ficha-btn-cadastro"/)
   assert.match(APP, /btnCadastro\.style\.display = podeEditarCadastro\(\) \? '' : 'none'/)
 })
+
+// ── D3/D4: núcleo puro maquinas/estoque-tabela.js ──────────────────────────
+const {
+  COLUNAS_ESTOQUE, proximaOrdem, normalizarBusca, compararMateriais, aplicarOrdemEFiltro,
+} = require('../maquinas/estoque-tabela.js')
+
+test('COLUNAS_ESTOQUE tem nove colunas na ordem do markup, três numéricas', () => {
+  assert.equal(COLUNAS_ESTOQUE.length, 9)
+  assert.deepEqual(COLUNAS_ESTOQUE.map(c => c.id), [
+    'codigo', 'nome', 'tipo', 'sistema', 'aplicacao',
+    'estoque_atual', 'estoque_minimo', 'preco', 'status',
+  ])
+  const numericas = COLUNAS_ESTOQUE.filter(c => c.tipo === 'numero').map(c => c.id)
+  assert.deepEqual(numericas.sort(), ['estoque_atual', 'estoque_minimo', 'preco'])
+})
+
+test('proximaOrdem cicla null → asc → desc → null', () => {
+  assert.equal(proximaOrdem(null), 'asc')
+  assert.equal(proximaOrdem('asc'), 'desc')
+  assert.equal(proximaOrdem('desc'), null)
+})
+
+test('normalizarBusca derruba acento e caixa — "Óleo" casa com "oleo"', () => {
+  assert.equal(normalizarBusca('Óleo'), normalizarBusca('oleo'))
+  assert.equal(normalizarBusca('ÓLEO'), 'oleo')
+  assert.equal(normalizarBusca(null), '')
+  assert.equal(normalizarBusca(undefined), '')
+  assert.equal(normalizarBusca(10), '10')
+})
+
+const MAT_A = { id: 1, codigo: 'A', nome: 'Zebra', tipo: 'consumivel', sistema: 'Motor', aplicacao: 'Vários', estoque_atual: 10, estoque_minimo: 2, unidade: 'un', preco: 5 }
+const MAT_B = { id: 2, codigo: 'B', nome: 'Abelha', tipo: 'peca', sistema: '', aplicacao: '', estoque_atual: 9, estoque_minimo: 20, unidade: 'un', preco: null }
+const MAT_C = { id: 3, codigo: 'C', nome: 'Óleo hidráulico', tipo: 'peca', sistema: 'Hidráulico', aplicacao: '', estoque_atual: 100, estoque_minimo: 2, unidade: 'L', preco: 30 }
+const LISTA = [MAT_A, MAT_B, MAT_C]
+
+test('ordenação numérica ordena por número, não por string (10 depois de 9)', () => {
+  const asc = aplicarOrdemEFiltro(LISTA, { coluna: 'estoque_atual', dir: 'asc' }, {}).map(m => m.codigo)
+  assert.deepEqual(asc, ['B', 'A', 'C'], '9, 10, 100 em ordem numérica — string ordenaria 10 antes de 9')
+  const desc = aplicarOrdemEFiltro(LISTA, { coluna: 'estoque_atual', dir: 'desc' }, {}).map(m => m.codigo)
+  assert.deepEqual(desc, ['C', 'A', 'B'])
+})
+
+test('ordenação textual usa pt-BR e vazio/nulo fica no fim nas duas direções', () => {
+  const asc = aplicarOrdemEFiltro(LISTA, { coluna: 'sistema', dir: 'asc' }, {}).map(m => m.codigo)
+  assert.deepEqual(asc, ['C', 'A', 'B'], 'Hidráulico, Motor, vazio — vazio sempre por último')
+  const desc = aplicarOrdemEFiltro(LISTA, { coluna: 'sistema', dir: 'desc' }, {}).map(m => m.codigo)
+  assert.deepEqual(desc, ['A', 'C', 'B'], 'Motor, Hidráulico, vazio — vazio continua por último mesmo decrescente')
+})
+
+test('preço nulo (não informado) fica no fim nas duas direções — não é zero', () => {
+  const asc = aplicarOrdemEFiltro(LISTA, { coluna: 'preco', dir: 'asc' }, {}).map(m => m.codigo)
+  assert.deepEqual(asc, ['A', 'C', 'B'])
+  const desc = aplicarOrdemEFiltro(LISTA, { coluna: 'preco', dir: 'desc' }, {}).map(m => m.codigo)
+  assert.deepEqual(desc, ['C', 'A', 'B'])
+})
+
+test('filtro é substring sobre o texto exibido, sem acento e sem caixa, e filtros de colunas diferentes se acumulam', () => {
+  const porNome = aplicarOrdemEFiltro(LISTA, null, { nome: 'oleo' }).map(m => m.codigo)
+  assert.deepEqual(porNome, ['C'], '"Óleo hidráulico" casa com "oleo" sem acento')
+  const semOrdem = aplicarOrdemEFiltro(LISTA, null, {}).map(m => m.codigo)
+  assert.deepEqual(semOrdem, ['A', 'B', 'C'], 'sem ord.coluna devolve a ordem de entrada')
+  // dois filtros em conjunção: só C casa em sistema E nome ao mesmo tempo
+  const doisFiltros = aplicarOrdemEFiltro(LISTA, null, { sistema: 'hidraul', nome: 'oleo' }).map(m => m.codigo)
+  assert.deepEqual(doisFiltros, ['C'])
+  const doisFiltrosSemCasar = aplicarOrdemEFiltro(LISTA, null, { sistema: 'motor', nome: 'oleo' }).map(m => m.codigo)
+  assert.deepEqual(doisFiltrosSemCasar, [], 'sistema=motor e nome=oleo não casam na mesma linha')
+})
+
+test('compararMateriais devolve 0 para coluna desconhecida', () => {
+  assert.equal(compararMateriais(MAT_A, MAT_B, 'coluna-que-nao-existe', 'asc'), 0)
+})
+
+// ── D3/D4: fiação em maquinas/app.js e maquinas/index.html ─────────────────
+test('o thead do estoque é o id="th-materiais", não mais markup estático de nove <th>', () => {
+  assert.match(HTML, /<thead id="th-materiais"><\/thead>/)
+  assert.doesNotMatch(HTML,
+    /<thead><tr>\s*<th>Código<\/th><th>Nome<\/th><th>Tipo<\/th><th>Sistema<\/th>/,
+    'o cabeçalho estático de nove colunas não pode voltar — quem desenha agora é renderCabecalhoMateriais()')
+})
+
+test('MAT_ORD e MAT_FILTROS são declarados em maquinas/app.js', () => {
+  assert.match(APP, /let MAT_ORD = \{ coluna: null, dir: null \}/)
+  assert.match(APP, /let MAT_FILTROS = \{\}/)
+  assert.match(APP, /let MAT_FILTROS_ABERTO = false/)
+})
+
+test('as quatro funções de interação estão publicadas em exporNoWindow()', () => {
+  const bloco = APP.match(/function exporNoWindow\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'exporNoWindow() deveria existir')
+  for (const nome of ['ordenarMateriais', 'filtrarColunaMateriais', 'aplicarFiltroMaterial', 'limparFiltrosMateriais']) {
+    assert.match(bloco[1], new RegExp(`\\b${nome}\\b`), `${nome} deveria estar publicada em exporNoWindow()`)
+  }
+})
+
+test('ordenar e filtrar não tocam o Supabase — nenhuma das quatro chama carregarTudo() nem supa.from(', () => {
+  for (const nome of ['ordenarMateriais', 'filtrarColunaMateriais', 'aplicarFiltroMaterial', 'limparFiltrosMateriais']) {
+    const bloco = APP.match(new RegExp(`function ${nome}\\([^)]*\\)\\{([\\s\\S]*?)\\n\\}`))
+    assert.ok(bloco, `${nome} deveria existir`)
+    assert.doesNotMatch(bloco[1], /carregarTudo\(\)/, `${nome} não pode chamar carregarTudo()`)
+    assert.doesNotMatch(bloco[1], /supa\.from\(/, `${nome} não pode consultar o Supabase`)
+  }
+})
+
+test('renderLinhasMateriais() contém a guarda de MATERIAL_EDIT_ID contra a lista visível (D4)', () => {
+  const bloco = APP.match(/function renderLinhasMateriais\(\)\{([\s\S]*?)\n\}\n\n\/\/ mostra "N de total"/)
+  assert.ok(bloco, 'renderLinhasMateriais() deveria existir')
+  assert.match(bloco[1],
+    /if\(MATERIAL_EDIT_ID !== null && !visiveis\.some\(m => m\.id === MATERIAL_EDIT_ID\)\)\{\s*\n\s*MATERIAL_EDIT_ID = null/,
+    'se a linha em edição saiu do filtro, a edição é cancelada em vez de sumir com os campos preenchidos')
+})
+
+test('editarMaterial() limpa filtro e ordem quando o material pedido está fora da lista visível (D4, caminho do painel)', () => {
+  const bloco = APP.match(/function editarMaterial\(id\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'editarMaterial() deveria existir')
+  assert.match(bloco[1], /aplicarOrdemEFiltro\(MATERIAIS, MAT_ORD, MAT_FILTROS\)/)
+  assert.match(bloco[1], /MAT_FILTROS = \{\}/)
+  assert.match(bloco[1], /MAT_ORD = \{ coluna: null, dir: null \}/)
+})
+
+test('aria-sort é escrito pelo cabeçalho, um valor fechado por estado', () => {
+  assert.match(APP, /const ariaSort = dir === 'asc' \? 'ascending' : dir === 'desc' \? 'descending' : 'none'/)
+  assert.match(APP, /<th aria-sort="\$\{ariaSort\}">/)
+})
+
+test('renderCabecalhoMateriais() escreve um botão de ordenação e um de filtro por coluna, com título em português', () => {
+  const bloco = APP.match(/function renderCabecalhoMateriais\(\)\{([\s\S]*?)\n\}/)
+  assert.ok(bloco, 'renderCabecalhoMateriais() deveria existir')
+  assert.match(bloco[1], /onclick="ordenarMateriais\('\$\{col\.id\}'\)"/)
+  assert.match(bloco[1], /onclick="filtrarColunaMateriais\('\$\{col\.id\}'\)"/)
+  assert.match(bloco[1], /class="th-acao\$\{filtroAtivo\?' ativo':''\}"/,
+    'o botão de filtro precisa de classe de estado ativo quando a coluna tem filtro preenchido')
+})
+
+test('CSS novo de cabeçalho segue .btn-tema como precedente de botão-ícone pequeno', () => {
+  assert.match(HTML, /\.th-acao\{[^}]*cursor:pointer/)
+  assert.match(HTML, /\.th-acao\.ativo\{color:var\(--accent-texto\)\}/)
+})

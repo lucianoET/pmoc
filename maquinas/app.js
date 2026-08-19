@@ -1,6 +1,7 @@
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
+import { COLUNAS_ESTOQUE, proximaOrdem, aplicarOrdemEFiltro } from './estoque-tabela.js'
 
 // ── CONFIG: shared/supabase-config.js descobre a configuração dos outros
 // cinco módulos lendo este arquivo por expressão regular — as duas
@@ -38,6 +39,11 @@ let OS_PLANOS_MARCADOS = []
 let OS_DETALHE_ID = null
 // material com a linha aberta em edição na aba de estoque
 let MATERIAL_EDIT_ID = null
+// ordenação e filtro do cabeçalho do estoque (D3) — operações de tela, sem
+// consulta ao Supabase; MAT_ORD.coluna nulo = ordem de entrada de MATERIAIS
+let MAT_ORD = { coluna: null, dir: null }
+let MAT_FILTROS = {}
+let MAT_FILTROS_ABERTO = false
 // máquina aberta na ficha e comentários por máquina (migração 32)
 let FICHA_ATIVO_ID = null
 let COMENTARIOS = []
@@ -816,13 +822,78 @@ function navegarAgenda(direcao){
 }
 
 // ── MATERIAIS ──
+// renderMateriais() é a entrada completa (chamada de carregarTudo() e de
+// editarMaterial()/cancelarEdicaoMaterial()); ela só delega para as duas
+// partes abaixo. Ordenar e abrir/fechar a linha de filtro reescrevem o
+// cabeçalho inteiro; digitar num campo de filtro chama só
+// renderLinhasMateriais() — reescrever o thead a cada tecla mataria o foco
+// e o cursor do campo (D3).
 function renderMateriais(){
+  renderCabecalhoMateriais()
+  renderLinhasMateriais()
+}
+
+// desenha o <thead> do estoque: por coluna, o rótulo e dois botões — um de
+// ordenação (⇅/↑/↓, três estados) e um de filtro (⌕, com classe de estado
+// ativo quando a coluna tem filtro preenchido). Com MAT_FILTROS_ABERTO,
+// acrescenta a segunda linha com um campo de busca por coluna.
+function renderCabecalhoMateriais(){
+  const thead = document.getElementById('th-materiais')
+  if(!thead) return
+
+  const linhaRotulos = '<tr>' + COLUNAS_ESTOQUE.map(col => {
+    const dir = MAT_ORD.coluna === col.id ? MAT_ORD.dir : null
+    const ariaSort = dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'
+    const iconeOrdem = dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : '⇅'
+    const tituloOrdem = `Ordenar por ${col.rotulo}`
+    const filtroAtivo = !!MAT_FILTROS[col.id]
+    const tituloFiltro = `Filtrar por ${col.rotulo}`
+    return `<th aria-sort="${ariaSort}">
+      <span class="th-rotulo">
+        ${esc(col.rotulo)}
+        <button type="button" class="th-acao" onclick="ordenarMateriais('${col.id}')" title="${tituloOrdem}" aria-label="${tituloOrdem}">${iconeOrdem}</button>
+        <button type="button" class="th-acao${filtroAtivo?' ativo':''}" onclick="filtrarColunaMateriais('${col.id}')" title="${tituloFiltro}" aria-label="${tituloFiltro}">⌕</button>
+      </span>
+    </th>`
+  }).join('') + '</tr>'
+
+  const linhaFiltros = MAT_FILTROS_ABERTO
+    ? '<tr>' + COLUNAS_ESTOQUE.map(col => `<th>
+        <input type="search" id="filtro-${col.id}" value="${esc(MAT_FILTROS[col.id] || '')}"
+          oninput="aplicarFiltroMaterial('${col.id}', this.value)" placeholder="filtrar"/>
+      </th>`).join('') + '</tr>'
+    : ''
+
+  thead.innerHTML = linhaRotulos + linhaFiltros
+}
+
+// aplica ordem e filtro sobre MATERIAIS e desenha o <tbody> — pura operação
+// de tela, nenhuma consulta ao Supabase, nenhuma chamada a carregarTudo()
+function renderLinhasMateriais(){
   const tbody = document.getElementById('tb-materiais')
+  if(!tbody) return
+
   if(!MATERIAIS.length){
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Nenhum material cadastrado</td></tr>'
+    atualizarContagemMateriais(0, 0)
     return
   }
-  tbody.innerHTML = MATERIAIS.map(m => {
+
+  const visiveis = aplicarOrdemEFiltro(MATERIAIS, MAT_ORD, MAT_FILTROS)
+
+  // D4: se a linha em edição saiu do conjunto filtrado, a edição é
+  // cancelada em vez de sumir com os campos preenchidos
+  if(MATERIAL_EDIT_ID !== null && !visiveis.some(m => m.id === MATERIAL_EDIT_ID)){
+    MATERIAL_EDIT_ID = null
+  }
+
+  if(!visiveis.length){
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Nenhum material corresponde ao filtro</td></tr>'
+    atualizarContagemMateriais(0, MATERIAIS.length)
+    return
+  }
+
+  tbody.innerHTML = visiveis.map(m => {
     const ok = m.estoque_atual >= m.estoque_minimo
     const pct = m.estoque_minimo > 0 ? Math.min(100, Math.round((m.estoque_atual/m.estoque_minimo)*100)) : 100
 
@@ -878,6 +949,60 @@ function renderMateriais(){
         </div>
       </td>
     </tr>`}).join('')
+
+  atualizarContagemMateriais(visiveis.length, MATERIAIS.length)
+}
+
+// mostra "N de total" e o botão de limpar apenas quando ordem ou filtro
+// estão ativos — sem isso a tela sempre exibiria "34 de 34", ruído no caso
+// comum de ninguém ter ordenado ou filtrado nada
+function atualizarContagemMateriais(visiveis, total){
+  const contagem = document.getElementById('mat-contagem')
+  const btnLimpar = document.getElementById('btn-limpar-filtros')
+  const ativo = MAT_ORD.coluna !== null || Object.values(MAT_FILTROS).some(Boolean)
+  if(contagem) contagem.textContent = ativo ? `${visiveis} de ${total}` : ''
+  if(btnLimpar) btnLimpar.style.display = ativo ? '' : 'none'
+}
+
+// ── ordenação e filtro do estoque (D3) — tudo de tela, nada de Supabase ──
+function ordenarMateriais(coluna){
+  const dirAtual = MAT_ORD.coluna === coluna ? MAT_ORD.dir : null
+  // outra coluna sempre começa em 'asc' e zera a anterior; a mesma coluna
+  // avança no ciclo null → asc → desc → null
+  const proximo = MAT_ORD.coluna === coluna ? proximaOrdem(dirAtual) : 'asc'
+  MAT_ORD = proximo === null ? { coluna: null, dir: null } : { coluna, dir: proximo }
+  renderMateriais()
+}
+
+function filtrarColunaMateriais(coluna){
+  MAT_FILTROS_ABERTO = !MAT_FILTROS_ABERTO
+  // fechar limpa os filtros inteiros — um filtro invisível escondendo linhas
+  // seria pior do que nenhum filtro
+  if(!MAT_FILTROS_ABERTO) MAT_FILTROS = {}
+  renderMateriais()
+  if(MAT_FILTROS_ABERTO){
+    const campo = document.getElementById('filtro-' + coluna)
+    if(campo) campo.focus()
+  }
+}
+
+function aplicarFiltroMaterial(coluna, valor){
+  if(valor){
+    MAT_FILTROS = { ...MAT_FILTROS, [coluna]: valor }
+  } else {
+    const { [coluna]: _removido, ...resto } = MAT_FILTROS
+    MAT_FILTROS = resto
+  }
+  // só as linhas — reescrever o cabeçalho a cada tecla tiraria o foco e o
+  // cursor do campo de busca
+  renderLinhasMateriais()
+}
+
+function limparFiltrosMateriais(){
+  MAT_FILTROS = {}
+  MAT_ORD = { coluna: null, dir: null }
+  MAT_FILTROS_ABERTO = false
+  renderMateriais()
 }
 
 // ── valor da hora-homem (maq_config, migração 30) ──
@@ -950,6 +1075,14 @@ async function salvarValorHora(){
 
 // ── edição em linha do estoque ──
 function editarMaterial(id){
+  // D4: o painel (pintarResumo() de MATERIAIS com estoque baixo) pode pedir
+  // uma peça que ficou fora do filtro ou da ordem ativos — sem limpar os
+  // dois antes, o botão do painel pareceria quebrado (a linha não apareceria)
+  const visiveis = aplicarOrdemEFiltro(MATERIAIS, MAT_ORD, MAT_FILTROS)
+  if(!visiveis.some(m => m.id === id)){
+    MAT_FILTROS = {}
+    MAT_ORD = { coluna: null, dir: null }
+  }
   MATERIAL_EDIT_ID = id
   irParaAba('materiais')
   renderMateriais()
@@ -2726,6 +2859,7 @@ function exporNoWindow(){
     abrirVencMaquina,
     adicionarPecaOS,
     adicionarServicoOS,
+    aplicarFiltroMaterial,
     atualizarPecaOS,
     atualizarSelecaoVenc,
     atualizarServicoOS,
@@ -2740,8 +2874,11 @@ function exporNoWindow(){
     exportarOSDoc,
     exportarOSPdf,
     fecharModal,
+    filtrarColunaMateriais,
     irParaAba,
+    limparFiltrosMateriais,
     marcarTodosVenc,
+    ordenarMateriais,
     receberItem,
     removerPecaOS,
     removerServicoOS,

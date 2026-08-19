@@ -88,7 +88,13 @@ test('o modal de material tem os dois campos novos, com o datalist de sugestões
 })
 
 test('a tabela do estoque tem as colunas Sistema e Aplicação', () => {
-  assert.match(HTML, /<th>Sistema<\/th><th>Aplicação<\/th>/)
+  // quick-260818-twm: o <thead> estático virou id="th-materiais", desenhado
+  // por renderCabecalhoMateriais() a partir de COLUNAS_ESTOQUE (D3) — os
+  // rótulos das colunas agora vivem em maquinas/estoque-tabela.js
+  assert.match(HTML, /<thead id="th-materiais"><\/thead>/)
+  const ESTOQUE_TABELA = fs.readFileSync(path.join(RAIZ, 'maquinas', 'estoque-tabela.js'), 'utf8')
+  assert.match(ESTOQUE_TABELA, /rotulo: 'Sistema'/)
+  assert.match(ESTOQUE_TABELA, /rotulo: 'Aplicação'/)
   assert.match(APP, /esc\(m\.sistema \|\| '—'\)/)
   assert.match(APP, /esc\(m\.aplicacao \|\| '—'\)/)
 })
