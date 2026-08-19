@@ -174,9 +174,11 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     </div>
 
     <!-- OS -->
+    <!-- OS-MANUTENÇÃO — OS de manutenção de máquina. A operação de corte
+         saiu daqui para a aba OS-Corte em 19/08/2026. -->
     <div class="view" id="view-os">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div class="view-title">Ordens de Serviço</div>
+        <div class="view-title">Ordens de Serviço — Manutenção</div>
         <!-- Reparos é o catálogo sintoma → causa que a OS corretiva consome —
              não um sistema à parte, por isso o link mora aqui e não no portal. -->
         <div style="display:flex;gap:8px">
@@ -185,7 +187,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <button class="btn btn-p btn-sm" onclick="abrirModalOS()">+ OS</button>
         </div>
       </div>
-      <div class="view-sub">Clique numa OS para ver o detalhe, editar e exportar</div>
+      <div class="view-sub">Manutenção de máquina — clique numa OS para ver o detalhe, editar e exportar</div>
       <div class="filters-inline">
         <select id="filtro-os" onchange="renderOS()" class="control-auto">
           <option value="">Todas as situações</option>
@@ -208,21 +210,27 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         </table>
       </div>
 
-      <!-- Operações passou a ser seção desta aba, não aba própria (18/08/2026):
-           operação é execução de serviço — pertence à aba onde já se abre e
-           acompanha OS. -->
+    </div>
+
+    <!-- OS-CORTE — aba própria desde 19/08/2026. Operação de corte tem
+         ciclo, vocabulário e responsável diferentes da OS de manutenção de
+         máquina: uma trata do equipamento, a outra do terreno. Enquanto
+         dividiam a mesma aba, a tela misturava as duas leituras. -->
+    <div class="view" id="view-corte">
       <div class="view-head">
-        <h3 class="section-spaced">Operações de serviço</h3>
+        <div>
+          <div class="view-title">Ordem de Serviço de Corte</div>
+          <div class="view-sub">OS de corte vegetal — programação e execução por área</div>
+        </div>
         <div class="ops-actions">
           <button class="btn btn-s btn-sm" id="btn-nova-area" onclick="abrirModalArea()">+ Área</button>
-          <button class="btn btn-p btn-sm" id="btn-nova-operacao" onclick="abrirModalOperacao()">+ Operação</button>
+          <button class="btn btn-p btn-sm" id="btn-nova-operacao" onclick="abrirModalOperacao()">+ OS de corte</button>
         </div>
       </div>
-      <div class="view-sub">Programação e execução de corte, poda e limpeza por área</div>
       <div class="kpi-row" id="operacoes-kpis"></div>
       <div class="kanban" id="operacoes-kanban"></div>
       <div class="view-head">
-        <h3 class="section-spaced">Áreas de serviço</h3>
+        <h3 class="section-spaced">Áreas Vegetais</h3>
         <span class="tagline" id="areas-contagem"></span>
       </div>
       <!-- Cabeçalho desenhado em tempo de execução por maquinas/app.js

@@ -39,8 +39,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100
 .logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
 .topbar-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .user-chip{font-size:12px;color:var(--text2);background:var(--surface2);padding:4px 10px;border-radius:20px;border:1px solid var(--border);white-space:nowrap}
-.topbar-back{font-size:12px;color:var(--text3);text-decoration:none;white-space:nowrap}
-.topbar-back:hover{color:var(--accent-texto)}
+/* Portal é botão e vem antes de Sair (padronização de 19/08/2026): as duas
+   ações de saída do módulo, com o mesmo peso, na mesma ordem em todo lugar. */
+.topbar-portal{display:inline-flex;align-items:center;gap:6px}
+.topbar-portal .ico{margin-left:-1px}
+
+/* Ícone monocromático do conjunto comum (shared/icones.js): herda a cor do
+   texto ao redor, então responde a hover, estado ativo e tema sem uma
+   segunda regra. Caractere e emoji não fazem isso — trazem a própria
+   paleta e dependem da fonte que o sistema tem. */
+.ico{flex-shrink:0;vertical-align:-2px}
+.nav-ico{margin-right:2px}
 
 /* Abas com cara de botão. A rolagem se anuncia por sombra nas bordas, não por
    setas: seta é mais um alvo para o polegar errar e come a largura que falta
@@ -172,8 +181,13 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
 .shell-footer{border-top:1px solid var(--border);background:var(--surface);color:var(--text3);
   font-size:11px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;
   padding:12px 20px;margin-top:32px}
-.shell-footer a{color:var(--text3);text-decoration:none}
+.shell-footer a{color:var(--text3);text-decoration:none;display:inline-flex;align-items:center;gap:5px}
 .shell-footer a:hover{color:var(--accent-texto)}
+/* O alternador de tema desceu da barra superior para cá: é preferência de
+   exibição, escolhida uma vez, e no topo disputava espaço com as ações. */
+.shell-footer .btn-tema{padding:3px 7px;display:inline-flex;align-items:center}
+.rodape-marca{opacity:.85}
+.rodape-marca:hover{opacity:1}
 
 @media(max-width:900px){.section-split{grid-template-columns:1fr}}
 @media(max-width:700px){.fgrid,.fgrid3{grid-template-columns:1fr}.kpi-row{grid-template-columns:1fr 1fr}}
@@ -199,7 +213,7 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
   .topbar{padding:0 10px;gap:7px}
   .topbar-right{gap:7px}
   .logo{font-size:13px;gap:6px}
-  .topbar-back-txt{display:none}
+  .topbar-portal-txt{display:none}
   .user-chip{padding:3px 8px}
   .btn-sair{padding:5px 9px}
   .nav{padding:8px 10px;gap:5px}

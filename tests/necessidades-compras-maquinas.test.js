@@ -118,7 +118,10 @@ test('salvarMaterial() só envia sistema/aplicação quando a migração 34 est�
 test('a aba se chama Necessidades e tem id necessidades; nenhum id antigo de compras sobrou', () => {
   assert.match(HTML, /id="view-necessidades"/)
   assert.match(HTML, /id="necessidades-content"/)
-  assert.match(APP, /id: 'necessidades', icone: '🛒', label: 'Necessidades'/)
+  // O ícone deixou de ser emoji e passou a ser NOME do conjunto comum
+  // (shared/icones.js) na padronização de 19/08/2026 — o que este gate
+  // protege é a chave da aba e o rótulo, não o desenho.
+  assert.match(APP, /id: 'necessidades', icone: 'compras', label: 'Necessidades'/)
   assert.doesNotMatch(HTML, /view-compras|compras-content/)
   assert.doesNotMatch(APP, /id: 'compras'/)
   assert.doesNotMatch(APP, /function renderCompras\(/)

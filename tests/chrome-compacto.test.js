@@ -16,16 +16,18 @@ function regra(seletor) {
 }
 
 // ── barra superior em uma linha ───────────────────────────────────────────
-test('a barra superior traz os cinco elementos, nesta ordem', () => {
+test('a barra superior traz os quatro elementos, nesta ordem', () => {
   const bloco = SHELL.match(/const topbar = `([\s\S]*?)`/)
   assert.ok(bloco, 'shared/shell.js deveria montar a barra superior')
 
-  const ordem = ['class="logo"', 'id="user-chip"', 'id="btn-tema"', '${linkPortal}', 'onclick="sair()"']
+  // O tema saiu da barra para o rodapé em 19/08/2026 — sobraram quatro
+  // elementos no topo, e a ordem passou a ser título, usuário, Portal, Sair.
+  const ordem = ['class="logo"', 'id="user-chip"', '${botaoPortal}', 'onclick="sair()"']
   let posicao = -1
   for (const marca of ordem) {
     const onde = bloco[1].indexOf(marca)
     assert.ok(onde > posicao,
-      `${marca} está fora de ordem na barra superior — a ordem pedida é título, usuário, modo, portal, sair`)
+      `${marca} está fora de ordem na barra superior — a ordem pedida é título, usuário, portal, sair`)
     posicao = onde
   }
 })
@@ -49,13 +51,13 @@ test('a barra superior nunca quebra em duas linhas', () => {
   }
 })
 
-test('em tela estreita some o rótulo do portal, não o link', () => {
-  assert.match(SHELL, /class="topbar-back-txt"/,
+test('em tela estreita some o rótulo do portal, não o botão', () => {
+  assert.match(SHELL, /class="topbar-portal-txt"/,
     'o rótulo precisa de elemento próprio para poder sumir sozinho')
   const estreita = [...FOLHA.matchAll(/@media\(max-width:(\d+)px\)\{((?:[^{}]|\{[^{}]*\})*)\}/g)]
     .filter(([, largura]) => Number(largura) <= 480)
-  assert.ok(estreita.some(([, , miolo]) => /\.topbar-back-txt\{display:none\}/.test(miolo)),
-    'abaixo de 480px fica só a seta do portal — é o que cabe em 375px')
+  assert.ok(estreita.some(([, , miolo]) => /\.topbar-portal-txt\{display:none\}/.test(miolo)),
+    'abaixo de 480px fica só o ícone do portal — é o que cabe em 375px')
 })
 
 // ── faixa de abas ─────────────────────────────────────────────────────────

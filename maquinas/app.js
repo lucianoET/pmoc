@@ -3098,15 +3098,19 @@ async function boot(){
     // Vencimentos e Operações saíram da faixa de abas (18/08/2026): vencimento
     // é atributo da máquina e operação é execução de serviço — cada uma passa
     // a ser seção da aba onde já se estava trabalhando (Máquinas e OS).
+    // Ícones pelo NOME do conjunto comum (shared/icones.js): saem como SVG
+    // monocromático que herda a cor do texto. Emoji trazia a própria paleta,
+    // mudava de desenho em cada sistema e impedia qualquer padronização.
     navItems: [
-      { id: 'painel', icone: '📊', label: 'Painel', ativo: true },
-      { id: 'ativos', icone: '🔧', label: 'Máquinas' },
-      { id: 'os', icone: '📋', label: 'OS' },
-      { id: 'agenda', icone: '▦', label: 'Agenda' },
-      { id: 'materiais', icone: '📦', label: 'Estoque' },
-      { id: 'consumo', icone: '⛽', label: 'Consumo' },
-      { id: 'ciclo', icone: '📈', label: 'Ciclo de vida' },
-      { id: 'necessidades', icone: '🛒', label: 'Necessidades' },
+      { id: 'painel', icone: 'painel', label: 'Painel', ativo: true },
+      { id: 'ativos', icone: 'maquina', label: 'Máquinas' },
+      { id: 'os', icone: 'os', label: 'OS-Manutenção' },
+      { id: 'corte', icone: 'corte', label: 'OS-Corte' },
+      { id: 'agenda', icone: 'agenda', label: 'Agenda' },
+      { id: 'materiais', icone: 'estoque', label: 'Estoque' },
+      { id: 'consumo', icone: 'consumo', label: 'Consumo' },
+      { id: 'ciclo', icone: 'ciclo', label: 'Ciclo de vida' },
+      { id: 'necessidades', icone: 'compras', label: 'Necessidades' },
     ],
   })
 

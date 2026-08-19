@@ -21,6 +21,8 @@
 // chave de localStorage (D-03: com hífen, não sublinhado) — exportada
 // porque o teste de superfícies do plano 06-03 compara este texto com
 // o que está escrito no <head> das 7 páginas
+import { icone } from './icones.js'
+
 export const CHAVE_TEMA = 'pmoc-tema'
 
 // lista fechada dos únicos dois temas válidos (D-03: português)
@@ -101,9 +103,12 @@ export function aplicarTema(tema) {
   const botao = document.getElementById('btn-tema')
   if (botao) {
     const vaiParaClaro = temaValido === 'escuro'
-    const glifo = vaiParaClaro ? '☀' : '🌙'
     const rotulo = vaiParaClaro ? 'Ir para o tema claro' : 'Ir para o tema escuro'
-    botao.textContent = glifo
+    // Ícone do conjunto comum, não caractere: `☀`/`🌙` dependiam da fonte do
+    // sistema e traziam a própria cor — o emoji não obedecia ao tema que o
+    // botão serve para trocar. innerHTML com texto de icone(), que é
+    // constante do projeto e não recebe entrada nenhuma.
+    botao.innerHTML = icone(vaiParaClaro ? 'claro' : 'escuro')
     botao.title = rotulo
     botao.setAttribute('aria-label', rotulo)
   }

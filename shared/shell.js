@@ -19,6 +19,7 @@
 // bundler, sem dependência externa, o projeto continua zero-build.
 // Uma fase futura não deve "corrigir" esta importação de volta.
 import { iniciarTema } from './tema.js'
+import { icone, existeIcone } from './icones.js'
 
 // escapa texto vindo da configuração antes de entrar em HTML — mesmo padrão de mapa/app.js
 function esc(valor) {
@@ -38,26 +39,26 @@ export function montarShell(cfg) {
   const portalLink = cfg.portalLink !== false
   const versao = cfg.versao
 
-  // o rótulo "Portal" some por CSS em tela estreita e sobra a seta, que é o
-  // que cabe — daí o texto vir em elemento próprio, e não solto no link
-  const linkPortal = portalLink
-    ? '<a class="topbar-back" href="/" title="Voltar ao portal" aria-label="Voltar ao portal">←<span class="topbar-back-txt"> Portal</span></a>'
+  // Portal é BOTÃO, não link de texto, e fica imediatamente antes de Sair:
+  // são as duas ações de saída do módulo e passam a ter o mesmo peso visual
+  // em todos os módulos. O rótulo some por CSS em tela estreita e sobra o
+  // ícone, que é o que cabe — daí o texto vir em elemento próprio.
+  const botaoPortal = portalLink
+    ? `<button type="button" class="btn btn-s btn-sm topbar-portal" onclick="location.href='/'" title="Voltar ao portal" aria-label="Voltar ao portal">${icone('portal')}<span class="topbar-portal-txt">Portal</span></button>`
     : ''
 
-  // Ordem pedida pelo usuário e mantida em UMA linha em qualquer largura:
-  // título, usuário, modo (tema), portal, sair. Em tela estreita quem cede é o
-  // título (corta com reticências) e o link do portal (fica só a seta) — os
-  // dois se recuperam pelo contexto; um chip de cargo cortado, não.
+  // Ordem padronizada em todos os módulos e mantida em UMA linha em qualquer
+  // largura: título, usuário, Portal, Sair. O tema saiu daqui para o rodapé —
+  // é preferência de exibição, consultada uma vez por sessão, e disputava
+  // espaço com as duas ações que o usuário de fato usa no topo. Em tela
+  // estreita quem cede é o título (corta com reticências) e o rótulo do
+  // Portal (fica só o ícone); um chip de cargo cortado, não.
   const topbar = `
     <div class="topbar">
       <div class="logo"><div class="logo-dot"></div> PMOC <span class="logo-accent">${esc(nome)}</span></div>
       <div class="topbar-right">
         <span class="user-chip" id="user-chip">—</span>
-        <!-- btn-tema: nem o id nem a classe podem conter a subsequência "nav" —
-             tests/shell.test.js conta botões e afirma ausência da faixa de abas
-             por expressão regular sobre esse prefixo -->
-        <button id="btn-tema" class="btn-tema" onclick="alternarTema()" title="Ir para o tema claro" aria-label="Ir para o tema claro">☀</button>
-        ${linkPortal}
+        ${botaoPortal}
         <button class="btn btn-s btn-sm btn-sair" onclick="sair()">Sair</button>
       </div>
     </div>`
@@ -69,19 +70,31 @@ export function montarShell(cfg) {
     <div class="nav">
       ${navItems.map(item => {
         const id = esc(item.id)
-        const icone = esc(item.icone)
         const label = esc(item.label)
         const ativa = item.ativo ? ' active' : ''
-        return `<button class="nav-btn${ativa}" data-view="${id}" onclick="trocarView('${id}',this)">${icone} ${label}</button>`
+        // `icone` aceita as duas formas: o NOME de um ícone do conjunto
+        // comum (vira SVG monocromático, herda a cor do texto) ou um
+        // caractere solto, que continua saindo escapado — os módulos que
+        // ainda usam emoji seguem funcionando enquanto migram.
+        const desenho = existeIcone(item.icone) ? icone(item.icone, { classe: 'ico nav-ico' }) : esc(item.icone)
+        return `<button class="nav-btn${ativa}" data-view="${id}" onclick="trocarView('${id}',this)">${desenho} ${label}</button>`
       }).join('')}
     </div>`
     : ''
 
   const topo = topbar + nav
 
-  // rodapé mínimo (D-03): nome do módulo, versão quando informada, link ao portal
+  // Rodapé (D-03 mais o chrome padronizado de 19/08/2026): nome do módulo,
+  // versão quando informada, o alternador de tema — que saiu da barra
+  // superior — e a marca da empresa. O tema mora aqui porque é escolha de
+  // exibição, feita uma vez e raramente revista; o topo fica para as ações.
   const versaoSpan = versao ? `<span>v${esc(versao)}</span>` : ''
-  const rodape = `<footer class="shell-footer"><span>PMOC · CMASM — ${esc(nome)}</span>${versaoSpan}<a href="/">← Portal</a></footer>`
+  const rodape = `<footer class="shell-footer">
+      <span>PMOC · CMASM — ${esc(nome)}</span>${versaoSpan}
+      <button id="btn-tema" class="btn-tema" onclick="alternarTema()" title="Ir para o tema claro" aria-label="Ir para o tema claro">${icone('claro', { classe: 'ico' })}</button>
+      <a href="/">Portal</a>
+      <a class="rodape-marca" href="https://luctronics.com.br" target="_blank" rel="noopener noreferrer" title="Luctronics" aria-label="Luctronics — site da empresa">${icone('empresa', { classe: 'ico' })}<span>Luctronics</span></a>
+    </footer>`
 
   return { topo, rodape }
 }
