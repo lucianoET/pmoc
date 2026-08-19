@@ -1380,3 +1380,23 @@ saíram da conta de corte de grama.
 - [ ] Numa zona com `flora` classificada, confirmar a cor por vegetação (gramado verde-claro,
       capim colonial verde-limão, mata fechada verde-escuro) e o subtítulo do balão com a
       vegetação — "Área externa" quando não há flora classificada.
+
+---
+
+## Mapa: sala herda a posição do prédio (19/08/2026)
+
+Sem migração — mudança só de código. Medido contra o banco real logo depois: **54 ativos
+posicionados** (16 com posição própria, 38 herdados pela cadeia) contra 39 antes; **216 sem
+posição**; a lista de prédios caiu de 226 para **98** (as salas saíram) e passou a ordenar por
+quantos ativos cada prédio acenderia — F21 19, PAIOL 16, MK48 12, EXOCET 10.
+
+- [ ] Abrir `/mapa` → ☰ Módulos. Confirmar que **nenhuma sala** aparece em "Prédios sem
+      posição" e que a nota "Sala não entra na lista: herda a posição do prédio" está visível.
+- [ ] Clicar num ativo que esteja numa sala do COMANDO: o balão diz **"Herdada de COMANDO"**,
+      não "Herdada do local".
+- [ ] Posicionar um prédio com contagem alta (F21) e confirmar que **todos** os ativos das
+      salas dele aparecem no mapa de uma vez, e somem da lista de não localizados.
+- [ ] Arrastar um desses ativos em "Mover ativos": ele passa a ter posição própria e o prédio
+      **não** se move junto; os demais ativos do prédio continuam onde estavam.
+- [ ] Confirmar que nenhum ativo aparece pinado no centro da base sem prédio: a coordenada da
+      Organização Militar não é herdada de propósito.
