@@ -214,3 +214,76 @@ export function linkDoModulo(modulo, id) {
   if (typeof id !== 'number' || !Number.isInteger(id)) return null
   return `${rota}?ativo=${id}`
 }
+
+// ── Bloco 8 — vocabulário de estado do ativo ───────────────────────────
+// Cada tabela de ativo fala o estado com palavras próprias, e até agora
+// cada camada trazia a própria ponte: statusParaExibicao em
+// xmap-layers-grama.js, estadoParaExibicao em xmap-layers-eletrica.js,
+// mais os dicionários de cor logo ao lado de cada uma. Com três famílias
+// novas entrando (transportes, fonoclama, refrigeração) seriam seis
+// pontes e seis paletas — e a legenda da tela não teria de onde ler a cor
+// sem escrever hex à mão numa sétima cópia. A ponte passa a morar aqui,
+// no núcleo puro, junto das outras listas fechadas do arquivo.
+//
+// `sobreaviso` (transp_ativos) ganhou estado próprio em vez de ser dobrado
+// em `operante` ou `manutencao`: um veículo de sobreaviso não está livre
+// nem parado, e achatar os dois casos apagaria da tela justamente a
+// distinção que o despachante procura.
+export const ESTADOS = {
+  operante:   { rotulo: 'Operante',      cor: '#22c55e' },
+  standby:    { rotulo: 'Sobreaviso',    cor: '#38bdf8' },
+  manutencao: { rotulo: 'Em manutenção', cor: '#f59e0b' },
+  inoperante: { rotulo: 'Inoperante',    cor: '#ef4444' },
+  baixado:    { rotulo: 'Baixado',       cor: '#4a6785' },
+}
+
+// Cor de quem não casou com a lista fechada — nunca a cor de "operante",
+// para um valor desconhecido não passar por máquina boa na tela.
+export const COR_ESTADO_DESCONHECIDO = '#8fa8c8'
+
+// Um dicionário por módulo, cada um com os valores REAIS da coluna que
+// aquela tabela usa (verificados no banco de produção em 18/08/2026):
+// status em maq_ativos/elet_ativos/fono_ativos, status em transp_ativos
+// (outro vocabulário) e `funciona` em equipamentos (OK/NOK — a tabela de
+// refrigeração é anterior ao padrão e não tem coluna `status`).
+const ESTADO_POR_MODULO = {
+  maquinas:     { operante: 'operante', manutencao: 'manutencao', inoperante: 'inoperante', baixado: 'baixado' },
+  eletrica:     { operante: 'operante', manutencao: 'manutencao', inoperante: 'inoperante', baixado: 'baixado' },
+  fonoclama:    { operante: 'operante', manutencao: 'manutencao', inoperante: 'inoperante', baixado: 'baixado' },
+  transportes:  { disponivel: 'operante', sobreaviso: 'standby', manutencao: 'manutencao', indisponivel: 'inoperante', baixado: 'baixado' },
+  climatizacao: { OK: 'operante', NOK: 'inoperante' },
+}
+
+// Mesma técnica de normalizarFlora acima: comparação contra lista fechada,
+// sem trim e sem conversão de caixa. hasOwnProperty em vez de acesso
+// direto para um valor como "constructor" ou "__proto__" vindo do banco
+// não devolver função nenhuma.
+export function normalizarEstado(modulo, valor) {
+  const dicionario = ESTADO_POR_MODULO[modulo]
+  if (!dicionario) return null
+  return Object.prototype.hasOwnProperty.call(dicionario, valor) ? dicionario[valor] : null
+}
+
+export function corDoEstado(estado) {
+  return ESTADOS[estado]?.cor || COR_ESTADO_DESCONHECIDO
+}
+
+export function rotuloDoEstado(estado) {
+  return ESTADOS[estado]?.rotulo || 'Estado desconhecido'
+}
+
+// Classe visual da linha do balão, por estado — o mesmo vocabulário de
+// ok/warn/error que mapa/xmap.css já define para as linhas de popup. Mora
+// aqui, e não em cada camada, pela mesma razão que a cor: é mapeamento de
+// lista fechada, não desenho, e três camadas precisam do mesmo resultado.
+const CLASSE_POR_ESTADO = {
+  operante: 'ok',
+  standby: 'info',
+  manutencao: 'warn',
+  inoperante: 'error',
+  baixado: '',
+}
+
+export function classeDoEstado(estado) {
+  return Object.prototype.hasOwnProperty.call(CLASSE_POR_ESTADO, estado) ? CLASSE_POR_ESTADO[estado] : ''
+}

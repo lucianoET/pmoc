@@ -1276,3 +1276,64 @@ cadastro, e enquanto for 0/34 o comportamento automático não dispara para ning
 - [ ] "+ Serviço → Cadastrar novo serviço…" → idem
 - [ ] (Após migração 33) Vincular um serviço a uma peça no estoque; na OS, escolher a peça e ver o
       serviço entrar sozinho; remover tudo, escolher o serviço e ver a peça entrar
+
+## Calibração sai do localStorage e entra no Supabase (18/08/2026)
+
+### O que era
+
+`/calibracao` era o único módulo da plataforma sem banco. Os 38 instrumentos, 8 laboratórios, 12
+pedidos de serviço, 2 lotes e o catálogo de preços viviam inteiros em
+`localStorage['cmasm_erp_state_v1']`, gravados como um blob único a cada tecla. Consequências:
+limpar o cache apagava o controle de calibração do CMASM, cada computador via um dado diferente, e
+não havia backup nem forma de duas pessoas trabalharem no mesmo dado.
+
+### Migrações 35 e 36
+
+`supabase/35_calibracao_schema.sql` (aditiva) cria `cal_labs`, `cal_equipamentos`, `cal_ps`,
+`cal_lotes` e `cal_catalogo`. `supabase/36_calibracao_seed.sql` carrega o estado de fábrica,
+**gerado** por `node calibracao/gerar-seed.mjs` a partir das constantes do próprio `index.html` —
+não digitado à mão.
+
+Ensaiadas em `postgres:16-alpine` descartável antes de qualquer coisa (procedimento igual ao das
+outras cadeias, porta 55434, com `create role anon; create role authenticated` porque os papéis do
+Supabase não existem no Postgres puro):
+
+- schema aplica limpo e é idempotente na segunda passada — 68 colunas, 7 checks, RLS com 5 políticas
+- seed aplica limpo: 8 labs, 38 equipamentos, 12 PS, 2 lotes, 30 opções de catálogo
+- FKs resolvidas, datas convertidas (`12/03/2024` → `2024-03-12`), reaplicar não duplica
+
+### Decisões que o gate protege
+
+- **Escrita por linha, nunca o blob** — guardar o JSON inteiro numa coluna `jsonb` seria uma
+  mudança de cinco linhas, mas a primeira vez que duas pessoas editassem junto uma sobrescreveria a
+  outra inteira, em silêncio.
+- **PK de texto** (`e001`, `cms`, `p001`) — os ids já são as FKs que o React usa nas 11 páginas.
+- **`date` no banco, `dd/mm/aaaa` na tela**, convertidos só em `paraISO`/`paraBR`.
+- **Contador de PS derivado**, não persistido, com `cal_ps.num` unique — contador de cliente gera
+  `PS-CMS-26-013` duplicado assim que duas pessoas emitem juntas.
+- **A ata não virou tabela** — `ATA_ITEMS_SEED`/`ATA_INFO` só são lidos.
+- **Deriva mapa ↔ schema** — `CAMPOS_*` é comparado coluna a coluna com a migração 35: um campo
+  fora do mapa é gravado como **null, sem erro nenhum**.
+
+### ⚠ Segurança — o módulo segue sem login (decisão do usuário)
+
+As policies aceitam `anon` para escrita, então **qualquer pessoa com a URL `/calibracao` lê e altera
+os dados de todos**. Antes da migração isso já valia, mas o estrago ficava no navegador de quem
+fazia; agora é compartilhado. Fechar exige `shared/auth.js` no módulo mais uma migração trocando as
+políticas para `to authenticated`.
+
+### Fica para o usuário (no navegador, depois de aplicar 35 e 36)
+
+- [ ] Abrir `/calibracao` → dashboard preenchido; conferir 38 equipamentos e 8 laboratórios
+- [ ] Editar um instrumento, **recarregar a página** → a alteração continua lá (antes vinha do cache)
+- [ ] Abrir em **outro navegador ou computador** → o mesmo dado aparece
+- [ ] Emitir um PS → número na sequência do ano; concluir com data → o instrumento recebe `prox`
+      calculada e status CALIBRADO
+- [ ] Baixar um instrumento com PS em aberto → recusa; sem PS em aberto → some da lista (arquivado,
+      não apagado)
+- [ ] Catálogo de Preços: alterar um preço → recarregar → persistiu
+- [ ] Dados: se o navegador tiver dado da versão antiga, aparece o aviso âmbar com botão de exportar
+- [ ] Dados → "Apagar todos os dados do banco": **ler o texto do confirm** e cancelar (o clique é
+      destrutivo para todos os usuários)
+- [ ] Desligar a rede e recarregar → aviso vermelho "Não foi possível carregar os dados" com botão
+      de tentar de novo, não telas vazias

@@ -138,13 +138,32 @@ test('as escritas em maq_areas moram em mapa-dados.js — mapa-editor.js chama s
 })
 
 // ── 7. a camada de dados só grava nas tabelas previstas ──────────────────
-test('mapa-dados.js só fala com as tabelas previstas (maq_areas, maq_ativos, elet_ativos, cmasm_locais)', () => {
+// Duas origens de nome de tabela, não uma: até a quick-260818-vxu todas
+// apareciam literalmente dentro de .from('...'), e varrer só isso bastava.
+// Com CONFIG_POR_MODULO, o .from( recebe uma variável e as cinco tabelas
+// de ativo passaram a viver na configuração — uma varredura só de .from(
+// continuaria PASSANDO enquanto tivesse ficado cega para a metade que
+// mais cresce. As duas origens são lidas juntas, de propósito.
+test('mapa-dados.js só fala com as tabelas previstas (maq_areas, cmasm_locais e as cinco tabelas de ativo)', () => {
   const dados = ler(DADOS)
-  const tabelas = new Set(
-    [...dados.matchAll(/\.from\(\s*['"]([a-z_]+)['"]/g)].map((m) => m[1])
-  )
+  const literais = [...dados.matchAll(/\.from\(\s*['"]([a-z_]+)['"]/g)].map((m) => m[1])
+  const configuradas = [...dados.matchAll(/tabela:\s*['"]([a-z_]+)['"]/g)].map((m) => m[1])
+  const tabelas = new Set([...literais, ...configuradas])
   assert.ok(tabelas.has('maq_areas'), 'mapa-dados.js não referencia maq_areas — a escrita de zona deveria estar aqui (D-03)')
-  const permitidas = new Set(['maq_areas', 'maq_ativos', 'elet_ativos', 'cmasm_locais'])
+  assert.ok(tabelas.has('cmasm_locais'), 'mapa-dados.js não referencia cmasm_locais — as duas camadas de posição passam por aqui')
+  assert.ok(
+    configuradas.length >= 5,
+    `esperadas ao menos as cinco tabelas de ativo em CONFIG_POR_MODULO, encontradas ${configuradas.length}`
+  )
+  const permitidas = new Set([
+    'maq_areas',
+    'cmasm_locais',
+    'maq_ativos',
+    'elet_ativos',
+    'transp_ativos',
+    'fono_ativos',
+    'equipamentos',
+  ])
   for (const tabela of tabelas) {
     assert.ok(permitidas.has(tabela), `mapa-dados.js referencia tabela inesperada: ${tabela}`)
   }

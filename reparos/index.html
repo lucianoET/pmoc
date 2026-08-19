@@ -27,6 +27,22 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 .diag-col{flex:1;min-width:220px}
 .diag-cols{display:flex;gap:20px;flex-wrap:wrap}
 @media(max-width:640px){.diag-metricas{gap:10px}}
+
+/* ── D2/D3: cabeçalho ordenável/filtrável das três tabelas, mesmo padrão de
+   .th-rotulo/.th-acao de maquinas/index.html — escopado a este módulo,
+   shared/pmoc.css não é tocado. ── */
+.th-rotulo{display:inline-flex;align-items:center;gap:4px}
+.th-acao{background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:1px 3px;font-family:var(--ff)}
+.th-acao.ativo{color:var(--accent-texto)}
+/* D3: colunas densas — linha secundária de cada célula agrupada em fonte
+   menor, alinhamento superior para não descentralizar o texto quando uma
+   célula vizinha tem duas linhas e outra só uma. */
+#view-reparos .tbl-wrap td, #view-servicos .tbl-wrap td, #view-modelos .tbl-wrap td{padding:6px 10px;vertical-align:top}
+.cel-sub{font-size:11px;color:var(--text3);margin-top:2px}
+/* D4: cabeçalho de grupo do agrupamento por tipo de máquina — ocupa a
+   largura inteira da tabela, entre os grupos. */
+.linha-grupo td{background:var(--surface2,var(--surface));font-weight:600;padding:6px 10px}
+#btn-agrupar-reparos.ativo, #btn-agrupar-servicos.ativo, #btn-agrupar-modelos.ativo{color:var(--accent-texto);border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -48,52 +64,69 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 
     <!-- REPAROS -->
     <div class="view" id="view-reparos">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px">
         <div class="view-title">Reparos</div>
-        <button class="btn btn-p btn-sm" id="btn-novo-reparo" onclick="abrirModalReparo()">+ Reparo</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="rep-contagem-reparos" class="tagline"></span>
+          <button id="btn-limpar-reparos" class="btn btn-s btn-sm" style="display:none" onclick="limparFiltrosTabelaReparos('reparos')">Limpar filtros</button>
+          <button class="btn btn-p btn-sm" id="btn-novo-reparo" onclick="abrirModalReparo()">+ Reparo</button>
+        </div>
       </div>
       <div class="view-sub">Cada linha é um par sintoma → causa provável, com as peças e serviços que consome</div>
+      <div class="fgrid" style="margin-bottom:8px;align-items:end">
+        <div class="frow" style="margin-bottom:0"><label>Tipo de máquina</label><select id="tipo-reparos" onchange="selecionarTipoMaquina(this.value)"></select></div>
+        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-reparos" class="btn btn-s btn-sm" aria-pressed="false" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
+      </div>
       <div class="tbl-wrap">
         <table class="tbl">
-          <thead><tr>
-            <th>Código</th><th>Modelo</th><th>Sistema</th><th>Sintoma</th><th>Causa provável</th>
-            <th>Gravidade</th><th>Confirmado</th><th>Peças / serviços</th>
-          </tr></thead>
-          <tbody id="tb-reparos"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <thead id="th-reparos"></thead>
+          <tbody id="tb-reparos"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
 
     <!-- SERVIÇOS -->
     <div class="view" id="view-servicos">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px">
         <div class="view-title">Serviços</div>
-        <button class="btn btn-p btn-sm" id="btn-novo-servico" onclick="abrirModalServico()">+ Serviço</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="rep-contagem-servicos" class="tagline"></span>
+          <button id="btn-limpar-servicos" class="btn btn-s btn-sm" style="display:none" onclick="limparFiltrosTabelaReparos('servicos')">Limpar filtros</button>
+          <button class="btn btn-p btn-sm" id="btn-novo-servico" onclick="abrirModalServico()">+ Serviço</button>
+        </div>
       </div>
       <div class="view-sub">Operações de mão de obra. O tempo padrão é estimativa; o real fica em maq_os.horas_servico</div>
+      <div class="fgrid" style="margin-bottom:8px;align-items:end">
+        <div class="frow" style="margin-bottom:0"><label>Tipo de máquina</label><select id="tipo-servicos" onchange="selecionarTipoMaquina(this.value)"></select></div>
+        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-servicos" class="btn btn-s btn-sm" aria-pressed="false" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
+      </div>
       <div class="tbl-wrap">
         <table class="tbl">
-          <thead><tr>
-            <th>Código</th><th>Nome</th><th>Especialidade</th><th>Tempo padrão</th><th>Valor/hora</th><th>Usado em</th>
-          </tr></thead>
-          <tbody id="tb-servicos"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <thead id="th-servicos"></thead>
+          <tbody id="tb-servicos"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
 
     <!-- MODELOS -->
     <div class="view" id="view-modelos">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-wrap:wrap;gap:8px">
         <div class="view-title">Modelos</div>
-        <button class="btn btn-p btn-sm" id="btn-novo-modelo" onclick="abrirModalModelo()">+ Modelo</button>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="rep-contagem-modelos" class="tagline"></span>
+          <button id="btn-limpar-modelos" class="btn btn-s btn-sm" style="display:none" onclick="limparFiltrosTabelaReparos('modelos')">Limpar filtros</button>
+          <button class="btn btn-p btn-sm" id="btn-novo-modelo" onclick="abrirModalModelo()">+ Modelo</button>
+        </div>
       </div>
       <div class="view-sub">O conhecimento é indexado por modelo, não por máquina — é o que permite reaproveitá-lo em outra oficina</div>
+      <div class="fgrid" style="margin-bottom:8px;align-items:end">
+        <div class="frow" style="margin-bottom:0"><label>Tipo de máquina</label><select id="tipo-modelos" onchange="selecionarTipoMaquina(this.value)"></select></div>
+        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-modelos" class="btn btn-s btn-sm" aria-pressed="false" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
+      </div>
       <div class="tbl-wrap">
         <table class="tbl">
-          <thead><tr>
-            <th>Código</th><th>Fabricante</th><th>Modelo</th><th>Categoria</th><th>Motor</th><th>Máquinas</th><th>Reparos</th>
-          </tr></thead>
-          <tbody id="tb-modelos"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <thead id="th-modelos"></thead>
+          <tbody id="tb-modelos"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -134,7 +167,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 <div class="overlay" id="modal-servico">
   <div class="modal">
     <div class="modal-hd">
-      <h3>Novo serviço</h3>
+      <h3 id="modal-servico-titulo">Novo serviço</h3>
       <button class="btn btn-s btn-sm" onclick="fecharModal('modal-servico')">✕</button>
     </div>
     <div class="modal-body">
@@ -159,7 +192,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 <div class="overlay" id="modal-modelo">
   <div class="modal">
     <div class="modal-hd">
-      <h3>Novo modelo</h3>
+      <h3 id="modal-modelo-titulo">Novo modelo</h3>
       <button class="btn btn-s btn-sm" onclick="fecharModal('modal-modelo')">✕</button>
     </div>
     <div class="modal-body">

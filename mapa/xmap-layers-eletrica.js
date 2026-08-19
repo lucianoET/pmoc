@@ -15,7 +15,7 @@
  */
 
 import { carregarAtivosEletricos, carregarLocaisComPosicao, posicionarAtivos } from './mapa-dados.js'
-import { linkDoModulo } from './mapa-geometria.js'
+import { linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
 
 // Os mesmos quatro tipos de eletrica/app.js:8-13, duplicados aqui de
 // propósito: importar eletrica/app.js executaria o boot inteiro daquele
@@ -30,34 +30,12 @@ const TIPOS_ELETRICOS = {
   ILUMINACAO: { nome: 'Iluminação',       emoji: '💡' },
 }
 
-// elet_ativos.status no banco é operante|inoperante|manutencao|baixado
-// (supabase/14_eletrica_fonoclama_schema.sql), não o
-// operando|standby|manutencao|alerta|inativo que estadoColor/estadoClass
-// abaixo falam (portados do legado, mantidos como estão). Ponte local,
-// mesmo espírito de statusParaExibicao em xmap-layers-grama.js.
-function estadoParaExibicao(status) {
-  const mapa = { operante: 'operando', manutencao: 'manutencao', inoperante: 'alerta', baixado: 'inativo' }
-  return mapa[status] || status;
-}
-
-/* ── Helpers de cor/estilo ── */
-function estadoColor(estado) {
-  switch (estado) {
-    case 'operando':   return '#22c55e';
-    case 'standby':    return '#38bdf8';
-    case 'manutencao': return '#f59e0b';
-    case 'alerta':     return '#ef4444';
-    case 'inativo':    return '#4a6785';
-    default:           return '#8fa8c8';
-  }
-}
-
-function estadoClass(estado) {
-  if (estado === 'operando') return 'ok';
-  if (estado === 'alerta')   return 'error';
-  if (estado === 'manutencao') return 'warn';
-  return '';
-}
+/* ── Cor e classe por estado vêm do núcleo puro (mapa/mapa-geometria.js,
+   Bloco 8). A ponte de vocabulário que existia aqui (operante → operando,
+   inoperante → alerta) saiu junto: a normalização acontece uma vez, em
+   posicionarAtivos, e chega neste arquivo pronta em `a.estado`. O
+   vocabulário canônico herdou o `standby` que só esta camada legada
+   falava — é o estado `sobreaviso` de transp_ativos. ── */
 
 /* ── SVG Icons ──
    geradorSVG e quadroSVG reaproveitados do port legado, com a etiqueta de
@@ -67,8 +45,8 @@ function estadoClass(estado) {
    cobria esses dois tipos); ativoGenericoSVG segue o mesmo padrão visual
    (retângulo + emoji) que o resto do arquivo já usa. */
 function geradorSVG(estado) {
-  const c = estadoColor(estado);
-  const spin = estado === 'operando';
+  const c = corDoEstado(estado);
+  const spin = estado === 'operante';
   return `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34">
     <rect x="2" y="2" width="30" height="30" rx="6" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="2"/>
     <text x="17" y="20" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="9" font-weight="700" fill="${c}">GEN</text>
@@ -77,7 +55,7 @@ function geradorSVG(estado) {
 }
 
 function quadroSVG(estado) {
-  const c = estadoColor(estado);
+  const c = corDoEstado(estado);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
     <rect x="2" y="2" width="24" height="24" rx="3" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="2"/>
     <rect x="6" y="7"  width="6" height="3" rx="1" fill="${c}" opacity=".7"/>
@@ -89,7 +67,7 @@ function quadroSVG(estado) {
 }
 
 function ativoGenericoSVG(emoji, estado) {
-  const c = estadoColor(estado);
+  const c = corDoEstado(estado);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 26 26">
     <rect x="2" y="2" width="22" height="22" rx="5" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="1.5"/>
     <text x="13" y="17" text-anchor="middle" font-size="12" fill="${c}">${emoji}</text>
@@ -111,12 +89,11 @@ function makeIcon(svg, size, anchor) {
 function renderAtivosEletricos(group, ativos, tipo) {
   const info = TIPOS_ELETRICOS[tipo];
   ativos.forEach(a => {
-    const estadoExibicao = estadoParaExibicao(a.status);
-    const icon = makeIcon(iconePorTipo(tipo, estadoExibicao), tipo === 'GERADOR' ? [34, 34] : [26, 26], tipo === 'GERADOR' ? [17, 17] : [13, 13]);
+    const icon = makeIcon(iconePorTipo(tipo, a.estado), tipo === 'GERADOR' ? [34, 34] : [26, 26], tipo === 'GERADOR' ? [17, 17] : [13, 13]);
     const marker = L.marker([a.lat, a.lon], { icon });
 
     const rows = [
-      ['Estado',  a.status,                                        estadoClass(estadoExibicao)],
+      ['Estado',  rotuloDoEstado(a.estado),                        classeDoEstado(a.estado)],
       ['Uso',     (a.uso_atual || 0) + ' ' + (a.unidade_uso || 'h')],
       ['Posição', a.origemPosicao === 'propria' ? 'Própria' : 'Herdada do local', 'info'],
     ];
