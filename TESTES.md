@@ -1453,3 +1453,24 @@ e anel fechado, opacidade descendo polígono e marcador sem tocar o tile.
 - [ ] Como admin/gestor: usar "Desenhar" numa zona sem contorno e confirmar que a instrução
       aparece como faixa curta no rodapé do mapa, **sem caixa de diálogo** — e que o clique
       seguinte já cai no mapa.
+
+---
+
+## Mapa: estado ativo dos menus (19/08/2026)
+
+Sem migração. Depois desta tarefa e do posicionamento das 14 máquinas restantes no ponto do
+Apoio (onde estão as Tobatas), **os 270 ativos têm posição**: 91 próprias, 179 herdadas,
+**zero não localizados**.
+
+- [ ] Abrir `/mapa`: o botão **☰ Módulos** mostra um ícone de três traços (não um bloco preto)
+      e uma contagem ao lado — quantos módulos estão ligados.
+- [ ] ☰ Módulos: um módulo ligado tem **barra grossa à esquerda, fundo tingido, texto em
+      negrito e ponto cheio**; desligado fica apagado com anel vazio. Conferir que a diferença
+      é legível de relance, sem depender só da cor.
+- [ ] Ligar/desligar um módulo e conferir que a contagem no botão ☰ acompanha.
+- [ ] **Camadas**: uma camada ligada tem a linha inteira tingida com barra à esquerda; a
+      desligada fica apagada. Conferir em tema **claro** que os rótulos do painel continuam
+      legíveis (o painel é escuro sempre, por decisão).
+- [ ] Zoom 15-16: aparecem só os nomes de prédio e zona. A partir de 17, entram os nomes de
+      ativo e os grupos, com o nome do prédio na frente ("F21 (16)").
+- [ ] Navegar por teclado (Tab): os botões de alternância mostram anel de foco visível.
