@@ -6,9 +6,9 @@ current_phase: 7
 current_phase_name: ui-ux-mobile
 status: verifying
 stopped_at: Completed 07-01-PLAN.md — Fase 7 (UI/UX mobile) executada; migração 25 rodou e o UAT de leitura da Fase 10 passou, falta exercitar a escrita no app
-last_updated: "2026-08-18T21:56:34.000Z"
-last_activity: 2026-08-18
-last_activity_desc: Quick task 260818-pzq — Reparos alcançado de dentro do Máquinas, categoria Tobata, ficha com vencimentos (227 testes verdes)
+last_updated: "2026-08-19T08:45:00.000Z"
+last_activity: 2026-08-19
+last_activity_desc: Quick task 260819-5jf — chrome padronizado (ícones, Portal, tema no rodapé), abas OS-Manutenção/OS-Corte e contratação de empresa em Máquinas com migração 38 em produção (472 testes verdes)
 progress:
   total_phases: 8
   completed_phases: 4
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 7 (ui-ux-mobile) — EXECUTED
 Plan: 1 of 1
 Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
-Last activity: 2026-08-18 — Quick task 260818-vtm concluída: /reparos com edição por modal, ordenação e filtro por coluna, colunas densas e filtro/agrupamento por tipo de máquina
+Last activity: 2026-08-19 — Quick task 260819-5jf concluída: conjunto único de ícones no chrome dos 6 módulos, abas OS-Manutenção/OS-Corte e contratação de empresa em Máquinas (`shared/fluxo.js`, `shared/componentes.js`, migração 38 aplicada em produção)
 
 Progress: [██████████] 100% (v2.0)
 
