@@ -209,11 +209,13 @@ function renderItemNaoLocalizado(modulo, ativo, podePosicionar) {
 
 // ── prédios sem posição ────────────────────────────────────────────────
 // A alavanca da arquitetura de duas camadas (mapa-geometria.js#resolverPosicao):
-// posicionar UM prédio acende de uma vez todos os ativos ligados a ele por
-// local_id. A contagem ao lado de cada prédio é exatamente esse número —
-// quantos não localizados apontam para ele — e sai de NAO_LOCALIZADOS, sem
-// consulta nova: um ativo só está naquela lista se não tem posição própria
-// NEM herdada, então o prédio dele é justamente o que o acenderia.
+// posicionar UM prédio acende de uma vez todos os ativos ligados a ele —
+// inclusive os que apontam para uma SALA dele, que é o caso de 175 dos 190
+// ativos. A contagem ao lado de cada prédio é exatamente esse número e sai
+// de NAO_LOCALIZADOS, sem consulta nova: um ativo só está naquela lista se
+// não tem posição própria NEM herdada, e o `local_id` que ele carrega ali
+// já foi rolado para cima por posicionarAtivos (mapa-dados.js) até o
+// primeiro ancestral posicionável — o prédio, nunca a sala.
 function contagemPorLocal() {
   const contagem = new Map()
   for (const ativo of NAO_LOCALIZADOS) {

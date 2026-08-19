@@ -10,7 +10,7 @@
  * cliente só existe depois do login.
  */
 
-import { carregarAreas, carregarMaquinas, carregarLocaisComPosicao, posicionarAtivos } from './mapa-dados.js'
+import { carregarAreas, carregarMaquinas, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
 import { maquinasParaZona, normalizarCategoria, linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
 
 /* ── Estilo por VEGETAÇÃO ──
@@ -158,7 +158,7 @@ function renderMaquinas(group, maquinas) {
     const rows = [
       ['Status',   rotuloDoEstado(m.estado),                        classeDoEstado(m.estado)],
       ['Uso',      (m.uso_atual || 0) + ' ' + (m.unidade_uso || 'h')],
-      ['Posição',  m.origemPosicao === 'propria' ? 'Própria' : 'Herdada do local', 'info'],
+      ['Posição',  m.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${m.localPosicao || 'local'}`, 'info'],
     ];
 
     // O link nunca é concatenado — sai só de linkDoModulo, que valida
@@ -181,7 +181,7 @@ export async function registrarCamadasGrama() {
   const [areas, maquinasBrutas, locais] = await Promise.all([
     carregarAreas(),
     carregarMaquinas(),
-    carregarLocaisComPosicao(),
+    carregarArvoreDeLocais(),
   ]);
   const maquinasPosicionadas = posicionarAtivos(maquinasBrutas, locais, 'maquinas');
 

@@ -228,9 +228,78 @@ export function dentroDoEnvelope(lat, lon) {
   )
 }
 
+// ── Bloco 5b — a árvore de locais e a cadeia de herança ────────────────
+// Uma sala não recebe coordenada própria: ela fica DENTRO de um prédio, e
+// a posição dela é a do prédio. O banco confirma que essa é a forma da
+// coisa — 175 dos 190 ativos apontam para uma sala, e as 132 salas ativas
+// são todas filhas de uma edificação.
+//
+// A lista é do que HERDA, não do que posiciona, de propósito: um tipo novo
+// que apareça no cadastro aparece na tela para alguém posicionar, em vez
+// de sumir em silêncio da lista e ninguém descobrir por quê.
+export const TIPOS_QUE_HERDAM_POSICAO = ['sala']
+
+export function herdaPosicao(tipo) {
+  return TIPOS_QUE_HERDAM_POSICAO.includes(String(tipo ?? '').toLowerCase())
+}
+
+// O outro extremo da cadeia: a raiz da árvore é a Organização Militar
+// inteira, e ela TEM coordenada. Sem esta lista, subir o `parent_id` até o
+// fim daria posição a todo ativo do CMASM — 188 pinos empilhados no mesmo
+// ponto, o mapa dizendo "tudo localizado" e a lista de não localizados
+// esvaziando justamente o trabalho de campo que falta fazer. Um ponto no
+// centro de 20 hectares não é uma posição; é a ausência dela com aparência
+// de dado. Comparação em minúsculas porque o tipo vem do cadastro com a
+// caixa que o cadastro tem ("Organizacao Militar").
+export const TIPOS_SEM_HERANCA = ['organizacao militar']
+
+export function serveDePosicaoHerdada(local) {
+  if (!local) return false
+  if (TIPOS_SEM_HERANCA.includes(String(local.tipo ?? '').toLowerCase())) return false
+  return dentroDoEnvelope(local.lat, local.lon)
+}
+
+// Sobe a cadeia `parent_id` a partir de `localId` e devolve o primeiro
+// local que satisfaz `aceita` — o próprio local incluído. Devolve null se
+// a cadeia acabar sem ninguém aceito.
+//
+// A guarda de ciclo não é hipótese acadêmica: `parent_id` é uma coluna
+// comum, sem restrição de aciclicidade no banco, e um cadastro que aponte
+// dois locais um para o outro travaria a tela inteira num laço infinito —
+// não daria erro, daria uma aba congelada. O conjunto de visitados custa
+// nada e transforma isso em "não achei ancestral".
+export function localAscendente(localId, locais, aceita) {
+  if (localId == null || !locais || typeof aceita !== 'function') return null
+  const visitados = new Set()
+  let atual = locais[localId]
+  while (atual && !visitados.has(atual.id)) {
+    visitados.add(atual.id)
+    if (aceita(atual)) return atual
+    atual = atual.parent_id != null ? locais[atual.parent_id] : null
+  }
+  return null
+}
+
+// As duas subidas que a tela faz, cada uma com o seu critério:
+//
+// (1) de onde a posição vem — o primeiro ancestral com coordenada válida;
+// (2) qual local o usuário deveria posicionar para acender este ativo — o
+//     primeiro ancestral que não herda posição (a sala manda para o prédio
+//     dela). É o que faz a contagem da barra lateral dizer a verdade.
+export function localComPosicao(localId, locais) {
+  return localAscendente(localId, locais, serveDePosicaoHerdada)
+}
+
+export function localPosicionavel(localId, locais) {
+  return localAscendente(localId, locais, (l) => !herdaPosicao(l?.tipo))
+}
+
 // ── Bloco 6 — resolução de posição em duas camadas ─────────────────────
 // A posição do local (cmasm_locais.lat/lon) é do prédio inteiro,
-// compartilhada por todos os ativos ligados a ele; a posição própria do
+// compartilhada por todos os ativos ligados a ele — inclusive os ligados a
+// uma SALA dele, que chega aqui já resolvida pelo Bloco 5b: esta função
+// continua decidindo só entre duas camadas (própria × herdada), e quem
+// escolhe qual local representa a camada herdada é o chamador; a posição própria do
 // ativo é o que PLAT-20 grava quando alguém arrasta um ativo no mapa.
 // Devolver a origem, e não só o par, é o que permite à tela distinguir
 // "está no prédio" de "foi posicionado aqui". `local` ausente ou nulo não
