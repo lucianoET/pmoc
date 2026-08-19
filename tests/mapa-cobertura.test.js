@@ -224,6 +224,16 @@ test('nenhuma camada reimplanta a tradução de estado nem a paleta — as duas 
     if (nome.includes('aguada')) continue
     const conteudo = ler(path.join(MAPA, nome))
     assert.doesNotMatch(conteudo, /function\s+(estadoColor|estadoClass|estadoParaExibicao|statusParaExibicao|statusClass)\b/, `${nome} voltou a declarar a ponte/paleta de estado localmente`)
+    // Prédio não tem estado operacional (quick-260819-0g3): a camada de
+    // contorno desenha edificação, não ativo. Exigir corDoEstado dela
+    // criaria cor de estado onde não existe estado, e a legenda passaria
+    // a prometer uma leitura que o polígono não tem. O que ela não pode é
+    // inventar a paleta por fora — por isso a asserção aqui é a inversa,
+    // não uma dispensa.
+    if (nome.includes('predios')) {
+      assert.doesNotMatch(conteudo, /ESTADOS|corDoEstado|rotuloDoEstado|classeDoEstado/, `${nome} não deveria falar de estado — prédio não tem estado operacional`)
+      continue
+    }
     assert.match(conteudo, /corDoEstado/, `${nome} não usa corDoEstado do núcleo puro`)
   }
 })
@@ -246,7 +256,7 @@ test('o mapa não abre mais vazio — as camadas de dado real entram ligadas e a
   const iniciais = m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean)
   assert.deepEqual(
     iniciais.sort(),
-    ['climatizacao', 'eletrica', 'fonoclama', 'grama', 'transportes'],
+    ['climatizacao', 'eletrica', 'fonoclama', 'grama', 'predios', 'transportes'],
     'a lista de camadas ligadas no boot divergiu'
   )
   assert.ok(!iniciais.includes('aguada'), 'a aguada é o único módulo com dado de demonstração (D-01) — não pode abrir ligada')

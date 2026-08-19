@@ -38,6 +38,7 @@ import {
   carregarMaquinas,
   carregarLocaisSemPosicao,
   salvarPosicaoLocal,
+  salvarGeomLocal,
   LOCAIS_SEM_POSICAO,
   MODULOS_DE_ATIVO,
   carregarLocaisComPosicao,
@@ -118,23 +119,42 @@ export function iniciarEditorZonas(mapa, usuario) {
   criarBotaoAlternar(mapa)
 }
 
-// ── botão de alternância do modo, discreto sobre o mapa ──────────────
+// ── botão de alternância do modo, na barra lateral ───────────────────
+// Era um L.control em 'topright' e ficava debaixo do painel "Layers"
+// (.xmap-filters, z-index 1000, mesmo canto): um controle invisível, que
+// só aparecia quando o painel estava curto o bastante. Modo de edição não
+// é controle de mapa — é ação do módulo, e mora com as outras ações do
+// módulo, na barra lateral, onde já vivem "Posicionar" e "Desenhar".
 function criarBotaoAlternar(mapa) {
-  const controle = L.control({ position: 'topright' })
-  controle.onAdd = () => {
-    const btn = L.DomUtil.create('button', 'btn btn-s')
-    btn.type = 'button'
-    btn.textContent = 'Editar zonas'
-    btn.style.margin = '10px'
-    L.DomEvent.disableClickPropagation(btn)
-    btn.addEventListener('click', () => alternarModoEdicao(mapa, btn))
-    // Guardado para que edDesenharZona (barra lateral) possa ligar o modo
-    // sem o usuário ter que achar este botão antes — e para que o rótulo
-    // dele continue refletindo o estado real quando isso acontecer.
-    _btnZona = btn
-    return btn
-  }
-  controle.addTo(mapa)
+  const area = areaDeEdicao()
+  if (!area) return
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = 'btn btn-s ed-modo'
+  btn.textContent = 'Editar zonas'
+  btn.addEventListener('click', () => alternarModoEdicao(mapa, btn))
+  area.appendChild(btn)
+  // Guardado para que edDesenharZona (barra lateral) possa ligar o modo
+  // sem o usuário ter que achar este botão antes — e para que o rótulo
+  // dele continue refletindo o estado real quando isso acontecer.
+  _btnZona = btn
+}
+
+// A seção "Edição" da barra nasce escondida: um título sozinho, sem botão
+// nenhum embaixo, é o que o observador veria — e ele não tem nem um dos
+// dois modos. Quem revela é quem tem o que pôr lá.
+function areaDeEdicao() {
+  const area = document.getElementById('edicao-controles')
+  if (area) document.getElementById('edicao-titulo')?.removeAttribute('hidden')
+  return area
+}
+
+// Ligar um modo de edição com a barra lateral aberta esconde metade do
+// mapa justamente na hora em que o usuário precisa clicar nele. A barra é
+// de mapa/app.js, que publica o fechamento no window — se não estiver lá
+// (falha de boot da barra), o editor segue funcionando sem fechar nada.
+function fecharBarraLateral() {
+  if (typeof window.mapaFecharBarra === 'function') window.mapaFecharBarra()
 }
 
 async function alternarModoEdicao(mapa, btn) {
@@ -142,6 +162,7 @@ async function alternarModoEdicao(mapa, btn) {
   btn.classList.toggle('active', _modoAtivo)
   if (_modoAtivo) {
     btn.textContent = 'Sair da edição'
+    fecharBarraLateral()
     await ligarModoDesenho(mapa)
   } else {
     btn.textContent = 'Editar zonas'
@@ -443,7 +464,6 @@ function exporManipuladores() {
 let _mapaPosicao = null
 let _modoPosicaoAtivo = false
 let _grupoAtivosArrastaveis = null
-let _controlePosicao = null
 let _aguardandoClique = null // { modulo, id } | null
 let _aoMudarPosicaoAtivo = () => {}
 
@@ -461,20 +481,17 @@ export function iniciarEditorAtivos(mapa, usuario, aoMudarPosicao) {
 }
 
 // ── botão de alternância do modo "Mover ativos", mesmo padrão de
-// criarBotaoAlternar (editor de zona, acima): L.control reusando
+// criarBotaoAlternar (editor de zona, acima): na barra lateral, reusando
 // .btn/.btn-s da folha comum, sem família de botão nova ──
 function criarBotaoPosicionar(mapa) {
-  _controlePosicao = L.control({ position: 'topright' })
-  _controlePosicao.onAdd = () => {
-    const btn = L.DomUtil.create('button', 'btn btn-s')
-    btn.type = 'button'
-    btn.textContent = 'Mover ativos'
-    btn.style.margin = '10px'
-    L.DomEvent.disableClickPropagation(btn)
-    btn.addEventListener('click', () => alternarModoPosicao(mapa, btn))
-    return btn
-  }
-  _controlePosicao.addTo(mapa)
+  const area = areaDeEdicao()
+  if (!area) return
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = 'btn btn-s ed-modo'
+  btn.textContent = 'Mover ativos'
+  btn.addEventListener('click', () => alternarModoPosicao(mapa, btn))
+  area.appendChild(btn)
 }
 
 async function alternarModoPosicao(mapa, btn) {
@@ -482,6 +499,7 @@ async function alternarModoPosicao(mapa, btn) {
   btn.classList.toggle('active', _modoPosicaoAtivo)
   if (_modoPosicaoAtivo) {
     btn.textContent = 'Parar de mover'
+    fecharBarraLateral()
     await recarregarPosicionamento(mapa)
   } else {
     btn.textContent = 'Mover ativos'
@@ -578,6 +596,7 @@ function selecionarLocalParaPosicionar(id) {
 function armarEsperaClique(alvo, nome) {
   if (!_mapaPosicao) return
   cancelarEsperaClique()
+  fecharBarraLateral()
   _aguardandoClique = alvo
   mostrarFaixaAguardando(nome, alvo.tipo)
   _mapaPosicao.getContainer().style.cursor = 'crosshair'
@@ -636,10 +655,13 @@ function mostrarFaixaAguardando(nome, tipo) {
       'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:1000;max-width:min(560px,92vw);margin:0'
     document.body.appendChild(el)
   }
-  el.textContent =
-    tipo === 'local'
-      ? `Clique no mapa para posicionar o prédio "${nome}" — todos os ativos ligados a ele passam a herdar esta posição. Esc cancela.`
-      : `Clique no mapa para posicionar "${nome}". Esc cancela.`
+  if (tipo === 'contorno') {
+    el.textContent = `Desenhe o contorno do prédio "${nome}": clique em cada canto e feche o polígono no primeiro ponto. O centro do contorno vira a posição do prédio. Esc cancela.`
+  } else if (tipo === 'local') {
+    el.textContent = `Clique no mapa para posicionar o prédio "${nome}" — todos os ativos ligados a ele passam a herdar esta posição. Esc cancela.`
+  } else {
+    el.textContent = `Clique no mapa para posicionar "${nome}". Esc cancela.`
+  }
 }
 
 function ocultarFaixaAguardando() {
@@ -654,7 +676,70 @@ function ocultarFaixaAguardando() {
 // identificador numérico — nunca o nome do ativo, que fica de fora do
 // atributo onclick de propósito, para não abrir caminho de injeção via
 // entidade HTML decodificada dentro de uma string JS de aspas simples.
+// ── contorno do prédio (migração 37) ────────────────────────────────────
+// A terceira forma de posicionar, e a única que devolve ao prédio a forma
+// que ele tem: em vez de um ponto, o polígono da planta. Grava pela porta
+// única salvarGeomLocal, que põe geometria e centroide no mesmo update —
+// o ponto continua existindo, então os ativos que herdam posição do prédio
+// acendem igual (mapa-geometria.js#resolverPosicao lê o ponto).
+//
+// Cargo: CARGOS_POSICAO, a lista de quem já podia posicionar o prédio —
+// é a MESMA tabela (cmasm_locais), e não CARGOS_ZONA, que espelha a
+// policy de maq_areas e não tem nada a ver com esta escrita.
+const COR_CONTORNO_PREDIO = '#b08968'
+
+function desenharContornoDoPredio(id) {
+  if (!_mapaPosicao || !Number.isSafeInteger(id)) return
+  const local = LOCAIS_SEM_POSICAO.find((l) => l.id === id)
+  const nome = local?.nome || local?.codigo || `#${id}`
+  cancelarEsperaClique()
+  fecharBarraLateral()
+  mostrarFaixaAguardando(nome, 'contorno')
+
+  // L.Draw.Polygon habilitado direto, sem adicionar a barra de ferramentas
+  // do leaflet-draw ao mapa: a intenção já foi declarada no clique da
+  // barra lateral, e mais uma barra flutuante sobre o mapa é exatamente o
+  // que este trabalho está retirando de lá. O Esc do próprio leaflet-draw
+  // cancela o desenho e dispara DRAWSTOP, que faz a limpeza — não há um
+  // segundo caminho de cancelamento para sair de sincronia.
+  const desenho = new L.Draw.Polygon(_mapaPosicao, {
+    allowIntersection: false,
+    shapeOptions: {
+      color: COR_CONTORNO_PREDIO,
+      fillColor: COR_CONTORNO_PREDIO,
+      fillOpacity: 0.2,
+      weight: 2,
+    },
+  })
+
+  const limpar = () => {
+    _mapaPosicao.off(L.Draw.Event.CREATED, aoCriar)
+    _mapaPosicao.off(L.Draw.Event.DRAWSTOP, limpar)
+    ocultarFaixaAguardando()
+  }
+
+  async function aoCriar(evento) {
+    const coords = evento.layer.getLatLngs()[0].map((ll) => [ll.lat, ll.lng])
+    limpar()
+    const salvo = await salvarGeomLocal(id, coords)
+    if (!salvo) return // salvarGeomLocal já avisou (idioma do projeto)
+    // Mesma recarga do posicionamento por clique: o prédio sai da lista de
+    // "sem posição" e os ativos que herdam dele saem dos não localizados.
+    await recarregarPosicionamento(_mapaPosicao)
+    // O contorno recém-gravado só aparece no próximo desenho da camada de
+    // prédios, que é registrada uma vez no boot (xmap-layers-predios.js).
+    // Recarregar a página inteira aqui seria perder o estado do mapa; a
+    // faixa avisa, e o polígono aparece na próxima abertura.
+    alert(`Contorno de "${nome}" gravado. Ele aparece desenhado na próxima abertura do mapa.`)
+  }
+
+  _mapaPosicao.on(L.Draw.Event.CREATED, aoCriar)
+  _mapaPosicao.on(L.Draw.Event.DRAWSTOP, limpar)
+  desenho.enable()
+}
+
 function exporManipuladoresPosicao() {
   window.posSelecionarAtivo = (modulo, id) => selecionarParaPosicionar(modulo, id)
   window.posSelecionarLocal = (id) => selecionarLocalParaPosicionar(id)
+  window.posDesenharPredio = (id) => desenharContornoDoPredio(id)
 }
