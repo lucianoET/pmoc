@@ -1474,3 +1474,25 @@ Apoio (onde estão as Tobatas), **os 270 ativos têm posição**: 91 próprias, 
 - [ ] Zoom 15-16: aparecem só os nomes de prédio e zona. A partir de 17, entram os nomes de
       ativo e os grupos, com o nome do prédio na frente ("F21 (16)").
 - [ ] Navegar por teclado (Tab): os botões de alternância mostram anel de foco visível.
+
+---
+
+## Máquinas: tabela de áreas com edição, filtro e ordenação (19/08/2026)
+
+Sem migração. Conferido com dado real (16 áreas, **todas com contorno desenhado no mapa**).
+
+- [ ] Aba **OS** → seção "Áreas de serviço": conferir a contagem ("16 áreas") ao lado do título.
+- [ ] Clicar em ⇅ na coluna **Dimensão**: ordena crescente, depois decrescente, depois volta ao
+      natural. Área não informada fica no fim **nas duas direções**.
+- [ ] Clicar em ⌕ numa coluna: a linha de filtro abre e o cursor já está no campo daquela
+      coluna. Digitar "campo" no nome deixa 2 linhas e a contagem vira "2 de 16 áreas".
+- [ ] Filtrar por "praca" (sem acento) e conferir que acha "Praça".
+- [ ] Filtrar a coluna Dimensão por **"mapa"**: sobram só as áreas cuja dimensão veio do
+      contorno desenhado.
+- [ ] Como **observador**: nenhum botão ⚙ na tabela e nenhum "+ Área".
+- [ ] Como **admin/gestor**: ⚙ abre o formulário preenchido, com o título "Editar área de
+      serviço". Alterar o nome e salvar; conferir que a linha muda e que **não** foi criada uma
+      área nova.
+- [ ] Numa área com contorno: o campo "Área (m²)" está **travado**, com a nota "Calculada do
+      contorno desenhado no mapa". Salvar e conferir no /mapa que a dimensão não mudou.
+- [ ] Como **técnico**: conferir que o ⚙ não aparece (o banco recusaria de qualquer forma).
