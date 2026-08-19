@@ -40,10 +40,13 @@ const ORIGEM_LABEL = {
 // é o que fazia a tela parecer vazia.
 const MODULOS_INICIAIS = ['predios', 'grama', 'eletrica', 'transportes', 'fonoclama', 'climatizacao']
 
-// A partir deste zoom os rótulos de cadastro aparecem (classe no contêiner
-// do Leaflet, lida pelo CSS de mapa/index.html). Abaixo dele os nomes se
-// sobreporiam uns aos outros e a tela ficaria pior do que sem nome nenhum;
-// 17 é o nível em que a área do CMASM ocupa a tela inteira.
+// Dois limiares, porque são dois tipos de rótulo com densidades muito
+// diferentes. ESTRUTURA (prédio e zona) são poucas dezenas e são a leitura
+// do terreno — aparecem cedo, já no zoom em que o mapa abre. ATIVO é o
+// resto: mesmo agrupado por ponto, mostrar todos junto com a estrutura
+// enche a tela de texto sobreposto (medido: 137 rótulos visíveis em zoom
+// 16 na primeira tentativa de baixar o limiar único).
+const ZOOM_ESTRUTURA = 15
 const ZOOM_DETALHE = 17
 
 // Quantos itens a lista de prédios mostra antes de exigir o filtro. São
@@ -262,7 +265,10 @@ function ligarRotulosPorZoom() {
   const mapa = xMap.getLeafletMap()
   if (!mapa) return
   const aplicar = () => {
-    mapa.getContainer().classList.toggle('zoom-detalhe', mapa.getZoom() >= ZOOM_DETALHE)
+    const zoom = mapa.getZoom()
+    const classes = mapa.getContainer().classList
+    classes.toggle('zoom-estrutura', zoom >= ZOOM_ESTRUTURA)
+    classes.toggle('zoom-detalhe', zoom >= ZOOM_DETALHE)
   }
   mapa.on('zoomend', aplicar)
   aplicar()
@@ -577,22 +583,43 @@ function renderLegenda() {
 function ligarCamadasIniciais() {
   for (const mod of MODULOS_INICIAIS) {
     MODULOS_ATIVOS.add(mod)
-    document.querySelector(`.mod-btn[data-mod="${mod}"]`)?.classList.add('active')
+    marcarBotaoDeModulo(mod, true)
   }
   xMap.setModules([...MODULOS_ATIVOS])
   atualizarContagemDeCamadas()
+  atualizarContagemDeModulos()
+}
+
+// O estado do botão passa a viver em `aria-pressed`, não só numa classe:
+// é um botão de alternância, e o leitor de tela precisa da mesma informação
+// que o CSS usa para desenhar a barra e o ponto. A classe `.active` fica
+// junto porque outros pontos da folha ainda a leem.
+function marcarBotaoDeModulo(mod, ligado) {
+  const btn = document.querySelector(`.mod-btn[data-mod="${mod}"]`)
+  if (!btn) return
+  btn.classList.toggle('active', ligado)
+  btn.setAttribute('aria-pressed', ligado ? 'true' : 'false')
+}
+
+// Quantos módulos estão no mapa, no próprio botão flutuante: fechado, ele
+// deixava de responder a pergunta mais simples da tela — "o que estou
+// vendo?".
+function atualizarContagemDeModulos() {
+  const el = document.getElementById('modulos-contagem')
+  if (el) el.textContent = String(MODULOS_ATIVOS.size)
 }
 
 function alternarModulo(mod, btn) {
-  if (MODULOS_ATIVOS.has(mod)) {
-    MODULOS_ATIVOS.delete(mod)
-    btn.classList.remove('active')
-  } else {
-    MODULOS_ATIVOS.add(mod)
-    btn.classList.add('active')
-  }
+  const ligar = !MODULOS_ATIVOS.has(mod)
+  if (ligar) MODULOS_ATIVOS.add(mod)
+  else MODULOS_ATIVOS.delete(mod)
+  // O botão vem do onclick da marcação, mas quem marca é a mesma função do
+  // primeiro desenho — um caminho só para ligar e desligar, senão os dois
+  // divergem no dia em que um atributo novo entrar.
+  marcarBotaoDeModulo(mod, ligar)
   xMap.setModules([...MODULOS_ATIVOS])
   atualizarContagemDeCamadas()
+  atualizarContagemDeModulos()
 }
 
 // ── barra de módulos retrátil ──

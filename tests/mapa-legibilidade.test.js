@@ -93,6 +93,15 @@ test('as três camadas de ativo desenham pelo módulo compartilhado', () => {
   }
 })
 
+test('o rótulo do grupo nomeia o local, não repete o nome da camada', () => {
+  const fonte = ler(MARCADORES)
+  assert.match(
+    fonte,
+    /primeiro\.localPosicao \|\| nome/,
+    '"Climatização (16)" repetido dezenas de vezes não informa nada; "F21 (16)" responde onde e quantos'
+  )
+})
+
 test('o balão do grupo lista os ativos e leva à ficha — agrupar não pode custar o acesso', () => {
   const fonte = ler(MARCADORES)
   assert.match(fonte, /linkDoModulo\(modulo, ativo\.id\)/, 'cada linha do grupo deveria levar à ficha do ativo')
@@ -112,7 +121,20 @@ test('prédio, zona e ativo ganham rótulo permanente com classe cortada por zoo
     /\.leaflet-container:not\(\.zoom-detalhe\) \.xmap-rotulo\{display:none\}/,
     'sem o corte por zoom, todos os nomes aparecem ao mesmo tempo e a tela vira texto sobreposto'
   )
-  assert.match(ler(APP), /classList\.toggle\('zoom-detalhe'/, 'app.js deveria ligar a classe pelo zoom')
+  const app = ler(APP)
+  assert.match(app, /\.toggle\('zoom-detalhe'/, 'app.js deveria ligar a classe pelo zoom')
+  assert.match(app, /\.toggle\('zoom-estrutura'/, 'app.js deveria ligar a classe de estrutura pelo zoom')
+  // Dois limiares, e nesta ordem: a estrutura do terreno (prédio, zona) tem
+  // de aparecer ANTES do ativo. Um limiar único mostrando tudo ao mesmo
+  // tempo produziu 137 rótulos sobrepostos em zoom 16 — medido na tela.
+  const estrutura = Number(app.match(/const ZOOM_ESTRUTURA = (\d+)/)?.[1])
+  const detalhe = Number(app.match(/const ZOOM_DETALHE = (\d+)/)?.[1])
+  assert.ok(estrutura < detalhe, `estrutura (${estrutura}) deveria aparecer antes do ativo (${detalhe})`)
+  assert.match(
+    html,
+    /\.zoom-estrutura \.xmap-rotulo-predio/,
+    'falta a regra que devolve o rótulo de prédio no zoom de estrutura'
+  )
 })
 
 // ── 5. barra lateral e painel de camadas ────────────────────────────────
