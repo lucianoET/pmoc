@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 7 (ui-ux-mobile) — EXECUTED
 Plan: 1 of 1
 Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
-Last activity: 2026-08-18 — Quick task 260818-pzq concluída: Reparos alcançado de dentro do Máquinas, categoria Tobata, vencimentos na ficha e abas unificadas (10→8)
+Last activity: 2026-08-18 — Quick task 260818-r65 concluída: hora-homem sai do Estoque, material ganha sistema/aplicação, aba Necessidades com listas de compra e recebimento item a item (migração 34 aplicada e conferida em produção)
 
 Progress: [██████████] 100% (v2.0)
 
@@ -203,9 +203,10 @@ painel) segue pendente.
 | 2026-08-10 | importar-csv-programacao-vtr-emb-em-transportes | Módulo /mapa portado do legado cmms-mapa (Leaflet + xMap) no padrão pmoc, roteado no vercel.json e no portal; import do CSV VTR/EMB já concluído, apenas consulta de conferência documentada em TESTES.md |
 | 2026-08-11 | importar-modulo-calibracao | App legado de calibração (single-file, localStorage, sem Supabase) copiado como módulo independente em /calibracao com assets próprios; rewrite no vercel.json e card ativado no portal — sem unificação com shared/ nem locais (commits 240cfa6, eb1e342) |
 | 2026-08-18 | 260818-pzq-reparos-link-sai-do-portal-e-entra-no-m | Reparos sai do portal e é alcançado de dentro do Máquinas (âncora no cabeçalho da view de OS); categoria Tobata nos dois selects de máquinas; faixa de abas cai de 10 para 8 — Vencimentos vira seção da aba Máquinas e Operações vira seção da aba OS; ficha da máquina ganha bloco de manutenções derivado de calcVencimentos(); node --test 227/227 (commits d0d1b9c, 7630212, 7564dbe) |
+| 2026-08-18 | 260818-r65-estoque-e-necessidades-hora-homem-sai-do | Valor da hora-homem sai da aba Estoque para um modal aberto do cabeçalho da aba OS, onde o custo de mão de obra é consumido; `maq_materiais` ganha `sistema` e `aplicacao` (com "Vários" para peça de mais de um modelo), editáveis no modal e visíveis na tabela do estoque; aba "Lista de compras" vira "Necessidades", com preventiva/corretiva/aquisição/a comprar por material, geração de lista de compra (BOM: título, descrição, data, preço congelado na linha) e recebimento item a item que dá entrada no estoque; migração 34 **aplicada em produção em 18/08/2026** e conferida contra o banco (forma, constraints, índices, RLS); o fluxo inteiro foi exercido com dados reais e os artefatos de teste removidos; sem a migração o módulo continua funcionando como antes (D7, conferido antes de aplicar); node --test 253/253 (commits 4591abc, 14c1b30, e260f80, 4c2151d) |
 
 ## Session Continuity
 
 Last session: 2026-08-18T21:56:34.000Z
-Stopped at: Completed quick task 260818-pzq-reparos-link-sai-do-portal-e-entra-no-m — Reparos alcançado de dentro do Máquinas, categoria Tobata e ficha da máquina com vencimentos
+Stopped at: Completed quick task 260818-r65-estoque-e-necessidades-hora-homem-sai-do — Necessidades e listas de compra no ar, migração 34 aplicada e conferida em produção
 Resume file: None

@@ -115,6 +115,39 @@ test('o valor da hora é editável pelo usuário, sem passar por deploy', () => 
     'campo vazio apaga o valor — apagar é diferente de gravar zero')
 })
 
+// ── hora-homem sai da aba Estoque (18/08/2026) ─────────────────────────────
+// A hora-homem é preço de mão de obra, consumido na OS — não item de
+// prateleira. O campo deixou de morar em view-materiais e passou a viver num
+// modal aberto do cabeçalho da aba OS.
+test('o campo da hora-homem não mora mais na aba Estoque', () => {
+  const inicioMateriais = HTML.indexOf('id="view-materiais"')
+  const fimMateriais = HTML.indexOf('id="view-consumo"')
+  assert.ok(inicioMateriais > -1 && fimMateriais > inicioMateriais)
+  const blocoMateriais = HTML.slice(inicioMateriais, fimMateriais)
+  assert.doesNotMatch(blocoMateriais, /cfg-valor-hora/,
+    'o campo saiu da aba Estoque — mora no modal aberto pela aba OS')
+})
+
+test('o campo da hora-homem mora no modal aberto pela aba OS', () => {
+  const inicioModal = HTML.indexOf('id="modal-hora-homem"')
+  const fimModal = HTML.indexOf('<!-- MODAL: MATERIAL')
+  assert.ok(inicioModal > -1 && fimModal > inicioModal, 'modal-hora-homem deveria existir')
+  const blocoModal = HTML.slice(inicioModal, fimModal)
+  assert.match(blocoModal, /id="cfg-valor-hora"/)
+  assert.match(blocoModal, /id="btn-valor-hora"/)
+  assert.match(blocoModal, /id="cfg-hora-ajuda"/)
+
+  assert.match(HTML, /id="btn-hora-homem"[^>]*onclick="abrirModalHoraHomem\(\)"/,
+    'o botão que abre o modal mora no cabeçalho da aba OS')
+  assert.match(APP, /function abrirModalHoraHomem\(\)\{/)
+})
+
+test('o aviso de mão de obra sem valor não manda mais o usuário para a aba de estoque', () => {
+  assert.doesNotMatch(APP, /Defina o valor na aba Estoque/,
+    'a hora-homem mudou de lugar — o aviso precisa apontar para o botão novo')
+  assert.match(APP, /Nenhum valor de hora-homem cadastrado no módulo/)
+})
+
 // ── baixa de estoque a partir da lista ────────────────────────────────────
 test('a mesma peça não é debitada duas vezes quando está no plano e no diagnóstico', () => {
   const bloco = APP.match(/function pecasPrevistasDaOS\(planoIds, reparoId\)\{([\s\S]*?)\n\}/)
