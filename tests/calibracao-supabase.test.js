@@ -135,6 +135,20 @@ test('a carga lê as cinco tabelas em paralelo', () => {
   assert.match(bloco[1], /Promise\.all\(\[/)
 })
 
+test('toda leitura é ordenada — senão a lista se reembaralha a cada edição', () => {
+  // Pego no navegador, não na leitura do código: sem `order`, o Postgres
+  // devolve na ordem que quiser, e um UPDATE reescreve a tupla noutra
+  // posição do heap. Na prática o instrumento editado saltava de lugar na
+  // tabela. É invisível em banco recém-carregado e só aparece depois da
+  // primeira edição — exatamente o que um gate precisa segurar.
+  const bloco = /async function carregarTudo\(\)\s*\{([\s\S]*?)\n  \}/.exec(HTML)
+  assert.ok(bloco)
+  for (const t of TABELAS) {
+    const sel = new RegExp(`from\\('${t}'\\)\\.select\\([^)]*\\)((\\.order\\('[a-z_]+'\\))+)`)
+    assert.match(bloco[1], sel, `a leitura de ${t} precisa de order`)
+  }
+})
+
 test('falha de carga avisa em vez de mostrar telas vazias', () => {
   // Num controle de calibração, tela vazia é indistinguível de "não há
   // instrumento cadastrado" — que é a leitura assustadora e errada.
