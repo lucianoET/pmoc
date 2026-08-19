@@ -26,6 +26,7 @@
 
 import { carregarAtivosDoModulo, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
 import { linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
+import { desenharAtivosAgrupados } from './xmap-marcadores.js'
 
 // Só apresentação — rótulo de camada e emoji do marcador. O nome de
 // tabela e as colunas ficam em CONFIG_POR_MODULO (mapa-dados.js); aqui não
@@ -58,38 +59,53 @@ function ativoSVG(emoji, estado) {
   </svg>`
 }
 
+// Balão de um ativo só — o de sempre.
+function balaoDoAtivo(a, modulo, info) {
+  const rows = [['Estado', rotuloDoEstado(a.estado), classeDoEstado(a.estado)]]
+  if (a.detalhe) rows.push(['Identificação', esc(a.detalhe)])
+  // Horímetro/odômetro não existe em equipamentos (refrigeração) — a
+  // linha só entra quando a coluna veio, em vez de mostrar "0 h" para
+  // uma tabela que nunca mediu uso.
+  if (a.uso_atual != null) rows.push(['Uso', `${a.uso_atual} ${a.unidade_uso || 'h'}`])
+  // Com a herança subindo a árvore, "herdada" sozinho não informa: o
+  // ativo está numa sala e a coordenada é do prédio. O nome do local de
+  // origem é a diferença entre saber e supor.
+  rows.push(['Posição', a.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${esc(a.localPosicao || 'local')}`, 'info'])
+  // O destino nunca é concatenado — sai só de linkDoModulo, que valida
+  // módulo por lista fechada e identificador por forma (T-10-22).
+  // `climatizacao` não está em MODULOS: a função devolve null e a linha
+  // simplesmente não aparece, sem caso especial aqui.
+  const link = linkDoModulo(modulo, a.id)
+  if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info'])
+  return xMap.utils.popupHTML(info.emoji, esc(a.rotulo), esc(a.subtipo || info.nome), rows)
+}
+
+// Balão do grupo: a LISTA dos ativos daquele ponto. O agrupamento não pode
+// custar o acesso ao ativo — cada linha leva à ficha quando o módulo tem
+// rota. Corta em 15 e ANUNCIA o resto, como as listas da barra lateral.
+const LIMITE_LISTA_GRUPO = 15
+
+function balaoDoGrupo(grupo, modulo, info) {
+  const linhas = grupo.ativos.slice(0, LIMITE_LISTA_GRUPO).map((a) => {
+    const link = linkDoModulo(modulo, a.id)
+    const nome = link ? `<a href="${link}" class="xmap-popup-link">${esc(a.rotulo)}</a>` : esc(a.rotulo)
+    return [nome, rotuloDoEstado(a.estado), classeDoEstado(a.estado)]
+  })
+  const sobrando = grupo.ativos.length - linhas.length
+  if (sobrando > 0) linhas.push([`+${sobrando} neste ponto`, 'abra a ficha do prédio', 'info'])
+  const onde = grupo.ativos[0]?.localPosicao
+  const sub = onde ? `${esc(onde)} · ${grupo.ativos.length} ativos` : `${grupo.ativos.length} ativos neste ponto`
+  return xMap.utils.popupHTML(info.emoji, info.nome, sub, linhas)
+}
+
 function renderAtivos(group, ativos, modulo) {
   const info = APRESENTACAO[modulo]
-  ativos.forEach((a) => {
-    const icon = L.divIcon({
-      html: ativoSVG(info.emoji, a.estado),
-      className: '',
-      iconSize: [26, 26],
-      iconAnchor: [13, 13],
-      popupAnchor: [0, -13],
-    })
-    const marker = L.marker([a.lat, a.lon], { icon })
-
-    const rows = [['Estado', rotuloDoEstado(a.estado), classeDoEstado(a.estado)]]
-    if (a.detalhe) rows.push(['Identificação', esc(a.detalhe)])
-    // Horímetro/odômetro não existe em equipamentos (refrigeração) — a
-    // linha só entra quando a coluna veio, em vez de mostrar "0 h" para
-    // uma tabela que nunca mediu uso.
-    if (a.uso_atual != null) rows.push(['Uso', `${a.uso_atual} ${a.unidade_uso || 'h'}`])
-    // Com a herança subindo a árvore, "herdada" sozinho não informa: o
-    // ativo está numa sala e a coordenada é do prédio. O nome do local de
-    // origem é a diferença entre saber e supor.
-    rows.push(['Posição', a.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${esc(a.localPosicao || 'local')}`, 'info'])
-
-    // O destino nunca é concatenado — sai só de linkDoModulo, que valida
-    // módulo por lista fechada e identificador por forma (T-10-22).
-    // `climatizacao` não está em MODULOS: a função devolve null e a linha
-    // simplesmente não aparece, sem caso especial aqui.
-    const link = linkDoModulo(modulo, a.id)
-    if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info'])
-
-    marker.bindPopup(xMap.utils.popupHTML(info.emoji, esc(a.rotulo), esc(a.subtipo || info.nome), rows), { maxWidth: 220 })
-    group.addLayer(marker)
+  desenharAtivosAgrupados(group, ativos, {
+    modulo,
+    emoji: info.emoji,
+    nome: info.nome,
+    svgDeUm: (a) => ativoSVG(info.emoji, a.estado),
+    popupDeUm: (a) => balaoDoAtivo(a, modulo, info),
   })
 }
 

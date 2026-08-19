@@ -37,6 +37,12 @@ const ORIGEM_LABEL = {
 // é o que fazia a tela parecer vazia.
 const MODULOS_INICIAIS = ['predios', 'grama', 'eletrica', 'transportes', 'fonoclama', 'climatizacao']
 
+// A partir deste zoom os rótulos de cadastro aparecem (classe no contêiner
+// do Leaflet, lida pelo CSS de mapa/index.html). Abaixo dele os nomes se
+// sobreporiam uns aos outros e a tela ficaria pior do que sem nome nenhum;
+// 17 é o nível em que a área do CMASM ocupa a tela inteira.
+const ZOOM_DETALHE = 17
+
 // Quantos itens a lista de prédios mostra antes de exigir o filtro. São
 // centenas de locais; despejar todos na barra transforma a seção num
 // rolamento infinito onde nada é encontrado.
@@ -97,6 +103,8 @@ function inicializarMapa() {
       maxZoom: 19,
     })
     MAPA_INICIALIZADO = true
+    ligarRotulosPorZoom()
+    ligarBotaoCamadas()
     ligarBuscaDeAtivo()
     ligarFiltroDeLocal()
     renderLegenda()
@@ -141,10 +149,74 @@ async function registrarCamadasDoBanco() {
     // posicionarAtivos e povoaram NAO_LOCALIZADOS/POSICIONADOS antes deste
     // ponto.
     renderNaoLocalizados()
+    enquadrarNoQueExiste()
     await renderZonasSemContorno()
   } catch (error) {
     mostrarErroMapa(error)
   }
+}
+
+// ── rótulos por zoom ───────────────────────────────────────────────────
+// Os rótulos de prédio, zona e ativo são tooltips PERMANENTES do Leaflet,
+// escondidos por CSS abaixo de ZOOM_DETALHE. Ligar e desligar tooltip
+// camada por camada exigiria que cada arquivo de camada escutasse o mapa;
+// uma classe no contêiner resolve para todas de uma vez, e o CSS mora junto
+// do resto do chrome do módulo (mapa/index.html).
+function ligarRotulosPorZoom() {
+  const mapa = xMap.getLeafletMap()
+  if (!mapa) return
+  const aplicar = () => {
+    mapa.getContainer().classList.toggle('zoom-detalhe', mapa.getZoom() >= ZOOM_DETALHE)
+  }
+  mapa.on('zoomend', aplicar)
+  aplicar()
+}
+
+// ── painel de camadas ──────────────────────────────────────────────────
+// O painel nasce recolhido: com as 10 camadas registradas ele cobria um
+// quarto da tela o tempo todo. O botão é o cabeçalho dele — fica fora do
+// painel porque mapa/xmap.js redesenha o interior inteiro a cada toggle de
+// camada e apagaria qualquer coisa colocada lá dentro.
+function ligarBotaoCamadas() {
+  const btn = document.getElementById('btn-camadas')
+  const area = document.querySelector('.map-area')
+  if (!btn || !area) return
+  area.classList.add('camadas-recolhidas')
+  btn.addEventListener('click', (evento) => {
+    evento.stopPropagation()
+    const recolhido = area.classList.toggle('camadas-recolhidas')
+    btn.setAttribute('aria-expanded', recolhido ? 'false' : 'true')
+  })
+}
+
+// Contagem de camadas no rótulo do botão — o painel recolhido não pode
+// esconder o fato de haver camada nenhuma registrada (mapa sem dado) nem
+// de haver dez.
+function atualizarContagemDeCamadas() {
+  const texto = document.getElementById('btn-camadas-texto')
+  if (!texto) return
+  const quantas = document.querySelectorAll('.xmap-filter-item').length
+  texto.textContent = quantas ? `Camadas (${quantas})` : 'Camadas'
+}
+
+// ── enquadramento inicial ──────────────────────────────────────────────
+// Abrir num zoom fixo mostrava a base como um borrão no canto: o CMASM
+// ocupa poucos pixels em zoom 15. Enquadra o que de fato tem posição, com
+// teto de zoom para não colar a câmera em cima de um único ponto quando só
+// um ativo estiver posicionado. Sem posição nenhuma, mantém a visão
+// inicial — não há o que enquadrar.
+function enquadrarNoQueExiste() {
+  const mapa = xMap.getLeafletMap()
+  if (!mapa || !POSICIONADOS.length) return
+  // `animate: false` de propósito: no primeiro desenho não há de onde
+  // animar — o usuário ainda não viu o mapa. E a animação do Leaflet roda
+  // em requestAnimationFrame, que não dispara enquanto a aba não está
+  // compondo quadros: com ela, o enquadramento simplesmente não acontecia
+  // e o mapa abria no zoom inicial, com a base do tamanho de uma unha.
+  mapa.fitBounds(
+    POSICIONADOS.map((a) => [a.lat, a.lon]),
+    { padding: [40, 40], maxZoom: 18, animate: false }
+  )
 }
 
 function mostrarErroMapa(error) {
@@ -412,6 +484,7 @@ function ligarCamadasIniciais() {
     document.querySelector(`.mod-btn[data-mod="${mod}"]`)?.classList.add('active')
   }
   xMap.setModules([...MODULOS_ATIVOS])
+  atualizarContagemDeCamadas()
 }
 
 function alternarModulo(mod, btn) {
@@ -423,6 +496,7 @@ function alternarModulo(mod, btn) {
     btn.classList.add('active')
   }
   xMap.setModules([...MODULOS_ATIVOS])
+  atualizarContagemDeCamadas()
 }
 
 // ── barra de módulos retrátil ──

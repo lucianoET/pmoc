@@ -12,6 +12,7 @@
 
 import { carregarAreas, carregarMaquinas, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
 import { maquinasParaZona, normalizarCategoria, linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
+import { desenharAtivosAgrupados } from './xmap-marcadores.js'
 
 /* ── Estilo por VEGETAÇÃO ──
    A zona de maq_areas é o que ela sempre foi na prática e agora está dito
@@ -138,9 +139,11 @@ function renderAreas(group, areas, maquinas) {
       { maxWidth: 240 }
     );
 
+    // Permanente e cortado por zoom, igual ao do prédio: uma zona sem nome
+    // na tela é um polígono verde sem identidade.
     poly.bindTooltip(area.nome, {
-      permanent: false, direction: 'center',
-      className: 'xmap-area-tooltip',
+      permanent: true, direction: 'center',
+      className: 'xmap-rotulo xmap-rotulo-zona',
     });
 
     group.addLayer(poly);
@@ -148,35 +151,38 @@ function renderAreas(group, areas, maquinas) {
 }
 
 /* ── Renderiza máquinas posicionadas (mapa-dados.js já resolveu lat/lon e
-   a origem da posição — própria do ativo ou herdada do prédio/sala) ── */
+   a origem da posição — própria do ativo ou herdada do prédio/sala),
+   agrupando as que caíram no mesmo ponto: o desenho do agrupamento é
+   compartilhado (mapa/xmap-marcadores.js), só o ícone de uma máquina e o
+   balão dela são desta camada. ── */
+function balaoDaMaquina(m, categoria) {
+  const rows = [
+    ['Status',   rotuloDoEstado(m.estado),                        classeDoEstado(m.estado)],
+    ['Uso',      (m.uso_atual || 0) + ' ' + (m.unidade_uso || 'h')],
+    ['Posição',  m.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${m.localPosicao || 'local'}`, 'info'],
+  ];
+
+  // O link nunca é concatenado — sai só de linkDoModulo, que valida
+  // módulo por lista fechada e identificador por forma (T-10-22). Se a
+  // função devolver nulo, a linha simplesmente não aparece.
+  const link = linkDoModulo('maquinas', m.id);
+  if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info']);
+
+  return xMap.utils.popupHTML('🚜', m.nome, maqLabel(categoria), rows);
+}
+
 function renderMaquinas(group, maquinas) {
-  maquinas.forEach(m => {
-    const categoria = normalizarCategoria(m.categoria);
-    const icon = makeIcon(maquinaSVG(categoria, m.estado), [30, 30], [15, 15]);
-    const marker = L.marker([m.lat, m.lon], { icon });
-
-    const rows = [
-      ['Status',   rotuloDoEstado(m.estado),                        classeDoEstado(m.estado)],
-      ['Uso',      (m.uso_atual || 0) + ' ' + (m.unidade_uso || 'h')],
-      ['Posição',  m.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${m.localPosicao || 'local'}`, 'info'],
-    ];
-
-    // O link nunca é concatenado — sai só de linkDoModulo, que valida
-    // módulo por lista fechada e identificador por forma (T-10-22). Se a
-    // função devolver nulo, a linha simplesmente não aparece.
-    const link = linkDoModulo('maquinas', m.id);
-    if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info']);
-
-    marker.bindPopup(
-      xMap.utils.popupHTML('🚜', m.nome, maqLabel(categoria), rows),
-      { maxWidth: 220 }
-    );
-    group.addLayer(marker);
+  desenharAtivosAgrupados(group, maquinas, {
+    modulo: 'maquinas',
+    emoji: '🚜',
+    nome: 'Máquinas',
+    ladoDeUm: 30,
+    svgDeUm: (m) => maquinaSVG(normalizarCategoria(m.categoria), m.estado),
+    popupDeUm: (m) => balaoDaMaquina(m, normalizarCategoria(m.categoria)),
+    rotuloDeUm: (m) => m.nome,
   });
 }
 
-/* ── Registro: busca uma vez, monta as definições de layer sobre o
-   resultado já carregado, e só então registra no componente xMap. ── */
 export async function registrarCamadasGrama() {
   const [areas, maquinasBrutas, locais] = await Promise.all([
     carregarAreas(),

@@ -49,10 +49,12 @@ function renderPredios(group, predios) {
       fillOpacity: 0.25,
     })
     const nome = predio.nome || predio.codigo || `#${predio.id}`
-    // Rótulo permanente só a partir do zoom de detalhe seria melhor, mas
-    // exigiria escutar o mapa daqui — a camada não guarda referência ao
-    // mapa de propósito. Tooltip por passagem do cursor resolve sem isso.
-    poly.bindTooltip(nome, { direction: 'center', className: 'xmap-planta-label' })
+    // Rótulo permanente, escondido por CSS abaixo do zoom de detalhe
+    // (mapa/index.html): o nome do prédio é a informação que faltava na
+    // tela — os únicos rótulos visíveis eram os 12 da planta do OSM, que
+    // não correspondem ao cadastro. A camada não escuta o mapa para isso:
+    // quem liga e desliga é uma classe no contêiner, uma linha em app.js.
+    poly.bindTooltip(nome, { permanent: true, direction: 'center', className: 'xmap-rotulo xmap-rotulo-predio' })
     const linhas = []
     if (predio.codigo) linhas.push(['Código', esc(predio.codigo)])
     if (predio.tipo) linhas.push(['Tipo', esc(predio.tipo)])

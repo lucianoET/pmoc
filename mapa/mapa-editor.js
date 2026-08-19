@@ -145,7 +145,7 @@ function criarBotaoAlternar(mapa) {
 // dois modos. Quem revela é quem tem o que pôr lá.
 function areaDeEdicao() {
   const area = document.getElementById('edicao-controles')
-  if (area) document.getElementById('edicao-titulo')?.removeAttribute('hidden')
+  if (area) document.getElementById('edicao-secao')?.removeAttribute('hidden')
   return area
 }
 
