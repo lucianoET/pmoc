@@ -1,6 +1,12 @@
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
+import { proximaOrdem, aplicarOrdemEFiltro } from '../shared/tabela.js'
+import {
+  COLUNAS_REPAROS, linhasReparos,
+  COLUNAS_SERVICOS, linhasServicos,
+  COLUNAS_MODELOS, linhasModelos,
+} from './tabelas.js'
 
 // ══════════════════════════════════════════════════════════════════
 // PMOC Reparos — catálogo de sintomas, causas, peças e serviços.
@@ -24,6 +30,19 @@ let VINCULO_REPARO_ID = null
 let REPARO_EDIT_ID = null
 let SERVICO_EDIT_ID = null
 let MODELO_EDIT_ID = null
+
+// estado de tela de ordem e filtro por coluna (D2), três conjuntos
+// independentes — um por aba, mesmo padrão de MAT_ORD/MAT_FILTROS em
+// maquinas/app.js. Nenhuma consulta ao Supabase envolvida.
+let TAB_REPAROS_ORD = { coluna: null, dir: null }
+let TAB_REPAROS_FILTROS = {}
+let TAB_REPAROS_FILTROS_ABERTO = false
+let TAB_SERVICOS_ORD = { coluna: null, dir: null }
+let TAB_SERVICOS_FILTROS = {}
+let TAB_SERVICOS_FILTROS_ABERTO = false
+let TAB_MODELOS_ORD = { coluna: null, dir: null }
+let TAB_MODELOS_FILTROS = {}
+let TAB_MODELOS_FILTROS_ABERTO = false
 
 const SISTEMAS = ['motor','combustivel','transmissao','corte','eletrico','hidraulico','estrutura']
 const ESPECIALIDADES = ['mecanica','eletrica','solda','usinagem','pintura','hidraulica']
@@ -231,73 +250,275 @@ function renderDiagnostico(){
   }).join('')
 }
 
-// ── TABELAS ──
+// ── TABELAS (D2/D3) ──
+// as três seguem o mesmo par cabeçalho/corpo de renderMateriais() em
+// maquinas/app.js: a função de entrada só delega; a de cabeçalho desenha o
+// <thead> a partir da definição de colunas; a de corpo aplica ordem e
+// filtro e escreve o <tbody>. Digitar num campo de filtro chama só a
+// função de corpo — redesenhar o cabeçalho a cada tecla mataria o foco e o
+// cursor do campo.
 function renderReparos(){
+  renderCabecalhoReparos()
+  renderLinhasReparos()
+}
+
+function renderServicos(){
+  renderCabecalhoServicos()
+  renderLinhasServicos()
+}
+
+function renderModelos(){
+  renderCabecalhoModelos()
+  renderLinhasModelos()
+}
+
+// mapa de tabela → estado + definição de colunas + funções de render, para
+// que os handlers de ordenar/filtrar sejam uma implementação só, que
+// recebe qual tabela está operando (D2). Getters/setters porque o estado é
+// `let` reatribuído a cada mudança, não mutado no lugar — mesma disciplina
+// de MAT_ORD/MAT_FILTROS em maquinas/app.js.
+function _estadoTabela(tabela){
+  const mapa = {
+    reparos: {
+      colunas: COLUNAS_REPAROS,
+      getOrd: () => TAB_REPAROS_ORD, setOrd: v => { TAB_REPAROS_ORD = v },
+      getFiltros: () => TAB_REPAROS_FILTROS, setFiltros: v => { TAB_REPAROS_FILTROS = v },
+      getAberto: () => TAB_REPAROS_FILTROS_ABERTO, setAberto: v => { TAB_REPAROS_FILTROS_ABERTO = v },
+      render: renderReparos, renderCorpo: renderLinhasReparos,
+    },
+    servicos: {
+      colunas: COLUNAS_SERVICOS,
+      getOrd: () => TAB_SERVICOS_ORD, setOrd: v => { TAB_SERVICOS_ORD = v },
+      getFiltros: () => TAB_SERVICOS_FILTROS, setFiltros: v => { TAB_SERVICOS_FILTROS = v },
+      getAberto: () => TAB_SERVICOS_FILTROS_ABERTO, setAberto: v => { TAB_SERVICOS_FILTROS_ABERTO = v },
+      render: renderServicos, renderCorpo: renderLinhasServicos,
+    },
+    modelos: {
+      colunas: COLUNAS_MODELOS,
+      getOrd: () => TAB_MODELOS_ORD, setOrd: v => { TAB_MODELOS_ORD = v },
+      getFiltros: () => TAB_MODELOS_FILTROS, setFiltros: v => { TAB_MODELOS_FILTROS = v },
+      getAberto: () => TAB_MODELOS_FILTROS_ABERTO, setAberto: v => { TAB_MODELOS_FILTROS_ABERTO = v },
+      render: renderModelos, renderCorpo: renderLinhasModelos,
+    },
+  }
+  return mapa[tabela]
+}
+
+// desenha o <thead> de uma das três tabelas a partir da definição de
+// colunas — rótulo, botão de ordenação de três estados e ⌕ de filtro por
+// coluna, mais a coluna final de ações sem rótulo e, com o filtro aberto,
+// a linha de campos. Uma implementação só serve as três abas porque o
+// único ponto que muda é qual definição de colunas e qual estado ela lê.
+function _cabecalhoTabela(tabela, colunas, ord, filtros, aberto){
+  const linhaRotulos = '<tr>' + colunas.map(col => {
+    const dir = ord.coluna === col.id ? ord.dir : null
+    const ariaSort = dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'
+    const iconeOrdem = dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : '⇅'
+    const tituloOrdem = `Ordenar por ${col.rotulo}`
+    const filtroAtivo = !!filtros[col.id]
+    const tituloFiltro = `Filtrar por ${col.rotulo}`
+    return `<th aria-sort="${ariaSort}">
+      <span class="th-rotulo">
+        ${esc(col.rotulo)}
+        <button type="button" class="th-acao" onclick="ordenarTabelaReparos('${tabela}','${col.id}')" title="${tituloOrdem}" aria-label="${tituloOrdem}">${iconeOrdem}</button>
+        <button type="button" class="th-acao${filtroAtivo?' ativo':''}" onclick="filtrarColunaTabelaReparos('${tabela}','${col.id}')" title="${tituloFiltro}" aria-label="${tituloFiltro}">⌕</button>
+      </span>
+    </th>`
+  }).join('') + '<th></th></tr>'
+
+  const linhaFiltros = aberto
+    ? '<tr>' + colunas.map(col => `<th>
+        <input type="search" id="filtro-${tabela}-${col.id}" value="${esc(filtros[col.id] || '')}"
+          oninput="aplicarFiltroTabelaReparos('${tabela}','${col.id}', this.value)" placeholder="filtrar"/>
+      </th>`).join('') + '<th></th></tr>'
+    : ''
+
+  return linhaRotulos + linhaFiltros
+}
+
+// mostra "N de total" e o botão de limpar só quando há ordem ou filtro
+// ativos — mesma razão de atualizarContagemMateriais() em maquinas/app.js:
+// sem isso a tela sempre mostraria "33 de 33", ruído no caso comum.
+function _atualizarContagemTabela(tabela, visiveis, total){
+  const t = _estadoTabela(tabela)
+  const contagem = document.getElementById(`rep-contagem-${tabela}`)
+  const btnLimpar = document.getElementById(`btn-limpar-${tabela}`)
+  const ativo = t.getOrd().coluna !== null || Object.values(t.getFiltros()).some(Boolean)
+  if(contagem) contagem.textContent = ativo ? `${visiveis} de ${total}` : ''
+  if(btnLimpar) btnLimpar.style.display = ativo ? '' : 'none'
+}
+
+function renderCabecalhoReparos(){
+  const thead = document.getElementById('th-reparos')
+  if(!thead) return
+  thead.innerHTML = _cabecalhoTabela('reparos', COLUNAS_REPAROS, TAB_REPAROS_ORD, TAB_REPAROS_FILTROS, TAB_REPAROS_FILTROS_ABERTO)
+}
+
+function renderLinhasReparos(){
   const tbody = document.getElementById('tb-reparos')
+  if(!tbody) return
+
   if(!REPAROS.length){
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Nenhum reparo cadastrado</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum reparo cadastrado</td></tr>'
+    _atualizarContagemTabela('reparos', 0, 0)
     return
   }
+
+  const todas = linhasReparos(REPAROS, MODELOS, REP_MATS, REP_SERVS)
+  const visiveis = aplicarOrdemEFiltro(todas, TAB_REPAROS_ORD, TAB_REPAROS_FILTROS, COLUNAS_REPAROS)
+
+  if(!visiveis.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum reparo corresponde ao filtro</td></tr>'
+    _atualizarContagemTabela('reparos', 0, todas.length)
+    return
+  }
+
   const badgeGrav = { alta:'b-red', media:'b-warn', baixa:'b-ok' }
-  tbody.innerHTML = REPAROS.map(r => {
-    const { pecas, servs } = resumoReparo(r.id)
-    const modelo = MODELOS.find(m => m.id === r.modelo_id)
+  tbody.innerHTML = visiveis.map(l => {
+    const r = l.registro
     return `<tr onclick="abrirModalVinculo(${r.id})">
-      <td class="hi">${esc(r.codigo || '—')}</td>
-      <td>${modelo ? esc(modelo.modelo) : '<span style="color:var(--text3)">qualquer</span>'}</td>
-      <td>${esc(r.sistema)}</td>
-      <td>${esc(r.sintoma)}</td>
-      <td>${esc(r.causa_provavel)}</td>
-      <td><span class="badge ${badgeGrav[r.gravidade] || 'b-blue'}">${esc(r.gravidade)}</span></td>
-      <td>${r.frequencia}×</td>
-      <td>${pecas.length} / ${servs.length}</td>
+      <td class="hi">${esc(l.codigo)}<div class="cel-sub">${l.modelo ? esc(l.modeloTexto) : 'qualquer modelo'}</div></td>
+      <td>${esc(l.sintoma)}<div class="cel-sub">${esc(l.causaProvavel)}</div></td>
+      <td><span class="badge b-blue">${esc(l.sistema)}</span> <span class="badge ${badgeGrav[l.gravidade] || 'b-blue'}">${esc(l.gravidade)}</span></td>
+      <td>${l.confirmacoes}×</td>
+      <td>${l.pecas} / ${l.servicos}</td>
       <td>${podeConhecimento()
         ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();abrirModalReparo(${r.id})" title="Editar cadastro do reparo" aria-label="Editar cadastro do reparo">⚙</button>`
         : ''}</td>
     </tr>`
   }).join('')
+
+  _atualizarContagemTabela('reparos', visiveis.length, todas.length)
 }
 
-function renderServicos(){
+function renderCabecalhoServicos(){
+  const thead = document.getElementById('th-servicos')
+  if(!thead) return
+  thead.innerHTML = _cabecalhoTabela('servicos', COLUNAS_SERVICOS, TAB_SERVICOS_ORD, TAB_SERVICOS_FILTROS, TAB_SERVICOS_FILTROS_ABERTO)
+}
+
+function renderLinhasServicos(){
   const tbody = document.getElementById('tb-servicos')
+  if(!tbody) return
+
   if(!SERVICOS.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum serviço cadastrado</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum serviço cadastrado</td></tr>'
+    _atualizarContagemTabela('servicos', 0, 0)
     return
   }
-  tbody.innerHTML = SERVICOS.map(s => {
-    const usos = REP_SERVS.filter(x => x.servico_id === s.id).length
+
+  const todas = linhasServicos(SERVICOS, REP_SERVS)
+  const visiveis = aplicarOrdemEFiltro(todas, TAB_SERVICOS_ORD, TAB_SERVICOS_FILTROS, COLUNAS_SERVICOS)
+
+  if(!visiveis.length){
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum serviço corresponde ao filtro</td></tr>'
+    _atualizarContagemTabela('servicos', 0, todas.length)
+    return
+  }
+
+  tbody.innerHTML = visiveis.map(l => {
+    const s = l.registro
     return `<tr>
-      <td class="hi">${esc(s.codigo || '—')}</td>
-      <td>${esc(s.nome)}</td>
-      <td>${esc(s.especialidade || '—')}</td>
-      <td>${s.tempo_padrao_h ? fH(s.tempo_padrao_h) : '—'}</td>
-      <td>${s.valor_hora ? fR(s.valor_hora) : '—'}</td>
-      <td>${usos} reparo(s)</td>
+      <td class="hi">${esc(l.codigo)}<div class="cel-sub">${esc(l.nome)}</div></td>
+      <td>${esc(l.especialidade)}</td>
+      <td>${l.tempoPadraoH ? fH(l.tempoPadraoH) : '—'}${l.valorHora ? ' · ' + fR(l.valorHora) : ''}</td>
+      <td>${l.usos} reparo(s)</td>
       <td>${podeCatalogo()
         ? `<button class="btn btn-s btn-sm" onclick="abrirModalServico(${s.id})" title="Editar cadastro do serviço" aria-label="Editar cadastro do serviço">⚙</button>`
         : ''}</td>
     </tr>`
   }).join('')
+
+  _atualizarContagemTabela('servicos', visiveis.length, todas.length)
 }
 
-function renderModelos(){
+function renderCabecalhoModelos(){
+  const thead = document.getElementById('th-modelos')
+  if(!thead) return
+  thead.innerHTML = _cabecalhoTabela('modelos', COLUNAS_MODELOS, TAB_MODELOS_ORD, TAB_MODELOS_FILTROS, TAB_MODELOS_FILTROS_ABERTO)
+}
+
+function renderLinhasModelos(){
   const tbody = document.getElementById('tb-modelos')
+  if(!tbody) return
+
   if(!MODELOS.length){
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhum modelo cadastrado</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum modelo cadastrado</td></tr>'
+    _atualizarContagemTabela('modelos', 0, 0)
     return
   }
-  tbody.innerHTML = MODELOS.map(m => `<tr>
-    <td class="hi">${esc(m.codigo || '—')}</td>
-    <td>${esc(m.fabricante)}</td>
-    <td>${esc(m.modelo)}</td>
-    <td>${esc(m.categoria || '—')}</td>
-    <td>${esc(m.motor || '—')}</td>
-    <td>${ATIVOS.filter(a => a.modelo_id === m.id).length}</td>
-    <td>${REPAROS.filter(r => r.modelo_id === m.id).length}</td>
-    <td>${podeCatalogo()
-      ? `<button class="btn btn-s btn-sm" onclick="abrirModalModelo(${m.id})" title="Editar cadastro do modelo" aria-label="Editar cadastro do modelo">⚙</button>`
-      : ''}</td>
-  </tr>`).join('')
+
+  const todas = linhasModelos(MODELOS, ATIVOS, REPAROS)
+  const visiveis = aplicarOrdemEFiltro(todas, TAB_MODELOS_ORD, TAB_MODELOS_FILTROS, COLUNAS_MODELOS)
+
+  if(!visiveis.length){
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Nenhum modelo corresponde ao filtro</td></tr>'
+    _atualizarContagemTabela('modelos', 0, todas.length)
+    return
+  }
+
+  tbody.innerHTML = visiveis.map(l => {
+    const m = l.registro
+    return `<tr>
+      <td class="hi">${esc(l.codigo)}<div class="cel-sub">${esc(l.fabricanteModelo)}</div></td>
+      <td>${esc(l.categoria)}</td>
+      <td>${esc(l.motor)}</td>
+      <td>${l.maquinas} máquinas / ${l.reparos} reparos</td>
+      <td>${podeCatalogo()
+        ? `<button class="btn btn-s btn-sm" onclick="abrirModalModelo(${m.id})" title="Editar cadastro do modelo" aria-label="Editar cadastro do modelo">⚙</button>`
+        : ''}</td>
+    </tr>`
+  }).join('')
+
+  _atualizarContagemTabela('modelos', visiveis.length, todas.length)
+}
+
+// ── ordenação e filtro por coluna (D2) — tudo de tela, nada de Supabase ──
+// as quatro recebem qual tabela estão operando ('reparos'|'servicos'|
+// 'modelos'), para que uma implementação só sirva as três abas.
+function ordenarTabelaReparos(tabela, coluna){
+  const t = _estadoTabela(tabela)
+  const ordAtual = t.getOrd()
+  const dirAtual = ordAtual.coluna === coluna ? ordAtual.dir : null
+  const proximo = ordAtual.coluna === coluna ? proximaOrdem(dirAtual) : 'asc'
+  t.setOrd(proximo === null ? { coluna: null, dir: null } : { coluna, dir: proximo })
+  t.render()
+}
+
+function filtrarColunaTabelaReparos(tabela, coluna){
+  const t = _estadoTabela(tabela)
+  const aberto = !t.getAberto()
+  // fechar limpa os filtros inteiros — um filtro invisível escondendo
+  // linhas seria pior do que nenhum filtro (mesma regra de Máquinas)
+  t.setAberto(aberto)
+  if(!aberto) t.setFiltros({})
+  t.render()
+  if(aberto){
+    const campo = document.getElementById(`filtro-${tabela}-${coluna}`)
+    if(campo) campo.focus()
+  }
+}
+
+function aplicarFiltroTabelaReparos(tabela, coluna, valor){
+  const t = _estadoTabela(tabela)
+  const filtros = t.getFiltros()
+  if(valor){
+    t.setFiltros({ ...filtros, [coluna]: valor })
+  } else {
+    const { [coluna]: _removido, ...resto } = filtros
+    t.setFiltros(resto)
+  }
+  // só o corpo — reescrever o cabeçalho a cada tecla tiraria o foco e o
+  // cursor do campo de busca
+  t.renderCorpo()
+}
+
+function limparFiltrosTabelaReparos(tabela){
+  const t = _estadoTabela(tabela)
+  t.setFiltros({})
+  t.setOrd({ coluna: null, dir: null })
+  t.setAberto(false)
+  t.render()
 }
 
 // ── MODAL REPARO ──
@@ -516,7 +737,11 @@ function exporNoWindow(){
     abrirModalReparo,
     abrirModalServico,
     abrirModalVinculo,
+    aplicarFiltroTabelaReparos,
     fecharModal,
+    filtrarColunaTabelaReparos,
+    limparFiltrosTabelaReparos,
+    ordenarTabelaReparos,
     popularVinculoAlvo,
     removerVinculo,
     renderDiagnostico,
