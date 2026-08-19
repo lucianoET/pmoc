@@ -56,7 +56,10 @@ tela estreita.
 - **Redesenhar o contorno de um prédio que já tem um**: o caminho de entrada é a lista
   "Prédios sem posição", e o prédio sai dela ao ganhar coordenada. Falta um caminho pelo
   próprio polígono.
-- **Converter as duas zonas que são prédios** ("Predio Comando", "Museu"): é dado do usuário,
-  não do código. Museu nem tem linha correspondente em `cmasm_locais`.
+- ~~Converter as duas zonas que são prédios~~ — **feito em 19/08/2026, a pedido do usuário**:
+  o Comando reusou o contorno já gravado no local 302; o Museu ganhou linha nova
+  (`CMASM-MUSEU`, id 623, 6 vértices, 1.673 m²), que não existia. As duas zonas foram
+  **arquivadas (`ativo = false`), não apagadas**, e a vegetação ativa caiu de 12.680 m² para
+  8.754 m².
 - **Recarregar a camada de prédios sem recarregar a página** depois de gravar um contorno: a
   camada é registrada uma vez no boot; recarregar a página perderia o estado do mapa.

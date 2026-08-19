@@ -1349,10 +1349,15 @@ para o Comando foi gravado no local 302 (COMANDO, 8 vértices, centroide
 −22,8395545 / −43,1091537, 2.253 m²), e a contagem de locais ativos sem posição caiu de 227
 para 226. Nenhum ativo aponta para o local 302, então esse contorno não acendeu ativo nenhum.
 
-**Pendência de dado, não de código:** as zonas `maq_areas` "Predio Comando" e "Museu" continuam
-cadastradas como zona de serviço — são edifícios desenhados antes de existir a ferramenta de
-contorno, e enquanto estiverem ativas os 2.253 m² do Comando entram na conta de área de corte
-de grama. "Museu" não tem local correspondente em `cmasm_locais`.
+**Conversão das duas zonas que eram prédios (19/08/2026):** "Predio Comando" reusou o contorno
+já gravado em `cmasm_locais` 302; "Museu" ganhou linha nova (`CMASM-MUSEU`, id 623,
+`edificacao` sob o CMASM, 6 vértices, centroide −22,8393873 / −43,1086979, 1.673 m²), porque
+não tinha nenhuma. As duas linhas de `maq_areas` foram **arquivadas (`ativo = false`), não
+apagadas**. A vegetação ativa caiu de 12.680 m² para **8.754 m²** — os 3.926 m² de edifício
+saíram da conta de corte de grama.
+
+- [ ] Confirmar na aba de áreas do Máquinas que "Predio Comando" e "Museu" não aparecem mais
+      entre as zonas ativas, e que o total de área caiu para 8.754 m².
 
 - [ ] Abrir `/mapa` e confirmar que a camada **Prédios** aparece ligada, com o contorno do
       Comando desenhado em marrom, distinto do verde das zonas.
