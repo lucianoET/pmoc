@@ -23,13 +23,36 @@
 function _fR(v) { return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',') }
 function _fH(v) { return Number(v || 0).toFixed(1).replace('.', ',') + ' h' }
 
+// conta ocorrências por chave numa passada só. As linhas são reconstruídas
+// a cada tecla digitada num filtro de coluna, então varrer os vínculos uma
+// vez por linha faria o custo crescer com o produto dos dois arrays — e o
+// catálogo é feito para ser compartilhado entre oficinas, ou seja, para
+// crescer.
+function _contarPor(lista, campo) {
+  const mapa = new Map()
+  for (const item of lista) {
+    const chave = item[campo]
+    mapa.set(chave, (mapa.get(chave) || 0) + 1)
+  }
+  return mapa
+}
+
+function _indexarPorId(lista) {
+  const mapa = new Map()
+  for (const item of lista) mapa.set(item.id, item)
+  return mapa
+}
+
 // ── REPAROS ──────────────────────────────────────────────────────────────
 // recebe os quatro arrays já carregados e devolve, por reparo, o texto do
 // modelo (fabricante+modelo, ou "qualquer modelo" quando o reparo não tem
 // modelo) e as duas contagens de vínculo.
 export function linhasReparos(reparos, modelos, repMats, repServs) {
+  const porId = _indexarPorId(modelos)
+  const pecasPorReparo = _contarPor(repMats, 'reparo_id')
+  const servicosPorReparo = _contarPor(repServs, 'reparo_id')
   return reparos.map(r => {
-    const modelo = modelos.find(m => m.id === r.modelo_id)
+    const modelo = porId.get(r.modelo_id)
     return {
       registro: r,
       modelo,
@@ -40,8 +63,8 @@ export function linhasReparos(reparos, modelos, repMats, repServs) {
       sistema: r.sistema,
       gravidade: r.gravidade,
       confirmacoes: Number(r.frequencia) || 0,
-      pecas: repMats.filter(x => x.reparo_id === r.id).length,
-      servicos: repServs.filter(x => x.reparo_id === r.id).length,
+      pecas: pecasPorReparo.get(r.id) || 0,
+      servicos: servicosPorReparo.get(r.id) || 0,
     }
   })
 }
@@ -88,6 +111,7 @@ export const COLUNAS_REPAROS = [
 
 // ── SERVIÇOS ─────────────────────────────────────────────────────────────
 export function linhasServicos(servicos, repServs) {
+  const usosPorServico = _contarPor(repServs, 'servico_id')
   return servicos.map(s => ({
     registro: s,
     codigo: s.codigo || '—',
@@ -95,7 +119,7 @@ export function linhasServicos(servicos, repServs) {
     especialidade: s.especialidade || '—',
     tempoPadraoH: s.tempo_padrao_h,
     valorHora: s.valor_hora,
-    usos: repServs.filter(x => x.servico_id === s.id).length,
+    usos: usosPorServico.get(s.id) || 0,
   }))
 }
 
@@ -128,6 +152,8 @@ export const COLUNAS_SERVICOS = [
 
 // ── MODELOS ──────────────────────────────────────────────────────────────
 export function linhasModelos(modelos, ativos, reparos) {
+  const ativosPorModelo = _contarPor(ativos, 'modelo_id')
+  const reparosPorModelo = _contarPor(reparos, 'modelo_id')
   return modelos.map(m => ({
     registro: m,
     codigo: m.codigo || '—',
@@ -140,8 +166,8 @@ export function linhasModelos(modelos, ativos, reparos) {
     // para que a coluna "Tipo" da tabela e o filtro falem a mesma língua
     tipoRotulo: m.categoria ? rotuloTipo(m.categoria) : '—',
     motor: m.motor || '—',
-    maquinas: ativos.filter(a => a.modelo_id === m.id).length,
-    reparos: reparos.filter(r => r.modelo_id === m.id).length,
+    maquinas: ativosPorModelo.get(m.id) || 0,
+    reparos: reparosPorModelo.get(m.id) || 0,
   }))
 }
 
@@ -217,9 +243,21 @@ export function opcoesTipoMaquina(modelos) {
 function _parseSelecao(selecao) {
   if (!selecao) return null
   const i = selecao.indexOf(':')
+  // sem separador é entrada inválida, não um tipo desconhecido: devolver
+  // null faz o predicado cair no mesmo caminho de "nenhuma seleção", em vez
+  // de depender do fallthrough de um tipo que não casa com nenhum ramo
+  if (i < 0) return null
   const tipo = selecao.slice(0, i)
   const valor = selecao.slice(i + 1)
-  return { tipo, valor: tipo === 'modelo' ? Number(valor) : valor }
+  // seleção que não nomeia valor nenhum não é seleção. Sem esta guarda,
+  // 'modelo:' viraria Number('') === 0, que não é id de modelo algum e
+  // esvaziaria a tabela sem dizer por quê.
+  if (!valor) return null
+  if (tipo === 'modelo') {
+    const id = Number(valor)
+    return Number.isFinite(id) ? { tipo, valor: id } : null
+  }
+  return { tipo, valor }
 }
 
 // filtro da aba Modelos: passa quando é o modelo escolhido ou tem a

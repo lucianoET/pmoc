@@ -311,6 +311,20 @@ const REPAROS_D4 = [
   { id: 3, modelo_id: null, sistema: 'motor' }, // sem modelo
 ]
 
+// Seleção malformada (sem o separador ':') é entrada inválida, não um tipo
+// desconhecido. Antes, slice(0, -1) produzia um tipo truncado que não casava
+// com nenhum ramo e só passava por causa do fallthrough final — agora o
+// parse rejeita e o predicado cai no mesmo caminho de "nenhuma seleção".
+test('seleção sem separador não filtra nada fora, em vez de virar um tipo truncado', () => {
+  for (const ruim of ['modelo', 'categoria', 'lixo', ':', 'modelo:', 'categoria:', 'modelo:abc']) {
+    const desc = JSON.stringify(ruim)
+    assert.equal(filtroTipoModelos(MODELOS_D4[0], ruim) || filtroTipoModelos(MODELOS_D4[1], ruim), true,
+      `modelos: ${desc} não pode esconder a tabela inteira`)
+  }
+  assert.equal(filtroTipoModelos(MODELOS_D4[0], 'modelo'), true)
+  assert.equal(filtroTipoModelos(MODELOS_D4[1], 'categoria'), true)
+})
+
 test('filtroTipoReparos: reparo sem modelo passa sempre; com modelo, passa pelo modelo ou pela categoria escolhida', () => {
   assert.equal(filtroTipoReparos(REPAROS_D4[2], MODELOS_D4, 'categoria:trator'), true, 'reparo sem modelo nunca é filtrado fora')
   assert.equal(filtroTipoReparos(REPAROS_D4[0], MODELOS_D4, 'categoria:trator'), true)
