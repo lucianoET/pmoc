@@ -1400,3 +1400,30 @@ quantos ativos cada prédio acenderia — F21 19, PAIOL 16, MK48 12, EXOCET 10.
       **não** se move junto; os demais ativos do prédio continuam onde estavam.
 - [ ] Confirmar que nenhum ativo aparece pinado no centro da base sem prédio: a coordenada da
       Organização Militar não é herdada de propósito.
+
+---
+
+## Mapa: legibilidade — agrupamento, rótulos, barra lateral, camadas (19/08/2026)
+
+Sem migração. Medido na tela antes e depois, com os 30 prédios já posicionados pelo usuário:
+
+| | antes | depois |
+|---|---|---|
+| marcadores desenhados | 195 (em 51 pontos; maior pilha 24) | **56** |
+| rótulos visíveis | 12 (todos da planta OSM) | **66** (prédio, zona, ativo/grupo) |
+| zoom de abertura | 15 (base do tamanho de uma unha) | **17**, enquadrando o que tem posição |
+| painel de camadas | aberto, ~1/4 da tela | recolhido, "Camadas (10)" |
+| seções da barra lateral abertas | 7 | 2 (Módulos, Edição) |
+
+- [ ] Abrir `/mapa`: o mapa deve abrir **já enquadrado** na área do CMASM, com os nomes de
+      prédio, zona e ativo visíveis.
+- [ ] Dar zoom out até 16 ou menos: os rótulos desaparecem (é o corte por zoom, não um bug).
+- [ ] Clicar num marcador com **badge de contagem**: o balão lista os ativos daquele ponto,
+      cada um com link para a ficha do módulo. Com mais de 15, a última linha anuncia o resto.
+- [ ] Conferir que um grupo com um ativo inoperante aparece na cor de inoperante, mesmo com
+      vários operantes no mesmo ponto.
+- [ ] Abrir **Camadas** e desligar Climatização: os marcadores dela desaparecem e o número no
+      botão continua contando as camadas registradas. Religar devolve.
+- [ ] ☰ Módulos: as seções abrem e fecham; os cabeçalhos fechados mostram os contadores
+      ("Não localizados (75)", "Prédios sem posição (66)").
+- [ ] Em 375 px: confirmar que o cabeçalho **Camadas** e o botão ☰ Módulos não se sobrepõem.
