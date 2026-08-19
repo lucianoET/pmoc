@@ -90,23 +90,43 @@ export function calcAreaM2(coords) {
 // os vértices são colineares) devolve null em vez de NaN: quem chama grava
 // coordenada, e NaN atravessaria a validação de envelope como "fora da
 // região" — mensagem errada para o problema certo.
+const AREA_MINIMA_CENTROIDE = 1e-12
+
 export function centroidePoligono(coords) {
   if (!Array.isArray(coords) || coords.length < 3) return null
+  // A conta roda com o primeiro vértice na origem e o deslocamento é
+  // somado de volta no fim. Sem isso, um prédio de 30 m em -22,84 / -43,10
+  // multiplica dois números da ordem de 20-40 e subtrai o resultado de
+  // outro quase igual: sobra ruído de ponto flutuante da mesma ordem da
+  // área do prédio. O resultado ainda saía a milímetros do certo, mas o
+  // erro cresce com a distância à origem do sistema de coordenadas, e é
+  // gratuito não tê-lo.
+  const [latOrigem, lonOrigem] = coords[0]
+  if (!Number.isFinite(latOrigem) || !Number.isFinite(lonOrigem)) return null
   let areaDobro = 0
   let lat = 0
   let lon = 0
   const n = coords.length
   for (let i = 0; i < n; i++) {
-    const [lat1, lon1] = coords[i]
-    const [lat2, lon2] = coords[(i + 1) % n]
-    if (!Number.isFinite(lat1) || !Number.isFinite(lon1)) return null
+    const [latA, lonA] = coords[i]
+    const [latB, lonB] = coords[(i + 1) % n]
+    if (!Number.isFinite(latA) || !Number.isFinite(lonA) || !Number.isFinite(latB) || !Number.isFinite(lonB)) return null
+    const lat1 = latA - latOrigem
+    const lon1 = lonA - lonOrigem
+    const lat2 = latB - latOrigem
+    const lon2 = lonB - lonOrigem
     const cruzado = lat1 * lon2 - lat2 * lon1
     areaDobro += cruzado
     lat += (lat1 + lat2) * cruzado
     lon += (lon1 + lon2) * cruzado
   }
-  if (areaDobro === 0) return null
-  return [lat / (3 * areaDobro), lon / (3 * areaDobro)]
+  // Comparar com zero exato não basta: três vértices colineares produzem
+  // resto de ponto flutuante da ordem de 1e-17, e o "centroide" resultante
+  // é ruído dividido por ruído. O corte é 1e-12 em grau² dobrado — cerca
+  // de 0,006 m², menor que qualquer coisa que alguém desenhe no mapa e dez
+  // ordens de grandeza acima do resto (um prédio de 30 m dá ~1,8e-7).
+  if (Math.abs(areaDobro) < AREA_MINIMA_CENTROIDE) return null
+  return [latOrigem + lat / (3 * areaDobro), lonOrigem + lon / (3 * areaDobro)]
 }
 
 // ── Bloco 3 — compatibilidade de máquinas ──────────────────────────────
