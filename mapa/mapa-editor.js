@@ -138,6 +138,7 @@ function criarBotaoAlternar(mapa) {
   const btn = document.createElement('button')
   btn.type = 'button'
   btn.className = 'btn btn-s ed-modo'
+  btn.setAttribute('aria-pressed', 'false')
   btn.textContent = 'Editar zonas'
   btn.addEventListener('click', () => alternarModoEdicao(mapa, btn))
   area.appendChild(btn)
@@ -167,6 +168,7 @@ function fecharBarraLateral() {
 async function alternarModoEdicao(mapa, btn) {
   _modoAtivo = !_modoAtivo
   btn.classList.toggle('active', _modoAtivo)
+  btn.setAttribute('aria-pressed', _modoAtivo ? 'true' : 'false')
   if (_modoAtivo) {
     btn.textContent = 'Sair da edição'
     fecharBarraLateral()
@@ -497,6 +499,7 @@ function criarBotaoPosicionar(mapa) {
   const btn = document.createElement('button')
   btn.type = 'button'
   btn.className = 'btn btn-s ed-modo'
+  btn.setAttribute('aria-pressed', 'false')
   btn.textContent = 'Mover ativos'
   btn.addEventListener('click', () => alternarModoPosicao(mapa, btn))
   area.appendChild(btn)
@@ -505,6 +508,7 @@ function criarBotaoPosicionar(mapa) {
 async function alternarModoPosicao(mapa, btn) {
   _modoPosicaoAtivo = !_modoPosicaoAtivo
   btn.classList.toggle('active', _modoPosicaoAtivo)
+  btn.setAttribute('aria-pressed', _modoPosicaoAtivo ? 'true' : 'false')
   if (_modoPosicaoAtivo) {
     btn.textContent = 'Parar de mover'
     fecharBarraLateral()

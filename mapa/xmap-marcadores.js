@@ -127,8 +127,13 @@ export function desenharAtivosAgrupados(group, ativos, opcoes) {
     // (mapa/index.html): sem nome nenhum, o mapa era um campo de ícones
     // iguais; com todos os nomes sempre visíveis, seria um campo de texto
     // sobreposto. O corte por zoom é o que faz os dois conviverem.
+    // O rótulo do grupo nomeia o LOCAL, não repete o nome da camada:
+    // "Climatização (16)" dito dezenas de vezes na tela não informa nada,
+    // enquanto "F21 (16)" responde as duas perguntas de uma vez — onde é e
+    // quantos há. Sem local herdado (posição própria), cai para o nome da
+    // camada, que é a única identidade que o grupo tem.
     const texto = varios
-      ? `${nome} (${ponto.ativos.length})`
+      ? `${primeiro.localPosicao || nome} (${ponto.ativos.length})`
       : (rotuloDeUm ? rotuloDeUm(primeiro) : primeiro.rotulo)
     marker.bindTooltip(String(texto ?? ''), {
       permanent: true,
