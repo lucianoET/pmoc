@@ -449,8 +449,26 @@ test('alternarAgrupamentoTipo() inverte o sinalizador e redesenha as três tabel
   assert.match(bloco[1], /renderModelos\(\)/)
 })
 
-test('nenhum arquivo em supabase/ foi criado ou alterado por esta quick task', () => {
-  const { execSync } = require('node:child_process')
-  const alterados = execSync('git status --porcelain supabase/', { cwd: RAIZ }).toString().trim()
-  assert.equal(alterados, '', 'D5: rep_modelos.categoria já existe e já está preenchida — nenhuma migração nova')
+// D5 desta quick task: o filtro por tipo de máquina não precisou de
+// migração, porque `rep_modelos.categoria` já existia e já estava
+// preenchida. A primeira versão deste teste afirmava `git status
+// --porcelain supabase/` vazio — o que media o estado da árvore de
+// trabalho, não a decisão: qualquer migração de qualquer tarefa futura o
+// derrubava, e a mensagem culparia o /reparos por algo que não é dele.
+// Agora afirma o que D5 realmente diz: nenhuma migração posterior à 27
+// mexe nas tabelas do catálogo de reparos.
+test('D5 — nenhuma migração nova mexe nas tabelas rep_* do catálogo', () => {
+  const dir = path.join(RAIZ, 'supabase')
+  const posteriores = fs
+    .readdirSync(dir)
+    .filter((nome) => /^\d+_.*\.sql$/.test(nome))
+    .filter((nome) => Number(nome.split('_')[0]) > 28)
+  for (const nome of posteriores) {
+    const sql = fs.readFileSync(path.join(dir, nome), 'utf8')
+    assert.doesNotMatch(
+      sql,
+      /(alter|create)\s+table\s+(if\s+not\s+exists\s+)?rep_/i,
+      `${nome} mexe numa tabela rep_* — o catálogo de reparos não precisou de migração nova (D5)`
+    )
+  }
 })

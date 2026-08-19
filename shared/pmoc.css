@@ -177,6 +177,64 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
 .hidden{display:none!important}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 
+/* ── peças de tela comuns (shared/componentes.js) ──
+   Tom semântico resolvido AQUI, uma vez: as funções daquele arquivo
+   devolvem o nome do tom, nunca a cor. Cor em JavaScript seria mais uma
+   cópia da paleta para alguém esquecer de atualizar. */
+.pilula{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+  padding:3px 9px;border-radius:20px;border:1px solid;white-space:nowrap;line-height:1.5}
+.pilula-neutro{color:var(--text2);border-color:var(--border);background:var(--surface2)}
+.pilula-info{color:var(--blue);border-color:color-mix(in srgb,var(--blue) 40%,transparent);background:color-mix(in srgb,var(--blue) 14%,transparent)}
+.pilula-ok{color:var(--green);border-color:color-mix(in srgb,var(--green) 40%,transparent);background:color-mix(in srgb,var(--green) 14%,transparent)}
+.pilula-warn{color:var(--yellow);border-color:color-mix(in srgb,var(--yellow) 40%,transparent);background:color-mix(in srgb,var(--yellow) 14%,transparent)}
+.pilula-erro{color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent);background:color-mix(in srgb,var(--red) 14%,transparent)}
+
+/* Par de botões que troca a lista mostrada. Estado ativo com os mesmos
+   quatro sinais somados do resto do chrome (19/08/2026): fundo tingido,
+   borda, peso e — o que sobrevive ao daltonismo — o próprio preenchimento. */
+.seg-toggle{display:inline-flex;background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:3px;gap:3px;margin-bottom:12px}
+.seg-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:none;border-radius:6px;
+  background:transparent;color:var(--text3);font-size:13px;font-weight:600;font-family:var(--ff);cursor:pointer;transition:.15s}
+.seg-btn:hover{color:var(--text2)}
+.seg-btn.ativo{background:var(--surface);color:var(--accent-texto);font-weight:700;
+  box-shadow:0 1px 3px rgba(0,0,0,.18),inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,transparent)}
+.seg-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Fila de filtros rápidos. Rola em vez de envolver: uma segunda linha de
+   chips empurra a lista para baixo da dobra em celular. */
+.chips{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px}
+.chip{flex-shrink:0;display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;
+  border:1px solid var(--border);background:var(--surface2);color:var(--text3);
+  font-size:12px;font-weight:600;font-family:var(--ff);cursor:pointer;transition:.15s}
+.chip:hover{color:var(--text2)}
+.chip.ativo{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 16%,var(--surface2));font-weight:700}
+.chip-n{font-size:10px;opacity:.8}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Régua de etapas do fluxo. Numerada de propósito: cor sozinha não diz
+   QUANTAS etapas faltam, e é isso que o usuário pergunta. */
+.regua{display:flex;list-style:none;margin:0 0 14px;padding:0;gap:0;overflow-x:auto}
+.regua-passo{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:64px;position:relative}
+.regua-passo::before{content:'';position:absolute;top:11px;left:0;right:50%;height:2px;background:var(--border)}
+.regua-passo::after{content:'';position:absolute;top:11px;left:50%;right:0;height:2px;background:var(--border)}
+.regua-passo:first-child::before,.regua-passo:last-child::after{display:none}
+.regua-passo.feito::before,.regua-passo.feito::after,.regua-passo.atual::before{background:var(--accent)}
+.regua-bola{position:relative;z-index:1;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:11px;font-weight:700;background:var(--surface2);
+  border:1px solid var(--border);color:var(--text3)}
+.regua-passo.feito .regua-bola{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.regua-passo.atual .regua-bola{border-color:var(--accent);color:var(--accent-texto);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.regua-txt{font-size:10px;color:var(--text3);text-align:center;line-height:1.3}
+.regua-passo.atual .regua-txt{color:var(--text);font-weight:700}
+
+/* Estado vazio com motivo: lista vazia, filtro sem resultado e erro de
+   carga produziam a mesma tela em branco, e branco não distingue "está
+   tudo certo" de "quebrou". */
+.vazio{padding:28px 16px;text-align:center;color:var(--text3);font-size:13px}
+.vazio-dica{font-size:12px;margin-top:6px;opacity:.85}
+
 /* ── rodapé do shell comum ── */
 .shell-footer{border-top:1px solid var(--border);background:var(--surface);color:var(--text3);
   font-size:11px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;

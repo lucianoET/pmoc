@@ -31,6 +31,19 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
    foi digitado, é recalculado a cada gravação da geometria. */
 .tag-mapa{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 5px;border-radius:8px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent-texto);margin-left:6px}
 .td-acoes{text-align:right;white-space:nowrap}
+/* Linha de contratação: cartão, não linha de tabela. Uma contratação tem
+   objeto em texto livre, empresa, valor e etapa — a tabela cortava o objeto
+   justamente na parte que identifica o serviço. */
+.ct-linha{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);
+  border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:.15s}
+.ct-linha:hover{border-color:var(--accent)}
+.ct-linha-topo{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.ct-num{font-size:12px;font-weight:700;color:var(--accent-texto);letter-spacing:.03em}
+.ct-obj{font-size:14px;font-weight:600;color:var(--text);margin-top:2px}
+.ct-linha-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--text3)}
+.ct-valor{font-weight:700;color:var(--text2)}
+.ct-desc{font-size:12px;color:var(--text2);margin-top:8px;line-height:1.45;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
 /* ── uso bar ── */
 .uso-bar-wrap{width:100%;background:var(--surface2);border-radius:4px;height:6px;overflow:hidden}
@@ -188,6 +201,12 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         </div>
       </div>
       <div class="view-sub">Manutenção de máquina — clique numa OS para ver o detalhe, editar e exportar</div>
+      <!-- Seletor entre as duas listas da aba: OS interna (oficina) e
+           contratação de empresa (serviço externo). São a mesma pergunta —
+           "o que está sendo feito nesta máquina?" — com dois recortes, e é
+           por isso que dividem a aba em vez de virarem duas. Desenhado por
+           maquinas/app.js#renderSeletorOS com shared/componentes.js. -->
+      <div id="os-seletor"></div>
       <div class="filters-inline">
         <select id="filtro-os" onchange="renderOS()" class="control-auto">
           <option value="">Todas as situações</option>
@@ -200,14 +219,21 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <option value="cancelada">Canceladas</option>
         </select>
       </div>
-      <div class="tbl-wrap">
-        <table class="tbl">
-          <thead><tr>
-            <th>Data</th><th>Máquina</th><th>Tipo</th><th>Serviço</th>
-            <th>Material</th><th>Técnico</th><th>Status</th><th>Ações</th>
-          </tr></thead>
-          <tbody id="tb-os"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
-        </table>
+      <div id="os-bloco-manutencao">
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Data</th><th>Máquina</th><th>Tipo</th><th>Serviço</th>
+              <th>Material</th><th>Técnico</th><th>Status</th><th>Ações</th>
+            </tr></thead>
+            <tbody id="tb-os"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Contratações (migração 38). Fica oculto até o seletor pedir. -->
+      <div id="os-bloco-contratacoes" hidden>
+        <div id="ct-chips"></div>
+        <div id="ct-lista"></div>
       </div>
 
     </div>
@@ -345,6 +371,43 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="frow"><label for="area-obs">Observações</label><textarea id="area-obs"></textarea></div>
     </div>
     <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('modal-area')">Cancelar</button><button class="btn btn-p" onclick="salvarArea()">Salvar área</button></div>
+  </div>
+</div>
+
+<!-- MODAL: CONTRATAÇÃO (migração 38) -->
+<div class="overlay" id="modal-contratacao">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-contratacao-titulo">
+    <div class="modal-hd"><h3 id="modal-contratacao-titulo">Nova contratação</h3><button class="btn btn-s btn-sm" onclick="fecharModal('modal-contratacao')" aria-label="Fechar">✕</button></div>
+    <div class="modal-body">
+      <div class="frow"><label for="ct-objeto">Objeto *</label><textarea id="ct-objeto" placeholder="Serviço a contratar — ex: retífica do motor do trator Solis 90"></textarea></div>
+      <div class="fgrid">
+        <!-- Máquina OU área, nunca as duas: é o mesmo `check` da migração 38
+             (num_nonnulls <= 1). Escolher uma limpa a outra na tela, para o
+             usuário não descobrir a regra pelo erro do banco. -->
+        <div class="frow"><label for="ct-ativo">Máquina</label><select id="ct-ativo" onchange="ctLimparOutroObjeto('ativo')"></select></div>
+        <div class="frow"><label for="ct-area">Área</label><select id="ct-area" onchange="ctLimparOutroObjeto('area')"></select></div>
+      </div>
+      <div class="fgrid3">
+        <div class="frow"><label for="ct-empresa">Empresa</label><input id="ct-empresa"/></div>
+        <div class="frow"><label for="ct-cnpj">CNPJ</label><input id="ct-cnpj" placeholder="00.000.000/0000-00"/></div>
+        <div class="frow"><label for="ct-fiscal">Fiscal</label><input id="ct-fiscal"/></div>
+      </div>
+      <div class="fgrid3">
+        <div class="frow"><label for="ct-solicitante">Solicitante</label><input id="ct-solicitante"/></div>
+        <div class="frow"><label for="ct-ne">Nota de empenho</label><input id="ct-ne"/></div>
+        <div class="frow"><label for="ct-valor">Valor estimado (R$)</label><input type="number" id="ct-valor" min="0" step="0.01"/></div>
+      </div>
+      <div class="frow"><label for="ct-obs">Observações</label><textarea id="ct-obs"></textarea></div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('modal-contratacao')">Cancelar</button><button class="btn btn-p" onclick="salvarContratacao()">Salvar contratação</button></div>
+  </div>
+</div>
+
+<!-- MODAL: DETALHE DA CONTRATAÇÃO — régua de etapas e avanço de estado -->
+<div class="overlay" id="modal-ct-detalhe">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-ct-detalhe-titulo">
+    <div class="modal-hd"><h3 id="modal-ct-detalhe-titulo">Contratação</h3><button class="btn btn-s btn-sm" onclick="fecharModal('modal-ct-detalhe')" aria-label="Fechar">✕</button></div>
+    <div class="modal-body" id="ct-detalhe-corpo"></div>
   </div>
 </div>
 
