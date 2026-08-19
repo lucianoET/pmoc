@@ -85,6 +85,31 @@ html,body{height:100%}
 .lg-item{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:var(--text2)}
 .lg-cor{width:12px;height:12px;border-radius:3px;flex-shrink:0}
 
+/* Seções colapsáveis da barra lateral: o marcador nativo sai (a seta feia
+   do navegador) e entra um sinal próprio, alinhado com o título. */
+.sb-sec{border-bottom:1px solid var(--border);padding:8px 0}
+.sb-sec:last-child{border-bottom:none}
+.sb-sec > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;margin-bottom:0;user-select:none}
+.sb-sec[open] > summary{margin-bottom:10px}
+.sb-sec > summary::-webkit-details-marker{display:none}
+.sb-sec > summary::before{content:'▸';font-size:9px;color:var(--text3);transition:transform .15s}
+.sb-sec[open] > summary::before{transform:rotate(90deg)}
+.sb-sec > summary:hover{color:var(--text2)}
+
+/* Rótulo de cadastro (prédio, zona, ativo, grupo de ativos) — permanente,
+   mas só visível a partir do zoom de detalhe. Sem nenhum rótulo a tela era
+   um campo de ícones iguais; com todos sempre visíveis, seria um campo de
+   texto sobreposto. A classe do contêiner é ligada por mapa/app.js no
+   evento de zoom. */
+/* Cor nenhuma escrita à mão: tokens da folha comum, como o resto do chrome
+   deste módulo. Prédio e zona se distinguem por FORMA do texto (caixa alta,
+   itálico), não por uma quarta cópia da paleta. */
+.xmap-rotulo{background:var(--surface);border:1px solid var(--border);box-shadow:none;color:var(--text);font-family:var(--ff);font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;white-space:nowrap;opacity:.92}
+.xmap-rotulo::before{display:none}
+.xmap-rotulo-predio{text-transform:uppercase;letter-spacing:.04em}
+.xmap-rotulo-zona{font-style:italic;font-weight:500}
+.leaflet-container:not(.zoom-detalhe) .xmap-rotulo{display:none}
+
 /* ── Posição dos controles sobre o mapa ────────────────────────────────
    Três sobreposições reais, corrigidas aqui (a folha do componente,
    mapa/xmap.css, continua fora de escopo — D-01 da Fase 6):
@@ -101,9 +126,20 @@ html,body{height:100%}
       botão ☰ Módulos em tela estreita. Desceu para o canto inferior
       esquerdo, que ficou livre com a saída dos chips de módulo ativo. */
 .map-area:has(#editor-painel.aberto) .xmap-filters{right:calc(min(300px,90vw) + 10px)}
-/* Com muitas camadas registradas o painel crescia até o rodapé e cobria o
-   mapa inteiro em tela baixa. Passa a rolar dentro de si. */
-.xmap-filters{max-height:calc(100% - 84px);overflow-y:auto}
+/* Painel de camadas: compacto, recolhível e abaixo do próprio cabeçalho
+   (#btn-camadas). Com 10 camadas registradas ele ocupava um quarto da tela
+   e ficava aberto sempre; agora nasce recolhido e o botão diz quantas são.
+   O título "Layers" do componente é escondido porque #btn-camadas o
+   substitui em português — mapa/xmap.js segue intocado. */
+.xmap-filters{top:46px;max-height:calc(100% - 120px);overflow-y:auto;min-width:0;padding:4px 6px}
+.xmap-filters .xmap-filters-title{display:none}
+.map-area.camadas-recolhidas .xmap-filters{display:none}
+#btn-camadas{position:absolute;right:10px;top:10px;z-index:1001;display:flex;align-items:center;gap:6px;padding:7px 11px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:12px;font-weight:600;font-family:var(--ff);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:.15s}
+#btn-camadas:hover{color:var(--text);border-color:var(--accent)}
+#btn-camadas[aria-expanded="true"]{color:var(--text);border-color:var(--accent)}
+/* O painel do editor encosta à direita — o cabeçalho das camadas recua
+   junto com o painel dele, pelo mesmo motivo. */
+.map-area:has(#editor-painel.aberto) #btn-camadas{right:calc(min(300px,90vw) + 10px)}
 .xmap-toolbar{top:auto;bottom:12px;left:10px;transform:none}
 /* Os chips de módulo ativo repetem, em maiúsculas e sem tradução, o que a
    barra lateral já mostra marcado — e disputavam o canto com a barra de
@@ -120,94 +156,121 @@ html,body{height:100%}
 
 <div id="app">
   <div class="body-layout">
+    <!-- Barra lateral em seções colapsáveis (<details>): sete blocos abertos
+         ao mesmo tempo davam uma parede de texto onde nada se achava. Só
+         "Módulos" e "Edição" nascem abertas — as demais têm contador no
+         cabeçalho, escrito por mapa/app.js, então é possível ver o tamanho
+         de cada lista sem abrir nenhuma. Elemento nativo de propósito: abre
+         e fecha, guarda estado e é acessível por teclado sem uma linha de
+         JavaScript. -->
     <div class="sidebar" id="barra-modulos" aria-hidden="true">
-      <div class="sidebar-title">Módulos</div>
-      <!-- Prédios: contorno de cmasm_locais (migração 37). Primeiro da
-           lista porque é o fundo sobre o qual os outros são lidos. -->
-      <button class="mod-btn" data-mod="predios" onclick="alternarModulo('predios', this)">
-        <span>Prédios — contorno das edificações</span>
-      </button>
-      <button class="mod-btn" data-mod="aguada" onclick="alternarModulo('aguada', this)">
-        <span>Aguada — monitoramento hídrico</span>
-        <span class="mod-badge-demo" title="Sistema externo autônomo (FastAPI + SQLite, alimentado por MQTT) — sem tabela no projeto pmoc; integração real entra na Phase 11 (decisão travada D-01)">demo</span>
-      </button>
-      <button class="mod-btn" data-mod="grama" onclick="alternarModulo('grama', this)">
-        <span>Grama — controle vegetal</span>
-      </button>
-      <button class="mod-btn" data-mod="eletrica" onclick="alternarModulo('eletrica', this)">
-        <span>Elétrica — sistema elétrico</span>
-      </button>
-      <button class="mod-btn" data-mod="transportes" onclick="alternarModulo('transportes', this)">
-        <span>Transportes — viaturas e embarcações</span>
-      </button>
-      <button class="mod-btn" data-mod="fonoclama" onclick="alternarModulo('fonoclama', this)">
-        <span>Fonoclama — sonorização 70V</span>
-      </button>
-      <!-- Chave de módulo `climatizacao` de propósito: o mapa lê a TABELA
-           `equipamentos`, não o app de Refrigeração, que está congelado
-           (PLAT-15) e cujo caminho não pode ser citado neste arquivo — o
-           gate de tests/mobile-375.test.js afirma isso. Coerente com o
-           resto: não há rota em MODULOS (mapa-geometria.js) para esta
-           chave, então o balão sai sem link de ficha, que é exatamente o
-           que a decisão protege. -->
-      <button class="mod-btn" data-mod="climatizacao" onclick="alternarModulo('climatizacao', this)">
-        <span>Climatização — ar-condicionado</span>
-      </button>
+      <details class="sb-sec" open>
+        <summary class="sidebar-title">Módulos</summary>
+        <!-- Prédios: contorno de cmasm_locais (migração 37). Primeiro da
+             lista porque é o fundo sobre o qual os outros são lidos. -->
+        <button class="mod-btn" data-mod="predios" onclick="alternarModulo('predios', this)">
+          <span>Prédios — contorno das edificações</span>
+        </button>
+        <button class="mod-btn" data-mod="aguada" onclick="alternarModulo('aguada', this)">
+          <span>Aguada — monitoramento hídrico</span>
+          <span class="mod-badge-demo" title="Sistema externo autônomo (FastAPI + SQLite, alimentado por MQTT) — sem tabela no projeto pmoc; integração real entra na Phase 11 (decisão travada D-01)">demo</span>
+        </button>
+        <button class="mod-btn" data-mod="grama" onclick="alternarModulo('grama', this)">
+          <span>Grama — controle vegetal</span>
+        </button>
+        <button class="mod-btn" data-mod="eletrica" onclick="alternarModulo('eletrica', this)">
+          <span>Elétrica — sistema elétrico</span>
+        </button>
+        <button class="mod-btn" data-mod="transportes" onclick="alternarModulo('transportes', this)">
+          <span>Transportes — viaturas e embarcações</span>
+        </button>
+        <button class="mod-btn" data-mod="fonoclama" onclick="alternarModulo('fonoclama', this)">
+          <span>Fonoclama — sonorização 70V</span>
+        </button>
+        <!-- Chave de módulo `climatizacao` de propósito: o mapa lê a TABELA
+             `equipamentos`, não o app de Refrigeração, que está congelado
+             (PLAT-15) e cujo caminho não pode ser citado neste arquivo — o
+             gate de tests/mobile-375.test.js afirma isso. Coerente com o
+             resto: não há rota em MODULOS (mapa-geometria.js) para esta
+             chave, então o balão sai sem link de ficha, que é exatamente o
+             que a decisão protege. -->
+        <button class="mod-btn" data-mod="climatizacao" onclick="alternarModulo('climatizacao', this)">
+          <span>Climatização — ar-condicionado</span>
+        </button>
+      </details>
 
       <!-- Modos de edição — preenchido em tempo de execução por
            mapa/mapa-editor.js, e só para quem tem cargo de escrita. Os dois
            botões eram controles Leaflet em 'topright', onde ficavam
-           debaixo do painel "Layers" (.xmap-filters). Seção vazia não
-           aparece: sem botão, o título fica sozinho, então ele também é
-           escrito pelo editor. -->
-      <div id="edicao-titulo" class="sidebar-title" hidden>Edição</div>
-      <div id="edicao-controles"></div>
+           debaixo do painel de camadas. -->
+      <details class="sb-sec" id="edicao-secao" open hidden>
+        <summary class="sidebar-title" id="edicao-titulo">Edição</summary>
+        <div id="edicao-controles"></div>
+      </details>
 
       <!-- Busca de ativo — lê de mapa-dados.js#POSICIONADOS, a contraparte
            de NAO_LOCALIZADOS, e voa até o ponto. Não procura dentro das
            camadas do Leaflet de propósito: isso amarraria a busca ao
            componente travado (mapa/xmap.js). -->
-      <div class="sidebar-title">Buscar ativo</div>
-      <input id="busca-ativo" class="lat-input" type="search" autocomplete="off"
-             placeholder="código, nome ou identificação" aria-label="Buscar ativo posicionado"/>
-      <div id="busca-resultados"></div>
+      <details class="sb-sec">
+        <summary class="sidebar-title">Buscar ativo</summary>
+        <input id="busca-ativo" class="lat-input" type="search" autocomplete="off"
+               placeholder="código, nome ou identificação" aria-label="Buscar ativo posicionado"/>
+        <div id="busca-resultados"></div>
+      </details>
 
       <!-- Painel de não localizados (plano 10-07, PLAT-20) — desenhado em
            tempo de execução por mapa/app.js#renderNaoLocalizados a partir
-           de mapa/mapa-dados.js#NAO_LOCALIZADOS. Título de seção no mesmo
-           estilo do título "Módulos" acima (.sidebar-title). -->
-      <div class="sidebar-title" id="nao-localizados-titulo">Não localizados</div>
-      <div id="nao-localizados"></div>
+           de mapa/mapa-dados.js#NAO_LOCALIZADOS. -->
+      <details class="sb-sec">
+        <summary class="sidebar-title" id="nao-localizados-titulo">Não localizados</summary>
+        <div id="nao-localizados"></div>
+      </details>
 
       <!-- Prédios sem posição — a outra camada da posição. Posicionar um
-           prédio acende de uma vez todos os ativos ligados a ele por
-           local_id; a lista vem ordenada por quantos ativos cada um
-           acenderia. Campo de busca porque são centenas de locais. -->
-      <div class="sidebar-title" id="locais-sem-posicao-titulo">Prédios sem posição</div>
-      <input id="busca-local" class="lat-input" type="search" autocomplete="off"
-             placeholder="filtrar prédio" aria-label="Filtrar prédios sem posição"/>
-      <!-- Sala não aparece na lista de propósito (TIPOS_QUE_HERDAM_POSICAO,
-           mapa/mapa-geometria.js): 175 dos 190 ativos apontam para uma
-           sala, e posicionar sala a sala seriam 132 atos de campo para
-           acender o que 30 prédios acendem. -->
-      <div class="nl-nota">Sala não entra na lista: herda a posição do prédio.</div>
-      <div id="locais-sem-posicao"></div>
+           prédio acende de uma vez todos os ativos ligados a ele, inclusive
+           os que apontam para uma sala dele; a lista vem ordenada por
+           quantos ativos cada um acenderia. -->
+      <details class="sb-sec">
+        <summary class="sidebar-title" id="locais-sem-posicao-titulo">Prédios sem posição</summary>
+        <input id="busca-local" class="lat-input" type="search" autocomplete="off"
+               placeholder="filtrar prédio" aria-label="Filtrar prédios sem posição"/>
+        <!-- Sala não aparece na lista de propósito (TIPOS_QUE_HERDAM_POSICAO,
+             mapa/mapa-geometria.js): 175 dos 190 ativos apontam para uma
+             sala, e posicionar sala a sala seriam 132 atos de campo para
+             acender o que 30 prédios acendem. -->
+        <div class="nl-nota">Sala não entra na lista: herda a posição do prédio.</div>
+        <div id="locais-sem-posicao"></div>
+      </details>
 
       <!-- Zonas de maq_areas sem contorno desenhado. Sem esta lista elas
            são inalcançáveis: carregarZonasEditaveis pula quem tem menos de
            três vértices, e desenhar por cima criaria uma zona nova. -->
-      <div class="sidebar-title" id="zonas-sem-contorno-titulo">Zonas sem contorno</div>
-      <div id="zonas-sem-contorno"></div>
+      <details class="sb-sec">
+        <summary class="sidebar-title" id="zonas-sem-contorno-titulo">Zonas sem contorno</summary>
+        <div id="zonas-sem-contorno"></div>
+      </details>
 
       <!-- Legenda desenhada a partir de ESTADOS (mapa/mapa-geometria.js):
            a mesma lista fechada que pinta os marcadores. Cor nenhuma é
            escrita à mão nesta marcação. -->
-      <div class="sidebar-title">Legenda</div>
-      <div id="legenda-estados"></div>
+      <details class="sb-sec">
+        <summary class="sidebar-title">Legenda</summary>
+        <div id="legenda-estados"></div>
+      </details>
     </div>
     <div class="map-area">
       <button id="btn-modulos" type="button" aria-expanded="false" aria-controls="barra-modulos">
         <span aria-hidden="true">☰</span><span>Módulos</span>
+      </button>
+      <!-- Cabeçalho do painel de camadas, do lado de fora dele: o painel é
+           redesenhado inteiro por mapa/xmap.js a cada clique num toggle, e
+           um botão colocado dentro seria apagado no primeiro uso. Este
+           também substitui o título "Layers" do componente, escondido por
+           CSS — é a única forma de ter o rótulo em português sem editar o
+           arquivo travado. -->
+      <button id="btn-camadas" type="button" aria-expanded="false" aria-controls="mapa">
+        <span aria-hidden="true">▤</span><span id="btn-camadas-texto">Camadas</span>
       </button>
       <div id="mapa"></div>
       <div id="editor-painel"></div>

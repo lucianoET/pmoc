@@ -294,6 +294,32 @@ export function localPosicionavel(localId, locais) {
   return localAscendente(localId, locais, (l) => !herdaPosicao(l?.tipo))
 }
 
+// ── Bloco 5c — agrupamento de ativos no mesmo ponto ────────────────────
+// Medido na tela com dado real: 195 marcadores em 51 pontos distintos, a
+// maior pilha com 24 ícones exatamente no mesmo pixel. Não é acaso nem
+// "estão perto" — é consequência direta da herança: todo ativo de um
+// prédio recebe a coordenada DAQUELE prédio, então N ativos no F21 são N
+// marcadores idênticos sobre o mesmo ponto. Desenhá-los um a um produz um
+// borrão preto onde deveria haver informação, e desligar uma camada não
+// muda nada visível.
+//
+// Agrupa por coordenada exata (chave de texto com 6 casas, ~11 cm — mais
+// fino que qualquer coisa que a tela distinga), preservando a ordem de
+// chegada dentro do grupo. Nenhuma biblioteca de cluster entra: cluster
+// por proximidade resolveria um problema que não é o nosso e ainda mudaria
+// a posição desenhada, o que num mapa de manutenção é pior que empilhar.
+export function agruparPorPonto(ativos) {
+  const porChave = new Map()
+  for (const ativo of ativos || []) {
+    if (ativo?.lat == null || ativo?.lon == null) continue
+    const chave = `${Number(ativo.lat).toFixed(6)},${Number(ativo.lon).toFixed(6)}`
+    const grupo = porChave.get(chave)
+    if (grupo) grupo.ativos.push(ativo)
+    else porChave.set(chave, { lat: ativo.lat, lon: ativo.lon, ativos: [ativo] })
+  }
+  return [...porChave.values()]
+}
+
 // ── Bloco 6 — resolução de posição em duas camadas ─────────────────────
 // A posição do local (cmasm_locais.lat/lon) é do prédio inteiro,
 // compartilhada por todos os ativos ligados a ele — inclusive os ligados a

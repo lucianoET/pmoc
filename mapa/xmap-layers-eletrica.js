@@ -16,6 +16,7 @@
 
 import { carregarAtivosEletricos, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
 import { linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
+import { desenharAtivosAgrupados } from './xmap-marcadores.js'
 
 // Os mesmos quatro tipos de eletrica/app.js:8-13, duplicados aqui de
 // propósito: importar eletrica/app.js executaria o boot inteiro daquele
@@ -86,29 +87,34 @@ function makeIcon(svg, size, anchor) {
 
 /* ── Renderiza os ativos de um tipo, já posicionados (mapa-dados.js
    resolveu lat/lon e a origem da posição). ── */
+function balaoEletrico(a, tipo, info) {
+  const rows = [
+    ['Estado',  rotuloDoEstado(a.estado),                        classeDoEstado(a.estado)],
+    ['Uso',     (a.uso_atual || 0) + ' ' + (a.unidade_uso || 'h')],
+    ['Posição', a.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${a.localPosicao || 'local'}`, 'info'],
+  ];
+  // O link nunca é concatenado — sai só de linkDoModulo, que valida
+  // módulo por lista fechada e identificador por forma (T-10-22). Se a
+  // função devolver nulo, a linha simplesmente não aparece.
+  const link = linkDoModulo('eletrica', a.id);
+  if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info']);
+  return xMap.utils.popupHTML(info.emoji, a.nome, info.nome, rows);
+}
+
+/* ── Renderiza os ativos de um tipo, já posicionados (mapa-dados.js
+   resolveu lat/lon e a origem da posição), agrupando os que caíram no
+   mesmo ponto — o desenho é o compartilhado (mapa/xmap-marcadores.js),
+   só o ícone de um ativo e o balão dele são desta camada. ── */
 function renderAtivosEletricos(group, ativos, tipo) {
   const info = TIPOS_ELETRICOS[tipo];
-  ativos.forEach(a => {
-    const icon = makeIcon(iconePorTipo(tipo, a.estado), tipo === 'GERADOR' ? [34, 34] : [26, 26], tipo === 'GERADOR' ? [17, 17] : [13, 13]);
-    const marker = L.marker([a.lat, a.lon], { icon });
-
-    const rows = [
-      ['Estado',  rotuloDoEstado(a.estado),                        classeDoEstado(a.estado)],
-      ['Uso',     (a.uso_atual || 0) + ' ' + (a.unidade_uso || 'h')],
-      ['Posição', a.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${a.localPosicao || 'local'}`, 'info'],
-    ];
-
-    // O link nunca é concatenado — sai só de linkDoModulo, que valida
-    // módulo por lista fechada e identificador por forma (T-10-22). Se a
-    // função devolver nulo, a linha simplesmente não aparece.
-    const link = linkDoModulo('eletrica', a.id);
-    if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info']);
-
-    marker.bindPopup(
-      xMap.utils.popupHTML(info.emoji, a.nome, info.nome, rows),
-      { maxWidth: 220 }
-    );
-    group.addLayer(marker);
+  desenharAtivosAgrupados(group, ativos, {
+    modulo: 'eletrica',
+    emoji: info.emoji,
+    nome: info.nome,
+    ladoDeUm: tipo === 'GERADOR' ? 34 : 26,
+    svgDeUm: (a) => iconePorTipo(tipo, a.estado),
+    popupDeUm: (a) => balaoEletrico(a, tipo, info),
+    rotuloDeUm: (a) => a.nome,
   });
 }
 
