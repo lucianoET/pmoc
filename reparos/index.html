@@ -57,9 +57,9 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <table class="tbl">
           <thead><tr>
             <th>Código</th><th>Modelo</th><th>Sistema</th><th>Sintoma</th><th>Causa provável</th>
-            <th>Gravidade</th><th>Confirmado</th><th>Peças / serviços</th>
+            <th>Gravidade</th><th>Confirmado</th><th>Peças / serviços</th><th></th>
           </tr></thead>
-          <tbody id="tb-reparos"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <tbody id="tb-reparos"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -74,9 +74,9 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Código</th><th>Nome</th><th>Especialidade</th><th>Tempo padrão</th><th>Valor/hora</th><th>Usado em</th>
+            <th>Código</th><th>Nome</th><th>Especialidade</th><th>Tempo padrão</th><th>Valor/hora</th><th>Usado em</th><th></th>
           </tr></thead>
-          <tbody id="tb-servicos"><tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <tbody id="tb-servicos"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -91,9 +91,9 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
-            <th>Código</th><th>Fabricante</th><th>Modelo</th><th>Categoria</th><th>Motor</th><th>Máquinas</th><th>Reparos</th>
+            <th>Código</th><th>Fabricante</th><th>Modelo</th><th>Categoria</th><th>Motor</th><th>Máquinas</th><th>Reparos</th><th></th>
           </tr></thead>
-          <tbody id="tb-modelos"><tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
+          <tbody id="tb-modelos"><tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -134,7 +134,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 <div class="overlay" id="modal-servico">
   <div class="modal">
     <div class="modal-hd">
-      <h3>Novo serviço</h3>
+      <h3 id="modal-servico-titulo">Novo serviço</h3>
       <button class="btn btn-s btn-sm" onclick="fecharModal('modal-servico')">✕</button>
     </div>
     <div class="modal-body">
@@ -159,7 +159,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 <div class="overlay" id="modal-modelo">
   <div class="modal">
     <div class="modal-hd">
-      <h3>Novo modelo</h3>
+      <h3 id="modal-modelo-titulo">Novo modelo</h3>
       <button class="btn btn-s btn-sm" onclick="fecharModal('modal-modelo')">✕</button>
     </div>
     <div class="modal-body">

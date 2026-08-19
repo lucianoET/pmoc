@@ -17,6 +17,14 @@ let MATERIAIS = [], ATIVOS = []
 let USUARIO = null
 let VINCULO_REPARO_ID = null
 
+// id do registro em edição de cada um dos três modais de cadastro (D1,
+// quick-260818-vtm) — nulo é "criando", preenchido é "editando". Cada
+// abridor de modal atribui a partir do argumento recebido; fecharModal()
+// zera, para que a próxima abertura pelo botão de criar não caia em update.
+let REPARO_EDIT_ID = null
+let SERVICO_EDIT_ID = null
+let MODELO_EDIT_ID = null
+
 const SISTEMAS = ['motor','combustivel','transmissao','corte','eletrico','hidraulico','estrutura']
 const ESPECIALIDADES = ['mecanica','eletrica','solda','usinagem','pintura','hidraulica']
 
@@ -227,7 +235,7 @@ function renderDiagnostico(){
 function renderReparos(){
   const tbody = document.getElementById('tb-reparos')
   if(!REPAROS.length){
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhum reparo cadastrado</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Nenhum reparo cadastrado</td></tr>'
     return
   }
   const badgeGrav = { alta:'b-red', media:'b-warn', baixa:'b-ok' }
@@ -243,6 +251,9 @@ function renderReparos(){
       <td><span class="badge ${badgeGrav[r.gravidade] || 'b-blue'}">${esc(r.gravidade)}</span></td>
       <td>${r.frequencia}×</td>
       <td>${pecas.length} / ${servs.length}</td>
+      <td>${podeConhecimento()
+        ? `<button class="btn btn-s btn-sm" onclick="event.stopPropagation();abrirModalReparo(${r.id})" title="Editar cadastro do reparo" aria-label="Editar cadastro do reparo">⚙</button>`
+        : ''}</td>
     </tr>`
   }).join('')
 }
@@ -250,7 +261,7 @@ function renderReparos(){
 function renderServicos(){
   const tbody = document.getElementById('tb-servicos')
   if(!SERVICOS.length){
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhum serviço cadastrado</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum serviço cadastrado</td></tr>'
     return
   }
   tbody.innerHTML = SERVICOS.map(s => {
@@ -262,6 +273,9 @@ function renderServicos(){
       <td>${s.tempo_padrao_h ? fH(s.tempo_padrao_h) : '—'}</td>
       <td>${s.valor_hora ? fR(s.valor_hora) : '—'}</td>
       <td>${usos} reparo(s)</td>
+      <td>${podeCatalogo()
+        ? `<button class="btn btn-s btn-sm" onclick="abrirModalServico(${s.id})" title="Editar cadastro do serviço" aria-label="Editar cadastro do serviço">⚙</button>`
+        : ''}</td>
     </tr>`
   }).join('')
 }
@@ -269,7 +283,7 @@ function renderServicos(){
 function renderModelos(){
   const tbody = document.getElementById('tb-modelos')
   if(!MODELOS.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text3)">Nenhum modelo cadastrado</td></tr>'
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text3)">Nenhum modelo cadastrado</td></tr>'
     return
   }
   tbody.innerHTML = MODELOS.map(m => `<tr>
@@ -280,88 +294,132 @@ function renderModelos(){
     <td>${esc(m.motor || '—')}</td>
     <td>${ATIVOS.filter(a => a.modelo_id === m.id).length}</td>
     <td>${REPAROS.filter(r => r.modelo_id === m.id).length}</td>
+    <td>${podeCatalogo()
+      ? `<button class="btn btn-s btn-sm" onclick="abrirModalModelo(${m.id})" title="Editar cadastro do modelo" aria-label="Editar cadastro do modelo">⚙</button>`
+      : ''}</td>
   </tr>`).join('')
 }
 
 // ── MODAL REPARO ──
-function abrirModalReparo(){
-  document.getElementById('rp-codigo').value = ''
-  document.getElementById('rp-sintoma').value = ''
-  document.getElementById('rp-causa').value = ''
-  document.getElementById('rp-proc').value = ''
-  document.getElementById('rp-gravidade').value = 'media'
+// id opcional (D1): com id, preenche os campos e o título de edição; sem
+// id, limpa tudo e mostra o título de criação — o mesmo modal serve os dois
+// casos, como já servia abrirModalMaterial() em maquinas/app.js.
+function abrirModalReparo(id){
+  REPARO_EDIT_ID = id || null
+  const r = REPARO_EDIT_ID ? REPAROS.find(x => x.id === REPARO_EDIT_ID) : null
+
+  document.getElementById('modal-reparo-titulo').textContent = r ? 'Editar reparo' : 'Novo reparo'
+  document.getElementById('rp-codigo').value = r?.codigo || ''
+  document.getElementById('rp-sintoma').value = r?.sintoma || ''
+  document.getElementById('rp-causa').value = r?.causa_provavel || ''
+  document.getElementById('rp-proc').value = r?.procedimento || ''
+  document.getElementById('rp-gravidade').value = r?.gravidade || 'media'
   document.getElementById('rp-modelo').innerHTML = '<option value="">— qualquer modelo —</option>' +
-    MODELOS.map(m => `<option value="${m.id}">${esc(m.fabricante)} ${esc(m.modelo)}</option>`).join('')
+    MODELOS.map(m => `<option value="${m.id}" ${m.id===r?.modelo_id?'selected':''}>${esc(m.fabricante)} ${esc(m.modelo)}</option>`).join('')
   document.getElementById('rp-sistema').innerHTML =
-    SISTEMAS.map(s => `<option value="${s}">${s}</option>`).join('')
+    SISTEMAS.map(s => `<option value="${s}" ${s===r?.sistema?'selected':''}>${s}</option>`).join('')
   document.getElementById('modal-reparo').classList.add('open')
 }
 
 async function salvarReparo(){
+  // guarda de cargo (D1): a mesma que já esconde o botão "+ Reparo" em
+  // aplicarPermissoes(), agora também no salvar — espelha a RLS real da
+  // migração 26 (T-vtm-01), não afrouxa nem troca por um helper comum
+  if(!podeConhecimento()){ alert('Seu cargo não altera o cadastro de reparos.'); return }
+
   const codigo = document.getElementById('rp-codigo').value.trim()
   const sintoma = document.getElementById('rp-sintoma').value.trim()
   const causa = document.getElementById('rp-causa').value.trim()
   if(!codigo || !sintoma || !causa){ alert('Preencha código, sintoma e causa provável.'); return }
 
-  const { error } = await supa.from('rep_reparos').insert({
+  const campos = {
     codigo,
     modelo_id: parseInt(document.getElementById('rp-modelo').value) || null,
     sistema: document.getElementById('rp-sistema').value,
     sintoma, causa_provavel: causa,
     gravidade: document.getElementById('rp-gravidade').value,
     procedimento: document.getElementById('rp-proc').value.trim() || null,
-  })
+  }
+  const { error } = REPARO_EDIT_ID
+    ? await supa.from('rep_reparos').update(campos).eq('id', REPARO_EDIT_ID)
+    : await supa.from('rep_reparos').insert(campos)
   if(error){ alert('Erro: ' + error.message); return }
   fecharModal('modal-reparo')
   await carregarTudo()
 }
 
 // ── MODAL SERVIÇO ──
-function abrirModalServico(){
-  document.getElementById('sv-codigo').value = ''
-  document.getElementById('sv-nome').value = ''
-  document.getElementById('sv-tempo').value = '0.5'
-  document.getElementById('sv-valor').value = ''
+// id opcional (D1): mesmo padrão de abrirModalReparo().
+function abrirModalServico(id){
+  SERVICO_EDIT_ID = id || null
+  const s = SERVICO_EDIT_ID ? SERVICOS.find(x => x.id === SERVICO_EDIT_ID) : null
+
+  document.getElementById('modal-servico-titulo').textContent = s ? 'Editar serviço' : 'Novo serviço'
+  document.getElementById('sv-codigo').value = s?.codigo || ''
+  document.getElementById('sv-nome').value = s?.nome || ''
+  document.getElementById('sv-tempo').value = s?.tempo_padrao_h ?? '0.5'
+  document.getElementById('sv-valor').value = s?.valor_hora ?? ''
   document.getElementById('sv-esp').innerHTML = '<option value="">—</option>' +
-    ESPECIALIDADES.map(e => `<option value="${e}">${e}</option>`).join('')
+    ESPECIALIDADES.map(e => `<option value="${e}" ${e===s?.especialidade?'selected':''}>${e}</option>`).join('')
   document.getElementById('modal-servico').classList.add('open')
 }
 
 async function salvarServico(){
+  // guarda de cargo (D1): a mesma que já esconde o botão "+ Serviço" em
+  // aplicarPermissoes() — espelha a RLS real da migração 26 (T-vtm-01)
+  if(!podeCatalogo()){ alert('Seu cargo não altera o cadastro de serviços.'); return }
+
   const codigo = document.getElementById('sv-codigo').value.trim()
   const nome = document.getElementById('sv-nome').value.trim()
   if(!codigo || !nome){ alert('Preencha código e nome.'); return }
 
-  const { error } = await supa.from('rep_servicos').insert({
+  const campos = {
     codigo, nome,
     especialidade: document.getElementById('sv-esp').value || null,
     tempo_padrao_h: parseFloat(document.getElementById('sv-tempo').value) || null,
     valor_hora: parseFloat(document.getElementById('sv-valor').value) || null,
-  })
+  }
+  const { error } = SERVICO_EDIT_ID
+    ? await supa.from('rep_servicos').update(campos).eq('id', SERVICO_EDIT_ID)
+    : await supa.from('rep_servicos').insert(campos)
   if(error){ alert('Erro: ' + error.message); return }
   fecharModal('modal-servico')
   await carregarTudo()
 }
 
 // ── MODAL MODELO ──
-function abrirModalModelo(){
-  for(const id of ['md-codigo','md-cat','md-fab','md-mod','md-motor']){
-    document.getElementById(id).value = ''
-  }
+// id opcional (D1): mesmo padrão de abrirModalReparo().
+function abrirModalModelo(id){
+  MODELO_EDIT_ID = id || null
+  const m = MODELO_EDIT_ID ? MODELOS.find(x => x.id === MODELO_EDIT_ID) : null
+
+  document.getElementById('modal-modelo-titulo').textContent = m ? 'Editar modelo' : 'Novo modelo'
+  document.getElementById('md-codigo').value = m?.codigo || ''
+  document.getElementById('md-cat').value = m?.categoria || ''
+  document.getElementById('md-fab').value = m?.fabricante || ''
+  document.getElementById('md-mod').value = m?.modelo || ''
+  document.getElementById('md-motor').value = m?.motor || ''
   document.getElementById('modal-modelo').classList.add('open')
 }
 
 async function salvarModelo(){
+  // guarda de cargo (D1): a mesma que já esconde o botão "+ Modelo" em
+  // aplicarPermissoes() — espelha a RLS real da migração 26 (T-vtm-01)
+  if(!podeCatalogo()){ alert('Seu cargo não altera o cadastro de modelos.'); return }
+
   const fabricante = document.getElementById('md-fab').value.trim()
   const modelo = document.getElementById('md-mod').value.trim()
   if(!fabricante || !modelo){ alert('Preencha fabricante e modelo.'); return }
 
-  const { error } = await supa.from('rep_modelos').insert({
+  const campos = {
     codigo: document.getElementById('md-codigo').value.trim() || null,
     fabricante, modelo,
     categoria: document.getElementById('md-cat').value.trim() || null,
     motor: document.getElementById('md-motor').value.trim() || null,
-  })
+  }
+  const { error } = MODELO_EDIT_ID
+    ? await supa.from('rep_modelos').update(campos).eq('id', MODELO_EDIT_ID)
+    : await supa.from('rep_modelos').insert(campos)
   if(error){ alert('Erro: ' + error.message); return }
   fecharModal('modal-modelo')
   await carregarTudo()
@@ -432,7 +490,14 @@ async function removerVinculo(tabela, id){
   renderVinculosAtuais()
 }
 
-function fecharModal(id){ document.getElementById(id).classList.remove('open') }
+// zera o id de edição do modal fechado (D1) — a próxima abertura pelo botão
+// de criar não pode cair no ramo de update de um registro antigo
+function fecharModal(id){
+  document.getElementById(id).classList.remove('open')
+  if(id === 'modal-reparo') REPARO_EDIT_ID = null
+  if(id === 'modal-servico') SERVICO_EDIT_ID = null
+  if(id === 'modal-modelo') MODELO_EDIT_ID = null
+}
 
 function fecharAoClicarFora(){
   document.querySelectorAll('.overlay').forEach(ov => {
