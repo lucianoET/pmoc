@@ -2,6 +2,13 @@ import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
 import { COLUNAS_ESTOQUE, proximaOrdem, aplicarOrdemEFiltro } from './estoque-tabela.js'
+import {
+  COLUNAS_AREAS,
+  rotuloDoTipo,
+  temContorno,
+  formatarArea,
+  aplicarOrdemEFiltro as aplicarOrdemEFiltroAreas,
+} from './areas-tabela.js'
 
 // ── CONFIG: shared/supabase-config.js descobre a configuração dos outros
 // cinco módulos lendo este arquivo por expressão regular — as duas
@@ -44,6 +51,13 @@ let MATERIAL_EDIT_ID = null
 let MAT_ORD = { coluna: null, dir: null }
 let MAT_FILTROS = {}
 let MAT_FILTROS_ABERTO = false
+// Mesmo trio para a tabela de áreas de serviço (aba Operações), mais o id
+// da área em edição. Ordem e filtro são estado de TELA: nenhuma consulta
+// nova, nenhum carregarTudo().
+let AREA_ORD = { coluna: null, dir: null }
+let AREA_FILTROS = {}
+let AREA_FILTROS_ABERTO = false
+let AREA_EDIT_ID = null
 // máquina aberta na ficha e comentários por máquina (migração 32)
 let FICHA_ATIVO_ID = null
 let COMENTARIOS = []
@@ -735,11 +749,20 @@ function podeEditarOperacoes(){
   return ['admin','gestor','tecnico','executor'].includes(USUARIO?.role)
 }
 
+// Espelha 1:1 a policy de escrita de maq_areas (supabase/12_maquinas_areas_
+// operacoes.sql: role in ('admin','gestor')). Diferente do gate do cadastro
+// de material, este NÃO é só de tela — o banco recusa técnico e observador
+// de qualquer forma. É a mesma lista que mapa/mapa-editor.js#CARGOS_ZONA
+// usa para liberar o desenho da zona, pela mesma razão: a tabela é a mesma.
+function podeEditarAreas(){
+  return ['admin','gestor'].includes(USUARIO?.role)
+}
+
 function aplicarPermissoesOperacoes(){
   const btnOperacao = document.getElementById('btn-nova-operacao')
   const btnArea = document.getElementById('btn-nova-area')
   if(btnOperacao) btnOperacao.style.display = podeEditarOperacoes() ? '' : 'none'
-  if(btnArea) btnArea.style.display = ['admin','gestor'].includes(USUARIO?.role) ? '' : 'none'
+  if(btnArea) btnArea.style.display = podeEditarAreas() ? '' : 'none'
 }
 
 function renderOperacoes(){
@@ -763,11 +786,122 @@ function renderOperacoes(){
         ${grupos[status].length ? grupos[status].map(renderCartaoOperacao).join('') : '<div class="empty" style="padding:24px 8px"><p>Nenhuma operação</p></div>'}
       </section>`).join('')
   }
-  tbody.innerHTML = AREAS.length ? AREAS.map(area => `<tr>
-    <td class="hi">${esc(area.codigo || '—')}</td><td>${esc(area.nome)}</td>
-    <td>${esc(area.tipo)}</td><td>${area.area_m2 == null ? '—' : Number(area.area_m2).toLocaleString('pt-BR')+' m²'}</td>
-    <td>${area.periodicidade_dias ? area.periodicidade_dias+' dias' : '—'}</td><td>${esc(area.localizacao || '—')}</td>
-  </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma área cadastrada</td></tr>'
+  renderAreas()
+}
+
+// ── ÁREAS DE SERVIÇO ──
+// Mesma divisão em duas partes que a tabela do Estoque usa, e pelo mesmo
+// motivo (D3 de quick-260818-twm): ordenar ou abrir a linha de filtro
+// reescreve o cabeçalho inteiro; digitar num campo de filtro redesenha só
+// o corpo — reescrever o <thead> a cada tecla mataria o foco e o cursor.
+function renderAreas(){
+  renderCabecalhoAreas()
+  renderLinhasAreas()
+}
+
+function renderCabecalhoAreas(){
+  const thead = document.getElementById('th-areas')
+  if(!thead) return
+  const linhaRotulos = '<tr>' + COLUNAS_AREAS.map(col => {
+    const dir = AREA_ORD.coluna === col.id ? AREA_ORD.dir : null
+    const ariaSort = dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none'
+    const iconeOrdem = dir === 'asc' ? '↑' : dir === 'desc' ? '↓' : '⇅'
+    const tituloOrdem = `Ordenar por ${col.rotulo}`
+    const tituloFiltro = `Filtrar por ${col.rotulo}`
+    return `<th aria-sort="${ariaSort}">
+      <span class="th-rotulo">
+        ${esc(col.rotulo)}
+        <button type="button" class="th-acao" onclick="ordenarAreas('${col.id}')" title="${tituloOrdem}" aria-label="${tituloOrdem}">${iconeOrdem}</button>
+        <button type="button" class="th-acao${AREA_FILTROS[col.id]?' ativo':''}" onclick="filtrarColunaAreas('${col.id}')" title="${tituloFiltro}" aria-label="${tituloFiltro}">⌕</button>
+      </span>
+    </th>`
+  }).join('') + '<th></th></tr>'
+
+  // A coluna de ação não tem campo de filtro — não há o que buscar num
+  // botão. O <th> vazio mantém as duas linhas alinhadas.
+  const linhaFiltros = AREA_FILTROS_ABERTO
+    ? '<tr>' + COLUNAS_AREAS.map(col => `<th>
+        <input type="search" id="filtro-area-${col.id}" value="${esc(AREA_FILTROS[col.id] || '')}"
+          oninput="aplicarFiltroArea('${col.id}', this.value)" placeholder="filtrar"/>
+      </th>`).join('') + '<th></th></tr>'
+    : ''
+
+  thead.innerHTML = linhaRotulos + linhaFiltros
+}
+
+function renderLinhasAreas(){
+  const tbody = document.getElementById('tb-areas')
+  if(!tbody) return
+  const colunas = COLUNAS_AREAS.length + 1
+
+  if(!AREAS.length){
+    tbody.innerHTML = `<tr><td colspan="${colunas}" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma área cadastrada</td></tr>`
+    atualizarContagemAreas(0, 0)
+    return
+  }
+
+  const visiveis = aplicarOrdemEFiltroAreas(AREAS, AREA_ORD, AREA_FILTROS)
+  if(!visiveis.length){
+    tbody.innerHTML = `<tr><td colspan="${colunas}" style="text-align:center;padding:24px;color:var(--text3)">Nenhuma área corresponde ao filtro</td></tr>`
+    atualizarContagemAreas(0, AREAS.length)
+    return
+  }
+
+  tbody.innerHTML = visiveis.map(area => {
+    // "mapa" ao lado da dimensão: a zona tem contorno desenhado e o número
+    // é derivado do polígono, recalculado a cada gravação no /mapa. Sem
+    // essa marca, um número que ninguém digitou parece digitável.
+    const dimensao = area.area_m2 == null
+      ? '—'
+      : `${formatarArea(area.area_m2)} m²${temContorno(area) ? ' <span class="tag-mapa" title="Dimensão calculada do contorno desenhado no mapa">mapa</span>' : ''}`
+    const acao = podeEditarAreas()
+      ? `<button class="btn btn-s btn-sm" onclick="abrirModalArea('${esc(area.id)}')" title="Editar cadastro da área" aria-label="Editar cadastro da área">⚙</button>`
+      : ''
+    return `<tr>
+      <td class="hi">${esc(area.codigo || '—')}</td><td>${esc(area.nome)}</td>
+      <td>${esc(rotuloDoTipo(area.tipo))}</td><td>${dimensao}</td>
+      <td>${area.periodicidade_dias ? area.periodicidade_dias+' dias' : '—'}</td><td>${esc(area.localizacao || '—')}</td>
+      <td class="td-acoes">${acao}</td>
+    </tr>`
+  }).join('')
+  atualizarContagemAreas(visiveis.length, AREAS.length)
+}
+
+function atualizarContagemAreas(visiveis, total){
+  const el = document.getElementById('areas-contagem')
+  if(!el) return
+  el.textContent = visiveis === total ? `${total} áreas` : `${visiveis} de ${total} áreas`
+}
+
+function ordenarAreas(coluna){
+  const dir = AREA_ORD.coluna === coluna ? proximaOrdem(AREA_ORD.dir) : 'asc'
+  AREA_ORD = dir ? { coluna, dir } : { coluna: null, dir: null }
+  renderAreas()
+}
+
+// Abrir a linha de filtro por uma coluna leva o foco para o campo daquela
+// coluna — clicar no ⌕ e ter que procurar onde digitar seria um passo a
+// mais para errar. Clicar de novo na mesma coluna fecha a linha e limpa os
+// filtros: sair do modo de filtro com filtro aplicado esconde linhas sem
+// deixar sinal na tela.
+function filtrarColunaAreas(coluna){
+  if(AREA_FILTROS_ABERTO && !AREA_FILTROS[coluna]){
+    AREA_FILTROS_ABERTO = false
+    AREA_FILTROS = {}
+    renderAreas()
+    return
+  }
+  AREA_FILTROS_ABERTO = true
+  renderAreas()
+  document.getElementById(`filtro-area-${coluna}`)?.focus()
+}
+
+function aplicarFiltroArea(coluna, valor){
+  if(valor) AREA_FILTROS[coluna] = valor
+  else delete AREA_FILTROS[coluna]
+  // Só o corpo: redesenhar o cabeçalho mataria o foco do campo que está
+  // sendo digitado.
+  renderLinhasAreas()
 }
 
 function renderCartaoOperacao(operacao){
@@ -2753,25 +2887,60 @@ async function salvarMovimento(){
   await carregarTudo()
 }
 
-function abrirModalArea(){
-  ;['area-codigo','area-nome','area-m2','area-periodicidade','area-localizacao','area-obs'].forEach(id=>document.getElementById(id).value='')
-  document.getElementById('area-tipo').value='corte'
+// Sem id, é cadastro novo; com id, o mesmo formulário reabre preenchido em
+// modo de edição. Um formulário só para as duas operações — dois
+// formulários divergiriam no primeiro campo que alguém acrescentasse.
+function abrirModalArea(id){
+  if(!podeEditarAreas()) return
+  const area = id ? AREAS.find(a => String(a.id) === String(id)) : null
+  if(id && !area){ alert('Área não encontrada — recarregue a página.'); return }
+  AREA_EDIT_ID = area ? area.id : null
+
+  document.getElementById('area-codigo').value = area?.codigo || ''
+  document.getElementById('area-nome').value = area?.nome || ''
+  document.getElementById('area-tipo').value = area?.tipo || 'corte'
+  document.getElementById('area-m2').value = area?.area_m2 ?? ''
+  document.getElementById('area-periodicidade').value = area?.periodicidade_dias ?? ''
+  document.getElementById('area-localizacao').value = area?.localizacao || ''
+  document.getElementById('area-obs').value = area?.obs || ''
+
+  // Zona com contorno desenhado tem a dimensão DERIVADA do polígono: o
+  // /mapa recalcula area_m2 a cada gravação da geometria (calcAreaM2). Um
+  // número digitado aqui sobreviveria até o próximo ajuste do contorno e
+  // então sumiria sem aviso — o campo fica travado e a tela diz por quê.
+  const campoM2 = document.getElementById('area-m2')
+  const nota = document.getElementById('area-m2-nota')
+  const derivada = temContorno(area)
+  campoM2.disabled = derivada
+  if(nota) nota.hidden = !derivada
+
+  document.getElementById('modal-area-titulo').textContent = area ? 'Editar área de serviço' : 'Nova área de serviço'
   document.getElementById('modal-area').classList.add('open')
 }
 
 async function salvarArea(){
+  if(!podeEditarAreas()) return
   const nome = document.getElementById('area-nome').value.trim()
   if(!nome){ alert('Informe o nome da área.'); return }
-  const { error } = await supa.from('maq_areas').insert({
+  const area = AREA_EDIT_ID ? AREAS.find(a => String(a.id) === String(AREA_EDIT_ID)) : null
+  const dados = {
     codigo: document.getElementById('area-codigo').value.trim().toUpperCase() || null,
     nome,
     tipo: document.getElementById('area-tipo').value,
-    area_m2: parseFloat(document.getElementById('area-m2').value) || null,
     periodicidade_dias: parseInt(document.getElementById('area-periodicidade').value) || null,
     localizacao: document.getElementById('area-localizacao').value.trim(),
     obs: document.getElementById('area-obs').value.trim(),
-  })
+  }
+  // A dimensão só entra no payload quando NÃO vem do contorno: mandar o
+  // valor do campo travado devolveria ao banco um número que o mapa
+  // recalcula, com chance de gravar o que a tela mostrava desatualizado.
+  if(!temContorno(area)) dados.area_m2 = parseFloat(document.getElementById('area-m2').value) || null
+
+  const { error } = AREA_EDIT_ID
+    ? await supa.from('maq_areas').update(dados).eq('id', AREA_EDIT_ID)
+    : await supa.from('maq_areas').insert(dados)
   if(error){ alert('Erro ao salvar área: '+error.message); return }
+  AREA_EDIT_ID = null
   fecharModal('modal-area'); await carregarTudo()
 }
 
@@ -2879,6 +3048,9 @@ function exporNoWindow(){
     limparFiltrosMateriais,
     marcarTodosVenc,
     ordenarMateriais,
+    ordenarAreas,
+    filtrarColunaAreas,
+    aplicarFiltroArea,
     receberItem,
     removerPecaOS,
     removerServicoOS,

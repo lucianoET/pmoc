@@ -27,6 +27,10 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 .th-rotulo{display:inline-flex;align-items:center;gap:4px}
 .th-acao{background:transparent;border:none;color:var(--text3);cursor:pointer;font-size:11px;padding:1px 3px;font-family:var(--ff)}
 .th-acao.ativo{color:var(--accent-texto)}
+/* Marca da dimensão derivada do contorno desenhado no /mapa: o número não
+   foi digitado, é recalculado a cada gravação da geometria. */
+.tag-mapa{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:1px 5px;border-radius:8px;background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent-texto);margin-left:6px}
+.td-acoes{text-align:right;white-space:nowrap}
 
 /* ── uso bar ── */
 .uso-bar-wrap{width:100%;background:var(--surface2);border-radius:4px;height:6px;overflow:hidden}
@@ -217,9 +221,16 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="view-sub">Programação e execução de corte, poda e limpeza por área</div>
       <div class="kpi-row" id="operacoes-kpis"></div>
       <div class="kanban" id="operacoes-kanban"></div>
-      <h3 class="section-spaced">Áreas de serviço</h3>
+      <div class="view-head">
+        <h3 class="section-spaced">Áreas de serviço</h3>
+        <span class="tagline" id="areas-contagem"></span>
+      </div>
+      <!-- Cabeçalho desenhado em tempo de execução por maquinas/app.js
+           (renderCabecalhoAreas), com ordenação e filtro por coluna vindos
+           do núcleo genérico shared/tabela.js — o mesmo da tabela do
+           Estoque e das três de /reparos. -->
       <div class="tbl-wrap"><table class="tbl">
-        <thead><tr><th>Código</th><th>Área</th><th>Tipo</th><th>Dimensão</th><th>Periodicidade</th><th>Localização</th></tr></thead>
+        <thead id="th-areas"></thead>
         <tbody id="tb-areas"></tbody>
       </table></div>
     </div>
@@ -318,7 +329,8 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       </div>
       <div class="fgrid3">
         <div class="frow"><label for="area-tipo">Tipo</label><select id="area-tipo"><option value="corte">Corte</option><option value="poda">Poda</option><option value="limpeza">Limpeza</option><option value="mista">Mista</option><option value="outro">Outro</option></select></div>
-        <div class="frow"><label for="area-m2">Área (m²)</label><input type="number" id="area-m2" min="0" step="1"/></div>
+        <div class="frow"><label for="area-m2">Área (m²)</label><input type="number" id="area-m2" min="0" step="1"/>
+          <small id="area-m2-nota" class="tagline" hidden>Calculada do contorno desenhado no mapa.</small></div>
         <div class="frow"><label for="area-periodicidade">Periodicidade (dias)</label><input type="number" id="area-periodicidade" min="1" step="1"/></div>
       </div>
       <div class="frow"><label for="area-localizacao">Localização</label><input id="area-localizacao"/></div>
