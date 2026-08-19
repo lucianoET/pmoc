@@ -78,6 +78,37 @@ export function calcAreaM2(coords) {
   return Math.abs((area * R * R) / 2)
 }
 
+// ── Bloco 2b — centroide do polígono ───────────────────────────────────
+// Centroide de ÁREA (fórmula do polígono), não média de vértices: um lado
+// com muitos vértices — a fachada detalhada de um prédio — puxaria a média
+// aritmética para cima dele e o ponto sairia de dentro da planta. Trabalha
+// em graus, sem projeção: para um edifício de dezenas de metros na
+// latitude do CMASM o erro é irrelevante e o resultado precisa voltar em
+// grau, que é o que `cmasm_locais.lat`/`lon` guardam.
+//
+// Polígono degenerado (menos de três vértices, ou área nula porque todos
+// os vértices são colineares) devolve null em vez de NaN: quem chama grava
+// coordenada, e NaN atravessaria a validação de envelope como "fora da
+// região" — mensagem errada para o problema certo.
+export function centroidePoligono(coords) {
+  if (!Array.isArray(coords) || coords.length < 3) return null
+  let areaDobro = 0
+  let lat = 0
+  let lon = 0
+  const n = coords.length
+  for (let i = 0; i < n; i++) {
+    const [lat1, lon1] = coords[i]
+    const [lat2, lon2] = coords[(i + 1) % n]
+    if (!Number.isFinite(lat1) || !Number.isFinite(lon1)) return null
+    const cruzado = lat1 * lon2 - lat2 * lon1
+    areaDobro += cruzado
+    lat += (lat1 + lat2) * cruzado
+    lon += (lon1 + lon2) * cruzado
+  }
+  if (areaDobro === 0) return null
+  return [lat / (3 * areaDobro), lon / (3 * areaDobro)]
+}
+
 // ── Bloco 3 — compatibilidade de máquinas ──────────────────────────────
 // Portada IDÊNTICA de DEV_ERP/cmms-mapa/admin.html:1009-1026, cascata de
 // condições e vocabulário de saída inalterados (cortador_grama,
