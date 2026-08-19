@@ -1427,3 +1427,29 @@ Sem migração. Medido na tela antes e depois, com os 30 prédios já posicionad
 - [ ] ☰ Módulos: as seções abrem e fecham; os cabeçalhos fechados mostram os contadores
       ("Não localizados (75)", "Prédios sem posição (66)").
 - [ ] Em 375 px: confirmar que o cabeçalho **Camadas** e o botão ☰ Módulos não se sobrepõem.
+
+---
+
+## Mapa: features portadas do cmasm-mapa-v2 (19/08/2026)
+
+Sem migração. Conferido na tela com dado real: escala "200 m", coordenada com 6 casas,
+**269 feições exportadas** (256 ativos, 8 zonas, 5 contornos de prédio) com longitude primeiro
+e anel fechado, opacidade descendo polígono e marcador sem tocar o tile.
+
+- [ ] Passar o cursor pelo mapa: a faixa no alto mostra LAT/LON com 6 casas e o zoom. Em tela
+      menor que 820 px ela não aparece (o espaço é do ☰ Módulos e do cabeçalho de camadas).
+- [ ] Conferir a escala métrica no canto inferior esquerdo, e que a barra Mapa/Satélite não
+      senta em cima dela.
+- [ ] ☰ Módulos → **Exibição** → arrastar "Opacidade das camadas": polígonos, marcadores e
+      rótulos clareiam; o mapa de fundo **não** muda.
+- [ ] **Exibição → ↓ Exportar GeoJSON**: baixa `cmasm-mapa-AAAA-MM-DD.geojson`. Abrir num
+      leitor de GeoJSON (ou QGIS) e confirmar que a base cai no lugar certo — se aparecer no
+      oceano ou na Antártida, a ordem lon/lat foi trocada.
+- [ ] ☰ Módulos → **Planta de referência** → escolher uma imagem (ou arrastá-la sobre o mapa):
+      a planta entra nos limites da tela. Mover e dar zoom no mapa e clicar **Encaixar aqui**
+      até casar com o terreno; a planta deve acompanhar o mapa ao arrastar (não ficar parada).
+- [ ] Ajustar a opacidade da planta e desenhar o contorno de um prédio por cima dela.
+- [ ] **Remover** a planta e recarregar a página: ela não volta (é andaime, não dado).
+- [ ] Como admin/gestor: usar "Desenhar" numa zona sem contorno e confirmar que a instrução
+      aparece como faixa curta no rodapé do mapa, **sem caixa de diálogo** — e que o clique
+      seguinte já cai no mapa.

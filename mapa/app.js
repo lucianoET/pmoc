@@ -9,12 +9,15 @@ import {
   CARGOS_POSICAO,
   carregarLocaisSemPosicao,
   carregarAreas,
+  carregarLocaisComGeom,
 } from './mapa-dados.js'
 import { registrarCamadasGrama } from './xmap-layers-grama.js'
 import { registrarCamadasEletrica } from './xmap-layers-eletrica.js'
 import { registrarCamadaDeAtivos } from './xmap-layers-ativos.js'
 import { registrarCamadaPredios } from './xmap-layers-predios.js'
 import { iniciarEditorZonas, iniciarEditorAtivos } from './mapa-editor.js'
+import { iniciarPlantaDeReferencia } from './mapa-planta.js'
+import { montarGeoJSON, baixarGeoJSON } from './mapa-exportar.js'
 import { ESTADOS, corDoEstado } from './mapa-geometria.js'
 import { CARGOS_ZONA } from './mapa-editor.js'
 
@@ -103,6 +106,11 @@ function inicializarMapa() {
       maxZoom: 19,
     })
     MAPA_INICIALIZADO = true
+    ligarEscala()
+    ligarCoordenadas()
+    ligarOpacidadeDasCamadas()
+    ligarExportacao()
+    iniciarPlantaDeReferencia(xMap.getLeafletMap(), mostrarAviso)
     ligarRotulosPorZoom()
     ligarBotaoCamadas()
     ligarBuscaDeAtivo()
@@ -138,13 +146,13 @@ async function registrarCamadasDoBanco() {
     // estarem registradas, sobre a mesma instância que xMap já expõe
     // (nenhuma segunda instância de mapa é criada). Sai sem efeito se o
     // cargo da sessão não estiver na lista de escrita de maq_areas.
-    iniciarEditorZonas(xMap.getLeafletMap(), USUARIO)
+    iniciarEditorZonas(xMap.getLeafletMap(), USUARIO, mostrarAviso)
     // Modo de posicionamento de ativo (plano 10-07, PLAT-20) — mesma
     // instância de mapa, cargo próprio (CARGOS_POSICAO, deliberadamente
     // diferente do editor de zona). renderNaoLocalizados é o callback que
     // o editor chama depois de gravar uma posição, para a lista da barra
     // lateral sair de sincronia o mínimo possível.
-    iniciarEditorAtivos(xMap.getLeafletMap(), USUARIO, renderNaoLocalizados)
+    iniciarEditorAtivos(xMap.getLeafletMap(), USUARIO, renderNaoLocalizados, mostrarAviso)
     // Primeiro desenho das listas: as camadas acima já rodaram
     // posicionarAtivos e povoaram NAO_LOCALIZADOS/POSICIONADOS antes deste
     // ponto.
@@ -154,6 +162,94 @@ async function registrarCamadasDoBanco() {
   } catch (error) {
     mostrarErroMapa(error)
   }
+}
+
+// ── aviso curto e não bloqueante ───────────────────────────────────────
+// Porte do toast da referência (cmasm-mapa-v2). Existe por um motivo
+// concreto: o editor usava `alert()` para INSTRUIR ("desenhe o contorno,
+// clique nos vértices"), e o alert é modal — ele engole o próximo clique,
+// que é exatamente o clique no mapa que a instrução acabou de pedir. Erro
+// continua em alert (idioma do projeto): erro precisa parar o usuário.
+const MS_AVISO = 4200
+let _tempoAviso = null
+
+function mostrarAviso(mensagem) {
+  const el = document.getElementById('mapa-toast')
+  if (!el) return
+  // textContent, não innerHTML: a mensagem carrega nome de prédio e de
+  // ativo, vindos de linha de banco.
+  el.textContent = String(mensagem ?? '')
+  el.classList.add('visivel')
+  clearTimeout(_tempoAviso)
+  _tempoAviso = setTimeout(() => el.classList.remove('visivel'), MS_AVISO)
+}
+
+// ── escala métrica e coordenada sob o cursor ───────────────────────────
+// As duas vêm da referência (ScaleControl e #coordBar). A escala não é
+// decoração num mapa cuja unidade de trabalho é metro quadrado de corte de
+// grama; e a coordenada lida ANTES do clique é a diferença entre conferir e
+// adivinhar onde o ativo vai cair.
+function ligarEscala() {
+  const mapa = xMap.getLeafletMap()
+  if (!mapa) return
+  L.control.scale({ metric: true, imperial: false, position: 'bottomleft', maxWidth: 120 }).addTo(mapa)
+}
+
+function ligarCoordenadas() {
+  const mapa = xMap.getLeafletMap()
+  const el = document.getElementById('mapa-coord')
+  if (!mapa || !el) return
+  const escrever = (latlng) => {
+    const posicao = latlng
+      ? `LAT ${latlng.lat.toFixed(6)}  LON ${latlng.lng.toFixed(6)}`
+      : 'LAT —  LON —'
+    el.textContent = `${posicao}  ·  Z ${mapa.getZoom().toFixed(1)}`
+  }
+  mapa.on('mousemove', (evento) => escrever(evento.latlng))
+  mapa.on('mouseout', () => escrever(null))
+  mapa.on('zoomend', () => escrever(null))
+  escrever(null)
+}
+
+// ── opacidade das camadas ──────────────────────────────────────────────
+// Na referência há um slider por camada; aqui é um só, global, porque o
+// painel de camadas é redesenhado inteiro por mapa/xmap.js (travado) a cada
+// toggle e apagaria controles injetados nele. Atua nos dois painéis onde o
+// dado do banco é desenhado — polígono e marcador —, nunca no tile: o
+// objetivo é ver o terreno POR BAIXO do dado.
+function ligarOpacidadeDasCamadas() {
+  const mapa = xMap.getLeafletMap()
+  const faixa = document.getElementById('opacidade-camadas')
+  if (!mapa || !faixa) return
+  const aplicar = () => {
+    const valor = Number(faixa.value) / 100
+    for (const nome of ['overlayPane', 'markerPane', 'tooltipPane']) {
+      const painel = mapa.getPane(nome)
+      if (painel) painel.style.opacity = String(valor)
+    }
+  }
+  faixa.addEventListener('input', aplicar)
+  aplicar()
+}
+
+// ── exportação ─────────────────────────────────────────────────────────
+// Porte de exportGeoJSON() da referência. A fonte é o que já está em
+// memória (POSICIONADOS) mais duas leituras pela porta única — nenhuma
+// consulta nova é escrita aqui.
+function ligarExportacao() {
+  const btn = document.getElementById('btn-exportar')
+  if (!btn) return
+  btn.addEventListener('click', async () => {
+    btn.disabled = true
+    try {
+      const [zonas, predios] = await Promise.all([carregarAreas(), carregarLocaisComGeom()])
+      const dados = montarGeoJSON({ posicionados: POSICIONADOS, zonas, predios })
+      const quantas = baixarGeoJSON(dados)
+      mostrarAviso(`GeoJSON exportado: ${quantas} feições (ativos, zonas e contornos).`)
+    } finally {
+      btn.disabled = false
+    }
+  })
 }
 
 // ── rótulos por zoom ───────────────────────────────────────────────────

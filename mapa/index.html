@@ -110,6 +110,28 @@ html,body{height:100%}
 .xmap-rotulo-zona{font-style:italic;font-weight:500}
 .leaflet-container:not(.zoom-detalhe) .xmap-rotulo{display:none}
 
+/* Rótulo e faixa de controle da barra lateral (opacidade, planta). */
+.sb-rotulo{display:block;font-size:11px;color:var(--text3);margin:2px 0 4px}
+.sb-faixa{width:100%;margin-bottom:8px;accent-color:var(--accent)}
+
+/* Coordenada sob o cursor + zoom, no alto ao centro. Some em tela estreita:
+   ali o espaço é do botão ☰ Módulos e do cabeçalho de camadas. */
+#mapa-coord{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:805;
+  padding:4px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;
+  color:var(--text3);font-size:11px;font-family:var(--ff);white-space:pre;pointer-events:none;
+  box-shadow:0 1px 4px rgba(0,0,0,.2)}
+@media (max-width:820px){#mapa-coord{display:none}}
+
+/* Aviso curto, não bloqueante. Sobe do rodapé do mapa e some sozinho. */
+#mapa-toast{position:absolute;bottom:56px;left:50%;transform:translateX(-50%) translateY(8px);
+  z-index:1002;max-width:min(520px,92vw);padding:7px 12px;background:var(--surface);
+  border:1px solid var(--accent);border-radius:6px;color:var(--text);font-size:12px;
+  font-family:var(--ff);line-height:1.4;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}
+#mapa-toast.visivel{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Arraste de planta sobre o mapa — só a moldura, sem elemento novo. */
+.leaflet-container.arrastando-planta{outline:2px dashed var(--accent);outline-offset:-6px}
+
 /* ── Posição dos controles sobre o mapa ────────────────────────────────
    Três sobreposições reais, corrigidas aqui (a folha do componente,
    mapa/xmap.css, continua fora de escopo — D-01 da Fase 6):
@@ -140,7 +162,10 @@ html,body{height:100%}
 /* O painel do editor encosta à direita — o cabeçalho das camadas recua
    junto com o painel dele, pelo mesmo motivo. */
 .map-area:has(#editor-painel.aberto) #btn-camadas{right:calc(min(300px,90vw) + 10px)}
-.xmap-toolbar{top:auto;bottom:12px;left:10px;transform:none}
+.xmap-toolbar{top:auto;bottom:38px;left:10px;transform:none}
+/* A escala métrica ocupa o canto inferior esquerdo nativo do Leaflet; a
+   barra de basemap subiu 26px para não sentar em cima dela. */
+.leaflet-control-scale{margin-bottom:10px!important}
 /* Os chips de módulo ativo repetem, em maiúsculas e sem tradução, o que a
    barra lateral já mostra marcado — e disputavam o canto com a barra de
    basemap. Fora da tela, não do componente: mapa/xmap.js segue intocado. */
@@ -251,6 +276,35 @@ html,body{height:100%}
         <div id="zonas-sem-contorno"></div>
       </details>
 
+      <!-- Planta de referência (porte do overlay do cmasm-mapa-v2, agora
+           georreferenciada: L.imageOverlay gruda no terreno em vez de ficar
+           parada no viewport). Vive só na aba — não vai para o banco. -->
+      <details class="sb-sec">
+        <summary class="sidebar-title">Planta de referência</summary>
+        <input id="planta-arquivo" class="lat-input" type="file" accept="image/*"
+               aria-label="Imagem da planta de referência"/>
+        <div class="nl-nota">Também aceita arrastar a imagem sobre o mapa. Não é gravada.</div>
+        <div id="planta-controles" hidden>
+          <label class="sb-rotulo" for="planta-opacidade">Opacidade da planta</label>
+          <input id="planta-opacidade" class="sb-faixa" type="range" min="0" max="100" value="55"/>
+          <div class="ed-actions">
+            <button type="button" class="btn btn-s" id="planta-encaixar">Encaixar aqui</button>
+            <button type="button" class="btn btn-s" id="planta-remover">Remover</button>
+          </div>
+        </div>
+      </details>
+
+      <!-- Exibição: opacidade única das camadas de dado (porte do slider por
+           camada da referência — aqui é global porque o painel de camadas é
+           redesenhado inteiro por mapa/xmap.js, arquivo travado). -->
+      <details class="sb-sec">
+        <summary class="sidebar-title">Exibição</summary>
+        <label class="sb-rotulo" for="opacidade-camadas">Opacidade das camadas</label>
+        <input id="opacidade-camadas" class="sb-faixa" type="range" min="20" max="100" value="100"/>
+        <button type="button" class="btn btn-s ed-modo" id="btn-exportar">↓ Exportar GeoJSON</button>
+        <div class="nl-nota">Exporta ativos posicionados, zonas e contornos de prédio.</div>
+      </details>
+
       <!-- Legenda desenhada a partir de ESTADOS (mapa/mapa-geometria.js):
            a mesma lista fechada que pinta os marcadores. Cor nenhuma é
            escrita à mão nesta marcação. -->
@@ -273,6 +327,15 @@ html,body{height:100%}
         <span aria-hidden="true">▤</span><span id="btn-camadas-texto">Camadas</span>
       </button>
       <div id="mapa"></div>
+      <!-- Coordenada sob o cursor e zoom (porte do #coordBar da referência):
+           num mapa onde a ação é "clique aqui para posicionar", ler a
+           coordenada ANTES de clicar é a diferença entre conferir e adivinhar.
+           No alto ao centro, faixa que o basemap desocupou. -->
+      <div id="mapa-coord" aria-live="off">LAT —  LON —</div>
+      <!-- Aviso curto e não bloqueante (porte do toast): o editor usava
+           alert() para instrução, e o alert rouba o clique seguinte, que é
+           justamente o clique no mapa que a instrução está pedindo. -->
+      <div id="mapa-toast" role="status" aria-live="polite"></div>
       <div id="editor-painel"></div>
     </div>
   </div>
