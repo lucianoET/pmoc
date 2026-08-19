@@ -5482,11 +5482,16 @@ function useStore() {
   async function carregarTudo() {
     if (!supa) { setErroCarga('SDK do Supabase não carregou.'); setCarregando(false); return; }
     const [rl, re, rp, rt, rc] = await Promise.all([
-      supa.from('cal_labs').select('*'),
-      supa.from('cal_equipamentos').select('*'),
-      supa.from('cal_ps').select('*'),
-      supa.from('cal_lotes').select('*'),
-      supa.from('cal_catalogo').select('*').order('ord')
+      // `order` em tudo, sempre. Sem ele o Postgres devolve na ordem que
+      // quiser, e um UPDATE reescreve a linha noutra posição do heap: a
+      // lista de instrumentos se reembaralhava sozinha a cada edição.
+      // Por id porque e001…e038 é justamente a ordem do cadastro, que
+      // agrupa por divisão.
+      supa.from('cal_labs').select('*').order('id'),
+      supa.from('cal_equipamentos').select('*').order('id'),
+      supa.from('cal_ps').select('*').order('id'),
+      supa.from('cal_lotes').select('*').order('id'),
+      supa.from('cal_catalogo').select('*').order('equip_tipo').order('ord')
     ]);
     const falha = [rl, re, rp, rt, rc].find(r => r.error);
     if (falha) {
