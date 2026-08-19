@@ -86,6 +86,32 @@ test('as abas de Máquinas usam nome de ícone, não emoji', () => {
   assert.doesNotMatch(bloco, GLIFOS_ANTIGOS, 'sobrou emoji na declaração das abas')
 })
 
+test('nenhum módulo declara aba com emoji, e todo nome usado existe no conjunto', async () => {
+  const { existeIcone } = await import('../shared/icones.js')
+  const arquivos = [
+    ['maquinas/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
+    ['transportes/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
+    ['predial/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
+    ['shared/modulo-manutencao.js', /navItems: \[([\s\S]*?)\n {4}\]/],
+  ]
+  for (const [relativo, expressao] of arquivos) {
+    const bloco = ler(path.join(RAIZ, relativo)).match(expressao)
+    assert.ok(bloco, `navItems não encontrada em ${relativo}`)
+    assert.doesNotMatch(bloco[1], GLIFOS_ANTIGOS, `${relativo} ainda declara aba com emoji`)
+    for (const nome of [...bloco[1].matchAll(/icone: '([^']+)'/g)].map((m) => m[1])) {
+      assert.ok(existeIcone(nome), `${relativo} usa ícone "${nome}", que não existe no conjunto`)
+    }
+  }
+  // Elétrica e Fonoclama passam o ícone da aba por configuração; o emoji
+  // continua existindo neles, mas só para a tela de login (Auth#appIcone).
+  for (const relativo of ['eletrica/app.js', 'fonoclama/app.js']) {
+    const conteudo = ler(path.join(RAIZ, relativo))
+    const achado = conteudo.match(/iconeAba: '([^']+)'/)
+    assert.ok(achado, `${relativo} deveria declarar iconeAba`)
+    assert.ok(existeIcone(achado[1]), `${relativo} declara iconeAba "${achado[1]}", que não existe`)
+  }
+})
+
 // ── 3. abas OS-Manutenção e OS-Corte ────────────────────────────────────
 test('OS virou OS-Manutenção e OS-Corte entrou logo depois, com view própria', () => {
   const app = ler(APP_MAQ)

@@ -44,6 +44,19 @@ const TRACOS = {
   ciclo: '<path d="M4 19V5"/><path d="M4 19h16"/><path d="m7 15 4-5 3 3 5-7"/>',
   compras: '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2.5l2.2 11.2a1.5 1.5 0 0 0 1.5 1.2h8.1a1.5 1.5 0 0 0 1.5-1.2L21 8H6"/>',
   mapa: '<path d="m9 4-6 2.5v14L9 18l6 2.5 6-2.5v-14L15 6.5z"/><path d="M9 4v14M15 6.5v14"/>',
+
+  // ── abas dos demais módulos (migração de 19/08/2026) ──
+  prazo: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/>',
+  plano: '<path d="M4 5h4M4 12h4M4 19h4"/><path d="M11 5h9M11 12h9M11 19h9"/>',
+  chave: '<path d="M14.7 6.3a4 4 0 1 0 3 3l-1.4-1.4a2 2 0 1 1-.2-2.8z"/><path d="m13.3 9.3-8.6 8.6a1.5 1.5 0 0 0 2.1 2.1l8.6-8.6"/>',
+  rota: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.5 6H14a3.5 3.5 0 0 1 0 7h-4a3.5 3.5 0 0 0 0 7h5.5"/>',
+  relatorio: '<path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+  predio: '<path d="M4 21V6l7-3 7 3v15"/><path d="M2 21h20M9 21v-5h5v5"/><path d="M8 9h.01M12 9h.01M8 12.5h.01M12 12.5h.01"/>',
+  checklist: '<path d="m4 7 2 2 3-3M4 16l2 2 3-3"/><path d="M12 8h8M12 17h8"/>',
+  modelo: '<path d="M4 8h6l1.5 2H20a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5l1 2"/>',
+  veiculo: '<path d="M3 16V7a1 1 0 0 1 1-1h9v10"/><path d="M13 9h4l3 3.5V16"/><path d="M3 16h2M9 16h4M17 16h4"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="15" cy="17.5" r="1.6"/>',
+  eletrico: '<path d="M13 2 5 13h5l-1 9 8-11h-5z"/>',
+  som: '<path d="M4 9h3l6-4v14l-6-4H4z"/><path d="M17 8.5a5 5 0 0 1 0 7"/>',
 }
 
 export const NOMES_DE_ICONE = Object.keys(TRACOS)
