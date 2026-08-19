@@ -41,7 +41,7 @@ import {
   salvarGeomLocal,
   LOCAIS_SEM_POSICAO,
   MODULOS_DE_ATIVO,
-  carregarLocaisComPosicao,
+  carregarArvoreDeLocais,
   posicionarAtivos,
   salvarZona,
   atualizarZona,
@@ -524,7 +524,7 @@ async function recarregarPosicionamento(mapa) {
   // seria a segunda lista de módulos do projeto e a primeira a esquecer o
   // próximo módulo — o ativo continuaria posicionável pela lista mas não
   // arrastável, sem ninguém notar.
-  const locais = await carregarLocaisComPosicao()
+  const locais = await carregarArvoreDeLocais()
   // Locais recarregados junto porque posicionar um PRÉDIO tira da lista de
   // não localizados todos os ativos que herdam dele.
   await carregarLocaisSemPosicao()
@@ -571,7 +571,7 @@ function desenharMarcadoresArrastaveis(mapa, ativos) {
     const origemTexto =
       ativo.origemPosicao === 'propria'
         ? 'Posição própria.'
-        : 'Posição herdada do prédio — arrastar grava posição própria, sem mover o prédio.'
+        : `Posição herdada de ${esc(ativo.localPosicao || 'local')} — arrastar grava posição própria, sem mover o prédio.`
     marker.bindPopup(`<strong>${esc(ativo.rotulo || `#${ativo.id}`)}</strong><br>${origemTexto}`)
     _grupoAtivosArrastaveis.addLayer(marker)
   }

@@ -14,7 +14,7 @@
  * Supabase existir — a camada não se registra mais sozinha ao carregar.
  */
 
-import { carregarAtivosEletricos, carregarLocaisComPosicao, posicionarAtivos } from './mapa-dados.js'
+import { carregarAtivosEletricos, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
 import { linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
 
 // Os mesmos quatro tipos de eletrica/app.js:8-13, duplicados aqui de
@@ -95,7 +95,7 @@ function renderAtivosEletricos(group, ativos, tipo) {
     const rows = [
       ['Estado',  rotuloDoEstado(a.estado),                        classeDoEstado(a.estado)],
       ['Uso',     (a.uso_atual || 0) + ' ' + (a.unidade_uso || 'h')],
-      ['Posição', a.origemPosicao === 'propria' ? 'Própria' : 'Herdada do local', 'info'],
+      ['Posição', a.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${a.localPosicao || 'local'}`, 'info'],
     ];
 
     // O link nunca é concatenado — sai só de linkDoModulo, que valida
@@ -117,7 +117,7 @@ function renderAtivosEletricos(group, ativos, tipo) {
 export async function registrarCamadasEletrica() {
   const [ativosBrutos, locais] = await Promise.all([
     carregarAtivosEletricos(),
-    carregarLocaisComPosicao(),
+    carregarArvoreDeLocais(),
   ]);
   const posicionados = posicionarAtivos(ativosBrutos, locais, 'eletrica');
 

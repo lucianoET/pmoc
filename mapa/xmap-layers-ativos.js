@@ -24,12 +24,26 @@
 // do módulo (gate tests/mapa-camadas.test.js).
 // ══════════════════════════════════════════════════════════════════
 
-import { carregarAtivosDoModulo, carregarLocaisComPosicao, posicionarAtivos } from './mapa-dados.js'
+import { carregarAtivosDoModulo, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
 import { linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
 
 // Só apresentação — rótulo de camada e emoji do marcador. O nome de
 // tabela e as colunas ficam em CONFIG_POR_MODULO (mapa-dados.js); aqui não
 // se repete nada disso, para não haver duas listas de módulos para manter.
+// Cópia local, mesmo idioma de mapa/app.js e mapa/mapa-editor.js — o
+// projeto não tem utilitário compartilhado de escape. Chega neste arquivo
+// junto do nome do local herdado: nome de prédio é texto livre de cadastro
+// e entra na marcação do balão.
+function esc(valor) {
+  return String(valor ?? '').replace(/[&<>'"]/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
+  })[c])
+}
+
 const APRESENTACAO = {
   transportes: { nome: 'Transportes', emoji: '🚚' },
   fonoclama: { nome: 'Fonoclama', emoji: '📢' },
@@ -57,12 +71,15 @@ function renderAtivos(group, ativos, modulo) {
     const marker = L.marker([a.lat, a.lon], { icon })
 
     const rows = [['Estado', rotuloDoEstado(a.estado), classeDoEstado(a.estado)]]
-    if (a.detalhe) rows.push(['Identificação', a.detalhe])
+    if (a.detalhe) rows.push(['Identificação', esc(a.detalhe)])
     // Horímetro/odômetro não existe em equipamentos (refrigeração) — a
     // linha só entra quando a coluna veio, em vez de mostrar "0 h" para
     // uma tabela que nunca mediu uso.
     if (a.uso_atual != null) rows.push(['Uso', `${a.uso_atual} ${a.unidade_uso || 'h'}`])
-    rows.push(['Posição', a.origemPosicao === 'propria' ? 'Própria' : 'Herdada do local', 'info'])
+    // Com a herança subindo a árvore, "herdada" sozinho não informa: o
+    // ativo está numa sala e a coordenada é do prédio. O nome do local de
+    // origem é a diferença entre saber e supor.
+    rows.push(['Posição', a.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${esc(a.localPosicao || 'local')}`, 'info'])
 
     // O destino nunca é concatenado — sai só de linkDoModulo, que valida
     // módulo por lista fechada e identificador por forma (T-10-22).
@@ -71,7 +88,7 @@ function renderAtivos(group, ativos, modulo) {
     const link = linkDoModulo(modulo, a.id)
     if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info'])
 
-    marker.bindPopup(xMap.utils.popupHTML(info.emoji, a.rotulo, a.subtipo || info.nome, rows), { maxWidth: 220 })
+    marker.bindPopup(xMap.utils.popupHTML(info.emoji, esc(a.rotulo), esc(a.subtipo || info.nome), rows), { maxWidth: 220 })
     group.addLayer(marker)
   })
 }
@@ -83,7 +100,7 @@ export async function registrarCamadaDeAtivos(modulo) {
   if (!APRESENTACAO[modulo]) {
     throw new Error(`xmap-layers-ativos: módulo "${modulo}" não tem apresentação declarada.`)
   }
-  const [brutos, locais] = await Promise.all([carregarAtivosDoModulo(modulo), carregarLocaisComPosicao()])
+  const [brutos, locais] = await Promise.all([carregarAtivosDoModulo(modulo), carregarArvoreDeLocais()])
   const posicionados = posicionarAtivos(brutos, locais, modulo)
   xMap.registerLayer(modulo, {
     ativos: {

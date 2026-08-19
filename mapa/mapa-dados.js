@@ -32,6 +32,9 @@ import {
   dentroDoEnvelope,
   normalizarEstado,
   centroidePoligono,
+  localComPosicao,
+  localPosicionavel,
+  herdaPosicao,
 } from './mapa-geometria.js'
 
 // ── Bloco 1 — cliente ───────────────────────────────────────────────
@@ -102,21 +105,26 @@ export async function carregarAreas() {
   return data || []
 }
 
-// cmasm_locais — só os que têm coordenada (posição herdada de prédio ou
-// sala), devolvidos como mapa de id → local, pronto para o cruzamento em
-// memória que posicionarAtivos faz — dezenas de locais contra centenas de
-// ativos, cruzar em memória é mais simples que uma junção por ativo e não
-// muda o resultado.
-export async function carregarLocaisComPosicao() {
+// cmasm_locais — a ÁRVORE inteira de locais ativos, devolvida como mapa de
+// id → local, pronta para o cruzamento em memória que posicionarAtivos faz
+// (234 locais contra centenas de ativos; cruzar em memória é mais simples
+// que uma junção por ativo e não muda o resultado).
+//
+// Antes esta consulta trazia só quem tinha coordenada, e por isso a
+// herança enxergava um passo só. Não dava: 175 dos 190 ativos apontam para
+// uma SALA, e sala não recebe coordenada — ela fica dentro de um prédio. O
+// local intermediário PRECISA vir mesmo sem lat/lon, senão a cadeia
+// `parent_id` se rompe justamente no elo que faltava subir, e posicionar
+// os 30 prédios acenderia 2 ativos em vez de 177.
+export async function carregarArvoreDeLocais() {
   const supa = obterCliente()
   const { data, error } = await supa
     .from('cmasm_locais')
-    .select('id, nome, lat, lon')
-    .not('lat', 'is', null)
-    .not('lon', 'is', null)
+    .select('id, nome, tipo, parent_id, lat, lon')
+    .eq('ativo', true)
   if (error) {
     console.error('mapa-dados: falha ao carregar cmasm_locais —', error.message)
-    mostrarErroDeCarga('Não foi possível carregar os locais com posição. ' + error.message)
+    mostrarErroDeCarga('Não foi possível carregar a árvore de locais. ' + error.message)
     return {}
   }
   const porId = {}
@@ -152,12 +160,19 @@ export async function carregarLocaisSemPosicao() {
     return []
   }
   LOCAIS_SEM_POSICAO.length = 0
-  LOCAIS_SEM_POSICAO.push(...(data || []))
+  // Sala fica de fora: ela não recebe coordenada própria, herda a do
+  // prédio (núcleo puro, TIPOS_QUE_HERDAM_POSICAO). Oferecer as 132 salas
+  // para posicionar uma a uma era pedir 132 atos de campo para acender o
+  // que 30 prédios acendem. O filtro é do cliente e não da consulta de
+  // propósito: a lista de quem herda mora no núcleo puro, e duplicá-la
+  // dentro de um `.not('tipo','in',...)` criaria a segunda cópia — a
+  // primeira a divergir.
+  LOCAIS_SEM_POSICAO.push(...(data || []).filter((local) => !herdaPosicao(local.tipo)))
   return LOCAIS_SEM_POSICAO
 }
 
 // cmasm_locais — os prédios que já têm CONTORNO desenhado (migração 37).
-// Consulta separada de carregarLocaisComPosicao de propósito: aquela
+// Consulta separada de carregarArvoreDeLocais de propósito: aquela
 // devolve um mapa de id → ponto para o cruzamento em memória de
 // posicionarAtivos e é chamada a cada gravação de posição; esta devolve
 // uma lista de polígonos para desenhar. Trazer `geom` — dezenas de
@@ -347,7 +362,10 @@ export function posicionarAtivos(ativos, locais, modulo) {
   const config = configDoModulo(modulo)
   const posicionados = []
   for (const ativo of ativos || []) {
-    const local = ativo?.local_id != null ? locais?.[ativo.local_id] : null
+    // Duas subidas na árvore, cada uma com o seu critério (núcleo puro):
+    // de onde a posição vem, e qual local o usuário posicionaria para
+    // acender este ativo. A segunda só interessa a quem ficou sem posição.
+    const local = localComPosicao(ativo?.local_id, locais)
     const posicao = resolverPosicao(ativo, local)
     // Rótulo, subtipo e estado são resolvidos AQUI, uma vez, pelo nome de
     // coluna que a configuração do módulo declara — as camadas e a busca
@@ -362,11 +380,25 @@ export function posicionarAtivos(ativos, locais, modulo) {
       estado: normalizarEstado(modulo, ativo?.[config.colunaEstado]),
     }
     if (posicao.lat != null && posicao.lon != null) {
-      const posicionado = { ...comum, lat: posicao.lat, lon: posicao.lon, origemPosicao: posicao.origem }
+      const posicionado = {
+        ...comum,
+        lat: posicao.lat,
+        lon: posicao.lon,
+        origemPosicao: posicao.origem,
+        // De QUAL local a posição foi herdada. Com a cadeia subindo, "do
+        // local" deixou de ser suficiente na tela: o ativo está numa sala,
+        // e a coordenada é do prédio — dizer o nome é a diferença entre
+        // "herdada" e "herdada de onde".
+        localPosicao: posicao.origem === 'herdada' ? local?.nome ?? null : null,
+      }
       posicionados.push(posicionado)
       POSICIONADOS.push(posicionado)
     } else {
-      NAO_LOCALIZADOS.push(comum)
+      // O alvo de posicionamento é o prédio, não a sala: é ele que a barra
+      // lateral oferece, e é para ele que a contagem de "quantos ativos
+      // este local acende" precisa rolar.
+      const alvo = localPosicionavel(ativo?.local_id, locais)
+      NAO_LOCALIZADOS.push({ ...comum, local_id: alvo?.id ?? ativo?.local_id ?? null })
     }
   }
   return posicionados
