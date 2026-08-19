@@ -74,6 +74,15 @@ html,body{height:100%}
 .nl-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)}
 .nl-item:last-child{border-bottom:none}
 .nl-btn{padding:4px 8px;font-size:11px;flex-shrink:0}
+/* Campo de busca da barra — mesma família visual dos campos do painel do
+   editor, sem token de cor próprio (D-01 da Fase 6). */
+.lat-input{width:100%;box-sizing:border-box;padding:7px 9px;margin-bottom:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:var(--ff)}
+.lat-input:focus{outline:none;border-color:var(--accent)}
+.nl-btn-link{background:none;border:none;padding:0;color:var(--text2);font-size:12px;font-family:var(--ff);text-align:left;cursor:pointer;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nl-btn-link:hover{color:var(--text)}
+.nl-contagem{font-size:11px;color:var(--text3);flex-shrink:0}
+.lg-item{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:var(--text2)}
+.lg-cor{width:12px;height:12px;border-radius:3px;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -83,22 +92,69 @@ html,body{height:100%}
   <div class="body-layout">
     <div class="sidebar" id="barra-modulos" aria-hidden="true">
       <div class="sidebar-title">Módulos</div>
-      <button class="mod-btn" onclick="alternarModulo('aguada', this)">
+      <button class="mod-btn" data-mod="aguada" onclick="alternarModulo('aguada', this)">
         <span>Aguada — monitoramento hídrico</span>
         <span class="mod-badge-demo" title="Sistema externo autônomo (FastAPI + SQLite, alimentado por MQTT) — sem tabela no projeto pmoc; integração real entra na Phase 11 (decisão travada D-01)">demo</span>
       </button>
-      <button class="mod-btn" onclick="alternarModulo('grama', this)">
+      <button class="mod-btn" data-mod="grama" onclick="alternarModulo('grama', this)">
         <span>Grama — controle vegetal</span>
       </button>
-      <button class="mod-btn" onclick="alternarModulo('eletrica', this)">
+      <button class="mod-btn" data-mod="eletrica" onclick="alternarModulo('eletrica', this)">
         <span>Elétrica — sistema elétrico</span>
       </button>
+      <button class="mod-btn" data-mod="transportes" onclick="alternarModulo('transportes', this)">
+        <span>Transportes — viaturas e embarcações</span>
+      </button>
+      <button class="mod-btn" data-mod="fonoclama" onclick="alternarModulo('fonoclama', this)">
+        <span>Fonoclama — sonorização 70V</span>
+      </button>
+      <!-- Chave de módulo `climatizacao` de propósito: o mapa lê a TABELA
+           `equipamentos`, não o app de Refrigeração, que está congelado
+           (PLAT-15) e cujo caminho não pode ser citado neste arquivo — o
+           gate de tests/mobile-375.test.js afirma isso. Coerente com o
+           resto: não há rota em MODULOS (mapa-geometria.js) para esta
+           chave, então o balão sai sem link de ficha, que é exatamente o
+           que a decisão protege. -->
+      <button class="mod-btn" data-mod="climatizacao" onclick="alternarModulo('climatizacao', this)">
+        <span>Climatização — ar-condicionado</span>
+      </button>
+
+      <!-- Busca de ativo — lê de mapa-dados.js#POSICIONADOS, a contraparte
+           de NAO_LOCALIZADOS, e voa até o ponto. Não procura dentro das
+           camadas do Leaflet de propósito: isso amarraria a busca ao
+           componente travado (mapa/xmap.js). -->
+      <div class="sidebar-title">Buscar ativo</div>
+      <input id="busca-ativo" class="lat-input" type="search" autocomplete="off"
+             placeholder="código, nome ou identificação" aria-label="Buscar ativo posicionado"/>
+      <div id="busca-resultados"></div>
+
       <!-- Painel de não localizados (plano 10-07, PLAT-20) — desenhado em
            tempo de execução por mapa/app.js#renderNaoLocalizados a partir
            de mapa/mapa-dados.js#NAO_LOCALIZADOS. Título de seção no mesmo
            estilo do título "Módulos" acima (.sidebar-title). -->
       <div class="sidebar-title" id="nao-localizados-titulo">Não localizados</div>
       <div id="nao-localizados"></div>
+
+      <!-- Prédios sem posição — a outra camada da posição. Posicionar um
+           prédio acende de uma vez todos os ativos ligados a ele por
+           local_id; a lista vem ordenada por quantos ativos cada um
+           acenderia. Campo de busca porque são centenas de locais. -->
+      <div class="sidebar-title" id="locais-sem-posicao-titulo">Prédios sem posição</div>
+      <input id="busca-local" class="lat-input" type="search" autocomplete="off"
+             placeholder="filtrar prédio" aria-label="Filtrar prédios sem posição"/>
+      <div id="locais-sem-posicao"></div>
+
+      <!-- Zonas de maq_areas sem contorno desenhado. Sem esta lista elas
+           são inalcançáveis: carregarZonasEditaveis pula quem tem menos de
+           três vértices, e desenhar por cima criaria uma zona nova. -->
+      <div class="sidebar-title" id="zonas-sem-contorno-titulo">Zonas sem contorno</div>
+      <div id="zonas-sem-contorno"></div>
+
+      <!-- Legenda desenhada a partir de ESTADOS (mapa/mapa-geometria.js):
+           a mesma lista fechada que pinta os marcadores. Cor nenhuma é
+           escrita à mão nesta marcação. -->
+      <div class="sidebar-title">Legenda</div>
+      <div id="legenda-estados"></div>
     </div>
     <div class="map-area">
       <button id="btn-modulos" type="button" aria-expanded="false" aria-controls="barra-modulos">

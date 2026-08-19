@@ -130,6 +130,13 @@ export async function carregarLocaisComPosicao() {
 // ligados a ele por local_id, enquanto posicionar ativo a ativo custa um
 // ato de campo por ativo. Em 18/08/2026 são 311 locais, 0 com coordenada,
 // e 190 ativos apontando para 138 deles.
+// Estado deste arquivo pelo mesmo motivo de NAO_LOCALIZADOS: quem leu a
+// linha é quem sabe. A tela desenha a lista e o editor precisa do nome do
+// prédio para a faixa de "clique no mapa" — sem uma lista compartilhada,
+// o nome teria que viajar por atributo onclick, exatamente o que
+// renderItemNaoLocalizado evita de propósito.
+export const LOCAIS_SEM_POSICAO = []
+
 export async function carregarLocaisSemPosicao() {
   const supa = obterCliente()
   const { data, error } = await supa
@@ -143,7 +150,9 @@ export async function carregarLocaisSemPosicao() {
     mostrarErroDeCarga('Não foi possível carregar os prédios sem posição. ' + error.message)
     return []
   }
-  return data || []
+  LOCAIS_SEM_POSICAO.length = 0
+  LOCAIS_SEM_POSICAO.push(...(data || []))
+  return LOCAIS_SEM_POSICAO
 }
 
 // Relação de módulo para tabela e colunas: LISTA FECHADA. Módulo fora
@@ -206,7 +215,7 @@ const CONFIG_POR_MODULO = {
     colunaSubtipo: 'tipo',
     colunaEstado: 'status',
   },
-  refrigeracao: {
+  climatizacao: {
     tabela: 'equipamentos',
     colunas: 'id, tipo, predio, local, funciona, estado, patrimonio, local_id, lat, lon',
     colunaAtivo: null,

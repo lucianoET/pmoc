@@ -34,8 +34,12 @@ import {
 } from './mapa-geometria.js'
 import {
   carregarAreas,
+  carregarAtivosDoModulo,
   carregarMaquinas,
-  carregarAtivosEletricos,
+  carregarLocaisSemPosicao,
+  salvarPosicaoLocal,
+  LOCAIS_SEM_POSICAO,
+  MODULOS_DE_ATIVO,
   carregarLocaisComPosicao,
   posicionarAtivos,
   salvarZona,
@@ -51,6 +55,14 @@ import {
 // de tests/mapa-editor.test.js extrai esta linha por eles e compara com a
 // política real do banco.
 const CARGOS_ZONA = ['admin', 'gestor']
+
+// Reexportada em linha separada de propósito: o gate de
+// tests/mapa-editor.test.js localiza a declaração acima por uma expressão
+// ancorada em `const`/`let` no começo da linha e compararia com a policy
+// real de maq_areas; prefixar `export` na declaração deixaria o gate cego.
+// A barra lateral (mapa/app.js) precisa da lista para não oferecer
+// "Desenhar" a quem o banco recusaria — e não pode redeclará-la.
+export { CARGOS_ZONA }
 
 // Mesmo idioma de esc() em mapa/app.js — duplicado aqui de propósito,
 // porque app.js não exporta o seu (cada módulo do projeto mantém a própria
@@ -93,6 +105,8 @@ let _maquinas = []
 let _zonaAtual = null // { id|null, nome, tipo, geom, flora, inclinacao, limpeza }
 let _modoPainel = null // 'criar' | 'editar'
 let _camadaSelecionada = null
+let _btnZona = null
+let _zonaAlvo = null // zona sem contorno esperando o próximo polígono desenhado
 
 export function iniciarEditorZonas(mapa, usuario) {
   // Sai sem fazer nada quando o cargo não está na lista de escrita de zona
@@ -114,6 +128,10 @@ function criarBotaoAlternar(mapa) {
     btn.style.margin = '10px'
     L.DomEvent.disableClickPropagation(btn)
     btn.addEventListener('click', () => alternarModoEdicao(mapa, btn))
+    // Guardado para que edDesenharZona (barra lateral) possa ligar o modo
+    // sem o usuário ter que achar este botão antes — e para que o rótulo
+    // dele continue refletindo o estado real quando isso acontecer.
+    _btnZona = btn
     return btn
   }
   controle.addTo(mapa)
@@ -200,6 +218,17 @@ async function carregarZonasEditaveis(mapa) {
 function aoCriarPoligono(e) {
   const coords = e.layer.getLatLngs()[0].map((ll) => [ll.lat, ll.lng])
   _grupoDesenho.clearLayers()
+  // Zona armada pela barra lateral ("Desenhar" numa zona sem contorno):
+  // o polígono recém-fechado é o CONTORNO DELA, não uma zona nova. Sem
+  // isto, carregarZonasEditaveis pula quem tem geom nula (menos de três
+  // vértices, abaixo) e desenhar por cima criaria uma quarta linha
+  // duplicada em vez de completar a que já existe.
+  if (_zonaAlvo) {
+    const zona = _zonaAlvo
+    _zonaAlvo = null
+    abrirPainelEdicao({ ...zona, geom: coords }, null)
+    return
+  }
   abrirPainelCriacao(coords)
 }
 
@@ -365,6 +394,23 @@ function exporManipuladores() {
   // maq_areas tem coluna de arquivamento e o projeto arquiva em vez de
   // apagar, mas desativar zona pela tela é suposição sinalizada, fora
   // desta fase — ver 10-06-PLAN.md § Suposições sinalizadas.
+  // Arma o desenho para uma zona QUE JÁ EXISTE sem contorno. Recebe só o
+  // identificador; a linha é buscada de novo pela porta de dados, nunca
+  // recebida por atributo de tela. Se o modo de edição estiver desligado,
+  // liga — quem clicou em "Desenhar" já declarou a intenção, exigir que
+  // ache o botão do mapa antes seria só um passo a mais para errar.
+  window.edDesenharZona = async (id) => {
+    const zonas = await carregarAreas()
+    const zona = zonas.find((z) => z.id === id)
+    if (!zona) {
+      alert('Zona não encontrada — recarregue a página.')
+      return
+    }
+    if (!_modoAtivo && _mapa && _btnZona) await alternarModoEdicao(_mapa, _btnZona)
+    _zonaAlvo = zona
+    alert(`Desenhe o contorno de "${zona.nome}" no mapa: clique nos vértices e feche o polígono.`)
+  }
+
   window.edHabilitarArraste = () => {
     if (_camadaSelecionada?.editing) {
       _camadaSelecionada.editing.enable()
@@ -455,12 +501,19 @@ async function alternarModoPosicao(mapa, btn) {
 // esta função não estar condicionada ao toggle, só o desenho da camada
 // arrastável está.
 async function recarregarPosicionamento(mapa) {
+  // Percorre MODULOS_DE_ATIVO (mapa-dados.js) em vez de nomear máquinas e
+  // elétrica à mão: com as três famílias novas, uma lista escrita aqui
+  // seria a segunda lista de módulos do projeto e a primeira a esquecer o
+  // próximo módulo — o ativo continuaria posicionável pela lista mas não
+  // arrastável, sem ninguém notar.
   const locais = await carregarLocaisComPosicao()
-  const [maquinas, eletricos] = await Promise.all([carregarMaquinas(), carregarAtivosEletricos()])
-  const posicionados = [
-    ...posicionarAtivos(maquinas, locais, 'maquinas').map((a) => ({ ...a, _modulo: 'maquinas' })),
-    ...posicionarAtivos(eletricos, locais, 'eletrica').map((a) => ({ ...a, _modulo: 'eletrica' })),
-  ]
+  // Locais recarregados junto porque posicionar um PRÉDIO tira da lista de
+  // não localizados todos os ativos que herdam dele.
+  await carregarLocaisSemPosicao()
+  const porModulo = await Promise.all(MODULOS_DE_ATIVO.map((modulo) => carregarAtivosDoModulo(modulo)))
+  const posicionados = MODULOS_DE_ATIVO.flatMap((modulo, i) =>
+    posicionarAtivos(porModulo[i], locais, modulo).map((a) => ({ ...a, _modulo: modulo }))
+  )
   if (_modoPosicaoAtivo && mapa) desenharMarcadoresArrastaveis(mapa, posicionados)
   _aoMudarPosicaoAtivo()
 }
@@ -501,19 +554,32 @@ function desenharMarcadoresArrastaveis(mapa, ativos) {
       ativo.origemPosicao === 'propria'
         ? 'Posição própria.'
         : 'Posição herdada do prédio — arrastar grava posição própria, sem mover o prédio.'
-    marker.bindPopup(`<strong>${esc(ativo.nome || ativo.codigo || `#${ativo.id}`)}</strong><br>${origemTexto}`)
+    marker.bindPopup(`<strong>${esc(ativo.rotulo || `#${ativo.id}`)}</strong><br>${origemTexto}`)
     _grupoAtivosArrastaveis.addLayer(marker)
   }
 }
 
 // ── posicionar a partir da lista de não localizados ─────────────────────
 function selecionarParaPosicionar(modulo, id) {
+  const item = NAO_LOCALIZADOS.find((a) => a.origemModulo === modulo && a.id === id)
+  armarEsperaClique({ tipo: 'ativo', modulo, id }, item?.rotulo || `#${id}`)
+}
+
+// A outra camada da posição (plano quick-260818-vxu): o alvo é o PRÉDIO,
+// não o ativo. Mesmo fluxo de espera de clique, mesma faixa, mesmo Esc —
+// só muda a porta de escrita no fim. O nome vem de LOCAIS_SEM_POSICAO
+// (mapa-dados.js) pelo identificador, nunca por atributo onclick, mesma
+// razão registrada em mapa/app.js#renderItemNaoLocalizado.
+function selecionarLocalParaPosicionar(id) {
+  const local = LOCAIS_SEM_POSICAO.find((l) => l.id === id)
+  armarEsperaClique({ tipo: 'local', id }, local?.nome || local?.codigo || `#${id}`)
+}
+
+function armarEsperaClique(alvo, nome) {
   if (!_mapaPosicao) return
   cancelarEsperaClique()
-  const item = NAO_LOCALIZADOS.find((a) => a.origemModulo === modulo && a.id === id)
-  const nome = item?.codigo || item?.nome || `#${id}`
-  _aguardandoClique = { modulo, id }
-  mostrarFaixaAguardando(nome)
+  _aguardandoClique = alvo
+  mostrarFaixaAguardando(nome, alvo.tipo)
   _mapaPosicao.getContainer().style.cursor = 'crosshair'
   _mapaPosicao.once('click', aoClicarParaPosicionar)
   document.addEventListener('keydown', aoEscapeCancelar)
@@ -523,8 +589,16 @@ async function aoClicarParaPosicionar(e) {
   const alvo = _aguardandoClique
   if (!alvo) return
   encerrarEsperaClique()
-  const salvo = await salvarPosicaoAtivo(alvo.modulo, alvo.id, e.latlng.lat, e.latlng.lng)
-  if (!salvo) return // salvarPosicaoAtivo já avisou (idioma do projeto)
+  // Duas portas de escrita distintas, escolhidas pelo tipo do alvo — a de
+  // ativo tem proibição explícita de tocar em cmasm_locais (D-03), a de
+  // local grava só lá. O `if` fica aqui, no chamador, para nenhuma das
+  // duas funções de gravação virar uma que decide sozinha qual tabela
+  // escrever.
+  const salvo =
+    alvo.tipo === 'local'
+      ? await salvarPosicaoLocal(alvo.id, e.latlng.lat, e.latlng.lng)
+      : await salvarPosicaoAtivo(alvo.modulo, alvo.id, e.latlng.lat, e.latlng.lng)
+  if (!salvo) return // as duas já avisaram o erro (idioma do projeto)
   await recarregarPosicionamento(_mapaPosicao)
 }
 
@@ -552,7 +626,7 @@ function cancelarEsperaClique() {
 // classe .callout já existente na folha comum, sem cor escrita à mão.
 // textContent, não innerHTML: o nome vem de linha de banco e nunca passa
 // por marcação aqui, então esc() não se aplica (não é HTML).
-function mostrarFaixaAguardando(nome) {
+function mostrarFaixaAguardando(nome, tipo) {
   let el = document.getElementById(FAIXA_AGUARDANDO_ID)
   if (!el) {
     el = document.createElement('div')
@@ -562,7 +636,10 @@ function mostrarFaixaAguardando(nome) {
       'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:1000;max-width:min(560px,92vw);margin:0'
     document.body.appendChild(el)
   }
-  el.textContent = `Clique no mapa para posicionar "${nome}". Esc cancela.`
+  el.textContent =
+    tipo === 'local'
+      ? `Clique no mapa para posicionar o prédio "${nome}" — todos os ativos ligados a ele passam a herdar esta posição. Esc cancela.`
+      : `Clique no mapa para posicionar "${nome}". Esc cancela.`
 }
 
 function ocultarFaixaAguardando() {
@@ -579,4 +656,5 @@ function ocultarFaixaAguardando() {
 // entidade HTML decodificada dentro de uma string JS de aspas simples.
 function exporManipuladoresPosicao() {
   window.posSelecionarAtivo = (modulo, id) => selecionarParaPosicionar(modulo, id)
+  window.posSelecionarLocal = (id) => selecionarLocalParaPosicionar(id)
 }

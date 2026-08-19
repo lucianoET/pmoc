@@ -251,7 +251,7 @@ const ESTADO_POR_MODULO = {
   eletrica:     { operante: 'operante', manutencao: 'manutencao', inoperante: 'inoperante', baixado: 'baixado' },
   fonoclama:    { operante: 'operante', manutencao: 'manutencao', inoperante: 'inoperante', baixado: 'baixado' },
   transportes:  { disponivel: 'operante', sobreaviso: 'standby', manutencao: 'manutencao', indisponivel: 'inoperante', baixado: 'baixado' },
-  refrigeracao: { OK: 'operante', NOK: 'inoperante' },
+  climatizacao: { OK: 'operante', NOK: 'inoperante' },
 }
 
 // Mesma técnica de normalizarFlora acima: comparação contra lista fechada,

@@ -33,7 +33,7 @@ import { linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './map
 const APRESENTACAO = {
   transportes: { nome: 'Transportes', emoji: '🚚' },
   fonoclama: { nome: 'Fonoclama', emoji: '📢' },
-  refrigeracao: { nome: 'Refrigeração', emoji: '❄' },
+  climatizacao: { nome: 'Climatização', emoji: '❄' },
 }
 
 function ativoSVG(emoji, estado) {
@@ -66,7 +66,7 @@ function renderAtivos(group, ativos, modulo) {
 
     // O destino nunca é concatenado — sai só de linkDoModulo, que valida
     // módulo por lista fechada e identificador por forma (T-10-22).
-    // `refrigeracao` não está em MODULOS: a função devolve null e a linha
+    // `climatizacao` não está em MODULOS: a função devolve null e a linha
     // simplesmente não aparece, sem caso especial aqui.
     const link = linkDoModulo(modulo, a.id)
     if (link) rows.push(['Módulo', `<a href="${link}" class="xmap-popup-link">Abrir na ficha →</a>`, 'info'])
