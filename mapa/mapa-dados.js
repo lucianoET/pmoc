@@ -30,6 +30,7 @@ import {
   normalizarInclinacao,
   normalizarLimpeza,
   dentroDoEnvelope,
+  normalizarEstado,
 } from './mapa-geometria.js'
 
 // ── Bloco 1 — cliente ───────────────────────────────────────────────
@@ -122,40 +123,129 @@ export async function carregarLocaisComPosicao() {
   return porId
 }
 
-// Relação de módulo para tabela: LISTA FECHADA. Módulo fora dela lança, e
-// o nome da tabela nunca é montado por concatenação de texto — nome de
-// tabela composto a partir de string é o começo de uma injeção, e a lista
-// fechada custa três linhas (T-10-23). Cresce nos planos 10-06/10-07
-// conforme mais módulos ganharem posição no mapa; hoje só grama
-// (maq_ativos) e elétrica (elet_ativos) leem daqui.
-const TABELA_POR_MODULO = {
-  maquinas: 'maq_ativos',
-  eletrica: 'elet_ativos',
+// cmasm_locais — o oposto da consulta acima: os locais ATIVOS que ainda
+// não têm coordenada. É a lista de onde sai a seção "Prédios sem posição"
+// da barra lateral, e a razão de ela existir é a alavanca da arquitetura
+// de duas camadas: posicionar UM prédio acende de uma vez todos os ativos
+// ligados a ele por local_id, enquanto posicionar ativo a ativo custa um
+// ato de campo por ativo. Em 18/08/2026 são 311 locais, 0 com coordenada,
+// e 190 ativos apontando para 138 deles.
+export async function carregarLocaisSemPosicao() {
+  const supa = obterCliente()
+  const { data, error } = await supa
+    .from('cmasm_locais')
+    .select('id, codigo, nome, tipo')
+    .eq('ativo', true)
+    .is('lat', null)
+    .order('nome')
+  if (error) {
+    console.error('mapa-dados: falha ao carregar cmasm_locais sem posição —', error.message)
+    mostrarErroDeCarga('Não foi possível carregar os prédios sem posição. ' + error.message)
+    return []
+  }
+  return data || []
 }
 
-// Colunas por módulo: categoria é exclusiva de maq_ativos, tipo é
-// exclusiva de elet_ativos — o resto (identificação, estado, uso, vínculo
-// de local, posição própria) é comum às duas tabelas.
-const COLUNAS_POR_MODULO = {
-  maquinas: 'id, codigo, nome, categoria, status, uso_atual, unidade_uso, local_id, lat, lon',
-  eletrica: 'id, codigo, nome, tipo, status, uso_atual, unidade_uso, local_id, lat, lon',
+// Relação de módulo para tabela e colunas: LISTA FECHADA. Módulo fora
+// dela lança, e o nome da tabela nunca é montado por concatenação de
+// texto — nome de tabela composto a partir de string é o começo de uma
+// injeção, e a lista fechada custa três linhas (T-10-23).
+//
+// Por que virou um objeto de configuração por módulo, e não mais dois
+// dicionários de tabela e de colunas: `equipamentos` (refrigeração) é
+// anterior ao padrão `*_ativos` do projeto e não tem NENHUMA das colunas
+// que as outras quatro compartilham — não tem `ativo`, não tem `codigo`,
+// não tem `nome` e não tem `status`. Tem `predio`, `local`, `tipo`,
+// `funciona` (OK/NOK), `estado` (NOVA/SEMI/VELHA) e `patrimonio`.
+// Com colunas fixas no corpo da consulta, a única saída seria um `if`
+// para refrigeração dentro de carregarAtivosDoModulo — e o próximo
+// módulo com schema próprio traria o segundo. A forma da tabela passa a
+// ser dado, não desvio de fluxo.
+//
+// Atenção ao par de nomes parecidos: em refrigeração, `colunaEstado` é
+// `funciona`, NÃO a coluna literalmente chamada `estado` — essa guarda a
+// idade do aparelho (NOVA/SEMI/VELHA), não se ele opera.
+const CONFIG_POR_MODULO = {
+  maquinas: {
+    tabela: 'maq_ativos',
+    colunas: 'id, codigo, nome, categoria, status, uso_atual, unidade_uso, local_id, lat, lon',
+    colunaAtivo: 'ativo',
+    colunaOrdem: 'nome',
+    colunaRotulo: 'nome',
+    colunaDetalhe: 'codigo',
+    colunaSubtipo: 'categoria',
+    colunaEstado: 'status',
+  },
+  eletrica: {
+    tabela: 'elet_ativos',
+    colunas: 'id, codigo, nome, tipo, status, uso_atual, unidade_uso, local_id, lat, lon',
+    colunaAtivo: 'ativo',
+    colunaOrdem: 'nome',
+    colunaRotulo: 'nome',
+    colunaDetalhe: 'codigo',
+    colunaSubtipo: 'tipo',
+    colunaEstado: 'status',
+  },
+  transportes: {
+    tabela: 'transp_ativos',
+    colunas: 'id, codigo, nome, tipo, subtipo, identificacao, status, uso_atual, unidade_uso, local_id, lat, lon',
+    colunaAtivo: 'ativo',
+    colunaOrdem: 'nome',
+    colunaRotulo: 'nome',
+    colunaDetalhe: 'identificacao',
+    colunaSubtipo: 'tipo',
+    colunaEstado: 'status',
+  },
+  fonoclama: {
+    tabela: 'fono_ativos',
+    colunas: 'id, codigo, nome, tipo, patrimonio, status, uso_atual, unidade_uso, local_id, lat, lon',
+    colunaAtivo: 'ativo',
+    colunaOrdem: 'nome',
+    colunaRotulo: 'nome',
+    colunaDetalhe: 'codigo',
+    colunaSubtipo: 'tipo',
+    colunaEstado: 'status',
+  },
+  refrigeracao: {
+    tabela: 'equipamentos',
+    colunas: 'id, tipo, predio, local, funciona, estado, patrimonio, local_id, lat, lon',
+    colunaAtivo: null,
+    colunaOrdem: 'predio',
+    colunaRotulo: 'tipo',
+    colunaDetalhe: 'local',
+    colunaSubtipo: 'tipo',
+    colunaEstado: 'funciona',
+  },
+}
+
+// Lista de módulos que o mapa sabe carregar, na ordem em que a tela os
+// apresenta. Exportada para a tela e o editor não redeclararem a lista —
+// mesmo motivo de CARGOS_POSICAO morar aqui e ser importada.
+export const MODULOS_DE_ATIVO = Object.keys(CONFIG_POR_MODULO)
+
+export function configDoModulo(modulo) {
+  const config = Object.prototype.hasOwnProperty.call(CONFIG_POR_MODULO, modulo)
+    ? CONFIG_POR_MODULO[modulo]
+    : null
+  if (!config) {
+    throw new Error(
+      `mapa-dados: módulo "${modulo}" não está na lista fechada de tabelas de ativo (CONFIG_POR_MODULO).`
+    )
+  }
+  return config
 }
 
 export async function carregarAtivosDoModulo(modulo) {
-  const tabela = TABELA_POR_MODULO[modulo]
-  if (!tabela) {
-    throw new Error(
-      `mapa-dados: módulo "${modulo}" não está na lista fechada de tabelas de ativo (TABELA_POR_MODULO).`
-    )
-  }
+  const config = configDoModulo(modulo)
   const supa = obterCliente()
-  const { data, error } = await supa
-    .from(tabela)
-    .select(COLUNAS_POR_MODULO[modulo])
-    .eq('ativo', true)
-    .order('nome')
+  let consulta = supa.from(config.tabela).select(config.colunas)
+  // `equipamentos` não tem coluna de arquivamento — filtrar por ela
+  // devolveria erro do Postgres em vez de lista. O filtro é aplicado só
+  // onde a coluna existe.
+  if (config.colunaAtivo) consulta = consulta.eq(config.colunaAtivo, true)
+  const { data, error } = await consulta.order(config.colunaOrdem)
   if (error) {
-    console.error(`mapa-dados: falha ao carregar ${tabela} —`, error.message)
+    console.error(`mapa-dados: falha ao carregar ${config.tabela} —`, error.message)
     mostrarErroDeCarga(`Não foi possível carregar os ativos de ${modulo}. ${error.message}`)
     return []
   }
@@ -180,9 +270,23 @@ export function carregarAtivosEletricos() {
 // a outra acabou de escrever.
 export const NAO_LOCALIZADOS = []
 
+// Contraparte de NAO_LOCALIZADOS, pelo mesmo motivo e com a mesma regra de
+// limpeza por módulo: quem sabe quais ativos ficaram no mapa é quem acabou
+// de resolver a posição deles. A busca da tela (voar até o ativo) lê daqui
+// em vez de percorrer as camadas do Leaflet — a lista é dado, o marcador é
+// desenho, e procurar dentro do desenho amarraria a busca ao componente
+// travado (mapa/xmap.js).
+export const POSICIONADOS = []
+
 export function limparNaoLocalizados(modulo) {
   for (let i = NAO_LOCALIZADOS.length - 1; i >= 0; i--) {
     if (NAO_LOCALIZADOS[i].origemModulo === modulo) NAO_LOCALIZADOS.splice(i, 1)
+  }
+}
+
+export function limparPosicionados(modulo) {
+  for (let i = POSICIONADOS.length - 1; i >= 0; i--) {
+    if (POSICIONADOS[i].origemModulo === modulo) POSICIONADOS.splice(i, 1)
   }
 }
 
@@ -202,14 +306,30 @@ export function limparNaoLocalizados(modulo) {
 // mapa, senão a primeira impressão de um mapa real é "não funciona".
 export function posicionarAtivos(ativos, locais, modulo) {
   limparNaoLocalizados(modulo)
+  limparPosicionados(modulo)
+  const config = configDoModulo(modulo)
   const posicionados = []
   for (const ativo of ativos || []) {
     const local = ativo?.local_id != null ? locais?.[ativo.local_id] : null
     const posicao = resolverPosicao(ativo, local)
+    // Rótulo, subtipo e estado são resolvidos AQUI, uma vez, pelo nome de
+    // coluna que a configuração do módulo declara — as camadas e a busca
+    // recebem um formato único e nunca precisam saber que refrigeração
+    // guarda o estado em `funciona` e as outras em `status`.
+    const comum = {
+      ...ativo,
+      origemModulo: modulo,
+      rotulo: ativo?.[config.colunaRotulo] ?? ativo?.[config.colunaDetalhe] ?? `#${ativo?.id}`,
+      detalhe: ativo?.[config.colunaDetalhe] ?? null,
+      subtipo: ativo?.[config.colunaSubtipo] ?? null,
+      estado: normalizarEstado(modulo, ativo?.[config.colunaEstado]),
+    }
     if (posicao.lat != null && posicao.lon != null) {
-      posicionados.push({ ...ativo, lat: posicao.lat, lon: posicao.lon, origemPosicao: posicao.origem })
+      const posicionado = { ...comum, lat: posicao.lat, lon: posicao.lon, origemPosicao: posicao.origem }
+      posicionados.push(posicionado)
+      POSICIONADOS.push(posicionado)
     } else {
-      NAO_LOCALIZADOS.push({ ...ativo, origemModulo: modulo })
+      NAO_LOCALIZADOS.push(comum)
     }
   }
   return posicionados
@@ -334,12 +454,7 @@ export const CARGOS_POSICAO = ['admin', 'gestor', 'tecnico']
 export async function salvarPosicaoAtivo(modulo, id, lat, lon) {
   // Resolve a tabela pela mesma lista fechada de carregarAtivosDoModulo —
   // nome de tabela nunca é montado por concatenação de texto.
-  const tabela = TABELA_POR_MODULO[modulo]
-  if (!tabela) {
-    throw new Error(
-      `mapa-dados: módulo "${modulo}" não está na lista fechada de tabelas de ativo (TABELA_POR_MODULO).`
-    )
-  }
+  const { tabela } = configDoModulo(modulo)
   // Identificador validado como inteiro estrito, mesmo critério que o lado
   // de destino do link já usa (maquinas/app.js#_abrirAtivoDaUrl, plano
   // 10-03) — Number.isSafeInteger, não um cast tolerante.
@@ -367,6 +482,47 @@ export async function salvarPosicaoAtivo(modulo, id, lat, lon) {
     .single()
   if (error) {
     alert('Erro ao salvar posição: ' + error.message)
+    return null
+  }
+  return data
+}
+
+// ── Bloco 7 — escrita de posição de LOCAL ──────────────────────────────
+// A outra metade da arquitetura de duas camadas. salvarPosicaoAtivo (Bloco
+// 6) grava a posição PRÓPRIA do ativo e por isso tem proibição explícita
+// de tocar em cmasm_locais — mover um ativo não pode arrastar os vizinhos
+// dele junto. Esta função é o caminho oposto e deliberado: quem chama
+// sabe que está posicionando o PRÉDIO, e que todos os ativos ligados a ele
+// sem posição própria passam a herdar essa coordenada (resolverPosicao:
+// própria vence herdada, nunca o contrário). São as duas únicas portas de
+// escrita de coordenada do módulo, uma por camada, cada uma numa tabela.
+//
+// Mesmo cargo do posicionamento de ativo (CARGOS_POSICAO, Bloco 6): a
+// policy de cmasm_locais também escopa escrita a `authenticated`, e a
+// lista da tela continua sendo mais estreita por decisão de produto, não
+// espelho da policy. Mesmas três garantias que tests/mapa-posicionamento
+// afirma sobre salvarPosicaoAtivo: identificador inteiro estrito,
+// coordenada validada pelo núcleo puro ANTES da viagem de rede, e lat/lon
+// no mesmo .update( — nunca em dois comandos, que deixariam meia
+// coordenada gravada se o segundo falhasse.
+export async function salvarPosicaoLocal(id, lat, lon) {
+  if (!Number.isSafeInteger(id)) {
+    alert('Erro: identificador de local inválido.')
+    return null
+  }
+  if (!dentroDoEnvelope(lat, lon)) {
+    alert('Erro: a coordenada está fora da região do CMASM. Verifique o ponto marcado no mapa.')
+    return null
+  }
+  const supa = obterCliente()
+  const { data, error } = await supa
+    .from('cmasm_locais')
+    .update({ lat, lon })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    alert('Erro ao salvar posição do prédio: ' + error.message)
     return null
   }
   return data

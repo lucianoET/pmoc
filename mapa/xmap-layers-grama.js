@@ -11,7 +11,7 @@
  */
 
 import { carregarAreas, carregarMaquinas, carregarLocaisComPosicao, posicionarAtivos } from './mapa-dados.js'
-import { maquinasParaZona, normalizarCategoria, linkDoModulo } from './mapa-geometria.js'
+import { maquinasParaZona, normalizarCategoria, linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
 
 /* ── Estilos por tipo de área ──
    maq_areas.tipo no banco é corte|poda|limpeza|mista|outro (D-03,
@@ -35,33 +35,23 @@ function tipoLabel(t) {
   return { jardim:'Jardim', bosque:'Bosque', canteiro:'Canteiro', area_recreativa:'Área Recreativa', horta:'Horta' }[t] || t;
 }
 
-// maq_ativos.status no banco é operante|inoperante|manutencao|baixado
-// (supabase/01_maquinas_schema.sql), não o operacional|em_manutencao|inativo
-// que statusClass/maquinaSVG abaixo falam (portados do legado, mantidos
-// como estão). Esta ponte resolve a leitura antes de chegar neles — mesmo
-// espírito de normalizarCategoria em mapa/mapa-geometria.js, só que local
-// a este arquivo porque é vocabulário de exibição, não de domínio.
-function statusParaExibicao(status) {
-  const mapa = { operante: 'operacional', manutencao: 'em_manutencao', inoperante: 'em_manutencao', baixado: 'inativo' }
-  return mapa[status] || status;
-}
-
-function statusClass(s) {
-  return { operacional: 'ok', em_manutencao: 'warn', inativo: '' }[s] || '';
-}
-
 function maqLabel(t) {
   return { cortador_grama:'Cortador', roçadeira:'Roçadeira', motosserra:'Motosserra', soprador:'Soprador' }[t] || t;
 }
 
-/* ── SVG máquina ── */
-function maquinaSVG(tipo, status) {
-  const c = { operacional: '#4ade80', em_manutencao: '#f59e0b', inativo: '#4a6785' }[status] || '#8fa8c8';
+/* ── SVG máquina ──
+   A ponte de vocabulário (maq_ativos.status é operante|inoperante|
+   manutencao|baixado) e a paleta saíram daqui para o núcleo puro
+   (mapa/mapa-geometria.js, Bloco 8): eram três cópias da mesma tradução —
+   uma aqui, uma na elétrica, uma por família nova — e a legenda da tela
+   não teria de onde ler a cor sem escrever hex à mão numa quarta. */
+function maquinaSVG(tipo, estado) {
+  const c = corDoEstado(estado);
   const ico = { cortador_grama:'✂', roçadeira:'⚡', motosserra:'⚙', soprador:'〜' }[tipo] || '⚙';
   return `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
     <rect x="2" y="2" width="26" height="26" rx="6" fill="rgba(7,17,31,.92)" stroke="${c}" stroke-width="2"/>
     <text x="15" y="20" text-anchor="middle" font-size="14" fill="${c}">${ico}</text>
-    ${status === 'em_manutencao' ? '<circle cx="24" cy="6" r="4" fill="#f59e0b"/>' : ''}
+    ${estado === 'manutencao' ? `<circle cx="24" cy="6" r="4" fill="${c}"/>` : ''}
   </svg>`;
 }
 
@@ -142,12 +132,11 @@ function renderAreas(group, areas, maquinas) {
 function renderMaquinas(group, maquinas) {
   maquinas.forEach(m => {
     const categoria = normalizarCategoria(m.categoria);
-    const statusExibicao = statusParaExibicao(m.status);
-    const icon = makeIcon(maquinaSVG(categoria, statusExibicao), [30, 30], [15, 15]);
+    const icon = makeIcon(maquinaSVG(categoria, m.estado), [30, 30], [15, 15]);
     const marker = L.marker([m.lat, m.lon], { icon });
 
     const rows = [
-      ['Status',   m.status,                                        statusClass(statusExibicao)],
+      ['Status',   rotuloDoEstado(m.estado),                        classeDoEstado(m.estado)],
       ['Uso',      (m.uso_atual || 0) + ' ' + (m.unidade_uso || 'h')],
       ['Posição',  m.origemPosicao === 'propria' ? 'Própria' : 'Herdada do local', 'info'],
     ];
