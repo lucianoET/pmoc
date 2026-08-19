@@ -75,7 +75,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="view-sub">Cada linha é um par sintoma → causa provável, com as peças e serviços que consome</div>
       <div class="fgrid" style="margin-bottom:8px;align-items:end">
         <div class="frow" style="margin-bottom:0"><label>Tipo de máquina</label><select id="tipo-reparos" onchange="selecionarTipoMaquina(this.value)"></select></div>
-        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-reparos" class="btn btn-s btn-sm" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
+        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-reparos" class="btn btn-s btn-sm" aria-pressed="false" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
@@ -98,7 +98,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="view-sub">Operações de mão de obra. O tempo padrão é estimativa; o real fica em maq_os.horas_servico</div>
       <div class="fgrid" style="margin-bottom:8px;align-items:end">
         <div class="frow" style="margin-bottom:0"><label>Tipo de máquina</label><select id="tipo-servicos" onchange="selecionarTipoMaquina(this.value)"></select></div>
-        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-servicos" class="btn btn-s btn-sm" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
+        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-servicos" class="btn btn-s btn-sm" aria-pressed="false" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
       </div>
       <div class="tbl-wrap">
         <table class="tbl">
@@ -121,7 +121,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="view-sub">O conhecimento é indexado por modelo, não por máquina — é o que permite reaproveitá-lo em outra oficina</div>
       <div class="fgrid" style="margin-bottom:8px;align-items:end">
         <div class="frow" style="margin-bottom:0"><label>Tipo de máquina</label><select id="tipo-modelos" onchange="selecionarTipoMaquina(this.value)"></select></div>
-        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-modelos" class="btn btn-s btn-sm" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
+        <div class="frow" style="margin-bottom:0"><button type="button" id="btn-agrupar-modelos" class="btn btn-s btn-sm" aria-pressed="false" onclick="alternarAgrupamentoTipo()">Agrupar por tipo</button></div>
       </div>
       <div class="tbl-wrap">
         <table class="tbl">

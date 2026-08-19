@@ -235,7 +235,11 @@ function alternarAgrupamentoTipo(){
   AGRUPAR_POR_TIPO = !AGRUPAR_POR_TIPO
   for(const id of ['btn-agrupar-reparos','btn-agrupar-servicos','btn-agrupar-modelos']){
     const btn = document.getElementById(id)
-    if(btn) btn.classList.toggle('ativo', AGRUPAR_POR_TIPO)
+    if(!btn) continue
+    btn.classList.toggle('ativo', AGRUPAR_POR_TIPO)
+    // botão de dois estados: a borda de destaque diz o estado a quem enxerga,
+    // aria-pressed diz o mesmo a quem usa leitor de tela
+    btn.setAttribute('aria-pressed', String(AGRUPAR_POR_TIPO))
   }
   renderReparos()
   renderServicos()
