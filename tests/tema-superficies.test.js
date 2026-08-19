@@ -132,11 +132,18 @@ test('calibracao/index.html fica fora da convencao pmoc-tema por decisao (D-05) 
     !conteudo.includes(CHAVE_TEMA),
     `calibracao/index.html menciona a chave de tema da plataforma '${CHAVE_TEMA}' — a convencao vazou para um modulo que deveria ficar fora dela`
   )
-  assert.doesNotMatch(
-    conteudo,
-    /shared\//,
-    'calibracao/index.html referencia shared/ — deveria continuar standalone, como o app legado que e'
-  )
+  // Desde 19/08/2026 o modulo importa shared/auth.js: a decisao D-06 exigia
+  // login por cargo, e escrever a segunda tela de login do projeto seria pior
+  // do que a excecao. O que D-05 protege e o TEMA — o modulo tem o proprio
+  // alternador, com vocabulario proprio (dark/light) e chave propria. Entao a
+  // proibicao passou a nomear os dois arquivos da convencao, em vez de
+  // proibir o diretorio inteiro.
+  for (const proibido of ['shared/tema.js', 'shared/shell.js']) {
+    assert.ok(
+      !conteudo.includes(proibido),
+      `calibracao/index.html carrega ${proibido} — a convencao de tema da plataforma vazou para um modulo que fica fora dela por decisao (D-05)`
+    )
+  }
   for (const tema of TEMAS) {
     assert.doesNotMatch(
       conteudo,
