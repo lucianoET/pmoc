@@ -475,6 +475,12 @@ function(a,b,c){if(!Vd(b))throw Error(m(200));return Wd(null,a,b,!1,c)};Q.unmoun
 </script>
 <script>window.React=window.React||self.React;window.ReactDOM=window.ReactDOM||self.ReactDOM;</script>
 
+<!-- SDK do Supabase. Ao contrário do React e do SheetJS acima, este vem
+     de CDN: o módulo passou a guardar os dados no Postgres (migrações 35
+     e 36), então já depende de rede para funcionar — embutir o SDK não
+     devolveria o modo offline. Mesma origem usada pelos outros módulos. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <!-- SheetJS (leitor XLSX/ODS) embutido para funcionamento 100% offline -->
 <script>
 /*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
@@ -5384,86 +5390,197 @@ function Lotes({
   }))));
 }
 
-// ===== PERSISTÊNCIA GLOBAL (localStorage) =====
+// ===== PERSISTÊNCIA GLOBAL (Supabase) =====
+// Este módulo guardava tudo em localStorage: limpar o cache apagava o
+// controle de calibração, e cada computador via um dado diferente.
+// Agora lê e grava nas tabelas cal_* (migrações 35 e 36).
+//
+// ⚠ O módulo continua sem login, por decisão do usuário — as políticas
+// aceitam anon, então quem tem a URL altera o dado de todos. Está
+// registrado como pendência conhecida no CLAUDE.md.
+const SUPA_URL = 'https://thoaqipyhfmromsgzmjs.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRob2FxaXB5aGZtcm9tc2d6bWpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjk5NTksImV4cCI6MjEwMTY0NTk1OX0.1Ig6ijb6SKgeQRgGwM54MyzlVr-n_feSAxaFTwbHRGY';
+const supa = window.supabase ? window.supabase.createClient(SUPA_URL, SUPA_KEY) : null;
+
+// Chave antiga. Não é mais lida nem escrita — fica declarada só para a
+// tela Dados poder avisar quem ainda tem dado preso no navegador.
 const STATE_KEY = 'cmasm_erp_state_v1';
-function loadSavedState() {
-  try {
-    const r = localStorage.getItem(STATE_KEY);
-    if (!r) return null;
-    const d = JSON.parse(r);
-    return d && d.v === 1 ? d : null;
-  } catch (e) {
-    return null;
-  }
+
+// ── borda: camelCase do app ↔ snake_case do Postgres ──
+// Identificador em Postgres é minúsculo por convenção (aspas em
+// "labId" obrigariam a citar para sempre), mas o React já referencia
+// eqId/labId/cC em dezenas de lugares. Os dois mundos se encontram
+// aqui e em lugar nenhum mais.
+const CAMPOS_LAB = {
+  id: 'id', code: 'code', nome: 'nome', tipo: 'tipo', acred: 'acred',
+  esp: 'esp', obs: 'obs', ativo: 'ativo'
+};
+const CAMPOS_EQ = {
+  id: 'id', sn: 'sn', pat: 'pat', cat: 'cat', tipo: 'tipo', fab: 'fab',
+  mod: 'mod', faixa: 'faixa', div: 'div', labId: 'lab_id', per: 'per',
+  ult: 'ult', prox: 'prox', cert: 'cert', status: 'status',
+  cC: 'custo_cal', cR: 'custo_rep', rest: 'rest', obs: 'obs',
+  local: 'local', grandeza: 'grandeza', resol: 'resol', classe: 'classe',
+  ema: 'ema', uCal: 'u_cal', fw: 'fw', verifInt: 'verif_int', ativo: 'ativo'
+};
+const CAMPOS_PS = {
+  id: 'id', num: 'num', eqId: 'eq_id', labId: 'lab_id', tipo: 'tipo',
+  status: 'status', emi: 'emi', env: 'env', cal: 'cal', ret: 'ret',
+  cert: 'cert', res: 'res', vM: 'valor_prev', vE: 'valor_exec',
+  nf: 'nf', ctr: 'ctr', emi_nm: 'emitente', obs: 'obs'
+};
+const CAMPOS_LOTE = {
+  id: 'id', code: 'code', desc: 'descricao', contrato: 'contrato',
+  status: 'status', data: 'data', itens: 'itens'
+};
+
+// Quais campos de cada entidade são data. O app fala dd/mm/aaaa; o
+// banco guarda `date`. A tradução acontece só nestes dois helpers.
+const DATAS = { eq: ['ult', 'prox'], ps: ['emi', 'env', 'cal', 'ret'], lote: ['data'] };
+
+function paraISO(v) {
+  if (!v) return null;
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(v).trim());
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 }
-const SAVED_STATE = loadSavedState();
+function paraBR(v) {
+  if (!v) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+}
+
+// objeto do app → linha do banco. Só os campos presentes viajam, para
+// que um update parcial continue parcial.
+function paraLinha(obj, campos, datas = []) {
+  const linha = {};
+  for (const [campo, coluna] of Object.entries(campos)) {
+    if (!(campo in obj)) continue;
+    linha[coluna] = datas.includes(campo) ? paraISO(obj[campo]) : obj[campo];
+  }
+  return linha;
+}
+// linha do banco → objeto do app
+function daLinha(linha, campos, datas = []) {
+  const obj = {};
+  for (const [campo, coluna] of Object.entries(campos)) {
+    obj[campo] = datas.includes(campo) ? paraBR(linha[coluna]) : linha[coluna];
+  }
+  return obj;
+}
+
 function useStore() {
-  const [eqs, setEqs] = useState(SAVED_STATE?.eqs || EQS);
-  const [labs, setLabs] = useState(SAVED_STATE?.labs || LABS);
-  const [pss, setPss] = useState(SAVED_STATE?.pss || PS_INIT);
-  const [cnt, setCnt] = useState(SAVED_STATE?.cnt || PS_INIT.length + 1);
-  const [lotes, setLotes] = useState(SAVED_STATE?.lotes || LOTES_INIT);
-  const [catalog, setCatalogState] = useState(loadCatalog());
-  useEffect(() => {
-    try {
-      localStorage.setItem(STATE_KEY, JSON.stringify({
-        v: 1,
-        savedAt: new Date().toISOString(),
-        eqs, labs, pss, cnt, lotes
-      }));
-    } catch (e) {
-      console.warn('CMASM: falha ao salvar estado', e);
+  const [eqs, setEqs] = useState([]);
+  const [labs, setLabs] = useState([]);
+  const [pss, setPss] = useState([]);
+  const [lotes, setLotes] = useState([]);
+  const [catalog, setCatalogState] = useState({});
+  const [carregando, setCarregando] = useState(true);
+  const [erroCarga, setErroCarga] = useState(null);
+
+  // Uma consulta por tabela, em paralelo, no padrão carregarTudo() do
+  // resto do pmoc.
+  async function carregarTudo() {
+    if (!supa) { setErroCarga('SDK do Supabase não carregou.'); setCarregando(false); return; }
+    const [rl, re, rp, rt, rc] = await Promise.all([
+      supa.from('cal_labs').select('*'),
+      supa.from('cal_equipamentos').select('*'),
+      supa.from('cal_ps').select('*'),
+      supa.from('cal_lotes').select('*'),
+      supa.from('cal_catalogo').select('*').order('ord')
+    ]);
+    const falha = [rl, re, rp, rt, rc].find(r => r.error);
+    if (falha) {
+      // Sem as migrações 35/36 o módulo avisa em vez de mostrar tela
+      // quebrada — mesmo princípio de carregarCatalogoReparos() no Máquinas.
+      setErroCarga(falha.error.message);
+      setCarregando(false);
+      return;
     }
-  }, [eqs, labs, pss, cnt, lotes]);
-  function addLote(d) { setLotes(p => [...p, { ...d, id: "l" + Date.now() }]); }
-  function updLote(id, d) { setLotes(p => p.map(l => l.id === id ? { ...l, ...d } : l)); }
-  function setCatalog(c) { setCatalogState(c); }
+    setLabs((rl.data || []).map(l => daLinha(l, CAMPOS_LAB)));
+    setEqs((re.data || []).map(e => daLinha(e, CAMPOS_EQ, DATAS.eq)));
+    setPss((rp.data || []).map(p => daLinha(p, CAMPOS_PS, DATAS.ps)));
+    setLotes((rt.data || []).map(t => daLinha(t, CAMPOS_LOTE, DATAS.lote)));
+    const mapa = {};
+    for (const r of rc.data || []) {
+      (mapa[r.equip_tipo] = mapa[r.equip_tipo] || []).push({
+        forn: r.forn, contrato: r.contrato, preco: r.preco, item: r.item, tipo: r.tipo
+      });
+    }
+    setCatalogState(mapa);
+    setErroCarga(null);
+    setCarregando(false);
+  }
+
+  useEffect(() => { carregarTudo(); }, []);
+
+  // Escrita em segundo plano. A tela já mostrou a mudança; se o banco
+  // recusar, avisa e recarrega para a tela voltar a contar a verdade.
+  // ponytail: gravação otimista para não ter de tornar assíncronas as
+  // 11 páginas React, que consomem estes mutators de forma síncrona.
+  function gravar(q, oque) {
+    if (!supa) return;
+    Promise.resolve(q).then(({ error }) => {
+      if (error) { alert(`Erro ao salvar ${oque}: ${error.message}`); carregarTudo(); }
+    });
+  }
+
+  // O contador do PS não é guardado: é lido do que já existe. Um número
+  // de sequência mantido no cliente geraria PS-CMS-26-013 duplicado
+  // assim que duas pessoas emitissem ao mesmo tempo. `cal_ps.num` é
+  // unique, então uma colisão vira erro visível, não dado torto.
+  const ano = new Date().getFullYear().toString().slice(2);
+  const cnt = useMemo(() => {
+    let max = 0;
+    const re = new RegExp(`^PS-CMS-${ano}-(\\d+)$`);
+    for (const p of pss) {
+      const m = re.exec(p.num || '');
+      if (m) max = Math.max(max, +m[1]);
+    }
+    return max + 1;
+  }, [pss, ano]);
+
   const lm = useMemo(() => Object.fromEntries(labs.map(l => [l.id, l])), [labs]);
   const em = useMemo(() => Object.fromEntries(eqs.map(e => [e.id, e])), [eqs]);
+
   function getPSByEq(id) {
     return pss.filter(p => p.eqId === id);
   }
+
   function addEq(d) {
-    const e = {
-      ...d,
-      id: `e${Date.now()}`,
-      ativo: true
-    };
+    const e = { ...d, id: `e${Date.now()}`, ativo: true };
     setEqs(p => [...p, e]);
+    gravar(supa.from('cal_equipamentos').insert(paraLinha(e, CAMPOS_EQ, DATAS.eq)), 'o instrumento');
     return e;
   }
+
   function updEq(id, d) {
-    setEqs(p => p.map(e => e.id === id ? {
-      ...e,
-      ...d
-    } : e));
+    setEqs(p => p.map(e => e.id === id ? { ...e, ...d } : e));
+    gravar(supa.from('cal_equipamentos').update(paraLinha(d, CAMPOS_EQ, DATAS.eq)).eq('id', id), 'o instrumento');
   }
+
   function delEq(id) {
     const ab = pss.find(p => p.eqId === id && !['CONCLUIDO', 'CANCELADO'].includes(p.status));
     if (ab) return 'PS em aberto — cancele antes';
-    setEqs(p => p.map(e => e.id === id ? {
-      ...e,
-      ativo: false
-    } : e));
+    // baixa é arquivamento, nunca delete — igual ao resto da plataforma
+    setEqs(p => p.map(e => e.id === id ? { ...e, ativo: false } : e));
+    gravar(supa.from('cal_equipamentos').update({ ativo: false }).eq('id', id), 'a baixa do instrumento');
     return null;
   }
+
   function addLab(d) {
-    setLabs(p => [...p, {
-      ...d,
-      id: `lab${Date.now()}`,
-      ativo: true
-    }]);
+    const l = { ...d, id: `lab${Date.now()}`, ativo: true };
+    setLabs(p => [...p, l]);
+    gravar(supa.from('cal_labs').insert(paraLinha(l, CAMPOS_LAB)), 'o laboratório');
   }
+
   function updLab(id, d) {
-    setLabs(p => p.map(l => l.id === id ? {
-      ...l,
-      ...d
-    } : l));
+    setLabs(p => p.map(l => l.id === id ? { ...l, ...d } : l));
+    gravar(supa.from('cal_labs').update(paraLinha(d, CAMPOS_LAB)).eq('id', id), 'o laboratório');
   }
+
   function emitPS(eqId, tipo, labId, extra = {}) {
     const eq = eqs.find(e => e.id === eqId);
-    const a = new Date().getFullYear().toString().slice(2);
-    const n = `PS-CMS-${a}-${String(cnt).padStart(3, '0')}`;
+    const n = `PS-CMS-${ano}-${String(cnt).padStart(3, '0')}`;
     const ps = {
       id: `p${Date.now()}`,
       num: n,
@@ -5485,14 +5602,13 @@ function useStore() {
       ...extra
     };
     setPss(p => [...p, ps]);
-    setCnt(c => c + 1);
+    gravar(supa.from('cal_ps').insert(paraLinha(ps, CAMPOS_PS, DATAS.ps)), 'o PS');
     return ps;
   }
+
   function updPS(id, d) {
-    setPss(p => p.map(x => x.id === id ? {
-      ...x,
-      ...d
-    } : x));
+    setPss(p => p.map(x => x.id === id ? { ...x, ...d } : x));
+    gravar(supa.from('cal_ps').update(paraLinha(d, CAMPOS_PS, DATAS.ps)).eq('id', id), 'o PS');
     const ps = pss.find(p => p.id === id);
     if (d.status === 'CONCLUIDO' && ps && ps.tipo !== 'reparo') {
       const cal = d.cal || ps.cal;
@@ -5516,14 +5632,13 @@ function useStore() {
       });
     }
   }
+
   function canPS(id) {
-    setPss(p => p.map(x => x.id === id ? {
-      ...x,
-      status: 'CANCELADO'
-    } : x));
+    setPss(p => p.map(x => x.id === id ? { ...x, status: 'CANCELADO' } : x));
+    gravar(supa.from('cal_ps').update({ status: 'CANCELADO' }).eq('id', id), 'o cancelamento do PS');
   }
+
   function emitPSBatch(items) {
-    const a = new Date().getFullYear().toString().slice(2);
     const created = [];
     let c = cnt;
     for (const it of items) {
@@ -5531,7 +5646,7 @@ function useStore() {
       if (!eq) continue;
       created.push({
         id: `p${Date.now()}_${c}`,
-        num: `PS-CMS-${a}-${String(c).padStart(3, '0')}`,
+        num: `PS-CMS-${ano}-${String(c).padStart(3, '0')}`,
         eqId: eq.id,
         labId: it.labId || eq.labId,
         tipo: it.tipo || 'calibracao_rotina',
@@ -5543,11 +5658,16 @@ function useStore() {
       });
       c++;
     }
-    if (created.length) { setPss(p => [...p, ...created]); setCnt(c); }
+    if (created.length) {
+      setPss(p => [...p, ...created]);
+      gravar(supa.from('cal_ps').insert(created.map(p => paraLinha(p, CAMPOS_PS, DATAS.ps))), 'os PS');
+    }
     return created;
   }
+
   function importEqs(rows) {
     const next = [...eqs];
+    const gravaveis = [];
     let added = 0, updated = 0;
     rows.forEach((r, i) => {
       const idx = next.findIndex(e =>
@@ -5559,9 +5679,10 @@ function useStore() {
           if (r[k] !== null && r[k] !== undefined && r[k] !== '') upd[k] = r[k];
         });
         next[idx] = { ...next[idx], ...upd, ativo: true };
+        gravaveis.push(next[idx]);
         updated++;
       } else {
-        next.push({
+        const novo = {
           id: `imp${Date.now()}_${i}`,
           sn: r.sn || null, pat: r.pat || null,
           cat: r.cat || 'ELE',
@@ -5575,32 +5696,95 @@ function useStore() {
           classe: r.classe || null, ema: r.ema || null, uCal: r.uCal || null,
           fw: null, verifInt: null,
           ativo: true
-        });
+        };
+        next.push(novo);
+        gravaveis.push(novo);
         added++;
       }
     });
     setEqs(next);
+    if (gravaveis.length) {
+      gravar(supa.from('cal_equipamentos')
+        .upsert(gravaveis.map(e => paraLinha(e, CAMPOS_EQ, DATAS.eq)), { onConflict: 'id' }),
+        'a importação');
+    }
     return { added, updated };
   }
-  function replaceState(d) {
-    if (Array.isArray(d.eqs)) setEqs(d.eqs);
-    if (Array.isArray(d.labs)) setLabs(d.labs);
-    if (Array.isArray(d.pss)) setPss(d.pss);
-    if (typeof d.cnt === 'number') setCnt(d.cnt);
-    if (Array.isArray(d.lotes)) setLotes(d.lotes);
-    if (d.catalog) {
-      setCatalogState(d.catalog);
-      try { localStorage.setItem(CAT_KEY, JSON.stringify(d.catalog)); } catch (e) {}
+
+  // Grava o catálogo inteiro: sobe o que existe e apaga o que saiu do
+  // mapa (a tela permite remover opção de preço, e upsert sozinho não
+  // apaga nada).
+  function persistirCatalogo(c) {
+    const linhas = [];
+    for (const [equipTipo, opcoes] of Object.entries(c || {})) {
+      (opcoes || []).forEach((o, i) => linhas.push({
+        equip_tipo: equipTipo, ord: i, forn: o.forn, contrato: o.contrato,
+        preco: o.preco, item: o.item, tipo: o.tipo
+      }));
     }
+    if (!supa) return;
+    gravar(supa.from('cal_catalogo').upsert(linhas, { onConflict: 'equip_tipo,ord' }), 'o catálogo');
+    Promise.resolve(
+      supa.from('cal_catalogo').select('equip_tipo,ord')
+    ).then(({ data, error }) => {
+      if (error || !data) return;
+      const vivos = new Set(linhas.map(l => `${l.equip_tipo} ${l.ord}`));
+      const sobra = data.filter(r => !vivos.has(`${r.equip_tipo} ${r.ord}`));
+      for (const r of sobra) {
+        supa.from('cal_catalogo').delete().eq('equip_tipo', r.equip_tipo).eq('ord', r.ord);
+      }
+    });
   }
-  function resetAll() {
-    try { localStorage.removeItem(STATE_KEY); } catch (e) {}
-    setEqs(EQS);
-    setLabs(LABS);
-    setPss(PS_INIT);
-    setCnt(PS_INIT.length + 1);
-    setLotes(LOTES_INIT);
+
+  function setCatalog(c) {
+    setCatalogState(c);
+    persistirCatalogo(c);
   }
+
+  function addLote(d) {
+    const l = { ...d, id: 'l' + Date.now() };
+    setLotes(p => [...p, l]);
+    gravar(supa.from('cal_lotes').insert(paraLinha(l, CAMPOS_LOTE, DATAS.lote)), 'o lote');
+  }
+
+  function updLote(id, d) {
+    setLotes(p => p.map(l => l.id === id ? { ...l, ...d } : l));
+    gravar(supa.from('cal_lotes').update(paraLinha(d, CAMPOS_LOTE, DATAS.lote)).eq('id', id), 'o lote');
+  }
+
+  // Restaurar backup: sobe tudo por cima do que está no banco. Não apaga
+  // o que não veio no arquivo — apagar em massa é o resetAll, que pede
+  // confirmação própria.
+  async function replaceState(d) {
+    if (!supa) return;
+    const passos = [];
+    if (Array.isArray(d.labs)) passos.push(['cal_labs', d.labs.map(l => paraLinha(l, CAMPOS_LAB)), 'id']);
+    if (Array.isArray(d.eqs)) passos.push(['cal_equipamentos', d.eqs.map(e => paraLinha(e, CAMPOS_EQ, DATAS.eq)), 'id']);
+    if (Array.isArray(d.pss)) passos.push(['cal_ps', d.pss.map(p => paraLinha(p, CAMPOS_PS, DATAS.ps)), 'id']);
+    if (Array.isArray(d.lotes)) passos.push(['cal_lotes', d.lotes.map(t => paraLinha(t, CAMPOS_LOTE, DATAS.lote)), 'id']);
+    for (const [tabela, linhas, chave] of passos) {
+      if (!linhas.length) continue;
+      const { error } = await supa.from(tabela).upsert(linhas, { onConflict: chave });
+      if (error) { alert(`Erro ao restaurar ${tabela}: ${error.message}`); break; }
+    }
+    if (d.catalog) persistirCatalogo(d.catalog);
+    await carregarTudo();
+  }
+
+  // Antes isto limpava o localStorage do próprio navegador. Agora apaga
+  // o banco compartilhado, então quem confirma precisa saber disso — o
+  // aviso está no texto do confirm, na tela Dados.
+  async function resetAll() {
+    if (!supa) return;
+    for (const t of ['cal_ps', 'cal_lotes', 'cal_equipamentos', 'cal_labs', 'cal_catalogo']) {
+      const { error } = await supa.from(t).delete().not('id', 'is', null);
+      if (error && t !== 'cal_catalogo') { alert(`Erro ao limpar ${t}: ${error.message}`); return; }
+    }
+    await supa.from('cal_catalogo').delete().neq('equip_tipo', '');
+    alert('Dados apagados. Reaplique supabase/36_calibracao_seed.sql para repor a carga de fábrica.');
+    await carregarTudo();
+  }
+
   return {
     importEqs,
     replaceState,
@@ -5625,7 +5809,10 @@ function useStore() {
     catalog,
     setCatalog,
     addLote,
-    updLote
+    updLote,
+    carregando,
+    erroCarga,
+    recarregar: carregarTudo
   };
 }
 function Modal({
@@ -8625,12 +8812,36 @@ function DadosPage({ s }) {
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [prev, setPrev] = useState(null);
-  const savedAt = (() => {
+  // Sobra da era localStorage: quem já usava o módulo antes da migração
+  // tem dado mais recente preso neste navegador. Nada é lido dali para o
+  // app — só serve para avisar a pessoa de que esse dado existe e ainda
+  // não subiu.
+  const legado = (() => {
     try {
       const d = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
-      return d?.savedAt ? new Date(d.savedAt).toLocaleString('pt-BR') : null;
+      if (!d || !Array.isArray(d.eqs)) return null;
+      return {
+        quando: d.savedAt ? new Date(d.savedAt).toLocaleString('pt-BR') : '—',
+        eqs: d.eqs.length,
+        pss: (d.pss || []).length
+      };
     } catch (e) { return null; }
   })();
+  function baixarLegado() {
+    try {
+      const bruto = localStorage.getItem(STATE_KEY);
+      if (!bruto) return;
+      const d = JSON.parse(bruto);
+      const b = new Blob([JSON.stringify({ ...d, v: 1, app: 'cmasm_erp_calibracao' }, null, 2)],
+        { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = `cmasm_legado_navegador_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      ok('Dados antigos deste navegador exportados. Use "Restaurar backup" para enviá-los ao banco.');
+    } catch (e) { bad('Falha ao exportar dados antigos: ' + e.message); }
+  }
   function ok(m) { setMsg(m); setErr(null); }
   function bad(m) { setErr(m); setMsg(null); }
   function exportBackup() {
@@ -8688,9 +8899,12 @@ function DadosPage({ s }) {
     ok(`Importação concluída: ${added} equipamento(s) novo(s), ${updated} atualizado(s). Chave de vínculo: SN ou patrimônio.`);
   }
   function doReset() {
-    if (window.confirm('Restaurar dados de fábrica? Todas as alterações feitas neste navegador serão perdidas. Exporte um backup antes, se necessário.')) {
+    // O texto precisou mudar junto com a migração: antes isto limpava o
+    // localStorage de quem clicava. Agora apaga as tabelas cal_* no
+    // Supabase — o dado de todo mundo, de todos os computadores.
+    if (window.confirm('APAGAR TODOS OS DADOS DE CALIBRAÇÃO?\n\nIsto apaga os instrumentos, laboratórios, pedidos de serviço e lotes do banco de dados compartilhado — para todos os usuários e todos os computadores, não só para este navegador. Não há desfazer.\n\nExporte um backup antes.')) {
       s.resetAll();
-      ok('Dados de fábrica restaurados.');
+      ok('Dados apagados do banco.');
     }
   }
   const fileBtn = (label, accept, onFile, primary) => h('label', { className: 'btn' + (primary ? ' pr' : ''), style: { cursor: 'pointer' } },
@@ -8708,16 +8922,25 @@ function DadosPage({ s }) {
     err && h('div', { className: 'card', style: { borderColor: 'var(--red)', color: 'var(--red)', marginBottom: 14 } }, '✕ ', err),
     h('div', { className: 'g2' },
       h('div', { className: 'card' },
-        h('div', { className: 'ct' }, 'Persistência automática'),
+        h('div', { className: 'ct' }, 'Banco de dados'),
         h('div', { style: { fontSize: 13, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 12 } },
-          'Os dados são salvos automaticamente neste navegador a cada alteração.',
-          h('br'), 'Último salvamento: ', h('b', { style: { color: 'var(--tx)' } }, savedAt || '—'),
+          'Os dados ficam no banco Supabase da plataforma e são gravados a cada alteração. Todos os computadores enxergam o mesmo dado.',
           h('br'), 'Equipamentos: ', h('b', { style: { color: 'var(--tx)' } }, s.eqs.filter(e => e.ativo).length),
           ' · PS: ', h('b', { style: { color: 'var(--tx)' } }, s.pss.length),
           ' · Lotes: ', h('b', { style: { color: 'var(--tx)' } }, s.lotes.length)),
         h('div', { style: { fontSize: 12, color: 'var(--tx3)', marginBottom: 12 } },
-          '⚠ O salvamento local não substitui backup: limpar o cache do navegador apaga os dados. Exporte o backup .json regularmente.'),
-        h('button', { className: 'btn dr sm', onClick: doReset }, '↺ Restaurar dados de fábrica')),
+          '⚠ Este módulo não pede login: quem tiver o endereço consulta e altera estes dados.'),
+        legado && h('div', {
+          style: {
+            fontSize: 12, color: 'var(--amber)', background: 'var(--amber-bg)',
+            border: '1px solid var(--amber)', borderRadius: 'var(--r)', padding: 10, marginBottom: 12
+          }
+        },
+          `Este navegador ainda guarda dados da versão anterior (${legado.eqs} equipamentos, ${legado.pss} PS, de ${legado.quando}). Eles não estão no banco.`,
+          h('br'),
+          h('button', { className: 'btn sm', style: { marginTop: 8 }, onClick: baixarLegado },
+            '⭳ Exportar dados antigos deste navegador')),
+        h('button', { className: 'btn dr sm', onClick: doReset }, '🗑 Apagar todos os dados do banco')),
       h('div', { className: 'card' },
         h('div', { className: 'ct' }, 'Backup / Restauração (arquivo .json)'),
         h('div', { style: { fontSize: 13, color: 'var(--tx2)', lineHeight: 1.6, marginBottom: 12 } },
@@ -8884,7 +9107,33 @@ function App() {
     onClick: () => setTheme(t => t === 'dark' ? 'light' : 'dark')
   }, theme === 'dark' ? '☀️ Claro' : '🌙 Escuro')), /*#__PURE__*/React.createElement("div", {
     className: "content"
-  }, pg === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
+  },
+  // Sem as migrações 35/36 aplicadas, ou com a rede fora, o módulo diz o
+  // que houve em vez de mostrar as telas vazias como se não houvesse
+  // nada cadastrado — que é o que assusta de verdade num controle de
+  // calibração.
+  s.erroCarga && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: { borderColor: 'var(--red)', marginBottom: 14 }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { color: 'var(--red)', fontWeight: 700, marginBottom: 6 }
+  }, "✕ Não foi possível carregar os dados"),
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 13, color: 'var(--tx2)', lineHeight: 1.6 }
+    }, "O módulo não conseguiu falar com o banco, então as telas abaixo estão vazias — isso não significa que não há instrumentos cadastrados. Verifique a conexão; se persistir, confirme que as migrações 35 e 36 foram aplicadas.",
+      /*#__PURE__*/React.createElement("div", {
+        style: { marginTop: 6, color: 'var(--tx3)', fontSize: 12 }
+      }, s.erroCarga)),
+    /*#__PURE__*/React.createElement("button", {
+      className: "btn sm",
+      style: { marginTop: 10 },
+      onClick: () => s.recarregar()
+    }, "↻ Tentar de novo")),
+  s.carregando && /*#__PURE__*/React.createElement("div", {
+    className: "card",
+    style: { marginBottom: 14, color: 'var(--tx2)' }
+  }, "Carregando dados do banco…"),
+  pg === 'dashboard' && /*#__PURE__*/React.createElement(Dashboard, {
     s: s,
     nav: setPg
   }), pg === 'equipamentos' && /*#__PURE__*/React.createElement(Equipamentos, {
