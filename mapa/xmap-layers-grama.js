@@ -13,26 +13,44 @@
 import { carregarAreas, carregarMaquinas, carregarLocaisComPosicao, posicionarAtivos } from './mapa-dados.js'
 import { maquinasParaZona, normalizarCategoria, linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
 
-/* ── Estilos por tipo de área ──
-   maq_areas.tipo no banco é corte|poda|limpeza|mista|outro (D-03,
-   supabase/12_maquinas_areas_operacoes.sql) — vocabulário diferente do
-   editor legado (jardim|bosque|canteiro|area_recreativa|horta), que este
-   dicionário ainda fala. Não há entrada travada para colidir: um tipo real
-   sem entrada aqui cai no `|| { ... }` de baixo, com a mesma cor padrão de
-   sempre — degrada de forma graciosa, não quebra. */
-function areaStyle(tipo) {
-  const s = {
-    jardim:          { color: '#4ade80', fill: '#4ade80' },
-    bosque:          { color: '#166534', fill: '#16a34a' },
-    canteiro:        { color: '#86efac', fill: '#86efac' },
-    area_recreativa: { color: '#22d3ee', fill: '#22d3ee' },
-    horta:           { color: '#a3e635', fill: '#a3e635' },
-  };
-  return s[tipo] || { color: '#4ade80', fill: '#4ade80' };
+/* ── Estilo por VEGETAÇÃO ──
+   A zona de maq_areas é o que ela sempre foi na prática e agora está dito
+   na tela: vegetação e área externa — campo, calçada, baixadão, entorno.
+   Edificação saiu daqui (quick-260819-0g3): prédio é polígono próprio em
+   cmasm_locais.geom, com camada e cor próprias, porque enquanto o desenho
+   de contorno não existia o usuário desenhava o prédio como zona de
+   serviço e o edifício entrava na conta de área de corte.
+
+   A cor sai de `flora` — a lista fechada da migração 25, travada por
+   `check` no banco —, não do dicionário legado do app cmms-mapa
+   (jardim/bosque/canteiro/área recreativa/horta), vocabulário que nunca
+   existiu neste projeto: nenhuma das sete zonas cadastradas casava com
+   uma daquelas chaves, então TODAS caíam no verde padrão e o estilo por
+   tipo era decorativo. Zona sem flora classificada continua no verde
+   padrão, de propósito: é "ainda não classificada", não uma sexta cor. */
+const ESTILO_FLORA = {
+  gramado:        { color: '#4ade80', fill: '#4ade80' },
+  capim_colonial: { color: '#a3e635', fill: '#a3e635' },
+  mata_fechada:   { color: '#166534', fill: '#16a34a' },
+};
+const ESTILO_VEGETACAO_PADRAO = { color: '#4ade80', fill: '#4ade80' };
+
+function estiloDaVegetacao(flora) {
+  return ESTILO_FLORA[flora] || ESTILO_VEGETACAO_PADRAO;
 }
 
+/* Vocabulário de exibição do tipo de SERVIÇO da zona — corte|poda|limpeza|
+   mista|outro (supabase/12_maquinas_areas_operacoes.sql), o que o banco de
+   fato aceita. Antes este dicionário falava o vocabulário legado e devolvia
+   'corte' cru para toda zona real. */
 function tipoLabel(t) {
-  return { jardim:'Jardim', bosque:'Bosque', canteiro:'Canteiro', area_recreativa:'Área Recreativa', horta:'Horta' }[t] || t;
+  return { corte:'Corte', poda:'Poda', limpeza:'Limpeza', mista:'Mista', outro:'Outro' }[t] || t;
+}
+
+const FLORA_LABEL = { gramado:'Gramado', capim_colonial:'Cap. Colonial', mata_fechada:'Mata Fechada' };
+
+function floraLabel(f) {
+  return FLORA_LABEL[f] || f;
 }
 
 function maqLabel(t) {
@@ -85,7 +103,7 @@ function renderAreas(group, areas, maquinas) {
     const coords = resolverCoordenadasArea(area);
     if (!coords || !coords.length) return;
 
-    const s = areaStyle(area.tipo);
+    const s = estiloDaVegetacao(area.flora);
     const poly = L.polygon(coords, {
       color: s.color, fillColor: s.fill, fillOpacity: 0.13, weight: 2,
     });
@@ -93,15 +111,14 @@ function renderAreas(group, areas, maquinas) {
     const { compativeis, semMapeamento } = maquinasParaZona(area, maquinas);
     const maqStr = compativeis.map(m => m.nome).join(', ') || '—';
 
-    const floraLabels = { gramado:'Gramado', capim_colonial:'Cap. Colonial', mata_fechada:'Mata Fechada' };
     const inclLabels  = { plano:'Plano', moderado:'Moderado', acentuado:'Acentuado' };
     const limpLabels  = { limpa:'Limpa', media:'Média', densa:'Densa' };
 
     const rows = [
-      ['Tipo',       tipoLabel(area.tipo)],
+      ['Serviço',    tipoLabel(area.tipo)],
       ['Área',       (area.area_m2 || 0).toLocaleString('pt-BR') + ' m²'],
     ];
-    if (area.flora)      rows.push(['Flora',      floraLabels[area.flora] || area.flora]);
+    if (area.flora)      rows.push(['Flora',      floraLabel(area.flora)]);
     if (area.inclinacao) rows.push(['Inclinação', inclLabels[area.inclinacao] || area.inclinacao]);
     if (area.limpeza)    rows.push(['Limpeza',    limpLabels[area.limpeza] || area.limpeza]);
     if (compativeis.length) rows.push(['Máquinas', maqStr, 'info']);
@@ -114,7 +131,10 @@ function renderAreas(group, areas, maquinas) {
     }
 
     poly.bindPopup(
-      xMap.utils.popupHTML('🌿', area.nome, tipoLabel(area.tipo), rows),
+      // Subtítulo é a vegetação, não o serviço: é o que distingue esta
+      // camada da de prédios a olho nu. Sem flora classificada, o balão diz
+      // "área externa" em vez de mentir uma vegetação.
+      xMap.utils.popupHTML('🌿', area.nome, area.flora ? floraLabel(area.flora) : 'Área externa', rows),
       { maxWidth: 240 }
     );
 
@@ -168,8 +188,8 @@ export async function registrarCamadasGrama() {
   const layerDefs = {
 
     areas: {
-      label: 'Áreas',
-      color: '#4ade80',
+      label: 'Vegetação e áreas externas',
+      color: ESTILO_VEGETACAO_PADRAO.color,
       render(group) {
         renderAreas(group, areas, maquinasBrutas);
       },
@@ -177,7 +197,7 @@ export async function registrarCamadasGrama() {
 
     maquinas: {
       label: 'Máquinas',
-      color: '#4ade80',
+      color: ESTILO_VEGETACAO_PADRAO.color,
       render(group) {
         renderMaquinas(group, maquinasPosicionadas);
       },

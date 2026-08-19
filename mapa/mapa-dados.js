@@ -31,6 +31,7 @@ import {
   normalizarLimpeza,
   dentroDoEnvelope,
   normalizarEstado,
+  centroidePoligono,
 } from './mapa-geometria.js'
 
 // ── Bloco 1 — cliente ───────────────────────────────────────────────
@@ -153,6 +154,33 @@ export async function carregarLocaisSemPosicao() {
   LOCAIS_SEM_POSICAO.length = 0
   LOCAIS_SEM_POSICAO.push(...(data || []))
   return LOCAIS_SEM_POSICAO
+}
+
+// cmasm_locais — os prédios que já têm CONTORNO desenhado (migração 37).
+// Consulta separada de carregarLocaisComPosicao de propósito: aquela
+// devolve um mapa de id → ponto para o cruzamento em memória de
+// posicionarAtivos e é chamada a cada gravação de posição; esta devolve
+// uma lista de polígonos para desenhar. Trazer `geom` — dezenas de
+// vértices por prédio — na consulta de posição encareceria o caminho
+// quente sem que ninguém ali fosse ler a geometria.
+export async function carregarLocaisComGeom() {
+  const supa = obterCliente()
+  const { data, error } = await supa
+    .from('cmasm_locais')
+    .select('id, codigo, nome, tipo, geom')
+    .eq('ativo', true)
+    .not('geom', 'is', null)
+    .order('nome')
+  if (error) {
+    console.error('mapa-dados: falha ao carregar contornos de cmasm_locais —', error.message)
+    mostrarErroDeCarga('Não foi possível carregar os contornos dos prédios. ' + error.message)
+    return []
+  }
+  // Linha com `geom` gravada mas curta demais para fechar um polígono é
+  // descartada aqui, não no desenho: o Leaflet aceitaria dois pontos e
+  // desenharia um traço, que na tela lê como prédio errado, não como dado
+  // faltando.
+  return (data || []).filter((local) => Array.isArray(local.geom) && local.geom.length >= 3)
 }
 
 // Relação de módulo para tabela e colunas: LISTA FECHADA. Módulo fora
@@ -532,6 +560,50 @@ export async function salvarPosicaoLocal(id, lat, lon) {
     .single()
   if (error) {
     alert('Erro ao salvar posição do prédio: ' + error.message)
+    return null
+  }
+  return data
+}
+
+// ── Bloco 7 — contorno do prédio (migração 37) ─────────────────────────
+// Terceira e última porta de escrita de geometria do módulo, e a segunda
+// que toca `cmasm_locais` — nenhuma tabela de ativo aparece aqui, mesma
+// separação de D-03 que salvarPosicaoAtivo/salvarPosicaoLocal já mantêm.
+//
+// `geom` e o centroide vão no MESMO `.update(`, nunca em dois comandos:
+// um prédio com contorno e sem ponto pararia de acender os ativos que
+// herdam posição dele (mapa-geometria.js#resolverPosicao lê o ponto, não
+// o polígono), e essa metade gravada seria invisível na tela — o contorno
+// apareceria, os ativos sumiriam.
+//
+// O centroide é calculado pelo núcleo puro e validado contra o envelope
+// ANTES da viagem de rede, como as duas portas anteriores: o polígono
+// inteiro pode estar fora da região do CMASM, e o `check` do banco só
+// veria o par lat/lon.
+export async function salvarGeomLocal(id, geom) {
+  if (!Number.isSafeInteger(id)) {
+    alert('Erro: identificador de local inválido.')
+    return null
+  }
+  const centro = centroidePoligono(geom)
+  if (!centro) {
+    alert('Erro: o contorno precisa de pelo menos três vértices que formem uma área.')
+    return null
+  }
+  const [lat, lon] = centro
+  if (!dentroDoEnvelope(lat, lon)) {
+    alert('Erro: o contorno está fora da região do CMASM. Verifique o polígono desenhado.')
+    return null
+  }
+  const supa = obterCliente()
+  const { data, error } = await supa
+    .from('cmasm_locais')
+    .update({ geom, lat, lon })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) {
+    alert('Erro ao salvar contorno do prédio: ' + error.message)
     return null
   }
   return data

@@ -83,6 +83,35 @@ html,body{height:100%}
 .nl-contagem{font-size:11px;color:var(--text3);flex-shrink:0}
 .lg-item{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:var(--text2)}
 .lg-cor{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+
+/* ── Posição dos controles sobre o mapa ────────────────────────────────
+   Três sobreposições reais, corrigidas aqui (a folha do componente,
+   mapa/xmap.css, continua fora de escopo — D-01 da Fase 6):
+
+   1. O painel "Layers" (.xmap-filters, z-index 1000, canto superior
+      direito) cobria o painel do editor (#editor-painel, z-index 900,
+      encostado à direita). Agora ele recua para a esquerda do painel
+      enquanto o editor está aberto, em vez de ficar por cima.
+   2. Os dois botões de modo do editor eram controles Leaflet em
+      'topright' — o MESMO canto do painel "Layers", e abaixo dele na
+      pilha. Foram para a barra lateral (mapa/mapa-editor.js); nenhum
+      controle Leaflet ocupa mais o canto superior direito.
+   3. A barra Mapa/Satélite era centralizada no topo e colidia com o
+      botão ☰ Módulos em tela estreita. Desceu para o canto inferior
+      esquerdo, que ficou livre com a saída dos chips de módulo ativo. */
+.map-area:has(#editor-painel.aberto) .xmap-filters{right:calc(min(300px,90vw) + 10px)}
+/* Com muitas camadas registradas o painel crescia até o rodapé e cobria o
+   mapa inteiro em tela baixa. Passa a rolar dentro de si. */
+.xmap-filters{max-height:calc(100% - 84px);overflow-y:auto}
+.xmap-toolbar{top:auto;bottom:12px;left:10px;transform:none}
+/* Os chips de módulo ativo repetem, em maiúsculas e sem tradução, o que a
+   barra lateral já mostra marcado — e disputavam o canto com a barra de
+   basemap. Fora da tela, não do componente: mapa/xmap.js segue intocado. */
+.xmap-module-badge{display:none}
+/* Botões de modo do editor, na barra lateral: largura total como os
+   botões de módulo logo acima, não o tamanho de um controle flutuante. */
+.ed-modo{display:block;width:100%;margin-bottom:6px;text-align:left}
+.ed-modo.active{border-color:var(--accent);color:var(--text)}
 </style>
 </head>
 <body>
@@ -92,6 +121,11 @@ html,body{height:100%}
   <div class="body-layout">
     <div class="sidebar" id="barra-modulos" aria-hidden="true">
       <div class="sidebar-title">Módulos</div>
+      <!-- Prédios: contorno de cmasm_locais (migração 37). Primeiro da
+           lista porque é o fundo sobre o qual os outros são lidos. -->
+      <button class="mod-btn" data-mod="predios" onclick="alternarModulo('predios', this)">
+        <span>Prédios — contorno das edificações</span>
+      </button>
       <button class="mod-btn" data-mod="aguada" onclick="alternarModulo('aguada', this)">
         <span>Aguada — monitoramento hídrico</span>
         <span class="mod-badge-demo" title="Sistema externo autônomo (FastAPI + SQLite, alimentado por MQTT) — sem tabela no projeto pmoc; integração real entra na Phase 11 (decisão travada D-01)">demo</span>
@@ -118,6 +152,15 @@ html,body{height:100%}
       <button class="mod-btn" data-mod="climatizacao" onclick="alternarModulo('climatizacao', this)">
         <span>Climatização — ar-condicionado</span>
       </button>
+
+      <!-- Modos de edição — preenchido em tempo de execução por
+           mapa/mapa-editor.js, e só para quem tem cargo de escrita. Os dois
+           botões eram controles Leaflet em 'topright', onde ficavam
+           debaixo do painel "Layers" (.xmap-filters). Seção vazia não
+           aparece: sem botão, o título fica sozinho, então ele também é
+           escrito pelo editor. -->
+      <div id="edicao-titulo" class="sidebar-title" hidden>Edição</div>
+      <div id="edicao-controles"></div>
 
       <!-- Busca de ativo — lê de mapa-dados.js#POSICIONADOS, a contraparte
            de NAO_LOCALIZADOS, e voa até o ponto. Não procura dentro das

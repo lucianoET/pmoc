@@ -1337,3 +1337,46 @@ políticas para `to authenticated`.
       destrutivo para todos os usuários)
 - [ ] Desligar a rede e recarregar → aviso vermelho "Não foi possível carregar os dados" com botão
       de tentar de novo, não telas vazias
+
+---
+
+## Mapa: prédio como polígono, zona como vegetação, controles reorganizados (19/08/2026)
+
+Migração `37_locais_geometria.sql` **aplicada em produção em 19/08/2026** e conferida contra o
+banco: `cmasm_locais.geom` existe, o `check` de forma (`jsonb_typeof(geom) = 'array'`) existe.
+O caminho de escrita **foi exercido com dado real** — o contorno que o usuário havia desenhado
+para o Comando foi gravado no local 302 (COMANDO, 8 vértices, centroide
+−22,8395545 / −43,1091537, 2.253 m²), e a contagem de locais ativos sem posição caiu de 227
+para 226. Nenhum ativo aponta para o local 302, então esse contorno não acendeu ativo nenhum.
+
+**Conversão das duas zonas que eram prédios (19/08/2026):** "Predio Comando" reusou o contorno
+já gravado em `cmasm_locais` 302; "Museu" ganhou linha nova (`CMASM-MUSEU`, id 623,
+`edificacao` sob o CMASM, 6 vértices, centroide −22,8393873 / −43,1086979, 1.673 m²), porque
+não tinha nenhuma. As duas linhas de `maq_areas` foram **arquivadas (`ativo = false`), não
+apagadas**. A vegetação ativa caiu de 12.680 m² para **8.754 m²** — os 3.926 m² de edifício
+saíram da conta de corte de grama.
+
+- [ ] Confirmar na aba de áreas do Máquinas que "Predio Comando" e "Museu" não aparecem mais
+      entre as zonas ativas, e que o total de área caiu para 8.754 m².
+
+- [ ] Abrir `/mapa` e confirmar que a camada **Prédios** aparece ligada, com o contorno do
+      Comando desenhado em marrom, distinto do verde das zonas.
+- [ ] Passar o cursor sobre o contorno: nome do prédio; clicar: balão com código, tipo e
+      "Posição: centroide do contorno".
+- [ ] Confirmar que o painel "Layers" **não** cobre mais nenhum botão — os modos "Editar zonas"
+      e "Mover ativos" estão na barra lateral (☰ Módulos → seção **Edição**), visíveis só para
+      quem tem cargo de escrita.
+- [ ] Abrir o painel do editor (clicar numa zona em modo de edição) e confirmar que o painel
+      "Layers" recua para a esquerda dele, em vez de ficar por cima.
+- [ ] Em 375 px: confirmar que a barra Mapa/Satélite (agora no canto inferior esquerdo) não
+      colide com o botão ☰ Módulos.
+- [ ] Como `admin`/`gestor`/`tecnico`: em **Prédios sem posição**, usar **Contorno** num prédio,
+      desenhar o polígono e fechá-lo no primeiro ponto. Confirmar a mensagem de gravação, que o
+      prédio sai da lista e que o contorno aparece na próxima abertura do mapa.
+- [ ] Repetir com **Esc** no meio do desenho: nada é gravado e a faixa de instrução some.
+- [ ] Desenhar um contorno fora da região do CMASM: a gravação é recusada com a mensagem de
+      envelope, antes de qualquer viagem de rede.
+- [ ] Como `observador`: a seção **Edição** não aparece e os prédios não têm botão nenhum.
+- [ ] Numa zona com `flora` classificada, confirmar a cor por vegetação (gramado verde-claro,
+      capim colonial verde-limão, mata fechada verde-escuro) e o subtítulo do balão com a
+      vegetação — "Área externa" quando não há flora classificada.

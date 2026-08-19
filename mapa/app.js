@@ -13,6 +13,7 @@ import {
 import { registrarCamadasGrama } from './xmap-layers-grama.js'
 import { registrarCamadasEletrica } from './xmap-layers-eletrica.js'
 import { registrarCamadaDeAtivos } from './xmap-layers-ativos.js'
+import { registrarCamadaPredios } from './xmap-layers-predios.js'
 import { iniciarEditorZonas, iniciarEditorAtivos } from './mapa-editor.js'
 import { ESTADOS, corDoEstado } from './mapa-geometria.js'
 import { CARGOS_ZONA } from './mapa-editor.js'
@@ -31,7 +32,10 @@ const ORIGEM_LABEL = {
 // Módulos ligados no primeiro desenho. A aguada fica de FORA: ela é o
 // único módulo que ainda exibe dado de demonstração (D-01), e abrir o mapa
 // já mostrando dado falso junto do real é pior do que abrir sem ele.
-const MODULOS_INICIAIS = ['grama', 'eletrica', 'transportes', 'fonoclama', 'climatizacao']
+// `predios` entra na lista: o contorno do prédio é o fundo em que todo o
+// resto é lido — abrir o mapa com os marcadores flutuando sem as plantas
+// é o que fazia a tela parecer vazia.
+const MODULOS_INICIAIS = ['predios', 'grama', 'eletrica', 'transportes', 'fonoclama', 'climatizacao']
 
 // Quantos itens a lista de prédios mostra antes de exigir o filtro. São
 // centenas de locais; despejar todos na barra transforma a seção num
@@ -116,6 +120,7 @@ async function registrarCamadasDoBanco() {
       registrarCamadaDeAtivos('transportes'),
       registrarCamadaDeAtivos('fonoclama'),
       registrarCamadaDeAtivos('climatizacao'),
+      registrarCamadaPredios(),
       // Fora do desenho do mapa, mas na mesma leva de leitura: a barra
       // lateral precisa das duas listas assim que a tela abre.
       carregarLocaisSemPosicao(),
@@ -263,9 +268,15 @@ function renderLocaisSemPosicao() {
 // onclick, mesma razão registrada em renderItemNaoLocalizado acima — o
 // editor busca o nome de novo em LOCAIS_SEM_POSICAO pelo id.
 function renderItemLocal(local, quantos, podePosicionar) {
+  // Duas ações, a mesma tabela: "Ponto" marca o prédio com um clique —
+  // rápido, quando o que importa é acender os ativos que herdam dele — e
+  // "Contorno" desenha a planta dele, que é a forma que o prédio tem de
+  // verdade. As duas gravam o ponto no fim (o contorno grava o centroide),
+  // então nenhuma das duas deixa o prédio pela metade.
   const acao =
     podePosicionar && Number.isSafeInteger(local.id)
-      ? `<button type="button" class="btn btn-s nl-btn" onclick="posSelecionarLocal(${local.id})">Posicionar</button>`
+      ? `<button type="button" class="btn btn-s nl-btn" onclick="posSelecionarLocal(${local.id})">Ponto</button>` +
+        `<button type="button" class="btn btn-s nl-btn" onclick="posDesenharPredio(${local.id})">Contorno</button>`
       : ''
   const contagem = quantos ? `<span class="nl-contagem">${quantos} ativo${quantos > 1 ? 's' : ''}</span>` : ''
   return `<div class="nl-item"><span>${esc(local.nome || local.codigo || `#${local.id}`)}</span>${contagem}${acao}</div>`
@@ -466,6 +477,10 @@ async function sair() {
 function exporNoWindow() {
   window.alternarModulo = alternarModulo
   window.sair = sair
+  // mapa/mapa-editor.js fecha a barra ao ligar um modo de edição — com ela
+  // aberta, metade do mapa fica coberta justamente na hora de clicar nele.
+  // Publicado aqui porque a barra é desta tela, não do editor.
+  window.mapaFecharBarra = () => _mostrarBarraModulos(false)
 }
 
 function mostrarErroBoot(error) {
