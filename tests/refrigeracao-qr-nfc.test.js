@@ -136,6 +136,206 @@ test('id="nav-inv" está no botão de navTo(\'inv\', e aplicarAlvoFicha referenc
   assert.match(HTML.slice(ini, fim), /'nav-inv'/);
 });
 
+// ══════════════════════════════════════════════════════════════════
+// Task 2 — QR por equipamento na ficha e na ficha impressa, etiquetas
+// ══════════════════════════════════════════════════════════════════
+
+function fakeQrcode() {
+  var data = '';
+  return {
+    addData: function (d) { data = String(d); },
+    make: function () {},
+    createSvgTag: function () {
+      var hash = 0;
+      for (var i = 0; i < data.length; i++) hash = (hash * 31 + data.charCodeAt(i)) >>> 0;
+      return '<svg xmlns="http://www.w3.org/2000/svg"><path d="M' + hash + ' 0h1v1h-1z"/></svg>';
+    },
+  };
+}
+
+function carregarSandboxQr(overrides) {
+  const ini = HTML.indexOf('/* ── QR e etiquetas do equipamento ── */');
+  const fim = HTML.indexOf('/* ══ IMPRESSÃO DA OS ══ */', ini);
+  assert.ok(ini > 0 && fim > ini, 'bloco "QR e etiquetas do equipamento" não encontrado');
+  const chamadas = { showToast: [], imprimirDocumento: [] };
+  const ctx = {
+    PARAM_FICHA: 'equip',
+    CT_APP_URL: 'https://pmoc-refrigeracao.vercel.app',
+    location: { protocol: 'https:', origin: 'https://x.tld', pathname: '/refrigeracao' },
+    localStorage: { getItem: function () { return null; } },
+    linkSeguro(u) { return typeof u === 'string' && /^https?:\/\//i.test(u) ? u : ''; },
+    esc(s) { if (!s) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+    DATA: [],
+    showToast(msg, tipo) { chamadas.showToast.push({ msg: msg, tipo: tipo }); },
+    imprimirDocumento(opcoes) { chamadas.imprimirDocumento.push(opcoes); },
+    qrcode: fakeQrcode,
+    navigator: {},
+  };
+  Object.assign(ctx, overrides || {});
+  vm.createContext(ctx);
+  vm.runInContext(HTML.slice(ini, fim), ctx);
+  ctx.__chamadas = chamadas;
+  return ctx;
+}
+
+test('urlFichaEquip(42) devolve base + ?equip=42, sem arrastar a query nem o hash da página atual', () => {
+  const ctx = carregarSandboxQr();
+  assert.strictEqual(ctx.urlFichaEquip(42), 'https://x.tld/refrigeracao?equip=42');
+});
+
+test('urlBaseApp usa o pmoc_app_url salvo quando é http(s)://, e cai no endereço da própria página quando o valor é envenenado', () => {
+  let ctx = carregarSandboxQr({ localStorage: { getItem: () => 'https://saved.example/app/' } });
+  assert.strictEqual(ctx.urlBaseApp(), 'https://saved.example/app');
+
+  for (const veneno of ['javascript:alert(1)', '"><img src=x>', '//outro.host']) {
+    ctx = carregarSandboxQr({ localStorage: { getItem: () => veneno } });
+    assert.strictEqual(ctx.urlBaseApp(), 'https://x.tld/refrigeracao', `valor "${veneno}" deveria cair no endereço da página`);
+  }
+});
+
+test('qrSvgDe devolve SVG de verdade, URLs diferentes produzem desenhos diferentes, e sem qrcode devolve "" sem lançar', () => {
+  const ctx = carregarSandboxQr();
+  const svg1 = ctx.qrSvgDe('https://x.tld/refrigeracao?equip=1');
+  assert.match(svg1, /^<svg/);
+  assert.match(svg1, /<path/);
+  const svg2 = ctx.qrSvgDe('https://x.tld/refrigeracao?equip=2');
+  assert.notStrictEqual(svg1, svg2);
+
+  const ctxSemQr = carregarSandboxQr({ qrcode: undefined });
+  assert.doesNotThrow(() => {
+    assert.strictEqual(ctxSemQr.qrSvgDe('https://x.tld'), '');
+  });
+});
+
+function carregarSandboxFiltro(overrides) {
+  const ini = HTML.indexOf('/* ── inventário: a seleção filtrada, com dois consumidores ── */');
+  const fim = HTML.indexOf('function getAllOSEntries(){', ini);
+  assert.ok(ini > 0 && fim > ini, 'bloco "inventário: a seleção filtrada" não encontrado');
+  const chamadas = { imprimirEtiquetas: [] };
+  const ctx = {
+    equipInoperante: (e) => e.funciona === 'NOK',
+    equipOperante: (e) => e.funciona === 'OK',
+    equipComRestricao: (e) => e.funciona === 'OR',
+    autoCrit: (e) => e.criticidade,
+    isVencido: (e) => !!e._vencido,
+    equipEstado: () => 'OP',
+    proxManut: () => null,
+    statusPill: () => '',
+    critPill: () => '',
+    dueBadgeHtml: () => '',
+    esc(s) { return s == null ? '' : String(s); },
+    el: () => null,
+    invChip: 'todos',
+    DATA: [],
+    cmpInv: (a, b) => (a.id || 0) - (b.id || 0),
+    imprimirEtiquetas(lista) { chamadas.imprimirEtiquetas.push(lista); },
+  };
+  Object.assign(ctx, overrides || {});
+  vm.createContext(ctx);
+  vm.runInContext(HTML.slice(ini, fim), ctx);
+  ctx.__chamadas = chamadas;
+  return ctx;
+}
+
+const EQUIPS_FILTRO = [
+  { id: 1, local: 'Sala A', predio: 'F21', fabricante: 'LG', funciona: 'OK', obs: '', criticidade: 'CRÍTICA', area: 'VERMELHA', _vencido: false },
+  { id: 2, local: 'Sala B', predio: 'MK48', fabricante: 'Springer', funciona: 'NOK', obs: 'Verificar filtro', criticidade: 'ALTA', area: 'AZUL', _vencido: true },
+  { id: 3, local: null, predio: null, fabricante: '', funciona: 'OR', obs: '', criticidade: 'MÉDIA', area: 'VERMELHA', _vencido: false },
+];
+
+test('filtrarInventario devolve a mesma seleção que o inventário mostra, para cada chip e para a busca por local/predio/fabricante — sem lançar com local/predio nulos', () => {
+  const ctx = carregarSandboxFiltro();
+  const porChip = {
+    todos: [1, 2, 3], nok: [2], ok: [1], or: [3], ver: [2], critica: [1],
+    vencidos: [2], vermelha: [1, 3], azul: [2],
+  };
+  for (const chip of Object.keys(porChip)) {
+    const r = Array.from(ctx.filtrarInventario(EQUIPS_FILTRO, '', chip), (e) => e.id);
+    assert.deepEqual(r, porChip[chip], `chip "${chip}" divergiu`);
+  }
+  assert.doesNotThrow(() => ctx.filtrarInventario(EQUIPS_FILTRO, 'x', 'todos'));
+  assert.deepEqual(Array.from(ctx.filtrarInventario(EQUIPS_FILTRO, 'sala a', 'todos'), (e) => e.id), [1]);
+  assert.deepEqual(Array.from(ctx.filtrarInventario(EQUIPS_FILTRO, 'mk48', 'todos'), (e) => e.id), [2]);
+  assert.deepEqual(Array.from(ctx.filtrarInventario(EQUIPS_FILTRO, 'spring', 'todos'), (e) => e.id), [2]);
+});
+
+test('a folha de etiquetas leva exatamente a seleção de filtrarInventario, comparação por id', () => {
+  const ctx = carregarSandboxFiltro({ invChip: 'vermelha' });
+  ctx.DATA = EQUIPS_FILTRO;
+  ctx.etiquetasDoInventario();
+  assert.strictEqual(ctx.__chamadas.imprimirEtiquetas.length, 1);
+  const entregue = Array.from(ctx.__chamadas.imprimirEtiquetas[0], (e) => e.id);
+  const esperado = Array.from(ctx.filtrarInventario(EQUIPS_FILTRO, '', 'vermelha'), (e) => e.id);
+  assert.deepEqual(entregue, esperado);
+});
+
+test('renderInv chama filtrarInventario( e a linha de "var list" não inlina mais o DATA.filter antigo', () => {
+  const ini = HTML.indexOf('function renderInv(){');
+  const fim = HTML.indexOf('\n}', ini);
+  assert.ok(ini > 0 && fim > ini, 'renderInv não encontrada');
+  const corpo = HTML.slice(ini, fim);
+  assert.match(corpo, /filtrarInventario\(/);
+  const idxList = corpo.indexOf('var list =');
+  const linha = corpo.slice(idxList, corpo.indexOf('\n', idxList));
+  assert.doesNotMatch(linha, /DATA\.filter\(/);
+});
+
+test('imprimirEtiquetas([]) e imprimirEtiquetas() avisam e não chamam imprimirDocumento nenhuma vez', () => {
+  const ctx = carregarSandboxQr();
+  ctx.imprimirEtiquetas([]);
+  ctx.imprimirEtiquetas();
+  assert.strictEqual(ctx.__chamadas.showToast.length, 2);
+  assert.strictEqual(ctx.__chamadas.imprimirDocumento.length, 0);
+});
+
+test('imprimirEtiquetas com 3 equipamentos chama imprimirDocumento uma vez, com assinaturas vazias, estilo não vazio, e 3 etiquetas com QR', () => {
+  const ctx = carregarSandboxQr();
+  const lista = [
+    { id: 1, local: 'A', predio: 'P1', tipo: 'SPLIT' },
+    { id: 2, local: 'B', predio: 'P2', tipo: 'SPLIT' },
+    { id: 3, local: 'C', predio: 'P3', tipo: 'SPLIT' },
+  ];
+  ctx.imprimirEtiquetas(lista);
+  assert.strictEqual(ctx.__chamadas.imprimirDocumento.length, 1);
+  const opcoes = ctx.__chamadas.imprimirDocumento[0];
+  assert.strictEqual(opcoes.assinaturas.length, 0);
+  assert.ok(opcoes.estilo && opcoes.estilo.length > 0);
+  assert.strictEqual((opcoes.corpo.match(/class="etq"/g) || []).length, 3);
+  assert.strictEqual((opcoes.corpo.match(/<svg/g) || []).length, 3);
+});
+
+test('etiquetaHtml de um equipamento com local marcado produz saída sem <img e com a forma escapada', () => {
+  const ctx = carregarSandboxQr();
+  const h = ctx.etiquetaHtml({ id: 9, local: '<img src=x onerror=alert(1)>', predio: 'F21', tipo: 'SPLIT' });
+  assert.doesNotMatch(h, /<img src=x onerror/);
+  assert.match(h, /&lt;img/);
+});
+
+test('o corpo de printFicha referencia qrSvgDe( e passa estilo:, sem window.open nem declaração de página própria', () => {
+  const ini = HTML.indexOf('function printFicha(equipId){');
+  const fim = HTML.indexOf('\n}', ini);
+  assert.ok(ini > 0 && fim > ini, 'printFicha não encontrada');
+  const corpo = HTML.slice(ini, fim);
+  assert.match(corpo, /qrSvgDe\(/);
+  assert.match(corpo, /estilo:/);
+  assert.doesNotMatch(corpo, /window\.open\(/);
+  assert.doesNotMatch(corpo, /@page\{size:A4/);
+});
+
+test('no arquivo inteiro, window.open( e a declaração de página A4 continuam em 1 ocorrência cada — a etiqueta não abriu segunda folha', () => {
+  assert.strictEqual((HTML.match(/window\.open\(/g) || []).length, 1);
+  assert.strictEqual((HTML.match(/@page\{size:A4/g) || []).length, 1);
+});
+
+test('qrGetUrl chama urlBaseApp() e não referencia location.href', () => {
+  const ini = HTML.indexOf('function qrGetUrl(){');
+  const fim = HTML.indexOf('\n}', ini);
+  assert.ok(ini > 0 && fim > ini, 'qrGetUrl não encontrada');
+  const corpo = HTML.slice(ini, fim);
+  assert.match(corpo, /urlBaseApp\(\)/);
+  assert.doesNotMatch(corpo, /location\.href/);
+});
+
 test('os quatro grep do PLAT-15 continuam em 0 em refrigeracao/index.html', () => {
   for (const padrao of ['shared/', 'pmoc.css', 'pmoc-tema', 'data-theme']) {
     assert.equal((HTML.match(new RegExp(padrao.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length, 0, `"${padrao}" apareceu em refrigeracao/index.html`);

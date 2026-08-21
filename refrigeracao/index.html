@@ -103,10 +103,11 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
 /* ═══════════════════════════════════════════
    SECTION HEADERS
 ═══════════════════════════════════════════ */
-.sec-head{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;padding:0 2px}
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;padding:0 2px;flex-wrap:wrap}
 .sec-title{font-size:13px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.4px}
 .sec-count{background:#E8ECF5;color:#1351B4;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px}
 .sec-ordem{margin-left:auto;margin-right:8px;font-size:11px;font-weight:600;color:#555;border:1.5px solid #E0E0E0;border-radius:8px;background:#fff;padding:3px 6px;max-width:52%}
+.sec-etq{background:#E8ECF5;color:#1351B4;border:none;border-radius:8px;width:26px;height:26px;font-size:12px;cursor:pointer;margin-right:8px;flex-shrink:0}
 
 /* ═══════════════════════════════════════════
    EQUIPMENT CARDS
@@ -754,6 +755,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <option value="criticidade">Ordenar: criticidade</option>
           <option value="vencimento">Ordenar: próxima manutenção</option>
         </select>
+        <button class="sec-etq" id="btn-etiquetas" title="Imprimir etiquetas dos equipamentos filtrados" aria-label="Imprimir etiquetas dos equipamentos filtrados" onclick="etiquetasDoInventario()"><i class="fas fa-tags" aria-hidden="true"></i></button>
         <span class="sec-count" id="inv-cnt">171</span>
       </div>
       <div id="inv-list"></div>
@@ -1292,20 +1294,31 @@ function setChip(btn, val){
   renderInv();
 }
 
-function renderInv(){
-  var q = (el('inv-search')||{value:''}).value.toLowerCase().trim();
-  var list = DATA.filter(function(e){
-    if(q && !(e.local.toLowerCase().includes(q)||e.predio.toLowerCase().includes(q)||(e.fabricante||'').toLowerCase().includes(q))) return false;
-    if(invChip==='nok') return equipInoperante(e);
-    if(invChip==='ok') return equipOperante(e);
-    if(invChip==='or') return equipComRestricao(e);
-    if(invChip==='ver') return e.obs && e.obs.toLowerCase().includes('verificar');
-    if(invChip==='critica') return autoCrit(e)==='CRÍTICA';
-    if(invChip==='vencidos') return isVencido(e);
-    if(invChip==='vermelha') return e.area==='VERMELHA';
-    if(invChip==='azul') return e.area==='AZUL';
+/* ── inventário: a seleção filtrada, com dois consumidores ── */
+/* Mesmo filter de sempre, movido sem mudança de regra — a única correção é
+   ler local/predio com (e.local||''), como fabricante já era: um local nulo
+   lançaria TypeError na busca (nenhum dos 171 registros tem, o que é sorte,
+   não garantia). Dois consumidores: a lista da tela (renderInv) e a folha de
+   etiquetas (etiquetasDoInventario, D-s3h-08). Sem ordenar — cmpInv continua
+   sendo quem ordena, com gate próprio. */
+function filtrarInventario(dados, busca, chip){
+  var q = (busca||'').toLowerCase().trim();
+  return (dados||[]).filter(function(e){
+    if(q && !((e.local||'').toLowerCase().includes(q)||(e.predio||'').toLowerCase().includes(q)||(e.fabricante||'').toLowerCase().includes(q))) return false;
+    if(chip==='nok') return equipInoperante(e);
+    if(chip==='ok') return equipOperante(e);
+    if(chip==='or') return equipComRestricao(e);
+    if(chip==='ver') return e.obs && e.obs.toLowerCase().includes('verificar');
+    if(chip==='critica') return autoCrit(e)==='CRÍTICA';
+    if(chip==='vencidos') return isVencido(e);
+    if(chip==='vermelha') return e.area==='VERMELHA';
+    if(chip==='azul') return e.area==='AZUL';
     return true;
-  }).sort(cmpInv);
+  });
+}
+
+function renderInv(){
+  var list = filtrarInventario(DATA, (el('inv-search')||{value:''}).value, invChip).sort(cmpInv);
 
   el('inv-cnt').textContent = list.length;
   el('inv-label').textContent = list.length===DATA.length ? 'Todos os Equipamentos' : 'Filtrado';
@@ -1344,6 +1357,15 @@ function renderInv(){
       (e.obs?'<span style="color:#E52207"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i>Obs.</span>':'')+
       '</div></div>';
   }).join('');
+}
+
+/* Único ponto deste bloco que toca o DOM: lê a busca da tela, aplica a mesma
+   seleção do inventário (D-s3h-08) e entrega a imprimirEtiquetas — a folha
+   sai com exatamente o que a tela está mostrando agora. */
+function etiquetasDoInventario(){
+  var busca = (el('inv-search')||{value:''}).value;
+  var lista = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
+  imprimirEtiquetas(lista);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1664,7 +1686,8 @@ function openDetail(id){
         '<button class="le-del" onclick="delLog('+id+',\''+esc(entry.id||'')+'\')" style="margin-top:4px"><i class="fas fa-trash mr1" aria-hidden="true"></i>Excluir</button>' +
         '</div>';
     }).join('') : '<div class="empty" style="padding:10px 0"><p>Nenhuma OS/manutenção registrada ainda.</p></div>') +
-    '</div>';
+    '</div>' +
+    blocoQrFicha(id);
 
   el('drawer-footer').innerHTML =
     '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>' +
@@ -3604,11 +3627,7 @@ async function doLoginRole(){
 var CT_APP_URL = 'https://pmoc-refrigeracao.vercel.app';
 var CT_QR_BRAND = new URL('qr-brand.png', location.href).href;
 function qrGetUrl(){
-  var saved = '';
-  try{ saved = localStorage.getItem('pmoc_app_url')||''; }catch(e){}
-  if(saved) return saved;
-  if(location.protocol==='http:'||location.protocol==='https:') return location.href.split('#')[0];
-  return CT_APP_URL;
+  return urlBaseApp();
 }
 function qrSetUrl(v){
   try{ localStorage.setItem('pmoc_app_url', (v||'').trim()); }catch(e){}
@@ -3672,6 +3691,118 @@ renderLoginMobile = function(){
   }
 };
 
+/* ── QR e etiquetas do equipamento ── */
+/* Um gerador de SVG só, três destinos: o QR na tela da ficha, o QR embutido
+   no papel (D-s3h-06) e o QR de cada etiqueta. urlBaseApp() é a única origem
+   de URL — sempre sem query e sem hash (D-s3h-05) — para o QR "Acesse pelo
+   celular" nunca herdar o ?equip= da página que o gerou. */
+function urlBaseApp(){
+  var salvo = '';
+  try{ salvo = localStorage.getItem('pmoc_app_url')||''; }catch(e){}
+  var base = linkSeguro(salvo);
+  if(!base){
+    base = (location.protocol==='http:'||location.protocol==='https:') ? (location.origin+location.pathname) : CT_APP_URL;
+  }
+  return base.split('#')[0].split('?')[0].replace(/\/$/,'');
+}
+
+function urlFichaEquip(id){
+  var n = parseInt(id, 10);
+  if(!isFinite(n)) return urlBaseApp();
+  return urlBaseApp() + '?' + PARAM_FICHA + '=' + n;
+}
+
+function qrSvgDe(url, cell){
+  if(typeof qrcode !== 'function') return '';
+  try{
+    var q = qrcode(0,'M');
+    q.addData(url);
+    q.make();
+    return q.createSvgTag({cellSize: cell||4, margin: 2, scalable: true});
+  }catch(e){
+    return '';
+  }
+}
+
+var ESTILO_ETIQUETAS =
+  'body{margin:0}' +
+  '.etq-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4mm}' +
+  '.etq{border:1px dashed #999;padding:3mm;display:flex;align-items:center;gap:3mm;page-break-inside:avoid;break-inside:avoid}' +
+  '.etq-qr svg{width:22mm;height:22mm;display:block}' +
+  '.etq-id{font-size:14pt;font-weight:800;color:#071D41}' +
+  '.etq-local{font-size:8pt;font-weight:700;word-break:break-word}' +
+  '.etq-tipo{font-size:7pt;color:#888}';
+
+/* Uma etiqueta: o SVG à esquerda, dado do equipamento à direita. Toda
+   interpolação de dado passa por esc() — o único HTML cru é o SVG produzido
+   pela biblioteca a partir de uma URL já validada por urlBaseApp (T-s3h-03).
+   Sem SVG (biblioteca ausente/URL longa) a etiqueta ainda sai, com a URL em
+   texto pequeno no lugar do desenho. */
+function etiquetaHtml(e){
+  var svg = qrSvgDe(urlFichaEquip(e.id), 3);
+  var qr = svg || ('<div style="font-size:6pt;word-break:break-all">'+esc(urlFichaEquip(e.id))+'</div>');
+  return '<div class="etq">' +
+    '<div class="etq-qr">'+qr+'</div>' +
+    '<div>' +
+    '<div class="etq-id">#'+e.id+'</div>' +
+    '<div class="etq-local">'+esc(e.predio||'')+' · '+esc(e.local||'')+'</div>' +
+    '<div class="etq-tipo">'+esc(e.tipo||'')+(e.btu?' · '+(e.btu/1000).toFixed(0)+'K BTU':'')+'</div>' +
+    '</div></div>';
+}
+
+/* Seleção vazia avisa e não abre janela nenhuma (D-s3h-08). */
+function imprimirEtiquetas(lista){
+  if(!lista || !lista.length){
+    showToast('Nenhum equipamento na seleção atual', 'error');
+    return;
+  }
+  var corpo = '<div class="etq-grid">' + lista.map(etiquetaHtml).join('') + '</div>';
+  imprimirDocumento({
+    titulo: 'Etiquetas — '+lista.length+' equipamento(s)',
+    subtitulo: 'Recorte no tracejado',
+    estilo: ESTILO_ETIQUETAS,
+    corpo: corpo,
+    assinaturas: []
+  });
+}
+
+/* Botão da ficha: a mesma função de impressão, lista de um. */
+function imprimirEtiquetaDe(id){
+  var e = DATA.find(function(r){ return r.id===id; });
+  if(!e) return;
+  imprimirEtiquetas([e]);
+}
+
+function copiarLinkFicha(id){
+  try{
+    if(!navigator.clipboard){ showToast('Selecione e copie a URL manualmente','error'); return; }
+    navigator.clipboard.writeText(urlFichaEquip(id))
+      .then(function(){ showToast('Link copiado','ok'); })
+      .catch(function(){ showToast('Não foi possível copiar — selecione a URL manualmente','error'); });
+  }catch(e){
+    showToast('Não foi possível copiar — selecione a URL manualmente','error');
+  }
+}
+
+/* Bloco 5 da ficha (D-s3h-09): empilhado na vertical, sem botão novo no
+   rodapé da gaveta. A Task 3 troca a frase provisória de NFC por blocoNfc(id). */
+function blocoQrFicha(id){
+  var url = urlFichaEquip(id);
+  var svg = qrSvgDe(url, 4);
+  return '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-qrcode mr1" aria-hidden="true"></i>5 · Etiqueta, QR e NFC</div>' +
+    '<div style="text-align:center;margin:8px 0">' +
+    (svg ? svg : '<div style="color:#999;font-size:12px">QR indisponível — use a URL abaixo.</div>') +
+    '</div>' +
+    '<div style="word-break:break-all;background:#F8F9FA;border:1px solid #E0E0E0;border-radius:8px;padding:8px;font-size:11px;color:#444;margin-bottom:8px">'+esc(url)+'</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+    '<button class="btn-secondary" onclick="copiarLinkFicha('+id+')"><i class="fas fa-copy mr1" aria-hidden="true"></i>Copiar link</button>' +
+    '<button class="btn-secondary" onclick="imprimirEtiquetaDe('+id+')"><i class="fas fa-tag mr1" aria-hidden="true"></i>Imprimir etiqueta</button>' +
+    '</div>' +
+    '<div style="font-size:11px;color:#888">Uma tag NFC guarda exatamente esse endereço — grave com qualquer app de NFC do celular.</div>' +
+    '</div>';
+}
+
 /* ══ IMPRESSÃO DA OS ══ */
 /* Tabela de duas colunas, usada pelos dois consumidores da folha timbrada. */
 function row2(l,v){ return '<tr><td class="l">'+l+'</td><td>'+(v||'—')+'</td></tr>'; }
@@ -3692,6 +3823,7 @@ function imprimirDocumento(opcoes){
   var corpo = opcoes.corpo || '';
   var assinaturas = opcoes.assinaturas || [];
   var rodape = opcoes.rodape || ('Documento gerado pelo PMOC.Refrigeração · CMASM/DME em '+new Date().toLocaleString('pt-BR'));
+  var estilo = opcoes.estilo || '';
   var ass = assinaturas.map(function(a){ return '<div>'+esc(a.papel)+'<br/>'+esc(a.nome||'')+'</div>'; }).join('');
   var h = '<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8"/><title>'+esc(titulo)+'</title><style>' +
     'body{font-family:Arial,sans-serif;font-size:10pt;color:#1B1B1B;margin:14mm}' +
@@ -3703,7 +3835,8 @@ function imprimirDocumento(opcoes){
     '.fotos{display:flex;gap:5mm;flex-wrap:wrap;margin:3mm 0}.fotos img{max-height:42mm;max-width:60mm;border:1px solid #CCC}' +
     '.ass{display:grid;grid-template-columns:1fr 1fr;gap:10mm;margin-top:14mm}.ass div{border-top:1px solid #000;padding-top:2mm;text-align:center;font-size:8pt}' +
     '.meta{font-size:8pt;color:#888}@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
-    '@page{size:A4;margin:12mm}</style></head><body>' +
+    '@page{size:A4;margin:12mm}' + estilo +
+    '</style></head><body>' +
     '<div class="hdr"><img src="'+CT_LOGO_URI+'" style="width:52px;height:52px"/>' +
     '<div style="flex:1"><h1>'+esc(titulo)+'</h1>' +
     '<div class="meta">CMASM · Divisão de Manutenção Especializada · UASG 744030 · ARP Nº 04/2024 (PE 90026/2024 — CMRJ) · Processo 63099.002208/2025-06</div></div>' +
@@ -3842,9 +3975,12 @@ function printFicha(equipId){
     corpo += '<div class="meta">Nenhuma OS/manutenção registrada ainda.</div>';
   }
 
+  var qrFicha = qrSvgDe(urlFichaEquip(equipId), 3);
+
   imprimirDocumento({
     titulo: 'FICHA DO EQUIPAMENTO — #'+equipId,
-    subtitulo: esc(e.predio)+' / '+esc(e.local),
+    subtitulo: esc(e.predio)+' / '+esc(e.local) + qrFicha,
+    estilo: '.hdr svg{width:20mm;height:20mm;display:block;margin-left:auto;margin-top:2mm}',
     corpo: corpo,
     assinaturas: [
       {papel:'Responsável técnico', nome:''},
