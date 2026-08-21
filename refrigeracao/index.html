@@ -1776,7 +1776,7 @@ async function manAprovar(logId){
 
 async function manDevolver(logId){
   var achado = manEntrada(logId); if(!achado) return;
-  var motivo = prompt('Motivo da devolução do orçamento:');
+  var motivo = prompt('Motivo da devolução do delineamento:');
   if (motivo===null) return;
   motivo = motivo.trim();
   if (!motivo) { showToast('Informe o motivo da devolução','error'); return; }
