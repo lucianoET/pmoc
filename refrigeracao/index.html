@@ -2040,11 +2040,42 @@ function ctOpenOS(osId){
 }
 
 /* ══ AÇÕES ══ */
+function ctNomeEvento(msg){
+  return msg || 'Atualização';
+}
+function ctDetalheEvento(statusAnterior, patch){
+  if(!patch || patch.status===undefined || patch.status===statusAnterior) return '';
+  var de = statusAnterior ? (CT_STATUS[statusAnterior] ? CT_STATUS[statusAnterior].label : statusAnterior) : '—';
+  var para = CT_STATUS[patch.status] ? CT_STATUS[patch.status].label : patch.status;
+  return de + ' → ' + para;
+}
+function ctUsuarioEvento(u){
+  if(!u) return '';
+  return u.nome + (u.role ? ' ('+u.role+')' : '');
+}
+
+async function ctRegistrarEvento(osId, statusAnterior, patch, msg){
+  try{
+    var r = await supa.from('os_eventos').insert({
+      os_id: osId,
+      evento: ctNomeEvento(msg),
+      detalhe: ctDetalheEvento(statusAnterior, patch) || null,
+      usuario: ctUsuarioEvento(ctUser) || null
+    }).select().single();
+    if(r.error){ console.warn('ctRegistrarEvento', r.error); return false; }
+    (ctEvt[osId]=ctEvt[osId]||[]).push(r.data); // D-jpd-06: cache atualizado na hora, sem realtime
+    return true;
+  }catch(e){ console.warn('ctRegistrarEvento', e); return false; }
+}
+
 async function ctUpd(osId, patch, msg){
+  var anterior = ctOS.find(function(o){return o.id===osId;});
+  var statusAnterior = anterior ? anterior.status : undefined; // lido ANTES do update (senão sai X → X)
   var r = await supa.from('os_contratacao').update(patch).eq('id',osId).select().single();
   if(r.error){ showToast('Erro ao atualizar','error'); return false; }
   var i = ctOS.findIndex(function(o){return o.id===osId;});
   if(i>=0) ctOS[i]=r.data;
+  await ctRegistrarEvento(osId, statusAnterior, patch, msg); // D-jpd-05: falha aqui não derruba a ação
   if(msg) showToast(msg,'ok');
   return true;
 }

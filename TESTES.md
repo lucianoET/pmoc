@@ -1496,3 +1496,31 @@ Sem migração. Conferido com dado real (16 áreas, **todas com contorno desenha
 - [ ] Numa área com contorno: o campo "Área (m²)" está **travado**, com a nota "Calculada do
       contorno desenhado no mapa". Salvar e conferir no /mapa que a dimensão não mudou.
 - [ ] Como **técnico**: conferir que o ⚙ não aparece (o banco recusaria de qualquer forma).
+
+---
+
+## Refrigeração — encerramento de OS e trilha (21/08/2026)
+
+Sem migração — `equipamentos.ultima_manutencao`, `logs_manutencao.*` e `os_eventos` já
+existem em produção. Roteiro manual do que nenhum gate alcança (rede real, sessão real).
+
+- [ ] Logado com um usuário autenticado (não "Visualizar sem login"), avançar uma OS de
+      contratação de ponta a ponta: solicitar → orçar → aprovar → executar → fiscalizar →
+      certificar. A cada passo, abrir o drawer da OS e conferir que "Histórico / Auditoria"
+      ganhou uma linha nova com o rótulo do passo anterior e do novo, e que a linha traz o
+      nome (e o cargo, entre parênteses) de quem fez a ação.
+- [ ] Imprimir a OS (ícone de impressora no rodapé do drawer) e conferir que a tabela
+      "Histórico (auditoria)" mostra a mesma trilha, na coluna **Detalhe** (não mais
+      "De → Para").
+- [ ] Certificar a OS (informar NF e itens da composição) e, na ficha do equipamento
+      (`openDetail`), conferir que ele saiu de "Nenhum registro de manutenção" — o histórico
+      ganhou uma linha começando com "Contratação <número da OS>" e o campo "Última manut."
+      deixou de estar vazio.
+- [ ] Repetir a certificação da mesma OS (ou recarregar a página e certificar de novo, se o
+      fluxo permitir reabrir) e conferir que **não** nasceu uma segunda linha de histórico
+      para essa contratação.
+- [ ] Registrar uma OS interna concluída (Registrar OS/Manutenção → Status CONCLUÍDA) num
+      equipamento sem `ultima_manutencao` e conferir que o campo "Última manut." da ficha
+      passa a mostrar a data da OS.
+- [ ] Entrar em "Visualizar sem login" (acesso Livre) e conferir que o histórico de
+      manutenção aparece nos equipamentos que têm log — não "Sem hist." nos 171.
