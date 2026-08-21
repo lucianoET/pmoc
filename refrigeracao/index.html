@@ -122,6 +122,7 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
 .equip-card:active{transform:scale(.98)}
 .equip-card.ok{border-left-color:#168821}
 .equip-card.nok{border-left-color:#E52207}
+.equip-card.or{border-left-color:#B46800}
 .equip-card.ver{border-left-color:#B46800}
 .ec-row1{display:flex;align-items:flex-start;gap:8px}
 .ec-num{font-size:11px;color:#aaa;font-weight:700;min-width:28px;padding-top:2px}
@@ -132,6 +133,7 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
 .pill{display:inline-flex;align-items:center;gap:4px;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;line-height:1}
 .pill-ok{background:#E6F4EA;color:#168821}
 .pill-nok{background:#FDECEA;color:#E52207}
+.pill-or{background:#FEF3E2;color:#B46800}
 .pill-ver{background:#FEF3E2;color:#B46800}
 .pill-crit{background:#FDECEA;color:#B71C1C}
 .pill-alta{background:#FFF3E0;color:#E65100}
@@ -659,8 +661,9 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div class="chips" id="inv-chips">
         <button class="chip active" onclick="setChip(this,'todos')">Todos</button>
-        <button class="chip" onclick="setChip(this,'nok')">NOK</button>
-        <button class="chip" onclick="setChip(this,'ok')">OK</button>
+        <button class="chip" onclick="setChip(this,'nok')">Inoperante</button>
+        <button class="chip" onclick="setChip(this,'ok')">Operante</button>
+        <button class="chip" onclick="setChip(this,'or')">Com restrições</button>
         <button class="chip" onclick="setChip(this,'ver')">Verificar</button>
         <button class="chip" onclick="setChip(this,'critica')">Crítica</button>
         <button class="chip" onclick="setChip(this,'vencidos')">Vencidos</button>
@@ -814,7 +817,7 @@ function showToast(msg, type){
 
 function autoCrit(e){
   if(e.criticidadeManual) return e.criticidade;
-  if(e.funciona==='NOK') return e.criticidade;
+  if(equipInoperante(e)) return e.criticidade;
   return e.criticidade;
 }
 
@@ -833,6 +836,54 @@ function nextPmoc(e, tipo){
   return d;
 }
 
+/* ── estado do equipamento: vocabulário OP/INOP/OR ── */
+/* D-q57-01/02/06: o estado da máquina passa a ser um vocabulário de três
+   palavras (era OK/NOK). EQUIP_EQUIVALENCIA existe para o frontend poder
+   ir a produção ANTES do SQL (migração 41) — o banco continua respondendo
+   OK/NOK até alguém rodar o .sql, e esta tradução faz a tela ler os dois
+   vocabulários sem diferença nenhuma para o usuário (D-q57-06). Ela some
+   no dia em que alguém confirmar que não há mais nenhuma linha em OK/NOK.
+   `estado` (a coluna, não este bloco) NÃO é reaproveitada — guarda a
+   idade aparente do aparelho, e a tela rotula esse campo "Idade aparente",
+   nunca "Estado" (D-q57-02). */
+var EQUIP_ESTADOS = {
+  'OP':   {rotulo:'Operante',                curto:'OP',   classe:'pill-ok',  icone:'fa-check'},
+  'OR':   {rotulo:'Operando com restrições',  curto:'OR',   classe:'pill-or',  icone:'fa-exclamation-triangle'},
+  'INOP': {rotulo:'Inoperante',               curto:'INOP', classe:'pill-nok', icone:'fa-times'}
+};
+var EQUIP_ORDEM = ['OP','OR','INOP'];
+var EQUIP_EQUIVALENCIA = {'OK':'OP','NOK':'INOP'};
+
+/* Comparação estrita contra a lista fechada, sem trim, sem conversão de
+   caixa, sem conversão para texto (ASVS V5) — mesma técnica de
+   normalizarFlora/normalizarTema no resto do projeto. hasOwnProperty em
+   vez de acesso direto: o valor vem do banco, e `constructor`/`__proto__`
+   não podem devolver função nenhuma. */
+function normalizarEstadoEquip(v){
+  if (EQUIP_ESTADOS.hasOwnProperty(v)) return v;
+  if (EQUIP_EQUIVALENCIA.hasOwnProperty(v)) return EQUIP_EQUIVALENCIA[v];
+  return null;
+}
+function equipEstado(e){ return normalizarEstadoEquip(e && e.funciona); }
+function equipOperante(e){ return equipEstado(e)==='OP'; }
+function equipComRestricao(e){ return equipEstado(e)==='OR'; }
+function equipInoperante(e){ return equipEstado(e)==='INOP'; }
+function rotuloEstadoEquip(v){
+  var n = normalizarEstadoEquip(v);
+  return n ? EQUIP_ESTADOS[n].rotulo : 'Não cadastrado';
+}
+
+/* Ponto único do vocabulário de estado na tela — desenha os três estados
+   a partir de EQUIP_ESTADOS; valor desconhecido ou nulo cai na pílula
+   "VERIFICAR" de sempre, com o valor original escapado no title (não é
+   estado inventado sendo exibido como texto, é um atributo auxiliar). */
+function statusPill(fn){
+  var n = normalizarEstadoEquip(fn);
+  if(!n) return '<span class="pill pill-ver" title="'+esc(fn==null?'':String(fn))+'"><i class="fas fa-question" aria-hidden="true"></i> VERIFICAR</span>';
+  var cfg = EQUIP_ESTADOS[n];
+  return '<span class="pill '+cfg.classe+'"><i class="fas '+cfg.icone+'" aria-hidden="true"></i> '+esc(cfg.curto)+'</span>';
+}
+
 /* ── alertas: contagem única ── */
 function equipSemHist(e){
   return !e.ultimaManutencao && !getLatestLogDate(e.id);
@@ -844,17 +895,19 @@ function equipVencido(e, agora){
 }
 function alertasPmoc(lista, agora){
   agora = agora || new Date();
-  var nok=[], vencidos=[], semHist=[], todos=[];
+  var nok=[], vencidos=[], semHist=[], restricao=[], todos=[];
   lista.forEach(function(e){
-    var eNok = e.funciona==='NOK';
+    var eNok = equipInoperante(e);
+    var eRestricao = equipComRestricao(e); // D-q57-07: OR não conta em nok — "Fora de Operação" nomeia um fato específico
     var eVencido = equipVencido(e, agora);
     var eSemHist = equipSemHist(e);
     if(eNok) nok.push(e);
+    if(eRestricao) restricao.push(e);
     if(eVencido) vencidos.push(e);
     if(eSemHist) semHist.push(e);
-    if(eNok || eVencido || eSemHist) todos.push(e);
+    if(eNok || eRestricao || eVencido || eSemHist) todos.push(e);
   });
-  return {nok:nok, vencidos:vencidos, semHist:semHist, todos:todos, total:todos.length};
+  return {nok:nok, vencidos:vencidos, semHist:semHist, restricao:restricao, todos:todos, total:todos.length};
 }
 function contarOSPendentes(entradas){
   return entradas.filter(function(o){ return o.entry && manPendente(o.entry.status); }).length;
@@ -872,11 +925,7 @@ function critPill(crit){
   var map={'CRÍTICA':'pill-crit','ALTA':'pill-alta','MÉDIA':'pill-media','BAIXA':'pill-baixa'};
   return '<span class="pill '+(map[crit]||'')+'">'+esc(crit)+'</span>';
 }
-function statusPill(fn){
-  if(fn==='OK') return '<span class="pill pill-ok"><i class="fas fa-check" aria-hidden="true"></i> OK</span>';
-  if(fn==='NOK') return '<span class="pill pill-nok"><i class="fas fa-times" aria-hidden="true"></i> NOK</span>';
-  return '<span class="pill pill-ver"><i class="fas fa-question" aria-hidden="true"></i> VERIFICAR</span>';
-}
+/* statusPill mora no bloco "estado do equipamento: vocabulário OP/INOP/OR", logo acima de "alertas: contagem única" — ponto único do vocabulário. */
 /* ── fluxo da OS interna: vocabulário e transições ── */
 /* Paleta nomeada por tom, referenciada por nome (reusa os hexadecimais que já
    existem no arquivo, na tabela CT_STATUS da contratação). CT_STATUS não é
@@ -1031,11 +1080,12 @@ function navTo(page, btn){
 function renderDash(){
   var now = new Date();
   var total = DATA.length;
-  var ok = DATA.filter(function(e){ return e.funciona==='OK'; }).length;
+  var ok = DATA.filter(function(e){ return equipOperante(e); }).length;
   var pct = total?Math.round(ok/total*100):0;
   var critica = DATA.filter(function(e){ return autoCrit(e)==='CRÍTICA'; }).length;
   var ag = alertasPmoc(DATA, now);
   var nok = ag.nok.length;
+  var restricao = ag.restricao.length;
   var semHist = ag.semHist.length;
   var vencidas = ag.vencidos.length;
   var alertCount = ag.total;
@@ -1052,7 +1102,7 @@ function renderDash(){
     '<div class="kpi-card" style="border-left-color:#E52207">' +
     '<div class="kpi-label"><i class="fas fa-times-circle mr1" aria-hidden="true"></i> Fora de Operação</div>' +
     '<div class="kpi-val" style="color:#E52207">'+nok+'</div>' +
-    '<div class="kpi-sub">'+(total?Math.round(nok/total*100):0)+'% do total</div></div>' +
+    '<div class="kpi-sub">'+(total?Math.round(nok/total*100):0)+'% do total'+(restricao?' · '+restricao+' com restrições':'')+'</div></div>' +
     '<div class="kpi-card" style="border-left-color:#B71C1C">' +
     '<div class="kpi-label"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i> Área Crítica</div>' +
     '<div class="kpi-val" style="color:#B71C1C">'+critica+'</div>' +
@@ -1073,10 +1123,12 @@ function renderDash(){
   alerts.forEach(function(e){
     var crit=autoCrit(e);
     var cc = CRIT_COLORS[crit]||'#999';
-    var reason = e.funciona==='NOK' ? 'NOK — '+esc(e.obs||'Verificar') :
+    var reason = equipInoperante(e) ? 'INOP — '+esc(e.obs||'Verificar') :
+                 equipComRestricao(e) ? 'Restrição — '+esc(e.obs||'Verificar') :
                  !getLatestLogDate(e.id)&&!e.ultimaManutencao ? 'Sem histórico de manutenção' : 'Manutenção vencida';
+    var alertIcon = equipInoperante(e) ? 'fa-times-circle' : equipComRestricao(e) ? 'fa-exclamation-triangle' : 'fa-calendar-exclamation';
     alertHtml += '<div class="alert-card" style="border-left-color:'+cc+'" onclick="openDetail('+e.id+')">' +
-      '<div class="alert-icon"><i class="fas '+(e.funciona==='NOK'?'fa-times-circle':'fa-calendar-exclamation')+'" style="color:'+cc+'"></i></div>' +
+      '<div class="alert-icon"><i class="fas '+alertIcon+'" style="color:'+cc+'"></i></div>' +
       '<div class="alert-body"><div class="alert-title">'+esc(e.local)+'</div>' +
       '<div class="alert-sub">'+esc(e.predio)+' · '+esc(reason)+'</div></div>' +
       critPill(crit)+'</div>';
@@ -1168,8 +1220,9 @@ function renderInv(){
   var q = (el('inv-search')||{value:''}).value.toLowerCase().trim();
   var list = DATA.filter(function(e){
     if(q && !(e.local.toLowerCase().includes(q)||e.predio.toLowerCase().includes(q)||(e.fabricante||'').toLowerCase().includes(q))) return false;
-    if(invChip==='nok') return e.funciona==='NOK';
-    if(invChip==='ok') return e.funciona==='OK';
+    if(invChip==='nok') return equipInoperante(e);
+    if(invChip==='ok') return equipOperante(e);
+    if(invChip==='or') return equipComRestricao(e);
     if(invChip==='ver') return e.obs && e.obs.toLowerCase().includes('verificar');
     if(invChip==='critica') return autoCrit(e)==='CRÍTICA';
     if(invChip==='vencidos') return isVencido(e);
@@ -1193,7 +1246,8 @@ function renderInv(){
     return;
   }
   el('inv-list').innerHTML = list.map(function(e){
-    var fn = e.funciona==='OK'?'ok':e.funciona==='NOK'?'nok':'ver';
+    var estEq = equipEstado(e);
+    var fn = estEq==='OP'?'ok':estEq==='INOP'?'nok':estEq==='OR'?'or':'ver';
     var horas = (e.horasDia||0)*(e.diasSemana||0);
     var btuK = e.btu? (e.btu>=1000?(e.btu/1000).toFixed(0)+'K BTU':e.btu+' BTU'):'—';
     return '<div class="equip-card '+fn+'" onclick="openDetail('+e.id+')">' +
@@ -1376,6 +1430,8 @@ function renderAlerts(){
   var ag = alertasPmoc(DATA, now);
   var nokList = ag.nok.slice()
     .sort(function(a,b){ var o=['CRÍTICA','ALTA','MÉDIA','BAIXA']; return o.indexOf(autoCrit(a))-o.indexOf(autoCrit(b)); });
+  var restList = ag.restricao.slice()
+    .sort(function(a,b){ var o=['CRÍTICA','ALTA','MÉDIA','BAIXA']; return o.indexOf(autoCrit(a))-o.indexOf(autoCrit(b)); });
   var vencList = ag.vencidos.slice()
     .sort(function(a,b){ var o=['CRÍTICA','ALTA','MÉDIA','BAIXA']; return o.indexOf(autoCrit(a))-o.indexOf(autoCrit(b)); });
   var semHistCrit = ag.semHist.filter(function(e){ return autoCrit(e)==='CRÍTICA'; });
@@ -1383,10 +1439,21 @@ function renderAlerts(){
   var html = '';
 
   if(nokList.length){
-    html += '<div class="sec-head"><span class="sec-title" style="color:#E52207"><i class="fas fa-times-circle mr1" aria-hidden="true"></i>NOK — Fora de Operação</span><span class="sec-count">'+nokList.length+'</span></div>';
+    html += '<div class="sec-head"><span class="sec-title" style="color:#E52207"><i class="fas fa-times-circle mr1" aria-hidden="true"></i>Inoperantes — Fora de Operação</span><span class="sec-count">'+nokList.length+'</span></div>';
     html += nokList.map(function(e){
       return '<div class="alert-card" onclick="openDetail('+e.id+')">' +
         '<div class="alert-icon"><i class="fas fa-times-circle" style="color:#E52207"></i></div>' +
+        '<div class="alert-body"><div class="alert-title">'+esc(e.local)+'</div>' +
+        '<div class="alert-sub">'+esc(e.predio)+(e.obs?' · '+esc(e.obs):'')+'</div></div>' +
+        critPill(autoCrit(e))+'</div>';
+    }).join('');
+  }
+
+  if(restList.length){
+    html += '<div class="sec-head" style="margin-top:16px"><span class="sec-title" style="color:#B46800"><i class="fas fa-exclamation-triangle mr1" aria-hidden="true"></i>Operando com restrições</span><span class="sec-count">'+restList.length+'</span></div>';
+    html += restList.map(function(e){
+      return '<div class="alert-card" style="border-left-color:#B46800" onclick="openDetail('+e.id+')">' +
+        '<div class="alert-icon"><i class="fas fa-exclamation-triangle" style="color:#B46800"></i></div>' +
         '<div class="alert-body"><div class="alert-title">'+esc(e.local)+'</div>' +
         '<div class="alert-sub">'+esc(e.predio)+(e.obs?' · '+esc(e.obs):'')+'</div></div>' +
         critPill(autoCrit(e))+'</div>';
@@ -2244,12 +2311,12 @@ function ctNovaOS(){
   el('dh-local').textContent = 'Solicitação de serviço';
   el('dh-predio').textContent = 'Selecione a máquina e descreva o problema';
   el('dh-pills').innerHTML = '';
-  var opts = DATA.slice().sort(function(a,b){ return (a.funciona==='NOK'?0:1)-(b.funciona==='NOK'?0:1); })
-    .map(function(e){ return '<option value="'+e.id+'">'+(e.funciona==='NOK'?'⛔ ':'')+'#'+e.id+' — '+esc(e.predio)+' / '+esc(e.local)+' ('+esc(e.tipo)+')</option>'; }).join('');
+  var opts = DATA.slice().sort(function(a,b){ return (equipInoperante(a)?0:1)-(equipInoperante(b)?0:1); })
+    .map(function(e){ return '<option value="'+e.id+'">'+(equipInoperante(e)?'⛔ ':'')+'#'+e.id+' — '+esc(e.predio)+' / '+esc(e.local)+' ('+esc(e.tipo)+')</option>'; }).join('');
   el('drawer-body').innerHTML =
     '<div class="ds"><div class="ds-title"><i class="fas fa-snowflake mr1" aria-hidden="true"></i>Máquina</div>' +
     '<select class="fgs" id="ct-equip-sel">'+opts+'</select>' +
-    '<div style="font-size:10px;color:#999;margin-top:6px">⛔ = máquinas NOK aparecem primeiro</div></div>' +
+    '<div style="font-size:10px;color:#999;margin-top:6px">⛔ = inoperantes aparecem primeiro</div></div>' +
     '<div class="ds"><div class="ds-title"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i>Problema / Serviço Necessário</div>' +
     '<textarea class="fgt" id="ct-problema" placeholder="Descreva o defeito ou serviço a contratar…"></textarea>' +
     '<div class="fg2" style="margin-top:8px">' +
@@ -2818,11 +2885,13 @@ function dvRenderCharts(){
     kpi.insertAdjacentElement('afterend', host);
   }
   var ativos = DATA.filter(function(e){ return e.tipo!=='RETIRADO'; });
-  var oks = ativos.filter(function(e){ return e.funciona==='OK'; });
+  // D-q57-07: um aparelho com restrição está ligado e consome energia — continua
+  // entrando no cálculo de potência/kWh, diferente do KPI "Fora de Operação" (só INOP).
+  var emOperacao = ativos.filter(function(e){ return equipOperante(e) || equipComRestricao(e); });
 
   /* ── capacidade térmica ── */
   var btuTotal = ativos.reduce(function(s,e){return s+(e.btu||0);},0);
-  var btuOk = oks.reduce(function(s,e){return s+(e.btu||0);},0);
+  var btuOk = emOperacao.reduce(function(s,e){return s+(e.btu||0);},0);
   var tr = btuTotal/12000, kwTerm = btuTotal/3412;
   var tipos = ['SPLIT','PISO/TETO','SELF CONTAINED','JANELA'];
   var segTipo = tipos.map(function(t){
@@ -2843,15 +2912,15 @@ function dvRenderCharts(){
 
   /* ── energia elétrica ── */
   var FATOR_CICLO = 0.7;
-  var potW = oks.reduce(function(s,e){return s+dvPotenciaW(e);},0);
-  var kwhMes = oks.reduce(function(s,e){
+  var potW = emOperacao.reduce(function(s,e){return s+dvPotenciaW(e);},0);
+  var kwhMes = emOperacao.reduce(function(s,e){
     return s + dvPotenciaW(e)/1000*(e.horasDia||0)*(e.diasSemana||0)*4.345*FATOR_CICLO;
   },0);
   var tarifa = dvGetTarifa();
   var custoMes = kwhMes*tarifa;
   var areas = ['AZUL','VERMELHA'];
   var kwhArea = areas.map(function(a){
-    return {label:'Área '+a, value: oks.filter(function(e){return e.area===a;})
+    return {label:'Área '+a, value: emOperacao.filter(function(e){return e.area===a;})
       .reduce(function(s,e){return s+dvPotenciaW(e)/1000*(e.horasDia||0)*(e.diasSemana||0)*4.345*FATOR_CICLO;},0)};
   });
   var maxA = Math.max.apply(null, kwhArea.map(function(x){return x.value;}))||1;
@@ -2888,19 +2957,28 @@ function dvRenderCharts(){
     }).join('')+'</div>';
 
   /* ── estado da frota ── */
-  var nOK = oks.length, nNOK = ativos.filter(function(e){return e.funciona==='NOK';}).length;
+  // Três segmentos, um por EQUIP_ESTADOS — a mesma lista fechada que a pílula e o
+  // chip do inventário usam, na mesma ordem (EQUIP_ORDEM).
+  var CORES_ESTADO_FROTA = {'OP':'#168821','OR':'#B46800','INOP':'#E52207'};
+  var estFrota = EQUIP_ORDEM.map(function(k){
+    return {chave:k, label:EQUIP_ESTADOS[k].curto, color:CORES_ESTADO_FROTA[k],
+      value: ativos.filter(function(e){ return equipEstado(e)===k; }).length};
+  });
+  var nFrota = estFrota.reduce(function(s,x){return s+x.value;},0)||1;
   var idades = ['NOVA','SEMI','VELHA'].map(function(st,i){
     return {label:st, value:ativos.filter(function(e){return e.estado===st;}).length, color:DV_SEQ[i]};
   });
   var nIdade = idades.reduce(function(s,x){return s+x.value;},0)||1;
   var htmlFrota =
     '<div class="chart-card"><div class="chart-title"><i class="fas fa-heartbeat" aria-hidden="true"></i>Estado da Frota</div>' +
-    '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:2px">' +
-    '<span style="color:#168821"><i class="fas fa-check-circle" aria-hidden="true"></i> OK '+nOK+' ('+dvFmt(nOK/(nOK+nNOK||1)*100)+'%)</span>' +
-    '<span style="color:#E52207">NOK '+nNOK+' <i class="fas fa-times-circle" aria-hidden="true"></i></span></div>' +
-    '<div class="seg-bar">' +
-    '<div style="width:'+(nOK/(nOK+nNOK||1)*100)+'%;background:#168821" title="OK: '+nOK+'"></div>' +
-    '<div style="flex:1;background:#E52207" title="NOK: '+nNOK+'"></div></div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:2px;flex-wrap:wrap;gap:4px">' +
+    estFrota.map(function(x){
+      return '<span style="color:'+x.color+'">'+x.label+' '+x.value+' ('+dvFmt(x.value/nFrota*100)+'%)</span>';
+    }).join('') +
+    '</div>' +
+    '<div class="seg-bar">'+estFrota.map(function(x){
+      return '<div style="width:'+(x.value/nFrota*100)+'%;background:'+x.color+'" title="'+x.label+': '+x.value+'"></div>';
+    }).join('')+'</div>' +
     '<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;color:#666;margin-top:12px;margin-bottom:2px">' +
     idades.map(function(x){return '<span><span class="dl-dot" style="display:inline-block;background:'+x.color+';vertical-align:-1px"></span> '+x.label+' '+x.value+'</span>';}).join('') + '</div>' +
     '<div class="seg-bar">'+idades.map(function(x){

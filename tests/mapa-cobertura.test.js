@@ -199,6 +199,37 @@ test('normalizarEstado traduz o vocabulário real de cada tabela para a lista fe
   )
 })
 
+// ── 7b. climatizacao (260821-q57): cinco valores, não dois ──────────────
+// A migração 41 amplia equipamentos.funciona de OK/NOK para OP/INOP/OR
+// (D-q57-01), e ESTADO_POR_MODULO.climatizacao guarda os CINCO valores de
+// propósito (D-q57-15) — as duas entradas antigas não somem no dia em que
+// o frontend publica, só quando alguém confirmar que o banco não tem mais
+// linha nenhuma em OK/NOK.
+test('normalizarEstado(climatizacao, …) entende os cinco valores — os dois do legado e os três da migração 41', async () => {
+  const { normalizarEstado } = await import('../mapa/mapa-geometria.js')
+  assert.equal(normalizarEstado('climatizacao', 'OK'), 'operante')
+  assert.equal(normalizarEstado('climatizacao', 'NOK'), 'inoperante')
+  assert.equal(normalizarEstado('climatizacao', 'OP'), 'operante')
+  assert.equal(normalizarEstado('climatizacao', 'INOP'), 'inoperante')
+  assert.equal(normalizarEstado('climatizacao', 'OR'), 'restricao')
+  assert.equal(normalizarEstado('climatizacao', 'inventado'), null)
+})
+
+test('ESTADOS.restricao existe, com rótulo não vazio e cor distinta das outras cinco', async () => {
+  const { ESTADOS } = await import('../mapa/mapa-geometria.js')
+  assert.ok(ESTADOS.restricao, 'ESTADOS.restricao não existe')
+  assert.ok(ESTADOS.restricao.rotulo && ESTADOS.restricao.rotulo.length > 0, 'rótulo de restricao vazio')
+  const cores = Object.entries(ESTADOS).filter(([k]) => k !== 'restricao').map(([, v]) => v.cor)
+  assert.ok(!cores.includes(ESTADOS.restricao.cor), 'a cor de restricao colide com a de outro estado')
+})
+
+test('corDoEstado(restricao) não é a cor de desconhecido nem a de operante; classeDoEstado(restricao) não é vazia', async () => {
+  const { corDoEstado, classeDoEstado, ESTADOS, COR_ESTADO_DESCONHECIDO } = await import('../mapa/mapa-geometria.js')
+  assert.notEqual(corDoEstado('restricao'), COR_ESTADO_DESCONHECIDO)
+  assert.notEqual(corDoEstado('restricao'), ESTADOS.operante.cor)
+  assert.ok(classeDoEstado('restricao'), 'classeDoEstado(restricao) deveria devolver classe não vazia')
+})
+
 test('sobreaviso (transp_ativos) tem estado próprio — não é dobrado em operante nem em manutenção', async () => {
   const { normalizarEstado } = await import('../mapa/mapa-geometria.js')
   const estado = normalizarEstado('transportes', 'sobreaviso')

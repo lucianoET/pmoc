@@ -17,6 +17,11 @@
 // ao novo sentido) — por isso o mesmo contexto do sandbox agora roda DOIS recortes
 // (`vm.runInContext` duas vezes, como tests/refrigeracao-encerramento-os.test.js já faz):
 // o bloco de alertas E o bloco de vocabulário/transições.
+//
+// 260821-q57 (Task 1): alertasPmoc passou a chamar equipInoperante/equipComRestricao, do
+// bloco de vocabulário do ESTADO DO EQUIPAMENTO (OP/INOP/OR) — um terceiro recorte, que
+// entra ANTES do bloco de alertas porque é dele que alertasPmoc depende. Sem ele o gate
+// ficaria verde por acaso do mesmo jeito que o comentário acima já registrou para 260821-l7n.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -48,6 +53,8 @@ function carregarNucleoAlertas() {
     getLatestLogDate() { return null; },
   };
   vm.createContext(ctx);
+  // bloco de vocabulário do estado do equipamento (alertasPmoc chama equipInoperante/equipComRestricao)
+  vm.runInContext(recorte('/* ── estado do equipamento: vocabulário OP/INOP/OR ── */', '/* ── alertas: contagem única ── */'), ctx);
   // bloco de alertas (contarOSPendentes chama manPendente, definido no bloco de vocabulário)
   vm.runInContext(recorte('/* ── alertas: contagem única ── */', 'function dueBadgeHtml('), ctx);
   // bloco de vocabulário e transições do fluxo da OS interna (260821-l7n)
@@ -112,6 +119,26 @@ test('total bate com o tamanho de todos e com a união calculada à mão numa fi
   assert.strictEqual(ag.total, ag.todos.length);
   assert.strictEqual(ag.total, 5); // união à mão: {eNok, eSemHist, eVencido, eNokESemHist, eTodosOsTres}
   assert.ok(ag.nok.length + ag.vencidos.length + ag.semHist.length > ag.total, 'a soma das parcelas deve exceder o total sem repetição, provando a sobreposição');
+});
+
+test('alertasPmoc (260821-q57): um equipamento OR cai na cesta restricao e entra em todos uma única vez', () => {
+  const ctx = carregarNucleoAlertas();
+  const orSemMotivoExtra = { id: 6, funciona: 'OR', ultimaManutencao: '2026-08-01', _prox: 100 };
+  const ag = ctx.alertasPmoc([orSemMotivoExtra], new Date('2026-08-21T12:00:00Z'));
+  assert.strictEqual(ag.restricao.includes(orSemMotivoExtra), true);
+  assert.strictEqual(ag.nok.includes(orSemMotivoExtra), false); // D-q57-07: OR não é "Fora de Operação"
+  assert.strictEqual(ag.todos.filter((e) => e === orSemMotivoExtra).length, 1);
+  assert.strictEqual(ag.total, 1);
+});
+
+test('alertasPmoc (260821-q57): um OR que também está vencido continua contando uma única vez no total', () => {
+  const ctx = carregarNucleoAlertas();
+  const orEVencido = { id: 7, funciona: 'OR', ultimaManutencao: '2020-01-01', _prox: -10 };
+  const ag = ctx.alertasPmoc([orEVencido], new Date('2026-08-21T12:00:00Z'));
+  assert.strictEqual(ag.restricao.includes(orEVencido), true);
+  assert.strictEqual(ag.vencidos.includes(orEVencido), true);
+  assert.strictEqual(ag.todos.filter((e) => e === orEVencido).length, 1);
+  assert.strictEqual(ag.total, 1);
 });
 
 test('equipVencido é falso para quem não tem data anterior — sem histórico não vence', () => {

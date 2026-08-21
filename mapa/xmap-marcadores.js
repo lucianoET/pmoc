@@ -42,7 +42,11 @@ function esc(valor) {
 // operantes precisa ser visível de longe. Média ou maioria esconderia
 // exatamente o que a tela existe para mostrar. Estado fora da lista (ou
 // nulo) pesa como o menos grave, para não fingir gravidade que não se sabe.
-const GRAVIDADE = ['inoperante', 'manutencao', 'standby', 'operante', 'baixado']
+// `restricao` (260821-q57) entra ENTRE `manutencao` e `standby`, de propósito: um
+// veículo em `standby` (sobreaviso) não tem defeito nenhum — está livre, só à
+// espera; uma máquina em `restricao` tem defeito conhecido e continua rodando.
+// Defeito pesa mais que ausência de defeito, mesmo com a máquina em pé.
+const GRAVIDADE = ['inoperante', 'manutencao', 'restricao', 'standby', 'operante', 'baixado']
 
 export function estadoMaisGrave(ativos) {
   let escolhido = null

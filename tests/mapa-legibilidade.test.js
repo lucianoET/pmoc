@@ -80,6 +80,26 @@ test('estado desconhecido não finge gravidade que não se sabe', async () => {
   assert.equal(estadoMaisGrave([]), null)
 })
 
+// ── 2b. restricao (260821-q57) na escala de gravidade ───────────────────
+// D-q57-14: um aparelho com restrição está FUNCIONANDO e ninguém está
+// trabalhando nele — pesa mais que sobreaviso (que não tem defeito
+// nenhum) e menos que manutenção (alguém já está atuando).
+test('restricao pesa mais que operante e que standby, e manutencao pesa mais que restricao', async () => {
+  const { estadoMaisGrave } = await import('../mapa/xmap-marcadores.js')
+  assert.equal(estadoMaisGrave([{ estado: 'operante' }, { estado: 'restricao' }]), 'restricao')
+  assert.equal(estadoMaisGrave([{ estado: 'standby' }, { estado: 'restricao' }]), 'restricao')
+  assert.equal(estadoMaisGrave([{ estado: 'restricao' }, { estado: 'manutencao' }]), 'manutencao')
+})
+
+test('toda chave de ESTADOS tem peso declarado na escala de gravidade — nenhum estado pesa como desconhecido por esquecimento', async () => {
+  const { ESTADOS } = await import('../mapa/mapa-geometria.js')
+  const { estadoMaisGrave } = await import('../mapa/xmap-marcadores.js')
+  for (const chave of Object.keys(ESTADOS)) {
+    const resultado = estadoMaisGrave([{ estado: 'valor-inventado-nao-listado' }, { estado: chave }])
+    assert.equal(resultado, chave, `${chave} perdeu para um estado desconhecido — falta na escala de gravidade`)
+  }
+})
+
 // ── 3. uma implementação de agrupamento, não três ───────────────────────
 test('as três camadas de ativo desenham pelo módulo compartilhado', () => {
   for (const nome of CAMADAS_DE_ATIVO) {
