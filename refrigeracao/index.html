@@ -751,6 +751,33 @@ function nextPmoc(e, tipo){
   return d;
 }
 
+/* ── alertas: contagem única ── */
+function equipSemHist(e){
+  return !e.ultimaManutencao && !getLatestLogDate(e.id);
+}
+function equipVencido(e, agora){
+  agora = agora || new Date();
+  var nx = nextPmoc(e,'inspecao');
+  return !!nx && nx < agora;
+}
+function alertasPmoc(lista, agora){
+  agora = agora || new Date();
+  var nok=[], vencidos=[], semHist=[], todos=[];
+  lista.forEach(function(e){
+    var eNok = e.funciona==='NOK';
+    var eVencido = equipVencido(e, agora);
+    var eSemHist = equipSemHist(e);
+    if(eNok) nok.push(e);
+    if(eVencido) vencidos.push(e);
+    if(eSemHist) semHist.push(e);
+    if(eNok || eVencido || eSemHist) todos.push(e);
+  });
+  return {nok:nok, vencidos:vencidos, semHist:semHist, todos:todos, total:todos.length};
+}
+function contarOSPendentes(entradas){
+  return entradas.filter(function(o){ return o.entry && o.entry.status==='PENDENTE'; }).length;
+}
+
 function dueBadgeHtml(d){
   if(!d) return '<span class="due-badge due-none">Sem hist.</span>';
   var now=new Date(); var diff=Math.round((d-now)/86400000);
@@ -801,13 +828,14 @@ function navTo(page, btn){
 function renderDash(){
   var now = new Date();
   var total = DATA.length;
-  var nok = DATA.filter(function(e){ return e.funciona==='NOK'; }).length;
   var ok = DATA.filter(function(e){ return e.funciona==='OK'; }).length;
   var pct = total?Math.round(ok/total*100):0;
   var critica = DATA.filter(function(e){ return autoCrit(e)==='CRÍTICA'; }).length;
-  var semHist = DATA.filter(function(e){ return !e.ultimaManutencao && !getLatestLogDate(e.id); }).length;
-  var vencidas = DATA.filter(function(e){ var nx=nextPmoc(e,'inspecao'); return nx&&nx<now; }).length;
-  var alertCount = nok + vencidas + semHist;
+  var ag = alertasPmoc(DATA, now);
+  var nok = ag.nok.length;
+  var semHist = ag.semHist.length;
+  var vencidas = ag.vencidos.length;
+  var alertCount = ag.total;
 
   el('kpi-area').innerHTML =
     '<div class="kpi-card" style="border-left-color:#1351B4">' +
@@ -832,10 +860,7 @@ function renderDash(){
     '<div class="kpi-sub">'+vencidas+' vencidas · '+semHist+' sem histórico</div></div>';
 
   // Alertas top 5
-  var alerts = DATA.filter(function(e){
-    var nx=nextPmoc(e,'inspecao');
-    return e.funciona==='NOK' || (nx&&nx<now) || (!e.ultimaManutencao && !getLatestLogDate(e.id));
-  }).sort(function(a,b){
+  var alerts = ag.todos.slice().sort(function(a,b){
     var ord=['CRÍTICA','ALTA','MÉDIA','BAIXA'];
     return ord.indexOf(autoCrit(a))-ord.indexOf(autoCrit(b));
   }).slice(0,5);
@@ -883,7 +908,7 @@ function renderDash(){
   el('alert-badge').textContent = alertCount;
   el('alert-badge').style.display = alertCount>0?'block':'none';
   var osAll = getAllOSEntries();
-  var osPend = osAll.filter(function(o){return o.status==='PENDENTE';}).length;
+  var osPend = contarOSPendentes(osAll);
   el('os-badge').textContent = osPend;
   el('os-badge').style.display = osPend>0?'block':'none';
   var pmocVenc = DATA.filter(function(e){ var nx=nextPmoc(e,'inspecao'); return nx&&nx<now; }).length;
@@ -1144,11 +1169,12 @@ function renderPmoc(){
 ═══════════════════════════════════════════════════════════ */
 function renderAlerts(){
   var now = new Date();
-  var nokList = DATA.filter(function(e){ return e.funciona==='NOK'; })
+  var ag = alertasPmoc(DATA, now);
+  var nokList = ag.nok.slice()
     .sort(function(a,b){ var o=['CRÍTICA','ALTA','MÉDIA','BAIXA']; return o.indexOf(autoCrit(a))-o.indexOf(autoCrit(b)); });
-  var vencList = DATA.filter(function(e){ var nx=nextPmoc(e,'inspecao'); return nx&&nx<now; })
+  var vencList = ag.vencidos.slice()
     .sort(function(a,b){ var o=['CRÍTICA','ALTA','MÉDIA','BAIXA']; return o.indexOf(autoCrit(a))-o.indexOf(autoCrit(b)); });
-  var semHist = DATA.filter(function(e){ return !e.ultimaManutencao&&!getLatestLogDate(e.id)&&autoCrit(e)==='CRÍTICA'; });
+  var semHistCrit = ag.semHist.filter(function(e){ return autoCrit(e)==='CRÍTICA'; });
 
   var html = '';
 
@@ -1176,24 +1202,29 @@ function renderAlerts(){
     }).join('');
   }
 
-  if(semHist.length){
-    html += '<div class="sec-head" style="margin-top:16px"><span class="sec-title"><i class="fas fa-question-circle mr1" aria-hidden="true"></i>Críticos Sem Histórico</span><span class="sec-count">'+semHist.length+'</span></div>';
-    html += semHist.map(function(e){
+  if(ag.semHist.length){
+    html += '<div class="sec-head" style="margin-top:16px"><span class="sec-title"><i class="fas fa-question-circle mr1" aria-hidden="true"></i>Críticos Sem Histórico</span><span class="sec-count">'+ag.semHist.length+'</span></div>';
+    html += semHistCrit.map(function(e){
       return '<div class="alert-card" style="border-left-color:#B71C1C" onclick="openDetail('+e.id+')">' +
         '<div class="alert-icon"><i class="fas fa-history" style="color:#B71C1C"></i></div>' +
         '<div class="alert-body"><div class="alert-title">'+esc(e.local)+'</div>' +
         '<div class="alert-sub">'+esc(e.predio)+' · Nenhum registro de manutenção</div></div>' +
         critPill(autoCrit(e))+'</div>';
     }).join('');
+    if(ag.semHist.length > semHistCrit.length){
+      html += '<div class="alert-sub" style="padding:6px 2px;color:#888">+'+(ag.semHist.length-semHistCrit.length)+' não críticos sem registro de manutenção</div>';
+    }
   }
 
+  if(html){
+    html = '<div style="font-size:11px;color:#888;padding:2px 2px 8px">Total sem repetição: '+ag.total+'. Um equipamento aparece em mais de uma seção quando tem mais de um motivo.</div>' + html;
+  }
   if(!html) html = '<div class="empty"><i class="fas fa-check-circle" style="color:#168821"></i><p>Nenhum alerta ativo!</p></div>';
 
   el('alert-list').innerHTML = html;
 
-  var total = nokList.length + vencList.length;
-  el('alert-badge').textContent = total;
-  el('alert-badge').style.display = total>0?'block':'none';
+  el('alert-badge').textContent = ag.total;
+  el('alert-badge').style.display = ag.total>0?'block':'none';
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1399,7 +1430,7 @@ async function acessoLivre() {
     var { data, error } = await supa.from('equipamentos').select('*').order('id');
     if (error) throw error;
     DATA = data.map(dbToEquip);
-    _logCache = {};
+    await loadLogsFromSupabase();
     // Marca modo observador
     window._modoObservador = true;
     // Remove tela de login
@@ -1530,6 +1561,7 @@ var CT_STEPS = ['Solicit.','Orçam.','Aprov.','Execução','Fiscal','NF','Encerr
 
 function fmtMoney(v){ return 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function ctStatusPill(s){ var c=CT_STATUS[s]||CT_STATUS['SOLICITADA']; return '<span class="ct-status" style="background:'+c.bg+';color:'+c.fg+'">'+c.label+'</span>'; }
+function ctEvtTexto(ev){ return ev && ev.detalhe ? String(ev.detalhe) : ''; }
 function ctEquip(id){ return DATA.find(function(r){return r.id===id;}) || {local:(id?'#'+id:'Sem equipamento'),predio:'',tipo:'',funciona:'',criticidade:''}; }
 
 /* ══ PERMISSÕES ══ */
@@ -1976,13 +2008,11 @@ function ctOpenOS(osId){
     h += '<div class="ds"><div class="ds-title"><i class="fas fa-history mr1" aria-hidden="true"></i>Histórico / Auditoria ('+evts.length+')</div>' +
       evts.map(function(ev){
         var dt = ev.criado_em ? new Date(ev.criado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-        var tx = ev.evento==='MUDANÇA DE STATUS'
-          ? ((CT_STATUS[ev.de_status]||{label:ev.de_status||'—'}).label+' → '+(CT_STATUS[ev.para_status]||{label:ev.para_status||'—'}).label)
-          : (ev.detalhes||'');
+        var tx = ctEvtTexto(ev);
         return '<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F0F0F0;font-size:11px">' +
           '<span style="color:#999;white-space:nowrap">'+dt+'</span>' +
           '<div style="flex:1;min-width:0"><strong>'+esc(ev.evento)+'</strong>'+(tx?' — '+esc(tx):'')+
-          (ev.usuario?'<div style="color:#888">'+esc(ev.usuario)+(ev.role?' ('+esc(ev.role)+')':'')+'</div>':'')+'</div></div>';
+          (ev.usuario?'<div style="color:#888">'+esc(ev.usuario)+'</div>':'')+'</div></div>';
       }).join('')+'</div>';
   }
 
@@ -2692,11 +2722,11 @@ function ctPrintOS(osId){
   h += '<h2>'+(comps.length?'6':'5')+'. Certificação</h2><table>'+row2('Nota Fiscal', esc(o.nf||'—')+(o.data_nf?' de '+fmtDate(o.data_nf):''))+
     row2('Certificador', esc(o.certificador||'—')+(o.data_certificacao?' em '+fmtDate(o.data_certificacao):''))+'</table>';
   if(evts.length){
-    h += '<h2>'+(comps.length?'7':'6')+'. Histórico (auditoria)</h2><table><tr><th>Data/Hora</th><th>Evento</th><th>De → Para</th><th>Usuário</th></tr>' +
+    h += '<h2>'+(comps.length?'7':'6')+'. Histórico (auditoria)</h2><table><tr><th>Data/Hora</th><th>Evento</th><th>Detalhe</th><th>Usuário</th></tr>' +
       evts.map(function(ev){
         return '<tr><td>'+(ev.criado_em?new Date(ev.criado_em).toLocaleString('pt-BR'):'')+'</td><td>'+esc(ev.evento)+'</td>' +
-          '<td>'+(ev.de_status?esc(ev.de_status)+' → ':'')+esc(ev.para_status||ev.detalhes||'')+'</td>' +
-          '<td>'+esc(ev.usuario||'')+(ev.role?' ('+esc(ev.role)+')':'')+'</td></tr>';
+          '<td>'+esc(ctEvtTexto(ev))+'</td>' +
+          '<td>'+esc(ev.usuario||'')+'</td></tr>';
       }).join('')+'</table>';
   }
   h += '<div class="ass"><div>Solicitante<br/>'+esc(o.solicitante||'')+'</div><div>Gestor Administrativo<br/>'+esc(o.aprovador||'')+'</div>' +
