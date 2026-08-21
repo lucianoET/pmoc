@@ -3799,8 +3799,61 @@ function blocoQrFicha(id){
     '<button class="btn-secondary" onclick="copiarLinkFicha('+id+')"><i class="fas fa-copy mr1" aria-hidden="true"></i>Copiar link</button>' +
     '<button class="btn-secondary" onclick="imprimirEtiquetaDe('+id+')"><i class="fas fa-tag mr1" aria-hidden="true"></i>Imprimir etiqueta</button>' +
     '</div>' +
-    '<div style="font-size:11px;color:#888">Uma tag NFC guarda exatamente esse endereço — grave com qualquer app de NFC do celular.</div>' +
+    blocoNfc(id) +
     '</div>';
+}
+
+/* ── NFC: gravação de tag ── */
+/* A tag guarda a mesma URL do QR (D-s3h-10) — não há formato próprio, e nada
+   do lado do site é necessário para LER uma tag: o celular abre o navegador
+   sozinho. O que o site faz é GRAVAR, e só onde funciona (D-s3h-11). */
+var NFC_ESPERA_MS = 30000;
+
+function nfcDisponivel(){
+  return typeof window !== 'undefined' && ('NDEFReader' in window) && window.isSecureContext === true;
+}
+
+/* Puro, lista fechada por e.name (D-s3h-12) — cada frase diz o que fazer,
+   nunca só "erro", e a palavra "undefined" nunca aparece no texto. */
+function mensagemErroNfc(nome, mensagem){
+  if(nome==='NotAllowedError') return 'Permissão negada ou tag somente-leitura. Autorize o NFC para este site e tente de novo.';
+  if(nome==='NotSupportedError') return 'A tag não tem espaço para esta URL, ou o aparelho não grava.';
+  if(nome==='NotReadableError') return 'O NFC está desligado no aparelho. Ligue e tente de novo.';
+  if(nome==='NetworkError') return 'A tag foi afastada antes de terminar. Encoste e mantenha parado até o aviso.';
+  if(nome==='AbortError') return 'Nenhuma tag encostada no tempo de espera. Toque de novo e encoste a tag na parte de trás do celular.';
+  return 'Não foi possível gravar a tag' + (mensagem ? ' (' + mensagem + ')' : '') + '.';
+}
+
+async function gravarTagNfc(id){
+  if(!nfcDisponivel()){
+    showToast('Este aparelho/navegador não grava tags NFC — use a URL acima com um app de NFC', 'error');
+    return false;
+  }
+  var url = urlFichaEquip(id); // a mesma URL do QR (D-s3h-10)
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, NFC_ESPERA_MS);
+  showToast('Encoste a tag NFC no celular…', '');
+  try{
+    await new window.NDEFReader().write({records:[{recordType:'url', data:url}]}, {signal: ctrl.signal});
+    showToast('Tag gravada para o equipamento #'+id, 'ok');
+    return true;
+  }catch(e){
+    showToast(mensagemErroNfc(e && e.name, e && e.message), 'error');
+    return false;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+/* Com suporte, o botão de gravação; sem suporte, nenhum botão — a instrução
+   de gravar por app de NFC no lugar dele. Nos dois casos a URL já está
+   visível no bloco 5, que é o caminho principal (D-s3h-10). */
+function blocoNfc(id){
+  if(nfcDisponivel()){
+    return '<button class="btn-secondary" onclick="gravarTagNfc('+id+')"><i class="fas fa-wifi mr1" aria-hidden="true"></i>Gravar tag NFC</button>' +
+      '<div style="font-size:11px;color:#888;margin-top:6px">Basta encostar uma tag regravável no celular.</div>';
+  }
+  return '<div style="font-size:11px;color:#888">A gravação pelo site só funciona no Chrome do Android, em https. Em qualquer outro aparelho, grave a URL acima como registro do tipo URL com um app de NFC (por exemplo, NFC Tools) — a tag guarda só esse endereço.</div>';
 }
 
 /* ══ IMPRESSÃO DA OS ══ */

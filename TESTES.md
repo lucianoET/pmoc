@@ -1635,3 +1635,28 @@ deste SQL.** Antes de rodar a migração 41 a tela lê `OK`/`NOK` normalmente (e
 - [ ] Registrar uma segunda leitura de qualquer medição (ex.: corrente) numa OS futura do mesmo
       equipamento e conferir que a ficha passa a mostrar o sparkline com a tendência (seta +
       variação) para essa medição.
+
+## Refrigeração — acesso à ficha por QR code e por tag NFC, e etiquetas (21/08/2026)
+
+Quick task 260821-s3h. Sem migração — só frontend (D-s3h-13).
+
+- [ ] Imprimir uma folha de etiquetas do filtro atual: no inventário, aplicar um filtro (ex.:
+      "Área Vermelha"), tocar no botão de etiquetas (ícone ao lado do contador) e conferir que a
+      folha A4 sai com exatamente aquela quantidade de equipamentos, três por linha, corte
+      tracejado, e que o QR de cada etiqueta lê de verdade com a câmera a uns 10cm.
+- [ ] Escanear um QR de equipamento com a câmera do celular **sem sessão aberta** (a tela de
+      login aparece primeiro): digitar a senha e confirmar que a ficha do equipamento certo abre
+      logo em seguida, já dentro do app.
+- [ ] Repetir o escaneio entrando por "Visualizar sem login" (modo observador) e confirmar que a
+      ficha do mesmo equipamento abre igual.
+- [ ] Com a ficha aberta pelo QR, dar F5 na página e confirmar que ela **não** reabre a gaveta —
+      a URL já voltou a ser a do app.
+- [ ] Abrir uma URL com `?equip=99999` (id que não existe) e confirmar que aparece a frase
+      nomeando o número "não encontrado", sem gaveta nenhuma abrindo.
+- [ ] Gravar uma tag NFC pelo Chrome do Android, em https: abrir a ficha de um equipamento,
+      tocar em "Gravar tag NFC", encostar uma tag regravável, e depois — com o app fechado —
+      aproximar o celular da tag e confirmar que o navegador abre sozinho na ficha daquele
+      equipamento.
+- [ ] Num iPhone (ou no Firefox), abrir a mesma ficha e confirmar que o botão "Gravar tag NFC"
+      **não** aparece, e que no lugar dele está a instrução de gravar a URL com um app de NFC
+      (ex.: NFC Tools), com a URL completa visível acima.
