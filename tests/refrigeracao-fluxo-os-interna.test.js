@@ -412,6 +412,228 @@ test('o corpo do drawer da OS interna chama manPode( e manPodeIrPara( no mesmo b
   assert.match(corpo, /manPode\('cancelar'\)\s*&&\s*manPodeIrPara\(/);
 });
 
+// ══════════════════════════════════════════════════════════════════
+// Task 3 — evidência (fotos + as 5 medições) e a conferência do gestor
+// (D-l7n-08/09/11)
+// ══════════════════════════════════════════════════════════════════
+
+function carregarFluxoCompleto(opts) {
+  opts = opts || {};
+  const updatesLog = [];
+  const updatesEquip = [];
+  const uploads = [];
+  const chamadas = { manAbrirOS: 0, renderOS: 0 };
+  const toasts = [];
+
+  const linhaBase = Object.assign({
+    id: 'log-1', equip_id: opts.equipId !== undefined ? opts.equipId : 10,
+    data_os: opts.date || '2026-08-10', status: opts.status || 'EM_EXECUCAO',
+    fotos: opts.fotosIniciais || [],
+  }, opts.linhaExtra || {});
+
+  const ctx = {
+    esc(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+    el(id) { return (ctx._campos && ctx._campos[id]) || { querySelectorAll() { return []; } }; },
+    val(id) { return (ctx._valores && ctx._valores[id] !== undefined) ? ctx._valores[id] : ''; },
+    _valores: opts.valores || {},
+    _campos: opts.campos || {},
+    window: { _modoObservador: !!opts.observador },
+    ctUser: opts.ctUser !== undefined ? opts.ctUser : { nome: 'Fulano', role: 'gestor' },
+    DATA: opts.data || [{ id: opts.equipId !== undefined ? opts.equipId : 10, ultimaManutencao: opts.ultimaManutencaoAtual || '' }],
+    showToast(msg, tipo) { toasts.push({ msg, tipo }); },
+    console: { warn() {}, error() {} },
+    today() { return '2026-08-21'; },
+    fmtDate(iso) { return iso || ''; },
+    confirm() { return opts.confirmar !== false; },
+    prompt() { return opts.motivoPrompt !== undefined ? opts.motivoPrompt : 'motivo'; },
+    openDrawer() {}, closeDrawer() {},
+    ctCompressFoto(file) {
+      if (opts.falhaCompressao) return Promise.reject(new Error('falhou compressão'));
+      return Promise.resolve({ _blob: true, nome: file && file.name });
+    },
+    supa: {
+      from(tabela) {
+        if (tabela === 'logs_manutencao') {
+          return {
+            update(patch) {
+              return {
+                eq(col, val) {
+                  return {
+                    select() {
+                      return {
+                        single() {
+                          if (opts.erroUpdateLog) return Promise.resolve({ error: { message: 'falhou' } });
+                          updatesLog.push({ id: val, patch });
+                          return Promise.resolve({ error: null, data: Object.assign({}, linhaBase, patch) });
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            },
+          };
+        }
+        if (tabela === 'equipamentos') {
+          return {
+            update(patch) {
+              return { eq(col, val) { updatesEquip.push({ patch, col, val }); return Promise.resolve({ error: null }); } };
+            },
+          };
+        }
+        throw new Error('tabela inesperada: ' + tabela);
+      },
+      storage: {
+        from(bucket) {
+          return {
+            upload(path, blob, cfg) {
+              if (opts.falhaUpload && uploads.length === (opts.falhaNoIndice || 0)) {
+                uploads.push({ path, falhou: true });
+                return Promise.resolve({ error: { message: 'falhou upload' } });
+              }
+              uploads.push({ path, blob, cfg });
+              return Promise.resolve({ error: null });
+            },
+            getPublicUrl(path) { return { data: { publicUrl: 'https://x/' + path } }; },
+          };
+        },
+      },
+    },
+  };
+  ctx._logCache = {};
+  ctx._logCache[ctx.DATA[0] ? ctx.DATA[0].id : (opts.equipId !== undefined ? opts.equipId : 10)] = [Object.assign({ id: linhaBase.id, status: linhaBase.status, date: linhaBase.data_os, fotos: linhaBase.fotos }, opts.entryExtra || {})];
+
+  vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
+  vm.runInContext(recorte('/* ── encerramento de OS: última manutenção ── */', 'async function saveLogEntry('), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: tela e ações ── */', 'function showSearch(){'), ctx);
+  // manAbrirOS/renderOS são pesadas (DOM) — mock depois de carregadas, chamado só no rodapé de cada ação.
+  ctx.manAbrirOS = function () { chamadas.manAbrirOS++; };
+  ctx.renderOS = function () { chamadas.renderOS++; };
+
+  ctx._updatesLog = updatesLog;
+  ctx._updatesEquip = updatesEquip;
+  ctx._uploads = uploads;
+  ctx._chamadas = chamadas;
+  ctx._toasts = toasts;
+  return ctx;
+}
+
+test('manDeltaT(12,24) devolve 12; com qualquer um dos dois ausente devolve null; quebrado sai com uma casa decimal', () => {
+  const ctx = carregarVocabulario();
+  assert.strictEqual(ctx.manDeltaT(12, 24), 12);
+  assert.strictEqual(ctx.manDeltaT(null, 24), null);
+  assert.strictEqual(ctx.manDeltaT(12, null), null);
+  assert.strictEqual(ctx.manDeltaT('', ''), null);
+  assert.strictEqual(ctx.manDeltaT(12.33, 24.789), 12.5);
+});
+
+test('registrar evidência numa OS que já tem duas fotos deixa a lista com as duas antigas mais as novas, na ordem, e nunca sobrescreve', async () => {
+  const ctx = carregarFluxoCompleto({
+    fotosIniciais: ['manutencao/log-1/a.jpg', 'manutencao/log-1/b.jpg'],
+    entryExtra: { fotos: ['manutencao/log-1/a.jpg', 'manutencao/log-1/b.jpg'] },
+    campos: { 'man-ex-fotos': { files: [{ name: 'c.jpg', type: 'image/jpeg' }] } },
+  });
+  const ok = await ctx.manRegistrarEvidencia('log-1');
+  assert.strictEqual(ctx._updatesLog.length, 1);
+  const fotos = ctx._updatesLog[0].patch.fotos;
+  assert.strictEqual(fotos.length, 3);
+  assert.strictEqual(fotos[0], 'manutencao/log-1/a.jpg');
+  assert.strictEqual(fotos[1], 'manutencao/log-1/b.jpg');
+  assert.ok(fotos[2].indexOf('manutencao/log-1/') === 0);
+});
+
+test('o caminho enviado ao bucket começa com o prefixo do fluxo interno e contém o id da OS', async () => {
+  const ctx = carregarFluxoCompleto({ campos: { 'man-ex-fotos': { files: [{ name: 'a.jpg', type: 'image/jpeg' }] } } });
+  await ctx.manRegistrarEvidencia('log-1');
+  assert.strictEqual(ctx._uploads.length, 1);
+  assert.match(ctx._uploads[0].path, /^manutencao\/log-1\//);
+});
+
+test('falha no upload de uma foto não impede a gravação das medições nem das demais fotos', async () => {
+  const ctx = carregarFluxoCompleto({
+    falhaUpload: true, falhaNoIndice: 0,
+    valores: { 'man-ex-ti': '12', 'man-ex-tr': '24' },
+    campos: { 'man-ex-fotos': { files: [{ name: 'a.jpg', type: 'image/jpeg' }, { name: 'b.jpg', type: 'image/jpeg' }] } },
+  });
+  await ctx.manRegistrarEvidencia('log-1');
+  assert.strictEqual(ctx._updatesLog.length, 1);
+  assert.strictEqual(ctx._updatesLog[0].patch.temp_insuflamento, 12);
+  assert.strictEqual(ctx._updatesLog[0].patch.fotos.length, 1); // a primeira falhou, a segunda subiu
+  assert.ok(ctx._toasts.some((t) => t.tipo === 'error'));
+});
+
+test('mais de seis arquivos: só os seis primeiros sobem; um arquivo que não é imagem é ignorado', async () => {
+  const files = [];
+  for (let i = 0; i < 8; i++) files.push({ name: 'f' + i + '.jpg', type: 'image/jpeg' });
+  files[2] = { name: 'doc.pdf', type: 'application/pdf' }; // não é imagem, dentro dos 6 primeiros
+  const ctx = carregarFluxoCompleto({ campos: { 'man-ex-fotos': { files } } });
+  await ctx.manRegistrarEvidencia('log-1');
+  assert.strictEqual(ctx._uploads.length, 5); // 6 primeiros, menos 1 não-imagem
+});
+
+test('manTemEvidencia é falso para OS sem foto e sem medição, verdadeiro com só uma foto, verdadeiro com só uma medição', () => {
+  const ctx = carregarFluxoCompleto({});
+  assert.strictEqual(ctx.manTemEvidencia({}), false);
+  assert.strictEqual(ctx.manTemEvidencia({ fotos: [] }), false);
+  assert.strictEqual(ctx.manTemEvidencia({ fotos: ['a.jpg'] }), true);
+  assert.strictEqual(ctx.manTemEvidencia({ insuflamento: 12 }), true);
+});
+
+test('manMudarStatus de EM_EXECUCAO para EXECUTADA sem evidência é recusado e não chama a porta de escrita (D-l7n-09)', async () => {
+  const ctx = carregarFluxoCompleto({ status: 'EM_EXECUCAO', entryExtra: { fotos: [] } });
+  await ctx.manMudarStatus('log-1', 'EXECUTADA');
+  assert.strictEqual(ctx._updatesLog.length, 0);
+  assert.ok(ctx._toasts.some((t) => t.tipo === 'error'));
+});
+
+test('conferência aprovada grava o estado terminal, o conferente do perfil e a data de conferência, e chama a gravação de última manutenção com a data da OS', async () => {
+  const ctx = carregarFluxoCompleto({
+    status: 'EXECUTADA', date: '2026-08-10',
+    equipId: 77, ultimaManutencaoAtual: '',
+    ctUser: { nome: 'Gestora Fulana', role: 'gestor' },
+  });
+  const ok = await ctx.manConferir('log-1', true);
+  assert.strictEqual(ok !== false, true);
+  assert.strictEqual(ctx._updatesLog.length, 1);
+  assert.strictEqual(ctx._updatesLog[0].patch.status, 'CONFERIDA');
+  assert.strictEqual(ctx._updatesLog[0].patch.conferente, 'Gestora Fulana');
+  assert.strictEqual(ctx._updatesLog[0].patch.data_conferencia, '2026-08-21'); // today() do mock
+  assert.strictEqual(ctx._updatesEquip.length, 1);
+  assert.strictEqual(ctx._updatesEquip[0].patch.ultima_manutencao, '2026-08-10'); // data da OS, não a de hoje
+});
+
+test('conferência com parecer vazio na devolução não grava nada; com parecer, volta um estado e mantém a lista de fotos intacta', async () => {
+  const semParecer = carregarFluxoCompleto({ status: 'EXECUTADA', valores: {} });
+  await semParecer.manConferir('log-1', false);
+  assert.strictEqual(semParecer._updatesLog.length, 0);
+  assert.ok(semParecer._toasts.some((t) => t.tipo === 'error'));
+
+  const comParecer = carregarFluxoCompleto({
+    status: 'EXECUTADA',
+    fotosIniciais: ['manutencao/log-1/a.jpg'],
+    entryExtra: { fotos: ['manutencao/log-1/a.jpg'] },
+    valores: { 'man-conf-parecer': 'faltou uma peça' },
+  });
+  await comParecer.manConferir('log-1', false);
+  assert.strictEqual(comParecer._updatesLog.length, 1);
+  assert.strictEqual(comParecer._updatesLog[0].patch.status, 'EM_EXECUCAO');
+  assert.strictEqual(comParecer._updatesLog[0].patch.parecer_conferencia, 'faltou uma peça');
+  assert.strictEqual('fotos' in comParecer._updatesLog[0].patch, false); // não toca em foto nem medição
+});
+
+test('um técnico chamando a conferência direto (sem passar pelo botão) é recusado — a guarda de cargo está na ação', async () => {
+  const ctx = carregarFluxoCompleto({ status: 'EXECUTADA', ctUser: { nome: 'Técnico Fulano', role: 'tecnico' } });
+  await ctx.manConferir('log-1', true);
+  assert.strictEqual(ctx._updatesLog.length, 0);
+  assert.ok(ctx._toasts.some((t) => t.tipo === 'error'));
+});
+
 test('os quatro grep do PLAT-15 continuam em 0', () => {
   for (const padrao of ['shared/', 'pmoc.css', 'pmoc-tema', 'data-theme']) {
     assert.strictEqual((HTML.match(new RegExp(padrao.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length, 0, `"${padrao}" apareceu em refrigeracao/index.html`);

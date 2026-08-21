@@ -1524,3 +1524,61 @@ existem em produção. Roteiro manual do que nenhum gate alcança (rede real, se
       passa a mostrar a data da OS.
 - [ ] Entrar em "Visualizar sem login" (acesso Livre) e conferir que o histórico de
       manutenção aparece nos equipamentos que têm log — não "Sem hist." nos 171.
+
+---
+
+## Refrigeração — OS interna com fluxo de aprovação pelo gestor (21/08/2026)
+
+Quick task 260821-l7n. Fluxo: `ABERTA` → `DELINEAMENTO` → `APROVACAO` → `EM_EXECUCAO` →
+`EXECUTADA` → `CONFERIDA` (mais `CANCELADA` de qualquer etapa aberta). Como em todas as
+outras migrações do projeto, o caminho de escrita só está fechado depois deste roteiro
+rodar contra o banco de verdade — até lá, `MAN_FLUXO_OK` continua podendo ser `false` numa
+sessão sem a migração.
+
+### Migração 40 — escrita, ainda não aplicada
+
+- [ ] Rodar `supabase/40_refrigeracao_os_fluxo.sql` no SQL editor do Supabase.
+- [ ] Colar aqui o resultado do bloco de conferência do próprio arquivo: 9 colunas novas em
+      `logs_manutencao`, a trava `logs_manutencao_status_check` com os 10 valores (7 do
+      fluxo + `PENDENTE`/`PARCIAL`/`CONCLUÍDA`), o índice `logs_manutencao_equip_id_idx`, e
+      as 10 linhas antigas continuando válidas, agrupadas por status — nenhuma reescrita.
+
+### Antes de aplicar a migração — prova de D-l7n-06
+
+- [ ] Com o frontend já publicado e a migração **ainda não aplicada**, abrir `/refrigeracao`,
+      criar uma OS e conferir que a tela é exatamente a de hoje (select de status visível,
+      sem régua, sem botão de gestor) e que o console do navegador não mostra erro nenhum.
+
+### Depois de aplicar a migração, logado com cargo de escrita
+
+- [ ] Entrar como **técnico** e abrir uma OS nova (Registrar OS/Manutenção). Conferir que:
+      não há select de status, o rodapé diz "Abrir OS", e a OS nasce em `ABERTA` — abrir o
+      drawer da própria OS e ver a régua no passo 1, sem nenhum botão de aprovar/conferir.
+- [ ] Ainda como técnico, "Iniciar delineamento" e depois preencher o diagnóstico e "Enviar
+      para aprovação" — a OS deve ir para `APROVACAO` e sumir os botões do técnico.
+- [ ] Sair e entrar como **gestor**. Abrir a mesma OS, conferir que aparecem os botões
+      "Aprovar" e "Devolver". Aprovar — a OS vai para `EM_EXECUCAO`, `aprovador`/
+      `data_aprovacao` aparecem na seção 2.
+- [ ] Voltar como **técnico**. Na seção "3 · Execução", preencher as quatro medições
+      (insuflamento, retorno, corrente, pressão) e uma foto tirada no celular; conferir que
+      o ΔT aparece calculado na tela (retorno − insuflamento) e que a foto aparece na grade
+      depois de "Registrar evidência".
+- [ ] Tentar "Concluir execução" **antes** de registrar qualquer evidência — conferir que o
+      botão não aparece; e que chamar a ação sem evidência (ex.: via um clique perdido)
+      seria recusada com toast, não silenciosamente aceita.
+- [ ] Com evidência registrada, "Concluir execução" — a OS vai para `EXECUTADA`.
+- [ ] Voltar como **gestor**. Na seção "4 · Conferência", "Conferir e encerrar" — a OS vai
+      para `CONFERIDA`, `conferente`/`data_conferencia` aparecem. Na ficha do equipamento
+      (`openDetail`), conferir que "Última manut." passou a mostrar a **data da OS** (não a
+      data de hoje em que a conferência foi feita).
+- [ ] Caminho negativo 1: repetir o registro de uma OS até `EXECUTADA` e, como gestor,
+      "Devolver" **sem** preencher o parecer — conferir que a ação é recusada com toast.
+      Preencher o parecer e devolver — a OS volta para `EM_EXECUCAO` com a evidência
+      (fotos e medições) intacta.
+- [ ] Caminho negativo 2: como técnico, tentar abrir a mesma OS que outro cargo já moveu de
+      estado (ex.: recarregar a página no meio do fluxo) e conferir que os botões oferecidos
+      correspondem sempre ao estado atual da OS, nunca ao estado da tela antes de recarregar.
+- [ ] Conferir que as 10 linhas de OS anteriores à migração continuam aparecendo no histórico
+      do equipamento, com a pílula da própria palavra delas (PENDENTE/PARCIAL/CONCLUÍDA),
+      sem régua e sem nenhum botão de ação — só a frase "Registro direto — não percorreu as
+      etapas de aprovação".

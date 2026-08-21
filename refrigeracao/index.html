@@ -1695,15 +1695,41 @@ function manAbrirOS(logId){
     }
     h += '</div>';
 
-    /* 3 · Execução — preenchido na Task 3 (evidência: fotos + medições) */
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-hard-hat mr1" aria-hidden="true"></i>3 · Execução</div>' +
-      '<div style="font-size:12px;color:#999">Nenhuma evidência registrada ainda.</div></div>';
+    /* 3 · Execução — evidência: fotos comprimidas + as cinco medições (D-l7n-09) */
+    h += '<div class="ds"><div class="ds-title"><i class="fas fa-hard-hat mr1" aria-hidden="true"></i>3 · Execução</div>';
+    h += manRenderEvidencia(entry);
+    if (st==='EM_EXECUCAO' && manPode('executar')) {
+      h += '<div style="margin-top:8px;border-top:1px dashed #DDD;padding-top:10px">' +
+        '<div class="fg2">' +
+        '<div><label class="fgl">Insufl. (°C)</label><input class="fgi" id="man-ex-ti" type="number" step="0.1"/></div>' +
+        '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="man-ex-tr" type="number" step="0.1"/></div>' +
+        '<div><label class="fgl">Corrente (A)</label><input class="fgi" id="man-ex-corr" type="number" step="0.1"/></div>' +
+        '<div><label class="fgl">Pressão (psi)</label><input class="fgi" id="man-ex-press" type="number" step="1"/></div></div>' +
+        '<label class="fgl" style="margin-top:8px">Fotos</label>' +
+        '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" capture="environment" multiple/>' +
+        '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="manRegistrarEvidencia(\''+esc(logId)+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar evidência</button></div>';
+      if (manTemEvidencia(entry) && manPode('executar') && manPodeIrPara(st,'EXECUTADA')) {
+        h += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
+      }
+    }
+    h += '</div>';
 
-    /* 4 · Conferência — preenchido na Task 3 */
+    /* 4 · Conferência — o gestor confere e encerra, ou devolve com parecer obrigatório */
     h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Conferência</div>';
     if (entry.conferente) {
       h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Conferido por '+esc(entry.conferente)+' em '+fmtDate(entry.dataConferencia)+'</div>' +
         (entry.parecerConferencia?'<div class="le-desc" style="margin-top:4px">'+esc(entry.parecerConferencia)+'</div>':'');
+    } else if (st==='EXECUTADA' && manPode('conferir') && manPodeIrPara(st,'CONFERIDA')) {
+      if (entry.parecerConferencia) {
+        h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px;margin-bottom:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida anteriormente: '+esc(entry.parecerConferencia)+'</div>';
+      }
+      h += '<label class="fgl">Parecer (opcional ao conferir, obrigatório ao devolver)</label>' +
+        '<textarea class="fgt" id="man-conf-parecer" placeholder="Observações da conferência…"></textarea>' +
+        '<div class="ct-btn-row">' +
+        '<button class="btn-success" onclick="manConferir(\''+esc(logId)+'\',true)"><i class="fas fa-check mr1" aria-hidden="true"></i>Conferir e encerrar</button>' +
+        '<button class="btn-danger" onclick="manConferir(\''+esc(logId)+'\',false)"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button></div>';
+    } else if (entry.parecerConferencia) {
+      h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida: '+esc(entry.parecerConferencia)+'</div>';
     } else {
       h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
     }
@@ -1725,6 +1751,7 @@ async function manMudarStatus(logId, novo){
   var atual = achado.entry.status;
   var acao = MAN_ACAO_DESTINO[novo];
   if (!manPodeIrPara(atual, novo) || !manPode(acao)) { showToast('Ação não permitida','error'); return; }
+  if (novo==='EXECUTADA' && !manTemEvidencia(achado.entry)) { showToast('Registre ao menos uma evidência antes de concluir a execução','error'); return; } // D-l7n-09: botão escondido não é validação
   var ok = await manAtualizarOS(logId, achado.equipId, {status:novo});
   if (ok) { manAbrirOS(logId); renderOS(); }
 }
@@ -1764,6 +1791,83 @@ async function manCancelar(logId){
   if(!manPodeIrPara(achado.entry.status,'CANCELADA') || !manPode('cancelar')){ showToast('Ação não permitida','error'); return; }
   var ok = await manAtualizarOS(logId, achado.equipId, {status:'CANCELADA'}, 'OS cancelada');
   if (ok) { closeDrawer(); renderOS(); }
+}
+
+/* ── fluxo da OS interna: evidência da execução (fotos + as cinco medições) ── */
+function manTemEvidencia(entry){
+  return !!((entry.fotos && entry.fotos.length) || entry.insuflamento || entry.retorno || entry.corrente || entry.pressao);
+}
+
+function manRenderEvidencia(entry){
+  var medTxt = [];
+  if (entry.insuflamento!==undefined && entry.insuflamento!==null && entry.insuflamento!=='') medTxt.push('Insufl.: '+entry.insuflamento+'°C');
+  if (entry.retorno!==undefined && entry.retorno!==null && entry.retorno!=='') medTxt.push('Retorno: '+entry.retorno+'°C');
+  if (entry.deltaT!==undefined && entry.deltaT!==null && entry.deltaT!=='') medTxt.push('ΔT: '+entry.deltaT+'°C');
+  if (entry.corrente!==undefined && entry.corrente!==null && entry.corrente!=='') medTxt.push('Corrente: '+entry.corrente+'A');
+  if (entry.pressao!==undefined && entry.pressao!==null && entry.pressao!=='') medTxt.push('Pressão: '+entry.pressao+' psi');
+  var fotos = (entry.fotos||[]).map(function(p){
+    var u = supa.storage.from('os-fotos').getPublicUrl(p).data.publicUrl;
+    return '<a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'" loading="lazy"/></a>';
+  }).join('');
+  var h = '';
+  if (medTxt.length) h += '<div class="le-chk"><i class="fas fa-thermometer-half mr1" aria-hidden="true"></i>'+medTxt.join(' · ')+'</div>';
+  if (fotos) h += '<div class="foto-grid">'+fotos+'</div>';
+  return h;
+}
+
+// LIMITE_FOTOS_EVIDENCIA: até 6 arquivos por chamada de registro — o campo aceita seleção
+// múltipla e um envio sem teto é a única forma de abuso barata aqui (T-l7n-04).
+var LIMITE_FOTOS_EVIDENCIA = 6;
+
+async function manRegistrarEvidencia(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  if (!manPode('executar')) { showToast('Sem permissão para registrar evidência','error'); return; }
+  var entry = achado.entry;
+  var ti = val('man-ex-ti'), tr = val('man-ex-tr'), corr = val('man-ex-corr'), press = val('man-ex-press');
+  var files = (el('man-ex-fotos')||{files:[]}).files;
+  if (ti==='' && tr==='' && corr==='' && press==='' && !files.length) { showToast('Registre ao menos uma medição ou uma foto','error'); return; }
+  showToast('Enviando evidência…', '');
+  var novos = [];
+  var limite = Math.min(files.length, LIMITE_FOTOS_EVIDENCIA);
+  for (var i=0; i<limite; i++) {
+    var f = files[i];
+    if (!f.type || f.type.indexOf('image/')!==0) continue; // arquivo que não é imagem é ignorado
+    try {
+      var blob = await ctCompressFoto(f); // reusa a compressão da contratação — não copia (mesmo teto 1280px/JPEG 0.8)
+      var path = 'manutencao/'+logId+'/'+Date.now()+'_'+i+'.jpg';
+      var up = await supa.storage.from('os-fotos').upload(path, blob, {contentType:'image/jpeg'});
+      if (up.error) throw up.error;
+      novos.push(path);
+    } catch(e) { console.error('foto', e); showToast('Falha no upload de uma foto', 'error'); }
+  }
+  var patch = { fotos: (entry.fotos||[]).concat(novos) }; // acrescenta, nunca substitui
+  if (ti !== '') patch.insuflamento = parseFloat(ti);
+  if (tr !== '') patch.retorno = parseFloat(tr);
+  if (corr !== '') patch.corrente = parseFloat(corr);
+  if (press !== '') patch.pressao = parseFloat(press);
+  if (ti !== '' || tr !== '') patch.deltaT = manDeltaT(ti, tr); // ΔT é sempre derivado, nunca digitado
+  var ok = await manAtualizarOS(logId, achado.equipId, patch, 'Evidência registrada');
+  if (ok) manAbrirOS(logId);
+}
+
+async function manConferir(logId, aprovado){
+  var achado = manEntrada(logId); if(!achado) return;
+  if (!manPode('conferir')) { showToast('Ação não permitida','error'); return; } // guarda na ação, não só na renderização (D-l7n-03)
+  var parecer = (val('man-conf-parecer')||'').trim();
+  if (aprovado) {
+    if (!manPodeIrPara(achado.entry.status,'CONFERIDA')) { showToast('Ação não permitida','error'); return; }
+    var nome = ctUser?ctUser.nome:'';
+    var ok = await manAtualizarOS(logId, achado.equipId, {status:'CONFERIDA', conferente:nome, dataConferencia:today(), parecerConferencia:parecer||null}, 'OS conferida');
+    if (ok) {
+      await atualizarUltimaManutencao(achado.equipId, achado.entry.date); // D-l7n-11: a data da OS, não a de hoje
+      manAbrirOS(logId); renderOS();
+    }
+  } else {
+    if (!manPodeIrPara(achado.entry.status,'EM_EXECUCAO')) { showToast('Ação não permitida','error'); return; }
+    if (!parecer) { showToast('Informe o parecer da devolução','error'); return; }
+    var ok2 = await manAtualizarOS(logId, achado.equipId, {status:'EM_EXECUCAO', parecerConferencia:parecer}, 'Devolvida p/ correção');
+    if (ok2) { manAbrirOS(logId); renderOS(); }
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
