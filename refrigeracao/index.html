@@ -364,12 +364,54 @@ function dbToEquip(r) {
   };
 }
 
+/* ── ponte de campos de logs_manutencao ── */
+/* Todo o camelCase do app ↔ snake_case do Postgres de logs_manutencao passa
+   por este mapa só — lido por dbToLog (entrada) e logParaDb (saída). Um campo
+   fora daqui é gravado como null sem erro nenhum (lição já paga em
+   /calibracao) — por isso o gate compara este mapa coluna a coluna com a
+   migração 40 + as colunas da migração 04. campanha_id fica deliberadamente
+   fora do mapa: o app nunca leu nem gravou essa coluna. */
+var CAMPOS_LOG = {
+  id: 'id',
+  equipId: 'equip_id',
+  date: 'data_os',
+  tipo: 'tipo',
+  status: 'status',
+  tecnico: 'tecnico',
+  desc: 'descricao',
+  checklist: 'checklist',
+  fotos: 'fotos',
+  insuflamento: 'temp_insuflamento',
+  retorno: 'temp_retorno',
+  deltaT: 'delta_t',
+  corrente: 'corrente_medida',
+  pressao: 'pressao_succao',
+  delineadoPor: 'delineado_por',
+  delineadoEm: 'delineado_em',
+  aprovador: 'aprovador',
+  dataAprovacao: 'data_aprovacao',
+  parecerAprovacao: 'parecer_aprovacao',
+  conferente: 'conferente',
+  dataConferencia: 'data_conferencia',
+  parecerConferencia: 'parecer_conferencia'
+};
+
 function dbToLog(r) {
-  return {
-    id: r.id, date: r.data_os, tipo: r.tipo,
-    status: r.status, tecnico: r.tecnico || '',
-    desc: r.descricao || '', checklist: r.checklist || []
-  };
+  var o = {};
+  Object.keys(CAMPOS_LOG).forEach(function(k){ o[k] = r[CAMPOS_LOG[k]]; });
+  o.tecnico = o.tecnico || '';
+  o.desc = o.desc || '';
+  o.checklist = o.checklist || [];
+  o.fotos = o.fotos || [];
+  return o;
+}
+
+function logParaDb(patch) {
+  var alvo = {};
+  Object.keys(patch).forEach(function(k){
+    if (CAMPOS_LOG.hasOwnProperty(k)) alvo[CAMPOS_LOG[k]] = patch[k];
+  });
+  return alvo;
 }
 
 /* ── CAMADA DE DADOS SUPABASE ── */
@@ -450,6 +492,37 @@ async function delLogEntryAsync(equipId, logId) {
   } catch(e) { return false; }
 }
 
+/* ── fluxo da OS interna: porta de escrita ── */
+var MAN_FLUXO_OK = false;
+
+async function manSondarEsquema() {
+  var r = await supa.from('logs_manutencao').select('id,fotos,aprovador,conferente').limit(1);
+  MAN_FLUXO_OK = !r.error;
+  return MAN_FLUXO_OK;
+}
+
+async function manAtualizarOS(logId, equipId, patch, msg) {
+  var r = await supa.from('logs_manutencao').update(logParaDb(patch)).eq('id', logId).select().single();
+  if(r.error){ showToast('Erro: '+r.error.message,'error'); return false; }
+  var novo = dbToLog(r.data);
+  var lista = _logCache[equipId];
+  if (lista) {
+    var i = lista.findIndex(function(e){ return e.id === logId; });
+    if (i >= 0) lista[i] = novo;
+  }
+  if (msg) showToast(msg, 'ok');
+  return true;
+}
+
+// carregarPerfil só é CHAMADA em initAppOnce, depois de todos os scripts terem rodado — por isso pode atribuir a ctUser mesmo estando num bloco <script> anterior ao que a declara.
+async function carregarPerfil() {
+  var s = await supa.auth.getSession();
+  var uid = s.data && s.data.session ? s.data.session.user.id : null;
+  if (!uid) return;
+  var r = await supa.from('usuarios').select('*').eq('auth_id', uid).maybeSingle();
+  ctUser = r.data || null;
+}
+
 /* ── REALTIME ── */
 function setupRealtime() {
   supa.channel('pmoc-mobile')
@@ -470,12 +543,20 @@ function setupRealtime() {
         if (!_logCache[eid]) _logCache[eid] = [];
         if (!_logCache[eid].find(function(e){return e.id===p.new.id;}))
           _logCache[eid].unshift(dbToLog(p.new));
+      } else if (p.eventType === 'UPDATE') {
+        // equipamento vem no payload, mas o cache é por equipamento — varre as chaves.
+        Object.keys(_logCache).forEach(function(id){
+          var i = _logCache[id].findIndex(function(e){return e.id===p.new.id;});
+          if (i>=0) _logCache[id][i] = dbToLog(p.new);
+        });
       } else if (p.eventType === 'DELETE') {
         Object.keys(_logCache).forEach(function(id){
           _logCache[id] = _logCache[id].filter(function(e){return e.id!==p.old.id;});
         });
       }
       renderDash();
+      var pgOs = el('page-os');
+      if (pgOs && pgOs.classList.contains('active')) renderOS();
     })
     .subscribe();
 }
@@ -1444,6 +1525,7 @@ async function acessoLivre() {
     if (error) throw error;
     DATA = data.map(dbToEquip);
     await loadLogsFromSupabase();
+    await manSondarEsquema();
     // Marca modo observador
     window._modoObservador = true;
     // Remove tela de login
@@ -1478,6 +1560,8 @@ async function initAppOnce(){
   showToast('Carregando…', '');
   await loadDataFromSupabase();
   await loadLogsFromSupabase();
+  await manSondarEsquema();
+  await carregarPerfil();
   setupRealtime();
   renderDash();
   renderInv();
@@ -1609,12 +1693,7 @@ async function ctLoad(){
     ctEvt = {}; ((r4b&&r4b.data)||[]).forEach(function(i){ (ctEvt[i.os_id]=ctEvt[i.os_id]||[]).push(i); });
     var r5 = await supa.from('arp_itens').select('*').order('item');
     ctArp = r5.data||[];
-    var s = await supa.auth.getSession();
-    var uid = s.data && s.data.session ? s.data.session.user.id : null;
-    if(uid){
-      var r6 = await supa.from('usuarios').select('*').eq('auth_id',uid).maybeSingle();
-      ctUser = r6.data||null;
-    }
+    if(!ctUser) await carregarPerfil();
     ctLoaded = true;
     return true;
   }catch(e){ console.error('ctLoad',e); showToast('Erro ao carregar contratações','error'); return false; }
