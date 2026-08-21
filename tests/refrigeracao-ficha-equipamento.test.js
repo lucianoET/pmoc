@@ -238,3 +238,98 @@ test('os quatro grep do PLAT-15 continuam em 0 em refrigeracao/index.html', () =
     assert.equal((HTML.match(new RegExp(padrao.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length, 0, `"${padrao}" apareceu em refrigeracao/index.html`);
   }
 });
+
+// ══════════════════════════════════════════════════════════════════
+// Task 3 — medições acompanhadas: tendência, sparkline e estado vazio
+// (260821-q57)
+// ══════════════════════════════════════════════════════════════════
+
+function carregarSandboxMedicoes() {
+  const ini = HTML.indexOf('/* ── ficha: medições acompanhadas ── */');
+  const fim = HTML.indexOf('/* ── encerramento de OS: última manutenção ── */', ini);
+  assert.ok(ini > 0 && fim > ini, 'bloco "ficha: medições acompanhadas" não encontrado');
+  const ctx = {
+    esc(s) { if (!s) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+  };
+  vm.createContext(ctx);
+  vm.runInContext(HTML.slice(ini, fim), ctx);
+  return ctx;
+}
+
+test('serieMedicoes devolve só números finitos, do mais antigo ao mais novo, descartando null/""/undefined/texto', () => {
+  const ctx = carregarSandboxMedicoes();
+  // _logCache/getEquipLog vêm ordenados do mais novo para o mais antigo.
+  const logsMaisNovoPrimeiro = [
+    { date: '2026-08-20', insuflamento: 18 },
+    { date: '2026-08-15', insuflamento: null },
+    { date: '2026-08-10', insuflamento: '' },
+    { date: '2026-08-05', insuflamento: undefined },
+    { date: '2026-08-01', insuflamento: 'abc' },
+    { date: '2026-07-25', insuflamento: 16 },
+  ];
+  const serie = ctx.serieMedicoes(logsMaisNovoPrimeiro, 'insuflamento');
+  // Array.from (do realm do teste) em vez de .map/deepEqual direto: `serie`
+  // nasce dentro do sandbox node:vm, com Array de outro realm — mesma
+  // armadilha já documentada em tests/refrigeracao-encerramento-os.test.js.
+  assert.deepEqual(Array.from(serie, (p) => p.valor), [16, 18]);
+  assert.deepEqual(Array.from(serie, (p) => p.date), ['2026-07-25', '2026-08-20']);
+});
+
+test('serieMedicoes devolve lista vazia quando não há nenhuma leitura', () => {
+  const ctx = carregarSandboxMedicoes();
+  assert.equal(Array.from(ctx.serieMedicoes([], 'corrente')).length, 0);
+  assert.equal(Array.from(ctx.serieMedicoes([{ date: '2026-08-01' }], 'corrente')).length, 0);
+  assert.equal(Array.from(ctx.serieMedicoes(null, 'corrente')).length, 0);
+});
+
+test('tendenciaMedicao compara a PRIMEIRA com a ÚLTIMA leitura, não o mínimo com o máximo, e devolve null com menos de dois pontos', () => {
+  const ctx = carregarSandboxMedicoes();
+  assert.equal(ctx.tendenciaMedicao([]), null);
+  assert.equal(ctx.tendenciaMedicao([{ date: 'x', valor: 10 }]), null);
+  // pico no meio: min/max diria "oscilou" (10→30→12), a pergunta certa é "caiu?" (10→12, subiu)
+  const serie = [{ date: 'a', valor: 10 }, { date: 'b', valor: 30 }, { date: 'c', valor: 12 }];
+  const tend = ctx.tendenciaMedicao(serie);
+  assert.equal(tend.primeiro, 10);
+  assert.equal(tend.ultimo, 12);
+  assert.equal(tend.delta, 2);
+});
+
+test('renderMedicoesFicha sem nenhuma leitura devolve a frase de vazio e nenhum <svg — o caso de todos os 171 equipamentos hoje', () => {
+  const ctx = carregarSandboxMedicoes();
+  const h = ctx.renderMedicoesFicha([]);
+  assert.match(h, /Nenhuma medição registrada ainda/);
+  assert.doesNotMatch(h, /<svg/);
+});
+
+test('série com um ponto mostra o valor, diz que não há tendência ainda, e não desenha <svg', () => {
+  const ctx = carregarSandboxMedicoes();
+  const h = ctx.renderMedicoesFicha([{ date: '2026-08-20', corrente: 5.5 }]);
+  assert.match(h, /5\.5/);
+  assert.match(h, /sem tendência ainda/);
+  assert.doesNotMatch(h, /<svg/);
+});
+
+test('série com N >= 2 pontos desenha uma polyline com N pares de coordenadas, dentro do viewBox declarado, sem NaN mesmo em série constante', () => {
+  const ctx = carregarSandboxMedicoes();
+  const logs = [
+    { date: '2026-08-20', corrente: 5.5 },
+    { date: '2026-08-15', corrente: 5.5 },
+    { date: '2026-08-10', corrente: 5.5 },
+  ];
+  const serie = ctx.serieMedicoes(logs, 'corrente');
+  assert.equal(serie.length, 3);
+  const svg = ctx.sparklineSVG(serie, '#1351B4');
+  assert.doesNotMatch(svg, /NaN/);
+  const m = svg.match(/<polyline points="([^"]*)"/);
+  assert.ok(m, 'polyline não encontrada');
+  const pares = m[1].trim().split(/\s+/);
+  assert.equal(pares.length, 3);
+  const mView = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+  assert.ok(mView, 'viewBox não encontrado');
+  const [vw, vh] = [Number(mView[1]), Number(mView[2])];
+  for (const par of pares) {
+    const [x, y] = par.split(',').map(Number);
+    assert.ok(x >= 0 && x <= vw, `x=${x} fora do viewBox`);
+    assert.ok(y >= 0 && y <= vh, `y=${y} fora do viewBox`);
+  }
+});

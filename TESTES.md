@@ -1582,3 +1582,56 @@ sessão sem a migração.
       do equipamento, com a pílula da própria palavra delas (PENDENTE/PARCIAL/CONCLUÍDA),
       sem régua e sem nenhum botão de ação — só a frase "Registro direto — não percorreu as
       etapas de aprovação".
+
+---
+
+## Refrigeração — ficha do equipamento em quatro blocos, cadastro editável, estado OP/INOP/OR (21/08/2026)
+
+Quick task 260821-q57. **Ordem de publicação (D-q57-06): o frontend vai a produção antes
+deste SQL.** Antes de rodar a migração 41 a tela lê `OK`/`NOK` normalmente (equivalência
+`EQUIP_EQUIVALENCIA`); depois de rodar, passa a ler/gravar `OP`/`INOP`/`OR`.
+
+### Antes de aplicar a migração 41 — prova de D-q57-06
+
+- [ ] Com o frontend já publicado e a migração **ainda não aplicada**, abrir `/refrigeracao` e
+      `/mapa` e conferir que nada mudou na tela — as 171 climatizações continuam coloridas e
+      as pílulas continuam OK/NOK traduzidas para Operante/Inoperante, sem erro no console.
+
+### Migração 41 — escrita, ainda não aplicada
+
+- [ ] Rodar `supabase/41_refrigeracao_ficha_estado.sql` no SQL editor do Supabase.
+- [ ] Colar aqui o resultado do bloco de conferência do próprio arquivo: `funciona` = `OP` 136
+      / `INOP` 35 (nenhum `OK`, nenhum `NOK`, total 171); as 7 colunas novas
+      (`modelo`, `data_fabricacao`, `link`, `manual_url`, `capacitor_marcha`,
+      `capacitor_partida`, `tensao_medida`); as duas travas (`equipamentos_link_url_chk`,
+      `equipamentos_funciona_chk`); e `0` na contagem de `link`/`manual_url` preenchidos.
+
+### Depois de aplicar a migração, logado como gestor
+
+- [ ] Abrir um equipamento e conferir os quatro blocos, nesta ordem: **1 · Local** (Área,
+      Prédio, Local, Patrimônio), **2 · Dados do equipamento** (Tipo, Fabricante, Modelo,
+      Capacidade, Tensão/Corrente nominais, Refrigerante, datas, Link, Manual), **3 · Estado e
+      PMOC** (pílula OP/INOP/OR, Criticidade, **Idade aparente** — nunca "Estado" — h/semana,
+      última manutenção, próximas inspeção/preventiva, Medições acompanhadas), **4 · Histórico
+      de OS/manutenções**.
+- [ ] "Editar cadastro" (rodapé do drawer): editar Modelo + Data de fabricação + Link, salvar,
+      reabrir a ficha e ver os três valores gravados. Testar um link `javascript:alert(1)` e
+      conferir a recusa (toast) antes de enviar.
+- [ ] "Imprimir ficha": conferir que a folha sai com o mesmo cabeçalho institucional (logo +
+      linha CMASM/UASG/ARP) da OS de contratação, os quatro blocos como tabelas, as últimas
+      10 OS, e assinaturas "Responsável técnico"/"Chefe da DME" em branco.
+- [ ] Entrar como **técnico** e conferir que o botão "Editar cadastro" não aparece na ficha nem
+      no rodapé — e que abrir `openEquipForm` direto (via console) recusa com toast.
+- [ ] Numa OS em execução, registrar evidência informando **só** o capacitor de marcha (sem
+      foto, sem as outras medições) e conferir que o botão "Concluir execução" aparece — a
+      evidência de capacitor conta sozinha (D-q57-12).
+- [ ] Conferir essa OS como gestor, escolhendo um estado diferente do atual no seletor "Estado
+      do equipamento após a manutenção" (ex.: INOP → OP). Conferir que, juntos: a pílula da
+      ficha muda, o chip "Com restrições"/"Operante"/"Inoperante" do inventário muda, e a **cor
+      do marcador da climatização no `/mapa`** muda também (pode exigir recarregar o mapa).
+- [ ] Abrir a ficha de um equipamento sem nenhuma medição registrada e conferir que a subseção
+      "Medições acompanhadas" diz "Nenhuma medição registrada ainda…" sem desenhar gráfico
+      vazio nenhum — o estado de todos os 171 equipamentos hoje.
+- [ ] Registrar uma segunda leitura de qualquer medição (ex.: corrente) numa OS futura do mesmo
+      equipamento e conferir que a ficha passa a mostrar o sparkline com a tendência (seta +
+      variação) para essa medição.

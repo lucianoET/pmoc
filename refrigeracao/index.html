@@ -462,6 +462,9 @@ var CAMPOS_LOG = {
   deltaT: 'delta_t',
   corrente: 'corrente_medida',
   pressao: 'pressao_succao',
+  capMarcha: 'capacitor_marcha',
+  capPartida: 'capacitor_partida',
+  tensaoMedida: 'tensao_medida',
   delineadoPor: 'delineado_por',
   delineadoEm: 'delineado_em',
   aprovador: 'aprovador',
@@ -1641,6 +1644,7 @@ function openDetail(id){
     '<div class="dfield"><label>Próx. Preventiva</label><div class="dval">'+dueBadgeHtml(np)+'</div></div>' +
     '</div>' +
     (e.obs?'<div class="dfield" style="margin-top:4px"><label>Observações</label><div class="dval" style="color:#E52207;font-weight:600">'+esc(e.obs)+'</div></div>':'') +
+    renderMedicoesFicha(logs) +
     '</div>' +
     '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-history mr1" aria-hidden="true"></i>4 · Histórico de OS/manutenções ('+logs.length+')</div>' +
@@ -1834,6 +1838,107 @@ async function salvarEquip(id){
   renderInv();
 }
 
+/* ── ficha: medições acompanhadas ── */
+/* D-q57-11: SVG escrito à mão, no idioma de dvDonut — zero build, sem
+   biblioteca de gráfico. As cores abaixo são cópia literal dos hexadecimais
+   já validados no arquivo (DV_CAT/DV_SEQ, CRIT_COLORS — todos definidos mais
+   abaixo): não são referenciadas as variáveis porque, em ordem de execução
+   top-level, elas ainda não têm valor no momento em que este bloco roda —
+   o hex é o mesmo, só escrito de novo, nenhuma cor nova inventada. */
+var MEDICOES_FICHA = [
+  {chave:'insuflamento', rotulo:'Temp. insuflamento', unidade:'°C', cor:'#1351B4'},
+  {chave:'retorno',      rotulo:'Temp. retorno',       unidade:'°C', cor:'#00897B'},
+  {chave:'deltaT',       rotulo:'ΔT',                  unidade:'°C', cor:'#7B1FA2'},
+  {chave:'corrente',     rotulo:'Corrente',             unidade:'A',  cor:'#E65100'},
+  {chave:'tensaoMedida', rotulo:'Tensão medida',        unidade:'V',  cor:'#1565C0'},
+  {chave:'pressao',      rotulo:'Pressão de sucção',    unidade:'psi',cor:'#33691E'},
+  {chave:'capMarcha',    rotulo:'Capacitor de marcha',  unidade:'µF', cor:'#5E85CB'},
+  {chave:'capPartida',   rotulo:'Capacitor de partida', unidade:'µF', cor:'#B8CBEA'}
+];
+
+/* Do mais antigo ao mais novo — _logCache vem ordenado ao contrário (mais
+   novo primeiro). Só Number.isFinite entra; null, '', undefined e texto não
+   numérico são descartados sem erro. Núcleo puro, testável em Node. */
+function serieMedicoes(logs, chave){
+  var out = [];
+  (logs||[]).forEach(function(entry){
+    if (!entry) return;
+    var n = parseFloat(entry[chave]);
+    if (Number.isFinite(n)) out.push({date:entry.date, valor:n});
+  });
+  return out.reverse();
+}
+
+/* Compara a PRIMEIRA leitura com a ÚLTIMA, nunca o mínimo com o máximo — a
+   pergunta é "caiu com o tempo?", não "oscilou?". null com menos de dois
+   pontos: não há tendência para calcular. */
+function tendenciaMedicao(serie){
+  if (!serie || serie.length<2) return null;
+  var primeiro = serie[0].valor, ultimo = serie[serie.length-1].valor;
+  return {primeiro:primeiro, ultimo:ultimo, delta: Math.round((ultimo-primeiro)*100)/100};
+}
+
+/* Mesmo idioma manual de dvDonut — nenhuma biblioteca. Série constante
+   (mínimo igual ao máximo) desenha a linha no meio, sem divisão por zero. */
+function sparklineSVG(serie, cor){
+  var w=100, h=28, m=3;
+  var vals = serie.map(function(p){return p.valor;});
+  var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  var pontos = serie.map(function(p,i){
+    var x = serie.length>1 ? m+(w-2*m)*i/(serie.length-1) : w/2;
+    var y = max>min ? (h-m)-(h-2*m)*(p.valor-min)/(max-min) : h/2;
+    return x.toFixed(1)+','+y.toFixed(1);
+  });
+  var ultimo = pontos[pontos.length-1].split(',');
+  return '<svg viewBox="0 0 '+w+' '+h+'" width="100" height="28" role="img" aria-hidden="false">' +
+    '<title>'+serie.length+' leituras</title>' +
+    '<polyline points="'+pontos.join(' ')+'" fill="none" stroke="'+esc(cor)+'" stroke-width="1.6"/>' +
+    '<circle cx="'+ultimo[0]+'" cy="'+ultimo[1]+'" r="2.2" fill="'+esc(cor)+'"/>' +
+    '</svg>';
+}
+
+/* Uma linha por série com pelo menos uma leitura. Série com um ponto mostra
+   o valor e diz que ainda não há tendência, sem <svg>. Nenhuma série com
+   leitura ⇒ a subseção inteira vira a frase de vazio, sem gráfico nenhum
+   (D-q57-11) — hoje é o estado de todos os 171 equipamentos. */
+function renderMedicoesFicha(logs){
+  var linhas = MEDICOES_FICHA.map(function(m){
+    var serie = serieMedicoes(logs, m.chave);
+    if (!serie.length) return '';
+    var ultimo = serie[serie.length-1].valor;
+    if (serie.length===1) {
+      return '<div class="dfield"><label>'+esc(m.rotulo)+'</label><div class="dval">'+ultimo+' '+esc(m.unidade)+
+        '<div style="font-size:10px;color:#999;margin-top:2px">1 leitura — sem tendência ainda</div></div></div>';
+    }
+    var tend = tendenciaMedicao(serie);
+    var seta = tend.delta>0 ? '↑' : (tend.delta<0 ? '↓' : '→');
+    var corTend = tend.delta>0 ? '#B46800' : (tend.delta<0 ? '#1565C0' : '#888');
+    return '<div class="dfield"><label>'+esc(m.rotulo)+'</label><div class="dval">'+ultimo+' '+esc(m.unidade)+
+      ' <span style="color:'+corTend+';font-size:11px;font-weight:700">'+seta+' '+(tend.delta>0?'+':'')+tend.delta+' '+esc(m.unidade)+'</span>' +
+      '<div style="margin-top:4px">'+sparklineSVG(serie, m.cor)+'</div></div></div>';
+  }).filter(function(x){ return x; });
+
+  if (!linhas.length) {
+    return '<div class="empty" style="padding:8px 0"><p>Nenhuma medição registrada ainda — as leituras aparecem aqui à medida que as OS forem executadas.</p></div>';
+  }
+  return '<div style="margin-top:10px;border-top:1px dashed #DDD;padding-top:8px">' +
+    '<div style="font-size:11px;font-weight:700;color:#666;text-transform:uppercase;margin-bottom:6px">Medições acompanhadas</div>' +
+    '<div class="dfields2">'+linhas.join('')+'</div></div>';
+}
+
+/* Mesma informação, sem SVG, para o documento em papel — as leituras com
+   data, uma linha row2 por série (reusa a tabela de duas colunas de
+   imprimirDocumento; não abre seção numerada própria — entra dentro do
+   bloco "3 · Estado e PMOC" da ficha impressa). */
+function medicoesFichaLinhasImpressao(logs){
+  return MEDICOES_FICHA.map(function(m){
+    var serie = serieMedicoes(logs, m.chave);
+    if (!serie.length) return '';
+    var leituras = serie.map(function(p){ return fmtDate(p.date)+': '+p.valor+' '+m.unidade; }).join(' · ');
+    return row2(esc(m.rotulo), esc(leituras));
+  }).join('');
+}
+
 /* ── encerramento de OS: última manutenção ── */
 async function atualizarUltimaManutencao(equipId, data){
   if(!data) return false;
@@ -1843,6 +1948,22 @@ async function atualizarUltimaManutencao(equipId, data){
   var { error } = await supa.from('equipamentos').update({ultima_manutencao:data}).eq('id',equipId);
   if(error){ showToast('Erro ao atualizar última manutenção','error'); return false; }
   e.ultimaManutencao = data;
+  return true;
+}
+
+/* D-q57-04: o estado do equipamento muda na própria conferência da OS que o
+   causou. Normaliza por normalizarEstadoEquip; não grava quando o valor não
+   é da lista fechada NEM quando já é o estado atual — não existe update que
+   não muda nada. */
+async function atualizarEstadoEquip(equipId, estado){
+  var novo = normalizarEstadoEquip(estado);
+  if(!novo) return false;
+  var e = DATA.find(function(r){ return r.id===equipId; });
+  if(!e) return false;
+  if(equipEstado(e)===novo) return false;
+  var { error } = await supa.from('equipamentos').update({funciona:novo}).eq('id',equipId);
+  if(error){ showToast('Erro ao atualizar estado do equipamento','error'); return false; }
+  e.funciona = novo;
   return true;
 }
 
@@ -1964,6 +2085,11 @@ function manAbrirOS(logId){
         '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="man-ex-tr" type="number" step="0.1"/></div>' +
         '<div><label class="fgl">Corrente (A)</label><input class="fgi" id="man-ex-corr" type="number" step="0.1"/></div>' +
         '<div><label class="fgl">Pressão (psi)</label><input class="fgi" id="man-ex-press" type="number" step="1"/></div></div>' +
+        '<label class="fgl" style="margin-top:10px;display:block">Elétrico</label>' +
+        '<div class="fg2">' +
+        '<div><label class="fgl">Capacitor de marcha (µF)</label><input class="fgi" id="man-ex-cap-marcha" type="number" step="0.1"/></div>' +
+        '<div><label class="fgl">Capacitor de partida (µF)</label><input class="fgi" id="man-ex-cap-partida" type="number" step="0.1"/></div>' +
+        '<div><label class="fgl">Tensão medida (V)</label><input class="fgi" id="man-ex-tensao" type="number" step="0.1"/></div></div>' +
         '<label class="fgl" style="margin-top:8px">Fotos</label>' +
         '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" capture="environment" multiple/>' +
         '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="manRegistrarEvidencia(\''+esc(logId)+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar evidência</button></div>';
@@ -1982,7 +2108,13 @@ function manAbrirOS(logId){
       if (entry.parecerConferencia) {
         h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px;margin-bottom:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida anteriormente: '+esc(entry.parecerConferencia)+'</div>';
       }
-      h += '<label class="fgl">Parecer (opcional ao conferir, obrigatório ao devolver)</label>' +
+      // D-q57-04: o estado muda na própria conferência do gestor, preso à OS que a causou.
+      var estadoAtualConf = equipEstado(e);
+      var optsConfEstado = (estadoAtualConf ? '' : '<option value="" selected disabled>(não cadastrado)</option>') +
+        EQUIP_ORDEM.map(function(k){ return '<option value="'+k+'"'+(estadoAtualConf===k?' selected':'')+'>'+esc(EQUIP_ESTADOS[k].rotulo)+'</option>'; }).join('');
+      h += '<label class="fgl">Estado do equipamento após a manutenção</label>' +
+        '<select class="fgs" id="man-conf-estado">'+optsConfEstado+'</select>' +
+        '<label class="fgl" style="margin-top:8px">Parecer (opcional ao conferir, obrigatório ao devolver)</label>' +
         '<textarea class="fgt" id="man-conf-parecer" placeholder="Observações da conferência…"></textarea>' +
         '<div class="ct-btn-row">' +
         '<button class="btn-success" onclick="manConferir(\''+esc(logId)+'\',true)"><i class="fas fa-check mr1" aria-hidden="true"></i>Conferir e encerrar</button>' +
@@ -2054,7 +2186,9 @@ async function manCancelar(logId){
 
 /* ── fluxo da OS interna: evidência da execução (fotos + as cinco medições) ── */
 function manTemEvidencia(entry){
-  return !!((entry.fotos && entry.fotos.length) || entry.insuflamento || entry.retorno || entry.corrente || entry.pressao);
+  // D-q57-12: as três medições novas contam como evidência — são leitura de
+  // instrumento igual às cinco de hoje.
+  return !!((entry.fotos && entry.fotos.length) || entry.insuflamento || entry.retorno || entry.corrente || entry.pressao || entry.capMarcha || entry.capPartida || entry.tensaoMedida);
 }
 
 function manRenderEvidencia(entry){
@@ -2064,6 +2198,9 @@ function manRenderEvidencia(entry){
   if (entry.deltaT!==undefined && entry.deltaT!==null && entry.deltaT!=='') medTxt.push('ΔT: '+entry.deltaT+'°C');
   if (entry.corrente!==undefined && entry.corrente!==null && entry.corrente!=='') medTxt.push('Corrente: '+entry.corrente+'A');
   if (entry.pressao!==undefined && entry.pressao!==null && entry.pressao!=='') medTxt.push('Pressão: '+entry.pressao+' psi');
+  if (entry.capMarcha!==undefined && entry.capMarcha!==null && entry.capMarcha!=='') medTxt.push('Cap. marcha: '+entry.capMarcha+'µF');
+  if (entry.capPartida!==undefined && entry.capPartida!==null && entry.capPartida!=='') medTxt.push('Cap. partida: '+entry.capPartida+'µF');
+  if (entry.tensaoMedida!==undefined && entry.tensaoMedida!==null && entry.tensaoMedida!=='') medTxt.push('Tensão: '+entry.tensaoMedida+'V');
   var fotos = (entry.fotos||[]).map(function(p){
     var u = supa.storage.from('os-fotos').getPublicUrl(p).data.publicUrl;
     return '<a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'" loading="lazy"/></a>';
@@ -2083,8 +2220,9 @@ async function manRegistrarEvidencia(logId){
   if (!manPode('executar')) { showToast('Sem permissão para registrar evidência','error'); return; }
   var entry = achado.entry;
   var ti = val('man-ex-ti'), tr = val('man-ex-tr'), corr = val('man-ex-corr'), press = val('man-ex-press');
+  var capM = val('man-ex-cap-marcha'), capP = val('man-ex-cap-partida'), tensaoM = val('man-ex-tensao');
   var files = (el('man-ex-fotos')||{files:[]}).files;
-  if (ti==='' && tr==='' && corr==='' && press==='' && !files.length) { showToast('Registre ao menos uma medição ou uma foto','error'); return; }
+  if (ti==='' && tr==='' && corr==='' && press==='' && capM==='' && capP==='' && tensaoM==='' && !files.length) { showToast('Registre ao menos uma medição ou uma foto','error'); return; }
   showToast('Enviando evidência…', '');
   var novos = [];
   var limite = Math.min(files.length, LIMITE_FOTOS_EVIDENCIA);
@@ -2104,6 +2242,9 @@ async function manRegistrarEvidencia(logId){
   if (tr !== '') patch.retorno = parseFloat(tr);
   if (corr !== '') patch.corrente = parseFloat(corr);
   if (press !== '') patch.pressao = parseFloat(press);
+  if (capM !== '') patch.capMarcha = parseFloat(capM);
+  if (capP !== '') patch.capPartida = parseFloat(capP);
+  if (tensaoM !== '') patch.tensaoMedida = parseFloat(tensaoM);
   if (ti !== '' || tr !== '') patch.deltaT = manDeltaT(ti, tr); // ΔT é sempre derivado, nunca digitado
   var ok = await manAtualizarOS(logId, achado.equipId, patch, 'Evidência registrada');
   if (ok) manAbrirOS(logId);
@@ -2119,6 +2260,7 @@ async function manConferir(logId, aprovado){
     var ok = await manAtualizarOS(logId, achado.equipId, {status:'CONFERIDA', conferente:nome, dataConferencia:today(), parecerConferencia:parecer||null}, 'OS conferida');
     if (ok) {
       await atualizarUltimaManutencao(achado.equipId, achado.entry.date); // D-l7n-11: a data da OS, não a de hoje
+      await atualizarEstadoEquip(achado.equipId, val('man-conf-estado')); // D-q57-04: o estado escolhido na conferência
       manAbrirOS(logId); renderOS();
     }
   } else {
@@ -3617,6 +3759,7 @@ function printFicha(equipId){
     row2('h/semana', horas?horas+'h':'') +
     row2('Última manutenção', lastDate?fmtDate(lastDate):'') +
     row2('Observações', e.obs?esc(e.obs):'') +
+    medicoesFichaLinhasImpressao(logsTodos) +
     '</table>';
 
   corpo += '<h2>4. Histórico de OS/manutenções ('+logs.length+' de '+logsTodos.length+')</h2>';

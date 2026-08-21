@@ -15,6 +15,7 @@ const path = require('node:path');
 
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'refrigeracao', 'index.html'), 'utf8');
 const SQL_40 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '40_refrigeracao_os_fluxo.sql'), 'utf8');
+const SQL_41 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '41_refrigeracao_ficha_estado.sql'), 'utf8');
 const SQL_04 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '04_refrigeracao_schema.sql'), 'utf8');
 
 function recorte(marcadorIni, marcadorFim) {
@@ -57,6 +58,17 @@ function colunasNovasMigracao40() {
   return nomes;
 }
 
+// 260821-q57 (Task 3): a migração 41 acrescenta três colunas em
+// logs_manutencao (capacitor_marcha, capacitor_partida, tensao_medida) — o
+// gate precisa aprender o fato novo, não a ponte que está errada.
+function colunasNovasMigracao41() {
+  const re = /alter table logs_manutencao add column if not exists (\w+)/g;
+  const nomes = [];
+  let m;
+  while ((m = re.exec(SQL_41))) nomes.push(m[1]);
+  return nomes;
+}
+
 // ── ponte de campos ── (CAMPOS_LOG / dbToLog / logParaDb)
 function carregarPonte() {
   const ctx = {};
@@ -75,13 +87,21 @@ test('toda coluna criada pela migração 40 aparece como valor em CAMPOS_LOG (D-
   });
 });
 
-test('todo valor de CAMPOS_LOG é uma coluna real (união das colunas da migração 04 com as da 40)', () => {
+test('todo valor de CAMPOS_LOG é uma coluna real (união das colunas da migração 04 com as da 40 e da 41)', () => {
   const ctx = carregarPonte();
-  const colunasReais = colunasLogsManutencao04().concat(colunasNovasMigracao40());
+  const colunasReais = colunasLogsManutencao04().concat(colunasNovasMigracao40(), colunasNovasMigracao41());
   Object.keys(ctx.CAMPOS_LOG).forEach((k) => {
     const col = ctx.CAMPOS_LOG[k];
     assert.ok(colunasReais.includes(col), `CAMPOS_LOG.${k} = "${col}" não é coluna real de logs_manutencao`);
   });
+});
+
+test('as três colunas novas da migração 41 (capacitor_marcha, capacitor_partida, tensao_medida) aparecem como valor em CAMPOS_LOG (D-q57-12)', () => {
+  const ctx = carregarPonte();
+  const novas41 = colunasNovasMigracao41();
+  assert.deepEqual(novas41.sort(), ['capacitor_marcha', 'capacitor_partida', 'tensao_medida'].sort());
+  const valores = Object.keys(ctx.CAMPOS_LOG).map((k) => ctx.CAMPOS_LOG[k]);
+  novas41.forEach((col) => assert.ok(valores.includes(col), `coluna nova "${col}" não está em CAMPOS_LOG`));
 });
 
 test('dbToLog de uma linha completa devolve as 5 medições e as fotos, e mantém as sete chaves que a tela já consumia', () => {
@@ -442,7 +462,7 @@ function carregarFluxoCompleto(opts) {
     _campos: opts.campos || {},
     window: { _modoObservador: !!opts.observador },
     ctUser: opts.ctUser !== undefined ? opts.ctUser : { nome: 'Fulano', role: 'gestor' },
-    DATA: opts.data || [{ id: opts.equipId !== undefined ? opts.equipId : 10, ultimaManutencao: opts.ultimaManutencaoAtual || '' }],
+    DATA: opts.data || [{ id: opts.equipId !== undefined ? opts.equipId : 10, ultimaManutencao: opts.ultimaManutencaoAtual || '', funciona: opts.funcionaAtual !== undefined ? opts.funcionaAtual : 'INOP' }],
     showToast(msg, tipo) { toasts.push({ msg, tipo }); },
     console: { warn() {}, error() {} },
     today() { return '2026-08-21'; },
@@ -507,6 +527,10 @@ function carregarFluxoCompleto(opts) {
   ctx._logCache[ctx.DATA[0] ? ctx.DATA[0].id : (opts.equipId !== undefined ? opts.equipId : 10)] = [Object.assign({ id: linhaBase.id, status: linhaBase.status, date: linhaBase.data_os, fotos: linhaBase.fotos }, opts.entryExtra || {})];
 
   vm.createContext(ctx);
+  // bloco do estado do equipamento (260821-q57): atualizarEstadoEquip chama
+  // normalizarEstadoEquip/equipEstado, definidos aqui — sem ele o sandbox
+  // lança ReferenceError na primeira conferência aprovada.
+  vm.runInContext(recorte('/* ── estado do equipamento: vocabulário OP/INOP/OR ── */', '/* ── alertas: contagem única ── */'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
@@ -585,6 +609,35 @@ test('manTemEvidencia é falso para OS sem foto e sem medição, verdadeiro com 
   assert.strictEqual(ctx.manTemEvidencia({ insuflamento: 12 }), true);
 });
 
+test('manTemEvidencia é verdadeiro com só capMarcha, com só capPartida e com só tensaoMedida (D-q57-12), e continua falso com a entrada vazia', () => {
+  const ctx = carregarFluxoCompleto({});
+  assert.strictEqual(ctx.manTemEvidencia({ capMarcha: 8.5 }), true);
+  assert.strictEqual(ctx.manTemEvidencia({ capPartida: 40 }), true);
+  assert.strictEqual(ctx.manTemEvidencia({ tensaoMedida: 220 }), true);
+  assert.strictEqual(ctx.manTemEvidencia({}), false);
+});
+
+test('manMudarStatus de EM_EXECUCAO para EXECUTADA passa quando a única evidência é uma leitura de capacitor', async () => {
+  const ctx = carregarFluxoCompleto({ status: 'EM_EXECUCAO', entryExtra: { fotos: [], capMarcha: 8.5 } });
+  await ctx.manMudarStatus('log-1', 'EXECUTADA');
+  assert.strictEqual(ctx._updatesLog.length, 1);
+  assert.strictEqual(ctx._updatesLog[0].patch.status, 'EXECUTADA');
+});
+
+test('manRegistrarEvidencia grava as três medições novas sob os nomes de coluna, e omite do patch o campo deixado em branco', async () => {
+  const ctx = carregarFluxoCompleto({
+    status: 'EM_EXECUCAO',
+    valores: { 'man-ex-cap-marcha': '8.5', 'man-ex-cap-partida': '', 'man-ex-tensao': '221' },
+    campos: { 'man-ex-fotos': { files: [] } },
+  });
+  await ctx.manRegistrarEvidencia('log-1');
+  assert.strictEqual(ctx._updatesLog.length, 1);
+  const patch = ctx._updatesLog[0].patch;
+  assert.strictEqual(patch.capacitor_marcha, 8.5);
+  assert.strictEqual(patch.tensao_medida, 221);
+  assert.strictEqual('capacitor_partida' in patch, false); // campo vazio nunca apaga leitura anterior
+});
+
 test('manMudarStatus de EM_EXECUCAO para EXECUTADA sem evidência é recusado e não chama a porta de escrita (D-l7n-09)', async () => {
   const ctx = carregarFluxoCompleto({ status: 'EM_EXECUCAO', entryExtra: { fotos: [] } });
   await ctx.manMudarStatus('log-1', 'EXECUTADA');
@@ -604,8 +657,42 @@ test('conferência aprovada grava o estado terminal, o conferente do perfil e a 
   assert.strictEqual(ctx._updatesLog[0].patch.status, 'CONFERIDA');
   assert.strictEqual(ctx._updatesLog[0].patch.conferente, 'Gestora Fulana');
   assert.strictEqual(ctx._updatesLog[0].patch.data_conferencia, '2026-08-21'); // today() do mock
-  assert.strictEqual(ctx._updatesEquip.length, 1);
+  assert.strictEqual(ctx._updatesEquip.length, 1); // sem valor no seletor: só a última manutenção é gravada
   assert.strictEqual(ctx._updatesEquip[0].patch.ultima_manutencao, '2026-08-10'); // data da OS, não a de hoje
+});
+
+test('conferência aprovada (D-q57-04) chama atualizarEstadoEquip com o valor do seletor, gravando funciona junto de ultima_manutencao', async () => {
+  const ctx = carregarFluxoCompleto({
+    status: 'EXECUTADA', date: '2026-08-10',
+    equipId: 77, ultimaManutencaoAtual: '', funcionaAtual: 'INOP',
+    ctUser: { nome: 'Gestora Fulana', role: 'gestor' },
+    valores: { 'man-conf-estado': 'OP' },
+  });
+  await ctx.manConferir('log-1', true);
+  assert.strictEqual(ctx._updatesEquip.length, 2); // ultima_manutencao + funciona
+  const patchEstado = ctx._updatesEquip.find((u) => 'funciona' in u.patch);
+  assert.ok(patchEstado, 'nenhum update de equipamentos gravou funciona');
+  assert.strictEqual(patchEstado.patch.funciona, 'OP');
+});
+
+test('atualizarEstadoEquip não grava quando o estado escolhido é igual ao atual, quando é vazio, e quando está fora da lista fechada — três chamadas, nenhuma escrita', async () => {
+  const ctx = carregarFluxoCompleto({ funcionaAtual: 'OP' });
+  const r1 = await ctx.atualizarEstadoEquip(10, 'OP'); // igual ao atual
+  const r2 = await ctx.atualizarEstadoEquip(10, ''); // vazio
+  const r3 = await ctx.atualizarEstadoEquip(10, 'ESTRANHO'); // fora da lista fechada
+  assert.strictEqual(r1, false);
+  assert.strictEqual(r2, false);
+  assert.strictEqual(r3, false);
+  assert.strictEqual(ctx._updatesEquip.length, 0);
+});
+
+test('a devolução (aprovado falso) não chama atualizarEstadoEquip — uma OS devolvida não concluiu nada', async () => {
+  const ctx = carregarFluxoCompleto({
+    status: 'EXECUTADA', funcionaAtual: 'INOP',
+    valores: { 'man-conf-parecer': 'faltou uma peça', 'man-conf-estado': 'OP' },
+  });
+  await ctx.manConferir('log-1', false);
+  assert.strictEqual(ctx._updatesEquip.length, 0);
 });
 
 test('conferência com parecer vazio na devolução não grava nada; com parecer, volta um estado e mantém a lista de fotos intacta', async () => {
