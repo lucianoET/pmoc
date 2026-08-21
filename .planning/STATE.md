@@ -5,10 +5,10 @@ milestone_name: Consolidação da plataforma
 current_phase: 7
 current_phase_name: ui-ux-mobile
 status: verifying
-stopped_at: Completed 07-01-PLAN.md — Fase 7 (UI/UX mobile) executada; migração 25 rodou e o UAT de leitura da Fase 10 passou, falta exercitar a escrita no app
-last_updated: "2026-08-19T09:05:00.000Z"
+stopped_at: Completed quick task 260821-jpd-corrigir-defeitos-verificados-do-modulo — três bugs de leitura/contagem, encerramento de OS grava ultima_manutencao com histórico idempotente, trilha os_eventos em ctUpd; node --test 514/514
+last_updated: "2026-08-21T17:33:06.213Z"
 last_activity: 2026-08-19
-last_activity_desc: Quick task 260819-863 — decisão D-06 fechada: login por cargo no /calibracao e migração 39 restringindo a escrita das cinco tabelas cal_* a sessão autenticada (485 testes verdes)
+last_activity_desc: "Quick task 260819-863: D-06 fechada, `/calibracao` com login por cargo e escrita só para sessão autenticada (migração 39)"
 progress:
   total_phases: 8
   completed_phases: 4
@@ -91,11 +91,13 @@ Progress: [██████████] 100% (v2.0)
 - [Reparos 18/08/2026]: o módulo foi entregue **fora do fluxo de fases do GSD** — sem
   `.planning/phases/`, sem PLAN/SUMMARY. Decisões e requisito estão em PROJECT.md; roteiro de
   teste manual em TESTES.md. Uma fase futura que reorganizar isso não deve tratar como lacuna.
+
 - [Reparos 18/08/2026]: `create table if not exists` numa migração aditiva garante a **existência**
   da tabela, não a **forma** dela. As `rep_*` foram criadas de um rascunho antes da 26; quando a 26
   rodou, os `create table` viraram no-op e as definições corretas foram ignoradas em silêncio, sem
   erro nenhum. A migração 28 fecha a diferença. Conferir colunas depois de aplicar, não só se o
   script terminou sem exceção.
+
 - [Reparos 18/08/2026]: o write path do módulo **nunca foi exercido** — `rep_reparos.frequencia`
   está 0 nos 33 reparos. Mesma pendência do `/mapa` na Fase 10. Checklist em TESTES.md.
 
@@ -158,6 +160,7 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: Modo 'Mover ativos' com toggle próprio (camada arrastável separada da de exibição) — evita duplicar visualmente marcadores; xMap.registerLayer não é chamado de novo após uma gravação por causa de bug conhecido em mapa/xmap.js (arquivo com edição proibida) que duplicaria layerGroups
 - [Phase ?]: PLAT-19 fechado como parcial — desenho de zona sem rede pronto e provado; tiles raster ficam como procedimento do usuário (mapa/tiles/GERAR-TILES.md), nunca marcado completo por presunção
 - [Phase ?]: PLAT-13 corrigido no próprio texto do requisito: o vínculo cmasm_locais.local_id é organizacional, não geográfico — a migração 25 acrescentou lat/lon de fato
+- [Phase ?]: 260821-jpd: ctUsuarioEvento lê usuarios.role (não existe coluna cargo no banco) — trilha os_eventos.usuario traz nome + (role) quando houver sessão
 
 ### Pending Todos
 
@@ -216,9 +219,10 @@ painel) segue pendente.
 | 2026-08-19 | 260819-4gq-mapa-estado-ativo-dos-menus-visivel-e-ic | Estado ativo dos menus deixa de ser uma borda de 1px e passa a somar quatro sinais (barra de 4px, fundo tingido, peso 700 e ponto cheio × anel vazio), com `aria-pressed` declarado na marcação; o painel de camadas do `xmap.js` travado ganha a linha inteira marcada, só por CSS. `☰` e `▤` viraram SVG — caíam em fonte de símbolo e apareciam como bloco preto no sistema do usuário. Dois erros achados na própria tela: token de tema (`--text`) num painel que é escuro sempre, e limiar único de rótulo baixado para 16 gerando 137 rótulos sobrepostos — corrigido com dois limiares (estrutura em 15, ativo em 17). O rótulo do grupo passou a nomear o prédio. Fora do código: as 14 máquinas sem posição foram gravadas no ponto do Apoio, e o mapa chegou a **270 de 270 ativos posicionados** (91 próprias, 179 herdadas). node --test 431/431 |
 | 2026-08-19 | 260819-4wn-maquinas-tabela-de-areas-com-edicao-filt | Tabela de áreas de serviço (aba OS) deixa de ser só leitura: ordenação e filtro por coluna vindos de `shared/tabela.js` — terceiro consumidor do núcleo, sem uma linha de mudança nele — e edição pelo `⚙`, com um formulário só para inserir e atualizar. A permissão espelha a policy real de `maq_areas` (migração 12: admin, gestor) e é conferida na abertura E na gravação; diferente do gate do estoque, o banco também recusa. A dimensão derivada do contorno desenhado no /mapa fica travada e fora do payload — um número digitado sobreviveria até o próximo ajuste da geometria e sumiria sem aviso. Marca MAPA filtrável e metro quadrado sem casas decimais. node --test 445/445 |
 | 2026-08-19 | 260819-5jf-chrome-padronizado-icones-monocromaticos | Chrome padronizado: `shared/icones.js` (17 ícones monocromáticos em `currentColor`, traço Material, núcleo puro) substitui os caracteres do chrome — `☰` aparecia como bloco preto e emoji de aba ignorava o tema. Barra superior virou título/usuário/**Portal (botão)**/Sair em todos os módulos; o tema desceu para o rodapé (6 módulos + portal), que também ganhou o link da Luctronics. Em Máquinas, `OS` virou **OS-Manutenção** e **OS-Corte** entrou logo depois com view própria — "Operações de serviço" → "Ordem de Serviço de Corte", "Áreas de serviço" → "Áreas Vegetais". **Não entregue, aguardando recorte:** componentes compartilhados de serviços/manutenções/estoque/compras/contratações e o porte do fluxo de Contratações (ARP) de Refrigeração — é decisão de dados antes de tela. node --test 456/456 |
+| 2026-08-21 | 260821-jpd-corrigir-defeitos-verificados-do-modulo- | Quatro bugs de leitura/contagem corrigidos em `refrigeracao/index.html`: `alertasPmoc()` unifica NOK/vencido/sem-histórico numa contagem sem duplicar (badge de OS pendente sai de 0 — lia `entry.status` no nível errado; KPI "Atenção PMOC" deixa de dar 202 sobre 171) e `acessoLivre()` passa a carregar os logs do observador em vez de zerar o cache (169→0 "Sem hist." falsos). `atualizarUltimaManutencao()` grava `equipamentos.ultima_manutencao` só quando a data é mais recente que a registrada (nunca retrocede), chamada por `saveLogEntry` (OS interna concluída) e por `ctEncerrarHistorico()` (certificação de contratação), que é idempotente pelo prefixo "Contratação \<numero\>" na descrição — certificar duas vezes não duplica histórico. `ctRegistrarEvento` grava a trilha real de `os_eventos` (coluna `detalhe`, sem os quatro campos fantasma `de_status`/`para_status`/`detalhes`/`role`) a cada `ctUpd`, sem derrubar a ação em caso de falha na trilha. Sem migração; três gates novos no padrão `node:vm` sobre recorte do HTML; `node --test` 514/514 (commits bc81169, e107aec, fa1be0a) |
 
 ## Session Continuity
 
-Last session: 2026-08-19T02:30:00.000Z
-Stopped at: Completed quick task 260819-5jf-chrome-padronizado-icones-monocromaticos — chrome padronizado e abas OS-Manutenção/OS-Corte; pendente de recorte: componentes compartilhados e porte das Contratações; node --test 456/456. Anterior: 260819-4wn-maquinas-tabela-de-areas-com-edicao-filt — tabela de áreas com edição, ordenação e filtro; node --test 445/445. Anterior: 260819-4gq-mapa-estado-ativo-dos-menus-visivel-e-ic — estado ativo dos menus legível de relance, ícones em SVG, dois limiares de rótulo; 270/270 ativos posicionados; node --test 431/431. Anterior: 260819-406-mapa-portar-features-do-cmasm-mapa-v2-co — features do protótipo cmasm-mapa-v2 portadas em função (GeoJSON, planta georreferenciada, coordenada, escala, aviso, opacidade); node --test 430/430. Anterior: 260819-348-mapa-legibilidade-agrupar-ativos-co-posi — agrupamento de marcadores, rótulos por zoom, barra lateral colapsável e painel de camadas recolhido; node --test 420/420. Anterior: 260819-23e-mapa-sala-herda-posicao-do-predio-cadeia — sala herda a posição do prédio pela cadeia parent_id; node --test 409/409. Anterior: 260819-0g3-mapa-predios-como-poligono-zonas-como-ve — prédio como polígono (migração 37 aplicada), zona como vegetação e controles do mapa sem sobreposição; node --test 400/400. Anterior: 260818-k9c-calibracao-migra-de-localstorage-para-sup — Calibração migrado do localStorage para o Supabase (migrações 35/36 aplicadas e conferidas); dois bugs de integração pegos no navegador (ordem instável, prazo com rede fora); falta publicar o código
+Last session: 2026-08-21T17:32:57.861Z
+Stopped at: Completed quick task 260821-jpd-corrigir-defeitos-verificados-do-modulo — três bugs de leitura/contagem, encerramento de OS grava ultima_manutencao com histórico idempotente, trilha os_eventos em ctUpd; node --test 514/514
 Resume file: None
