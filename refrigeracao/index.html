@@ -802,7 +802,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="nav-btn active" onclick="navTo('dash',this)">
       <i class="fas fa-chart-pie" aria-hidden="true"></i>Dashboard
     </button>
-    <button class="nav-btn" onclick="navTo('inv',this)">
+    <button class="nav-btn" id="nav-inv" onclick="navTo('inv',this)">
       <i class="fas fa-table" aria-hidden="true"></i>Inventário
     </button>
     <button class="nav-btn" onclick="navTo('os',this)">
@@ -2305,6 +2305,72 @@ function showSearch(){
   });
 })();
 
+/* ── link profundo: ?equip= ── */
+/* O nome do parâmetro mora só aqui — a ficha (bloco de QR) o consome para
+   escrever a URL. lerAlvoFicha/buscaSemAlvo são puros, sem API de navegador,
+   o que os torna testáveis em Node (D-s3h-04). */
+var PARAM_FICHA = 'equip';
+var ALVO_FICHA = null;
+
+function lerAlvoFicha(busca) {
+  if (!busca) return null;
+  var s = String(busca).split('#')[0];
+  if (s.charAt(0) === '?') s = s.slice(1);
+  if (!s) return null;
+  var partes = s.split('&');
+  for (var i = 0; i < partes.length; i++) {
+    var par = partes[i];
+    var idx = par.indexOf('=');
+    var chave = idx === -1 ? par : par.slice(0, idx);
+    var valor = idx === -1 ? '' : par.slice(idx + 1);
+    if (chave === PARAM_FICHA) {
+      if (/^\d{1,9}$/.test(valor)) return parseInt(valor, 10);
+      return null;
+    }
+  }
+  return null;
+}
+
+function buscaSemAlvo(busca) {
+  var s = busca || '';
+  if (s.charAt(0) === '?') s = s.slice(1);
+  if (!s) return '';
+  var partes = s.split('&');
+  var restantes = [];
+  for (var i = 0; i < partes.length; i++) {
+    var par = partes[i];
+    var idx = par.indexOf('=');
+    var chave = idx === -1 ? par : par.slice(0, idx);
+    if (chave !== PARAM_FICHA) restantes.push(par);
+  }
+  return restantes.length ? '?' + restantes.join('&') : '';
+}
+
+function limparUrlDoAlvo() {
+  try {
+    if (typeof history !== 'undefined' && typeof history.replaceState === 'function') {
+      history.replaceState(null, '', location.pathname + buscaSemAlvo(location.search) + location.hash);
+    }
+  } catch (e) {}
+}
+
+function aplicarAlvoFicha() {
+  var alvo = ALVO_FICHA;
+  ALVO_FICHA = null; // consumido: só abre uma vez por carga
+  if (alvo === null) return false;
+  limparUrlDoAlvo(); // antes da busca — o não-encontrado também não se repete a cada F5 (D-s3h-03)
+  var achado = DATA.find(function (r) { return r.id === alvo; });
+  if (!achado) {
+    showToast('Equipamento ' + alvo + ' não encontrado', 'error');
+    return false;
+  }
+  navTo('inv', el('nav-inv'));
+  openDetail(alvo);
+  return true;
+}
+
+ALVO_FICHA = lerAlvoFicha(location.search);
+
 /* ── ACESSO LIVRE (modo observador, somente leitura) ── */
 async function acessoLivre() {
   var btn = document.querySelector('[onclick="acessoLivre()"]');
@@ -2334,6 +2400,7 @@ async function acessoLivre() {
     document.body.prepend(banner);
     renderDash();
     renderInv();
+    aplicarAlvoFicha();
   } catch(e) {
     if (btn) { btn.textContent = 'Visualizar sem login'; btn.disabled = false; }
     showToast('Erro ao carregar dados', 'error');
@@ -2357,6 +2424,7 @@ async function initAppOnce(){
   renderInv();
   var fabEl = document.getElementById('fab');
   if (fabEl) fabEl.style.display = 'none';
+  aplicarAlvoFicha();
 }
 window.initAppOnce = initAppOnce;
 
