@@ -17,7 +17,11 @@
 -- (CONCLUÍDA com acento) e continuam exatamente como estão: o projeto
 -- arquiva, nunca reescreve histórico.
 --
--- Aditivo, aplicado à mão pelo usuário no SQL editor do Supabase — este
+-- APLICADA EM PRODUÇÃO EM 21/08/2026 e conferida: 9 colunas novas (23 no
+-- total), a trava com os 10 valores, o índice do FK, e as 10 linhas legadas
+-- intactas (9 CONCLUÍDA + 1 PARCIAL — nenhuma reescrita).
+--
+-- Aditivo, aplicado no SQL editor do Supabase — este
 -- arquivo só escreve o script, nunca o executa.
 -- ══════════════════════════════════════════════════════════════════
 
