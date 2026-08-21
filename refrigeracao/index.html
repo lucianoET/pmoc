@@ -1362,6 +1362,18 @@ function markAllChk(n){
   updateChkCnt();
 }
 
+/* ── encerramento de OS: última manutenção ── */
+async function atualizarUltimaManutencao(equipId, data){
+  if(!data) return false;
+  var e = DATA.find(function(r){ return r.id===equipId; });
+  if(!e) return false;
+  if(e.ultimaManutencao && e.ultimaManutencao>=data) return false; // D-jpd-03: nunca retrocede
+  var { error } = await supa.from('equipamentos').update({ultima_manutencao:data}).eq('id',equipId);
+  if(error){ showToast('Erro ao atualizar última manutenção','error'); return false; }
+  e.ultimaManutencao = data;
+  return true;
+}
+
 async function saveLogEntry(equipId, clistLen){
   if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
   var date=val('log-date'), tipo=val('log-tipo'), status=val('log-status');
@@ -1372,7 +1384,8 @@ async function saveLogEntry(equipId, clistLen){
     var lbl=el('drawer-body').querySelectorAll('.chk-item span')[i];
     if(chk&&lbl) checklist.push({i:i,label:lbl.textContent.trim(),done:chk.checked});
   }
-  await addLogEntryAsync(equipId,{date:date,tipo:tipo,status:status,tecnico:val('log-tec').trim(),desc:val('log-desc').trim(),checklist:checklist});
+  var logId = await addLogEntryAsync(equipId,{date:date,tipo:tipo,status:status,tecnico:val('log-tec').trim(),desc:val('log-desc').trim(),checklist:checklist});
+  if(logId && status==='CONCLUÍDA') await atualizarUltimaManutencao(equipId, date);
   showToast('OS registrada com sucesso','ok');
   openDetail(equipId);
   // Refresh
@@ -2064,13 +2077,43 @@ async function ctFiscalizar(osId, aprovado){
   }
 }
 
+/* ── histórico da contratação ── */
+function ctMarcadorHistorico(o){
+  return 'Contratação ' + (o.numero || o.id);
+}
+function ctDescricaoHistorico(o){
+  var desc = ctMarcadorHistorico(o) + ' — ' + (o.problema || 'Serviço executado por empresa contratada');
+  if(o.nf) desc += ' · NF ' + o.nf;
+  return desc;
+}
+function ctJaTemHistorico(linhas, marcador){
+  return (linhas||[]).some(function(l){
+    var texto = l.descricao!==undefined ? l.descricao : l.desc;
+    return typeof texto==='string' && texto.indexOf(marcador)===0;
+  });
+}
+async function ctEncerrarHistorico(o){
+  if(!o.equip_id) return false;
+  var data = o.data_nf || today();
+  var r = await supa.from('logs_manutencao').select('id,descricao').eq('equip_id', o.equip_id);
+  if(r.error){ console.warn('ctEncerrarHistorico', r.error); return false; }
+  if(ctJaTemHistorico(r.data||[], ctMarcadorHistorico(o))) return false;
+  var id = await addLogEntryAsync(o.equip_id, {date:data, tipo:'CORRETIVA', status:'CONCLUÍDA', tecnico:(o.empresa||''), desc:ctDescricaoHistorico(o), checklist:[]});
+  if(id) await atualizarUltimaManutencao(o.equip_id, data);
+  return !!id;
+}
+
 async function ctCertificar(osId){
   var nf = val('cf-nf').trim();
   if(!nf){ showToast('Informe o nº da NF','error'); return; }
   var comps = ctComp[osId]||[];
   if(!comps.length){ showToast('Adicione a composição de itens da ata','error'); return; }
   var nome = ctUser?ctUser.nome:'';
-  if(await ctUpd(osId,{status:'ENCERRADA',nf:nf,data_nf:val('cf-datanf')||today(),certificador:nome,data_certificacao:today()},'OS certificada e encerrada')){ ctOpenOS(osId); ctRenderList(); }
+  if(await ctUpd(osId,{status:'ENCERRADA',nf:nf,data_nf:val('cf-datanf')||today(),certificador:nome,data_certificacao:today()},'OS certificada e encerrada')){
+    var o = ctOS.find(function(x){return x.id===osId;});
+    if(o) await ctEncerrarHistorico(o);
+    ctOpenOS(osId); ctRenderList();
+  }
 }
 
 async function ctCancelar(osId){
