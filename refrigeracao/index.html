@@ -306,6 +306,7 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
 .os-card.concluida{border-left-color:#168821}
 .os-card.parcial{border-left-color:#B46800}
 .os-card.pendente{border-left-color:#E52207}
+.os-card.cancelada{border-left-color:#999}
 .os-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px}
 .os-id{font-size:11px;color:#aaa;font-weight:700}
 .os-local{font-size:14px;font-weight:700;color:#1B1B1B}
@@ -683,9 +684,9 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="page" id="page-os">
       <div class="chips" id="os-chips">
         <button class="chip active" onclick="setOSChip(this,'todos')">Todos</button>
-        <button class="chip" onclick="setOSChip(this,'pendente')">Pendente</button>
+        <button class="chip" onclick="setOSChip(this,'aberto')">Em aberto</button>
+        <button class="chip" onclick="setOSChip(this,'aprovacao')">P/ aprovar</button>
         <button class="chip" onclick="setOSChip(this,'concluida')">Concluída</button>
-        <button class="chip" onclick="setOSChip(this,'parcial')">Parcial</button>
         <button class="chip" onclick="setOSChip(this,'critica')">Crítica</button>
       </div>
       <div class="sec-head">
@@ -856,7 +857,7 @@ function alertasPmoc(lista, agora){
   return {nok:nok, vencidos:vencidos, semHist:semHist, todos:todos, total:todos.length};
 }
 function contarOSPendentes(entradas){
-  return entradas.filter(function(o){ return o.entry && o.entry.status==='PENDENTE'; }).length;
+  return entradas.filter(function(o){ return o.entry && manPendente(o.entry.status); }).length;
 }
 
 function dueBadgeHtml(d){
@@ -876,11 +877,132 @@ function statusPill(fn){
   if(fn==='NOK') return '<span class="pill pill-nok"><i class="fas fa-times" aria-hidden="true"></i> NOK</span>';
   return '<span class="pill pill-ver"><i class="fas fa-question" aria-hidden="true"></i> VERIFICAR</span>';
 }
-function statusPillOS(s){
-  if(s==='CONCLUÍDA') return '<span class="pill pill-ok">CONCLUÍDA</span>';
-  if(s==='PENDENTE') return '<span class="pill pill-nok">PENDENTE</span>';
-  return '<span class="pill pill-ver">PARCIAL</span>';
+/* ── fluxo da OS interna: vocabulário e transições ── */
+/* Paleta nomeada por tom, referenciada por nome (reusa os hexadecimais que já
+   existem no arquivo, na tabela CT_STATUS da contratação). CT_STATUS não é
+   tocada — o gate da trilha recorta aquela tabela. */
+var MAN_TONS = {
+  info:   {bg:'#E3F2FD', fg:'#1565C0'},
+  ok:     {bg:'#E6F4EA', fg:'#168821'},
+  warn:   {bg:'#FEF3E2', fg:'#B46800'},
+  erro:   {bg:'#FDECEA', fg:'#E52207'},
+  neutro: {bg:'#F5F5F5', fg:'#999'}
+};
+
+/* Os rótulos nomeiam o que a etapa está ESPERANDO — a pergunta de quem varre
+   a lista (idioma já usado em maquinas/contratacoes.js). step é 0..5, -1 para
+   o cancelamento. */
+var MAN_STATUS = {
+  'ABERTA':       {label:'Aberta — aguardando delineamento',      tom:'info',  step:0},
+  'DELINEAMENTO': {label:'Em delineamento',                       tom:'info',  step:1},
+  'APROVACAO':    {label:'Aguardando aprovação do gestor',        tom:'warn',  step:2},
+  'EM_EXECUCAO':  {label:'Em execução',                           tom:'info',  step:3},
+  'EXECUTADA':    {label:'Executada — aguardando conferência',    tom:'warn',  step:4},
+  'CONFERIDA':    {label:'Conferida',                             tom:'ok',    step:5},
+  'CANCELADA':    {label:'Cancelada',                             tom:'neutro',step:-1}
+};
+var MAN_STEPS = ['Abertura','Delineam.','Aprovação','Execução','Executada','Conclusão'];
+var MAN_ORDEM = ['ABERTA','DELINEAMENTO','APROVACAO','EM_EXECUCAO','EXECUTADA','CONFERIDA'];
+
+/* D-l7n-02: a equivalência AGRUPA (filtro, badge, classe do cartão), nunca
+   RENOMEIA — o rótulo de uma linha sem fluxo continua sendo a palavra da
+   própria linha (manRotulo/statusPillOS). */
+var MAN_EQUIVALENCIA = {'PENDENTE':'ABERTA', 'PARCIAL':'EM_EXECUCAO', 'CONCLUÍDA':'CONFERIDA'};
+
+/* Cargos que podem executar cada ação do fluxo interno (D-l7n-05) — empresa e
+   fiscal são papéis do ciclo de contratação (ctCan), não deste. */
+var MAN_ACOES_CARGO = {
+  abrir:    ['admin','gestor','tecnico'],
+  delinear: ['admin','gestor','tecnico'],
+  executar: ['admin','gestor','tecnico'],
+  aprovar:  ['admin','gestor'],
+  conferir: ['admin','gestor'],
+  cancelar: ['admin','gestor']
+};
+/* Ação exigida para MOVER a OS para cada estado — usada pela guarda dupla de
+   manMudarStatus. */
+var MAN_ACAO_DESTINO = {
+  'ABERTA':       'abrir',
+  'DELINEAMENTO': 'delinear',
+  'APROVACAO':    'delinear',
+  'EM_EXECUCAO':  'aprovar',
+  'EXECUTADA':    'executar',
+  'CONFERIDA':    'conferir',
+  'CANCELADA':    'cancelar'
+};
+
+function manNormalizar(s){
+  if (MAN_EQUIVALENCIA.hasOwnProperty(s)) return MAN_EQUIVALENCIA[s];
+  return s; // conhecido ou desconhecido: devolvido intacto
 }
+function manSemFluxo(s){ return MAN_EQUIVALENCIA.hasOwnProperty(s); }
+function manEhTerminal(s){ var n = manNormalizar(s); return n==='CONFERIDA' || n==='CANCELADA'; }
+function manPendente(s){ return !manEhTerminal(manNormalizar(s)); } // desconhecido conta como pendente, de propósito
+function manPasso(s){ var n = manNormalizar(s); return MAN_STATUS[n] ? MAN_STATUS[n].step : -1; }
+function manRotulo(s){
+  if (manSemFluxo(s)) return s;             // D-l7n-02: a palavra da própria linha, nunca a do estado equivalente
+  if (MAN_STATUS[s]) return MAN_STATUS[s].label;
+  return s;                                  // desconhecido: o próprio id
+}
+function manProximos(s){
+  var n = manNormalizar(s);
+  if (manEhTerminal(n)) return [];
+  var i = MAN_ORDEM.indexOf(n);
+  var out = [];
+  if (i>=0 && i+1<MAN_ORDEM.length) out.push(MAN_ORDEM[i+1]); // seguinte
+  if (i>0) out.push(MAN_ORDEM[i-1]);                           // anterior
+  out.push('CANCELADA');
+  return out;
+}
+function manPodeIrPara(atual, destino){ return manProximos(atual).indexOf(destino) >= 0; }
+function manDeltaT(insuflamento, retorno){
+  if (insuflamento===undefined||insuflamento===null||insuflamento===''||retorno===undefined||retorno===null||retorno==='') return null;
+  var ins = parseFloat(insuflamento), ret = parseFloat(retorno);
+  if (isNaN(ins) || isNaN(ret)) return null;
+  return Math.round((ret-ins)*10)/10; // ΔT é sempre derivado, nunca digitado
+}
+function manPodeCargo(acao, cargo){ return (MAN_ACOES_CARGO[acao]||[]).indexOf(cargo) >= 0; }
+function manClasseCard(s){
+  var n = manNormalizar(s);
+  if (n==='CONFERIDA') return 'concluida';
+  if (n==='CANCELADA') return 'cancelada';
+  if (n==='ABERTA') return 'pendente';
+  return 'parcial';
+}
+
+/* Régua com dois consumidores (D-l7n-10): o corpo de ctTimeline de hoje,
+   parametrizado. ctTimeline (bloco da contratação) vira a casca que injeta
+   CT_STEPS/CT_STATUS — CT_STATUS não é tocada. */
+function reguaPassos(passoAtual, passos){
+  if (passoAtual===-1) return '<div style="font-size:12px;color:#999;margin-bottom:8px"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelada</div>';
+  var h = '<div class="ct-timeline">';
+  passos.forEach(function(s,i){
+    var cls = i<passoAtual?'done':(i===passoAtual?'curr':'');
+    h += '<div class="ct-step '+cls+'"><div class="ct-dot">'+(i<passoAtual?'<i class="fas fa-check" aria-hidden="true"></i>':(i+1))+'</div><span>'+s+'</span></div>';
+    if(i<passos.length-1) h += '<div class="ct-bar '+(i<passoAtual?'done':'')+'"></div>';
+  });
+  return h+'</div>';
+}
+
+function statusPillOS(s){
+  if (manSemFluxo(s)) {
+    var clsLeg = s==='CONCLUÍDA'?'pill-ok':s==='PARCIAL'?'pill-ver':'pill-nok';
+    return '<span class="pill '+clsLeg+'" title="Registro direto — não percorreu as etapas de aprovação">'+esc(s)+'</span>';
+  }
+  if (MAN_STATUS[s]) {
+    var t = MAN_TONS[MAN_STATUS[s].tom] || MAN_TONS.neutro;
+    return '<span class="pill" style="background:'+t.bg+';color:'+t.fg+'">'+esc(MAN_STATUS[s].label)+'</span>';
+  }
+  var tu = MAN_TONS.neutro;
+  return '<span class="pill" style="background:'+tu.bg+';color:'+tu.fg+'">'+esc(s)+'</span>';
+}
+
+/* Dois wrappers que leem estado global — o gate testa a versão pura acima. */
+function manPode(acao){
+  if (window._modoObservador) return false;
+  return manPodeCargo(acao, ctUser && ctUser.role);
+}
+function manCargoAtual(){ return ctUser ? ctUser.role : ''; }
 
 function loadData(){ /* no-op: dados carregados via loadDataFromSupabase() */ }
 function saveData(){
@@ -1120,9 +1242,9 @@ function setOSChip(btn, val){
 
 function renderOS(){
   var all = getAllOSEntries().filter(function(o){
-    if(osChip==='pendente') return o.entry.status==='PENDENTE';
-    if(osChip==='concluida') return o.entry.status==='CONCLUÍDA';
-    if(osChip==='parcial') return o.entry.status==='PARCIAL';
+    if(osChip==='aberto') return manPendente(o.entry.status);
+    if(osChip==='aprovacao') return manNormalizar(o.entry.status)==='APROVACAO';
+    if(osChip==='concluida') return manNormalizar(o.entry.status)==='CONFERIDA';
     if(osChip==='critica') return autoCrit(o.equip)==='CRÍTICA';
     return true;
   });
@@ -1137,10 +1259,11 @@ function renderOS(){
 
   el('os-list').innerHTML = all.map(function(o){
     var st = o.entry.status||'PENDENTE';
-    var cls = st==='CONCLUÍDA'?'concluida':st==='PARCIAL'?'parcial':'pendente';
+    var cls = manClasseCard(st);
     var done = (o.entry.checklist||[]).filter(function(c){ return c.done; }).length;
     var total = (o.entry.checklist||[]).length;
-    return '<div class="os-card '+cls+'" onclick="openDetail('+o.equipId+')">' +
+    var abrir = MAN_FLUXO_OK ? "manAbrirOS('"+esc(o.entry.id||'')+"')" : ('openDetail('+o.equipId+')');
+    return '<div class="os-card '+cls+'" onclick="'+abrir+'">' +
       '<div class="os-hdr"><div><div class="os-local">'+esc(o.equip.local)+'</div>' +
       '<div class="os-predio">'+esc(o.equip.predio)+'</div></div>' +
       statusPillOS(st)+'</div>' +
@@ -1333,18 +1456,18 @@ function openDetail(id){
   if(logs.length){
     logHtml = '<div class="ds"><div class="ds-title"><i class="fas fa-history mr1" aria-hidden="true"></i>Histórico de Manutenção ('+logs.length+')</div>';
     logs.forEach(function(entry){
-      var stCls = entry.status==='CONCLUÍDA'?'pill-ok':entry.status==='PARCIAL'?'pill-ver':'pill-nok';
       var done = (entry.checklist||[]).filter(function(c){return c.done;}).length;
       var tot = (entry.checklist||[]).length;
       logHtml += '<div class="log-entry">' +
         '<div class="le-hdr">' +
         '<span class="le-date">'+fmtDate(entry.date)+'</span>' +
         '<span class="le-tipo">'+esc(entry.tipo||'')+'</span>' +
-        '<span class="le-status '+stCls+'">'+esc(entry.status||'')+'</span>' +
+        statusPillOS(entry.status) +
         '</div>' +
         (entry.tecnico?'<div class="le-tec"><i class="fas fa-user mr1" aria-hidden="true"></i>'+esc(entry.tecnico)+'</div>':'') +
         (entry.desc?'<div class="le-desc">'+esc(entry.desc)+'</div>':'') +
         (tot?'<div class="le-chk"><i class="fas fa-tasks mr1" aria-hidden="true"></i>'+done+'/'+tot+' itens do checklist</div>':'') +
+        (MAN_FLUXO_OK?'<button class="btn-sm" style="margin-top:4px;margin-right:6px;background:#E8ECF5;color:#1351B4" onclick="manAbrirOS(\''+esc(entry.id||'')+'\')"><i class="fas fa-clipboard-list mr1" aria-hidden="true"></i>Abrir OS</button>':'') +
         '<button class="le-del" onclick="delLog('+id+',\''+esc(entry.id||'')+'\')" style="margin-top:4px"><i class="fas fa-trash mr1" aria-hidden="true"></i>Excluir</button>' +
         '</div>';
     });
@@ -1398,19 +1521,28 @@ function openLogForm(equipId){
   el('dh-predio').textContent = e.predio;
   el('dh-pills').innerHTML = statusPill(e.funciona)+critPill(autoCrit(e));
 
+  // MAN_FLUXO_OK desligado: formulário byte a byte o de hoje, com o select de status (D-l7n-06).
+  var tituloDados = MAN_FLUXO_OK ? 'Problema Relatado' : 'Dados da Manutenção';
+  var lblDesc = MAN_FLUXO_OK ? 'Problema relatado / serviço solicitado' : 'Descrição / Serviços Realizados';
+  var statusHtml = MAN_FLUXO_OK ? '' :
+    '<div><label class="fgl">Status</label><select class="fgs fg-full" id="log-status">' +
+    '<option value="CONCLUÍDA">CONCLUÍDA</option><option value="PARCIAL">PARCIAL</option><option value="PENDENTE">PENDENTE</option>' +
+    '</select></div>';
+  var avisoFluxo = MAN_FLUXO_OK ?
+    '<div style="font-size:11px;color:#888;margin-top:6px"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>A OS nasce aberta — o gestor autoriza antes da execução e confere depois.</div>' : '';
+
   el('drawer-body').innerHTML =
     '<div class="ds">' +
-    '<div class="ds-title"><i class="fas fa-clipboard-check mr1" aria-hidden="true"></i>Dados da Manutenção</div>' +
+    '<div class="ds-title"><i class="fas fa-clipboard-check mr1" aria-hidden="true"></i>'+tituloDados+'</div>' +
     '<div class="fg2">' +
     '<div><label class="fgl">Data</label><input class="fgi" id="log-date" type="date" value="'+today()+'"/></div>' +
     '<div><label class="fgl">Tipo</label><select class="fgs" id="log-tipo">'+tipoOpts+'</select></div>' +
-    '<div><label class="fgl">Status</label><select class="fgs fg-full" id="log-status">' +
-    '<option value="CONCLUÍDA">CONCLUÍDA</option><option value="PARCIAL">PARCIAL</option><option value="PENDENTE">PENDENTE</option>' +
-    '</select></div>' +
+    statusHtml +
     '<div class="fg-full"><label class="fgl">Técnico Responsável</label><input class="fgi" id="log-tec" type="text" placeholder="Nome do técnico"/></div>' +
     '</div>' +
-    '<label class="fgl">Descrição / Serviços Realizados</label>' +
+    '<label class="fgl">'+lblDesc+'</label>' +
     '<textarea class="fgt" id="log-desc" placeholder="Descreva os serviços, peças trocadas, pendências…"></textarea>' +
+    avisoFluxo +
     '</div>' +
     '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-tasks mr1" aria-hidden="true"></i>Checklist PMOC — '+esc(e.tipo)+'</div>' +
@@ -1425,7 +1557,7 @@ function openLogForm(equipId){
   });
   el('drawer-footer').innerHTML =
     '<button class="btn-secondary" onclick="openDetail('+equipId+')">Cancelar</button>' +
-    '<button class="btn-primary" onclick="saveLogEntry('+equipId+','+clist.length+')"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar</button>';
+    '<button class="btn-primary" onclick="saveLogEntry('+equipId+','+clist.length+')"><i class="fas fa-save mr1" aria-hidden="true"></i>'+(MAN_FLUXO_OK?'Abrir OS':'Salvar')+'</button>';
 }
 
 function updateChkCnt(){
@@ -1457,7 +1589,7 @@ async function atualizarUltimaManutencao(equipId, data){
 
 async function saveLogEntry(equipId, clistLen){
   if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
-  var date=val('log-date'), tipo=val('log-tipo'), status=val('log-status');
+  var date=val('log-date'), tipo=val('log-tipo');
   if(!date||!tipo){ showToast('Preencha data e tipo','error'); return; }
   var checklist=[];
   for(var i=0;i<clistLen;i++){
@@ -1465,6 +1597,17 @@ async function saveLogEntry(equipId, clistLen){
     var lbl=el('drawer-body').querySelectorAll('.chk-item span')[i];
     if(chk&&lbl) checklist.push({i:i,label:lbl.textContent.trim(),done:chk.checked});
   }
+  if (MAN_FLUXO_OK) {
+    // A OS nasce ABERTA — o status nunca é lido de campo (D-l7n-06/11).
+    if (!manPode('abrir')) { showToast('Sem permissão para abrir OS', 'error'); return; }
+    var logIdMan = await addLogEntryAsync(equipId,{date:date,tipo:tipo,status:'ABERTA',tecnico:val('log-tec').trim(),desc:val('log-desc').trim(),checklist:checklist});
+    if (!logIdMan) return;
+    showToast('OS aberta com sucesso','ok');
+    manAbrirOS(logIdMan);
+    setTimeout(function(){ renderDash(); }, 100);
+    return;
+  }
+  var status=val('log-status');
   var logId = await addLogEntryAsync(equipId,{date:date,tipo:tipo,status:status,tecnico:val('log-tec').trim(),desc:val('log-desc').trim(),checklist:checklist});
   if(logId && status==='CONCLUÍDA') await atualizarUltimaManutencao(equipId, date);
   showToast('OS registrada com sucesso','ok');
@@ -1479,6 +1622,148 @@ async function delLog(equipId, logId){
   showToast('Registro excluído','del');
   openDetail(equipId);
   renderDash();
+}
+
+/* ── fluxo da OS interna: tela e ações ── */
+function manEntrada(logId){
+  var achado = null;
+  Object.keys(_logCache).forEach(function(equipIdStr){
+    (_logCache[equipIdStr]||[]).forEach(function(entry){
+      if (entry.id === logId) {
+        var equipId = parseInt(equipIdStr);
+        achado = { equipId: equipId, equip: DATA.find(function(r){ return r.id===equipId; }), entry: entry };
+      }
+    });
+  });
+  return achado;
+}
+
+function manAbrirOS(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  var equipId = achado.equipId, e = achado.equip || {local:'—',predio:''}, entry = achado.entry;
+  var st = entry.status;
+
+  el('dh-id').textContent = 'OS · #'+equipId;
+  el('dh-local').textContent = e.local;
+  el('dh-predio').textContent = e.predio;
+  el('dh-pills').innerHTML = statusPillOS(st);
+
+  var h = '';
+  if (manSemFluxo(st)) {
+    // D-l7n-02: linha sem fluxo não mostra régua — afirmaria uma aprovação que ninguém deu.
+    h += '<div style="font-size:12px;color:#999;margin-bottom:8px"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>Registro direto — não percorreu as etapas de aprovação.</div>';
+  } else {
+    h += reguaPassos(manPasso(st), MAN_STEPS);
+  }
+
+  var done = (entry.checklist||[]).filter(function(c){ return c.done; }).length;
+  var tot = (entry.checklist||[]).length;
+  h += '<div class="ds"><div class="ds-title"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i>1 · Abertura</div>' +
+    '<div class="dfields2">' +
+    '<div class="dfield"><label>Data</label><div class="dval" style="font-size:13px">'+fmtDate(entry.date)+'</div></div>' +
+    '<div class="dfield"><label>Tipo</label><div class="dval" style="font-size:13px">'+esc(entry.tipo||'—')+'</div></div>' +
+    '</div>' +
+    (entry.tecnico?'<div class="dfield"><label>Técnico</label><div class="dval" style="font-size:13px">'+esc(entry.tecnico)+'</div></div>':'') +
+    (entry.desc?'<div class="dfield"><label>Problema relatado</label><div class="dval" style="font-size:13px">'+esc(entry.desc)+'</div></div>':'') +
+    (tot?'<div class="le-chk"><i class="fas fa-tasks mr1" aria-hidden="true"></i>'+done+'/'+tot+' itens do checklist</div>':'') +
+    '</div>';
+
+  if (!manSemFluxo(st)) {
+    /* 2 · Delineamento */
+    h += '<div class="ds"><div class="ds-title"><i class="fas fa-stethoscope mr1" aria-hidden="true"></i>2 · Delineamento</div>';
+    if (entry.delineadoPor) {
+      h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Delineado por '+esc(entry.delineadoPor)+' em '+fmtDate((entry.delineadoEm||'').slice(0,10))+'</div>';
+    }
+    if (st==='ABERTA' && manPode('delinear') && manPodeIrPara(st,'DELINEAMENTO')) {
+      h += '<button class="btn-primary" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'DELINEAMENTO\')"><i class="fas fa-play mr1" aria-hidden="true"></i>Iniciar delineamento</button>';
+    }
+    if (st==='DELINEAMENTO' && manPode('delinear') && manPodeIrPara(st,'APROVACAO')) {
+      h += '<label class="fgl" style="margin-top:8px">Diagnóstico / serviços a executar</label>' +
+        '<textarea class="fgt" id="man-delin-desc">'+esc(entry.desc||'')+'</textarea>' +
+        '<button class="btn-primary" style="width:100%;margin-top:8px" onclick="manDelinear(\''+esc(logId)+'\')"><i class="fas fa-paper-plane mr1" aria-hidden="true"></i>Enviar para aprovação</button>';
+    }
+    if (entry.parecerAprovacao && (st==='DELINEAMENTO'||st==='APROVACAO')) {
+      h += '<div style="margin-top:8px;font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida: '+esc(entry.parecerAprovacao)+'</div>';
+    }
+    if (entry.aprovador) {
+      h += '<div style="margin-top:8px;font-size:11px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovado por '+esc(entry.aprovador)+' em '+fmtDate(entry.dataAprovacao)+'</div>';
+    }
+    if (st==='APROVACAO' && manPode('aprovar') && manPodeIrPara(st,'EM_EXECUCAO')) {
+      h += '<div class="ct-btn-row">' +
+        '<button class="btn-success" onclick="manAprovar(\''+esc(logId)+'\')"><i class="fas fa-check mr1" aria-hidden="true"></i>Aprovar</button>' +
+        '<button class="btn-danger" onclick="manDevolver(\''+esc(logId)+'\')"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button></div>';
+    }
+    h += '</div>';
+
+    /* 3 · Execução — preenchido na Task 3 (evidência: fotos + medições) */
+    h += '<div class="ds"><div class="ds-title"><i class="fas fa-hard-hat mr1" aria-hidden="true"></i>3 · Execução</div>' +
+      '<div style="font-size:12px;color:#999">Nenhuma evidência registrada ainda.</div></div>';
+
+    /* 4 · Conferência — preenchido na Task 3 */
+    h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Conferência</div>';
+    if (entry.conferente) {
+      h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Conferido por '+esc(entry.conferente)+' em '+fmtDate(entry.dataConferencia)+'</div>' +
+        (entry.parecerConferencia?'<div class="le-desc" style="margin-top:4px">'+esc(entry.parecerConferencia)+'</div>':'');
+    } else {
+      h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
+    }
+    h += '</div>';
+  }
+
+  el('drawer-body').innerHTML = h;
+
+  var foot = '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>';
+  if (manPode('cancelar') && manPodeIrPara(st,'CANCELADA')) {
+    foot += '<button class="btn-danger" style="flex:1" onclick="manCancelar(\''+esc(logId)+'\')"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelar OS</button>';
+  }
+  el('drawer-footer').innerHTML = foot;
+  openDrawer();
+}
+
+async function manMudarStatus(logId, novo){
+  var achado = manEntrada(logId); if(!achado) return;
+  var atual = achado.entry.status;
+  var acao = MAN_ACAO_DESTINO[novo];
+  if (!manPodeIrPara(atual, novo) || !manPode(acao)) { showToast('Ação não permitida','error'); return; }
+  var ok = await manAtualizarOS(logId, achado.equipId, {status:novo});
+  if (ok) { manAbrirOS(logId); renderOS(); }
+}
+
+async function manDelinear(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  var texto = (val('man-delin-desc')||'').trim();
+  if(!texto){ showToast('Descreva o diagnóstico','error'); return; }
+  if(!manPodeIrPara(achado.entry.status,'APROVACAO') || !manPode('delinear')){ showToast('Ação não permitida','error'); return; }
+  var nome = ctUser?ctUser.nome:'';
+  var ok = await manAtualizarOS(logId, achado.equipId, {status:'APROVACAO', desc:texto, delineadoPor:nome, delineadoEm:new Date().toISOString()});
+  if (ok) { manAbrirOS(logId); renderOS(); }
+}
+
+async function manAprovar(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  if(!manPodeIrPara(achado.entry.status,'EM_EXECUCAO') || !manPode('aprovar')){ showToast('Ação não permitida','error'); return; }
+  var nome = ctUser?ctUser.nome:'';
+  var ok = await manAtualizarOS(logId, achado.equipId, {status:'EM_EXECUCAO', aprovador:nome, dataAprovacao:today(), parecerAprovacao:null}, 'OS aprovada');
+  if (ok) { manAbrirOS(logId); renderOS(); }
+}
+
+async function manDevolver(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  var motivo = prompt('Motivo da devolução do orçamento:');
+  if (motivo===null) return;
+  motivo = motivo.trim();
+  if (!motivo) { showToast('Informe o motivo da devolução','error'); return; }
+  if(!manPodeIrPara(achado.entry.status,'DELINEAMENTO') || !manPode('aprovar')){ showToast('Ação não permitida','error'); return; }
+  var ok = await manAtualizarOS(logId, achado.equipId, {status:'DELINEAMENTO', parecerAprovacao:motivo}, 'Devolvida p/ ajuste');
+  if (ok) { manAbrirOS(logId); renderOS(); }
+}
+
+async function manCancelar(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  if(!confirm('Cancelar esta OS?')) return;
+  if(!manPodeIrPara(achado.entry.status,'CANCELADA') || !manPode('cancelar')){ showToast('Ação não permitida','error'); return; }
+  var ok = await manAtualizarOS(logId, achado.equipId, {status:'CANCELADA'}, 'OS cancelada');
+  if (ok) { closeDrawer(); renderOS(); }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1918,16 +2203,11 @@ function ctCompTotal(osId){
   },0);
 }
 
+/* D-l7n-10: régua com dois consumidores — casca que injeta CT_STATUS/CT_STEPS
+   sobre reguaPassos (bloco de vocabulário do fluxo interno). CT_STATUS não é
+   tocada. */
 function ctTimeline(status){
-  var cur = (CT_STATUS[status]||{}).step;
-  if(cur===-1) return '<div style="font-size:12px;color:#999;margin-bottom:8px"><i class="fas fa-ban mr1" aria-hidden="true"></i>OS cancelada</div>';
-  var h = '<div class="ct-timeline">';
-  CT_STEPS.forEach(function(s,i){
-    var cls = i<cur?'done':(i===cur?'curr':'');
-    h += '<div class="ct-step '+cls+'"><div class="ct-dot">'+(i<cur?'<i class="fas fa-check" aria-hidden="true"></i>':(i+1))+'</div><span>'+s+'</span></div>';
-    if(i<CT_STEPS.length-1) h += '<div class="ct-bar '+(i<cur?'done':'')+'"></div>';
-  });
-  return h+'</div>';
+  return reguaPassos((CT_STATUS[status]||{}).step, CT_STEPS);
 }
 
 function ctOpenOS(osId){

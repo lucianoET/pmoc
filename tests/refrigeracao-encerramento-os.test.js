@@ -162,9 +162,103 @@ test('erro na consulta de logs_manutencao devolve false sem lançar exceção', 
   assert.strictEqual(ctx._warns.length, 1);
 });
 
-test('saveLogEntry chama atualizarUltimaManutencao', () => {
-  const corpo = recorte('async function saveLogEntry(', 'async function delLog(');
-  assert.match(corpo, /await atualizarUltimaManutencao\(/);
+// 260821-l7n (Task 2): a asserção solta de "saveLogEntry chama atualizarUltimaManutencao"
+// deixou de ser fiel — com o fluxo de aprovação ligado, criar a OS NÃO grava última
+// manutenção (D-l7n-11: quem encerra é a conferência do gestor, não a abertura). A
+// asserção agora fixa o GUARDA nos dois lados, executando saveLogEntry de ponta a ponta
+// com um supa/DOM controlados, não só verificando que a chamada aparece no texto da função.
+function carregarSandboxSaveLogEntry(opts) {
+  opts = opts || {};
+  const updatesEquip = [];
+  const insercoes = [];
+  const chamadas = { manAbrirOS: 0, openDetail: 0, manPode: 0 };
+
+  const campos = {
+    'log-date': opts.date !== undefined ? opts.date : '2026-08-21',
+    'log-tipo': opts.tipo !== undefined ? opts.tipo : 'PREVENTIVA',
+    'log-status': opts.status !== undefined ? opts.status : 'CONCLUÍDA',
+    'log-tec': opts.tecnico || '',
+    'log-desc': opts.desc || '',
+  };
+
+  const ctx = {
+    MAN_FLUXO_OK: !!opts.fluxoLigado,
+    DATA: opts.data || [],
+    window: { _modoObservador: !!opts.observador },
+    showToast(msg, tipo) { ctx._toasts.push({ msg, tipo }); },
+    _toasts: [],
+    console: { warn() {}, error() {} },
+    today() { return '2026-08-21'; },
+    val(id) { return campos[id] !== undefined ? campos[id] : ''; },
+    el(id) {
+      // clistLen=0 nos testes — o laço do checklist nunca entra, então el() não
+      // precisa suportar querySelectorAll de verdade aqui.
+      return { querySelectorAll() { return []; } };
+    },
+    manPode(acao) { chamadas.manPode++; return opts.podeAbrir !== false; },
+    manAbrirOS(logId) { chamadas.manAbrirOS++; },
+    openDetail(equipId) { chamadas.openDetail++; },
+    renderDash() {},
+    setTimeout() {}, // sandbox vm não tem timers de navegador/Node por padrão
+    supa: {
+      from(tabela) {
+        if (tabela === 'equipamentos') {
+          return {
+            update(patch) {
+              return {
+                eq(col, val) {
+                  updatesEquip.push({ patch, col, val });
+                  return Promise.resolve({ error: null });
+                },
+              };
+            },
+          };
+        }
+        throw new Error('tabela inesperada: ' + tabela);
+      },
+    },
+    addLogEntryAsync(equipId, entry) {
+      const id = 'log-' + (insercoes.length + 1);
+      insercoes.push({ id, equipId, entry });
+      return Promise.resolve(id);
+    },
+  };
+  vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── encerramento de OS: última manutenção ── */', 'async function saveLogEntry('), ctx);
+  vm.runInContext(recorte('async function saveLogEntry(', 'async function delLog('), ctx);
+  ctx._updatesEquip = updatesEquip;
+  ctx._insercoes = insercoes;
+  ctx._chamadas = chamadas;
+  return ctx;
+}
+
+test('saveLogEntry com o fluxo desligado: grava status CONCLUÍDA e chama atualizarUltimaManutencao (comportamento de hoje, D-l7n-06)', async () => {
+  const equip = { id: 40, ultimaManutencao: '' };
+  const ctx = carregarSandboxSaveLogEntry({ fluxoLigado: false, status: 'CONCLUÍDA', data: [equip] });
+  await ctx.saveLogEntry(40, 0);
+  assert.strictEqual(ctx._insercoes.length, 1);
+  assert.strictEqual(ctx._insercoes[0].entry.status, 'CONCLUÍDA');
+  assert.strictEqual(ctx._updatesEquip.length, 1); // atualizarUltimaManutencao gravou
+  assert.strictEqual(ctx._chamadas.openDetail, 1);
+  assert.strictEqual(ctx._chamadas.manAbrirOS, 0);
+});
+
+test('saveLogEntry com o fluxo ligado: OS nasce ABERTA, status nunca lido do formulário, e NÃO grava última manutenção (D-l7n-11)', async () => {
+  const equip = { id: 41, ultimaManutencao: '' };
+  const ctx = carregarSandboxSaveLogEntry({ fluxoLigado: true, status: 'CONCLUÍDA', data: [equip] });
+  await ctx.saveLogEntry(41, 0);
+  assert.strictEqual(ctx._insercoes.length, 1);
+  assert.strictEqual(ctx._insercoes[0].entry.status, 'ABERTA'); // status fixo, não o valor do select
+  assert.strictEqual(ctx._updatesEquip.length, 0); // D-l7n-11: nada de última manutenção na abertura
+  assert.strictEqual(ctx._chamadas.manAbrirOS, 1);
+  assert.strictEqual(ctx._chamadas.openDetail, 0);
+});
+
+test('saveLogEntry com o fluxo ligado recusa sem permissão para abrir', async () => {
+  const ctx = carregarSandboxSaveLogEntry({ fluxoLigado: true, podeAbrir: false, data: [] });
+  await ctx.saveLogEntry(41, 0);
+  assert.strictEqual(ctx._insercoes.length, 0);
+  assert.strictEqual(ctx._toasts.some((t) => t.tipo === 'error'), true);
 });
 
 test('ctCertificar chama ctEncerrarHistorico', () => {

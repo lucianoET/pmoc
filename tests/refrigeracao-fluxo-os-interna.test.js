@@ -275,6 +275,143 @@ test('o ramo de UPDATE existe no handler de realtime de logs_manutencao e substi
   assert.match(corpo, /dbToLog\(p\.new\)/);
 });
 
+// ══════════════════════════════════════════════════════════════════
+// Task 2 — vocabulário, régua, transições, cargos (D-l7n-01/02/04/05/10)
+// ══════════════════════════════════════════════════════════════════
+
+function carregarVocabulario() {
+  // esc() real do arquivo (utilitário fora do recorte) — reproduzido aqui para o teste
+  // de escape do statusPillOS ser fiel ao comportamento real, não a um mock permissivo.
+  const ctx = {
+    esc(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+  };
+  vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
+  return ctx;
+}
+
+test('manProximos(APROVACAO) contém o seguinte, o anterior e o cancelamento — nada mais; terminais são vazios (D-l7n-04)', () => {
+  const ctx = carregarVocabulario();
+  const prox = ctx.manProximos('APROVACAO');
+  assert.strictEqual(prox.length, 3);
+  assert.ok(prox.includes('EM_EXECUCAO'));
+  assert.ok(prox.includes('DELINEAMENTO'));
+  assert.ok(prox.includes('CANCELADA'));
+  assert.strictEqual(ctx.manProximos('CONFERIDA').length, 0);
+  assert.strictEqual(ctx.manProximos('CANCELADA').length, 0);
+});
+
+test('manPodeIrPara(ABERTA,EM_EXECUCAO) é falso — não se pula a aprovação', () => {
+  const ctx = carregarVocabulario();
+  assert.strictEqual(ctx.manPodeIrPara('ABERTA', 'EM_EXECUCAO'), false);
+});
+
+test('manPodeCargo: aprovar/conferir só para admin/gestor; executar também para tecnico; nenhum papel de contratação aparece (D-l7n-05)', () => {
+  const ctx = carregarVocabulario();
+  assert.strictEqual(ctx.manPodeCargo('aprovar', 'tecnico'), false);
+  assert.strictEqual(ctx.manPodeCargo('conferir', 'tecnico'), false);
+  assert.strictEqual(ctx.manPodeCargo('aprovar', 'gestor'), true);
+  assert.strictEqual(ctx.manPodeCargo('aprovar', 'admin'), true);
+  assert.strictEqual(ctx.manPodeCargo('conferir', 'gestor'), true);
+  assert.strictEqual(ctx.manPodeCargo('conferir', 'admin'), true);
+  assert.strictEqual(ctx.manPodeCargo('executar', 'tecnico'), true);
+  Object.keys(ctx.MAN_ACOES_CARGO).forEach((acao) => {
+    ['empresa', 'fiscal', 'executor'].forEach((cargo) => {
+      assert.strictEqual(ctx.manPodeCargo(acao, cargo), false, `"${cargo}" não deveria poder "${acao}"`);
+    });
+  });
+});
+
+test('manNormalizar traduz os três do legado, devolve intacto um status conhecido, e devolve intacto um status inventado', () => {
+  const ctx = carregarVocabulario();
+  assert.strictEqual(ctx.manNormalizar('PENDENTE'), 'ABERTA');
+  assert.strictEqual(ctx.manNormalizar('PARCIAL'), 'EM_EXECUCAO');
+  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONFERIDA');
+  assert.strictEqual(ctx.manNormalizar('APROVACAO'), 'APROVACAO');
+  assert.strictEqual(ctx.manNormalizar('ESTADO_INVENTADO'), 'ESTADO_INVENTADO'); // nunca vira ABERTA por baixo do pano
+});
+
+test('manSemFluxo é verdadeiro para os três do legado e falso para os sete do fluxo novo', () => {
+  const ctx = carregarVocabulario();
+  ['PENDENTE', 'PARCIAL', 'CONCLUÍDA'].forEach((s) => assert.strictEqual(ctx.manSemFluxo(s), true));
+  ['ABERTA', 'DELINEAMENTO', 'APROVACAO', 'EM_EXECUCAO', 'EXECUTADA', 'CONFERIDA', 'CANCELADA'].forEach((s) => {
+    assert.strictEqual(ctx.manSemFluxo(s), false);
+  });
+});
+
+test('manPendente conta os dois abertos do legado e os cinco estados não terminais; não conta os dois terminais nem o concluído do legado', () => {
+  const ctx = carregarVocabulario();
+  ['PENDENTE', 'PARCIAL'].forEach((s) => assert.strictEqual(ctx.manPendente(s), true));
+  ['ABERTA', 'DELINEAMENTO', 'APROVACAO', 'EM_EXECUCAO', 'EXECUTADA'].forEach((s) => assert.strictEqual(ctx.manPendente(s), true));
+  assert.strictEqual(ctx.manPendente('CONFERIDA'), false);
+  assert.strictEqual(ctx.manPendente('CANCELADA'), false);
+  assert.strictEqual(ctx.manPendente('CONCLUÍDA'), false);
+});
+
+test('a equivalência agrupa sem renomear (D-l7n-01/02): a pílula do concluído legado tem a palavra dele, nunca a do terminal novo; um status inventado sai escapado', () => {
+  const ctx = carregarVocabulario();
+  const pillLegado = ctx.statusPillOS('CONCLUÍDA');
+  assert.ok(pillLegado.indexOf('CONCLUÍDA') >= 0);
+  assert.ok(pillLegado.indexOf('Conferida') < 0);
+  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONFERIDA'); // mesmo caindo junto no chip "Concluída"
+  const pillDesconhecido = ctx.statusPillOS('ALGO_ESTRANHO<script>');
+  assert.ok(pillDesconhecido.indexOf('ALGO_ESTRANHO') >= 0);
+  assert.ok(pillDesconhecido.indexOf('<script>') < 0); // esc() ativo
+});
+
+test('reguaPassos com a lista da contratação e com a lista do fluxo interno produz o número de etapas de cada uma (D-l7n-10)', () => {
+  const ctx = carregarVocabulario();
+  const CT_STEPS = ['Solicit.', 'Orçam.', 'Aprov.', 'Execução', 'Fiscal', 'NF', 'Encerr.'];
+  const h1 = ctx.reguaPassos(2, CT_STEPS);
+  const h2 = ctx.reguaPassos(2, ctx.MAN_STEPS);
+  assert.strictEqual((h1.match(/ct-dot/g) || []).length, CT_STEPS.length);
+  assert.strictEqual((h2.match(/ct-dot/g) || []).length, ctx.MAN_STEPS.length);
+  assert.strictEqual(ctx.MAN_STEPS.length, 6);
+});
+
+test('reguaPassos(-1, …) devolve a frase de cancelamento, não a régua', () => {
+  const ctx = carregarVocabulario();
+  const h = ctx.reguaPassos(-1, ctx.MAN_STEPS);
+  assert.ok(h.indexOf('ct-timeline') < 0);
+  assert.match(h, /[Cc]ancelad/);
+});
+
+test('manClasseCard mapeia os sete estados nas quatro classes de borda', () => {
+  const ctx = carregarVocabulario();
+  assert.strictEqual(ctx.manClasseCard('CONFERIDA'), 'concluida');
+  assert.strictEqual(ctx.manClasseCard('CANCELADA'), 'cancelada');
+  assert.strictEqual(ctx.manClasseCard('ABERTA'), 'pendente');
+  ['DELINEAMENTO', 'APROVACAO', 'EM_EXECUCAO', 'EXECUTADA'].forEach((s) => {
+    assert.strictEqual(ctx.manClasseCard(s), 'parcial');
+  });
+});
+
+test('o corpo de saveLogEntry grava o status inicial fixo e não lê o campo de status no ramo do fluxo ligado', () => {
+  const corpo = recorte('async function saveLogEntry(', 'async function delLog(');
+  const iniFluxo = corpo.indexOf('if (MAN_FLUXO_OK) {');
+  const fimFluxo = corpo.indexOf('\n  var status=val');
+  assert.ok(iniFluxo > 0 && fimFluxo > iniFluxo, 'ramo MAN_FLUXO_OK não encontrado em saveLogEntry');
+  const ramoLigado = corpo.slice(iniFluxo, fimFluxo);
+  assert.match(ramoLigado, /status:'ABERTA'/);
+  assert.doesNotMatch(ramoLigado, /val\('log-status'\)/);
+});
+
+test('o corpo de renderOS chama manPendente( e manClasseCard(', () => {
+  const corpo = recorte('function renderOS(){', 'function openNewOS(){');
+  assert.match(corpo, /manPendente\(/);
+  assert.match(corpo, /manClasseCard\(/);
+});
+
+test('o corpo do drawer da OS interna chama manPode( e manPodeIrPara( no mesmo bloco de cada botão de gestor', () => {
+  const corpo = recorte('/* ── fluxo da OS interna: tela e ações ── */', "\n/* ═══");
+  // Aprovar/Devolver e Cancelar são os botões de gestor (aprovar/conferir/cancelar, D-l7n-05).
+  assert.match(corpo, /manPode\('aprovar'\)\s*&&\s*manPodeIrPara\(/);
+  assert.match(corpo, /manPode\('cancelar'\)\s*&&\s*manPodeIrPara\(/);
+});
+
 test('os quatro grep do PLAT-15 continuam em 0', () => {
   for (const padrao of ['shared/', 'pmoc.css', 'pmoc-tema', 'data-theme']) {
     assert.strictEqual((HTML.match(new RegExp(padrao.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length, 0, `"${padrao}" apareceu em refrigeracao/index.html`);

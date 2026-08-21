@@ -9,6 +9,14 @@
 // tests/inventario-ordem-refrigeracao.test.js. `ctEvtTexto` é puro e recortado sozinho.
 // As últimas asserções são de presença/ausência de texto, recortadas na região onde
 // valem — única forma de conferir fiação num app single-file sem montar o DOM inteiro.
+//
+// 260821-l7n (Task 2): contarOSPendentes passou a delegar em manPendente() — o vocabulário
+// do fluxo de aprovação da OS interna, que muda o SENTIDO de "pendente" (agora inclui todo
+// estado não terminal, legado e novo). Um gate que continuasse recortando só o bloco de
+// alertas ficaria verde por acaso (ReferenceError silenciado por acidente nenhum, mas cego
+// ao novo sentido) — por isso o mesmo contexto do sandbox agora roda DOIS recortes
+// (`vm.runInContext` duas vezes, como tests/refrigeracao-encerramento-os.test.js já faz):
+// o bloco de alertas E o bloco de vocabulário/transições.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -18,11 +26,14 @@ const path = require('node:path');
 
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'refrigeracao', 'index.html'), 'utf8');
 
-function carregarNucleoAlertas() {
-  const ini = HTML.indexOf('/* ── alertas: contagem única ── */');
-  const fim = HTML.indexOf('function dueBadgeHtml(');
-  assert.ok(ini > 0 && fim > ini, 'bloco "alertas: contagem única" não encontrado em refrigeracao/index.html');
+function recorte(marcadorIni, marcadorFim) {
+  const ini = HTML.indexOf(marcadorIni);
+  const fim = HTML.indexOf(marcadorFim, ini);
+  assert.ok(ini > 0 && fim > ini, `recorte "${marcadorIni}" → "${marcadorFim}" não encontrado`);
+  return HTML.slice(ini, fim);
+}
 
+function carregarNucleoAlertas() {
   const ctx = {
     // nextPmoc controlado: cada equipamento traz _prox (dias a partir de 21/08/2026,
     // negativo = vencido, null/undefined = sem histórico — igual ao teste de inventário).
@@ -37,7 +48,10 @@ function carregarNucleoAlertas() {
     getLatestLogDate() { return null; },
   };
   vm.createContext(ctx);
-  vm.runInContext(HTML.slice(ini, fim), ctx);
+  // bloco de alertas (contarOSPendentes chama manPendente, definido no bloco de vocabulário)
+  vm.runInContext(recorte('/* ── alertas: contagem única ── */', 'function dueBadgeHtml('), ctx);
+  // bloco de vocabulário e transições do fluxo da OS interna (260821-l7n)
+  vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
   return ctx;
 }
 
@@ -51,13 +65,25 @@ function carregarCtEvtTexto() {
   return ctx;
 }
 
-test('contarOSPendentes ignora o status de primeiro nível e lê o de dentro de entry (defeito 1a)', () => {
+test('contarOSPendentes ignora o status de primeiro nível e lê o de dentro de entry (defeito 1a) — continua valendo: PENDENTE (legado) conta, CONCLUÍDA (legado, terminal via equivalência) não', () => {
   const ctx = carregarNucleoAlertas();
   const entradas = [
     { status: 'PENDENTE', entry: { status: 'CONCLUÍDA' } }, // forma exata do defeito 1a — não pode contar
     { entry: { status: 'PENDENTE' } },
   ];
   assert.strictEqual(ctx.contarOSPendentes(entradas), 1);
+});
+
+test('contarOSPendentes (260821-l7n): PARCIAL do legado e EM_EXECUCAO do fluxo novo contam; CANCELADA, CONFERIDA e CONCLUÍDA (legado) não contam', () => {
+  const ctx = carregarNucleoAlertas();
+  const entradas = [
+    { entry: { status: 'PARCIAL' } },       // legado, não terminal via equivalência (EM_EXECUCAO)
+    { entry: { status: 'EM_EXECUCAO' } },   // fluxo novo, não terminal
+    { entry: { status: 'CANCELADA' } },     // terminal
+    { entry: { status: 'CONFERIDA' } },     // terminal
+    { entry: { status: 'CONCLUÍDA' } },     // legado, terminal via equivalência
+  ];
+  assert.strictEqual(ctx.contarOSPendentes(entradas), 2);
 });
 
 test('alertasPmoc conta um equipamento NOK-e-sem-histórico uma única vez no total e nas duas parcelas', () => {
