@@ -353,18 +353,91 @@ const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 /* ── CONVERSORES ── */
 function dbToEquip(r) {
-  return {
-    id: r.id, area: r.area, predio: r.predio, local: r.local,
-    tipo: r.tipo, fabricante: r.fabricante || '', btu: r.btu || 0,
-    funciona: r.funciona, estado: r.estado, obs: r.obs || '',
-    refrigPermanente: r.refrig_permanente,
-    horasDia: r.horas_dia, diasSemana: r.dias_semana,
-    criticidade: r.criticidade, criticidadeManual: r.criticidade_manual,
-    tensao: r.tensao, correnteNominal: parseFloat(r.corrente_nominal) || 0,
-    patrimonio: r.patrimonio || '',
-    dataInstalacao: r.data_instalacao || '',
-    ultimaManutencao: r.ultima_manutencao || ''
-  };
+  var o = {};
+  Object.keys(CAMPOS_EQUIP).forEach(function(k){ o[k] = r[CAMPOS_EQUIP[k]]; });
+  o.fabricante = o.fabricante || '';
+  o.btu = o.btu || 0;
+  o.obs = o.obs || '';
+  o.patrimonio = o.patrimonio || '';
+  o.dataInstalacao = o.dataInstalacao || '';
+  o.ultimaManutencao = o.ultimaManutencao || '';
+  o.correnteNominal = parseFloat(o.correnteNominal) || 0;
+  /* criticidadeManual: `equipamentos.criticidade_manual` NÃO EXISTE no banco
+     (conferido nas migrações 04+19+25+41) — pendência conhecida, não consertada
+     por este task (ponto 3 do briefing). autoCrit() devolve e.criticidade nos
+     três ramos independente deste valor; a linha fica de propósito FORA de
+     CAMPOS_EQUIP (D-q57-08) para o gate afirmar a ausência da coluna. */
+  o.criticidadeManual = r.criticidade_manual;
+  return o;
+}
+
+/* ── ponte de campos de equipamentos ── */
+/* Mesma ideia de CAMPOS_LOG (abaixo): chave camelCase do app → nome de coluna,
+   cobrindo a tabela inteira — um campo fora daqui é gravado como null sem erro
+   nenhum (lição paga em /calibracao e repetida em CAMPOS_LOG). `dbToEquip` lê
+   por aqui; `equipParaDb` grava por aqui, mas só o que estiver TAMBÉM em
+   EQUIP_EDITAVEIS (D-q57-08) — duas guardas, não uma. */
+var CAMPOS_EQUIP = {
+  id: 'id', area: 'area', predio: 'predio', local: 'local', tipo: 'tipo',
+  fabricante: 'fabricante', modelo: 'modelo', btu: 'btu',
+  funciona: 'funciona', estado: 'estado', obs: 'obs',
+  refrigPermanente: 'refrig_permanente', horasDia: 'horas_dia', diasSemana: 'dias_semana',
+  criticidade: 'criticidade', tensao: 'tensao', correnteNominal: 'corrente_nominal',
+  patrimonio: 'patrimonio', dataFabricacao: 'data_fabricacao', dataInstalacao: 'data_instalacao',
+  ultimaManutencao: 'ultima_manutencao', refrigerante: 'refrigerante',
+  link: 'link', manualUrl: 'manual_url',
+  areaM2: 'area_m2', peDireito: 'pe_direito', nPessoas: 'n_pessoas',
+  dissipacaoW: 'dissipacao_w', fatorInsolacao: 'fator_insolacao',
+  localId: 'local_id', lat: 'lat', lon: 'lon'
+};
+
+/* Lista fechada do que o formulário de cadastro GRAVA (D-q57-08). `lat`/`lon`/
+   `localId` ficam de fora porque posição é trabalho de campo do /mapa (D-03);
+   `ultimaManutencao` fica de fora porque é derivada da conferência da OS
+   (atualizarUltimaManutencao) — um formulário de cadastro que gravasse
+   qualquer um dos dois desfaria em silêncio o trabalho de outro módulo. `id`
+   fica de fora porque nunca se edita a própria chave. */
+var EQUIP_EDITAVEIS = [
+  'area', 'predio', 'local', 'tipo', 'fabricante', 'modelo', 'btu',
+  'funciona', 'estado', 'criticidade', 'tensao', 'correnteNominal',
+  'patrimonio', 'dataFabricacao', 'dataInstalacao', 'refrigerante',
+  'link', 'manualUrl', 'refrigPermanente', 'horasDia', 'diasSemana', 'obs'
+];
+var EQUIP_NUMERICOS = ['btu', 'tensao', 'horasDia', 'diasSemana'];
+
+/* Caminho inverso de dbToEquip: duas guardas (chave fora de CAMPOS_EQUIP OU
+   fora de EQUIP_EDITAVEIS caem juntas), texto vazio vira null (um
+   data_fabricacao:'' é erro de cast no Postgres; um link:'' viola a trava de
+   esquema de URL por nada) — nunca texto vazio é gravado. */
+function equipParaDb(patch) {
+  var alvo = {};
+  Object.keys(patch || {}).forEach(function(k){
+    if (EQUIP_EDITAVEIS.indexOf(k) < 0 || !CAMPOS_EQUIP.hasOwnProperty(k)) return;
+    var coluna = CAMPOS_EQUIP[k];
+    var v = patch[k];
+    if (v === '' || v === undefined) { alvo[coluna] = null; return; }
+    if (k === 'correnteNominal') { var f = parseFloat(v); alvo[coluna] = isNaN(f) ? null : f; return; }
+    if (EQUIP_NUMERICOS.indexOf(k) >= 0) { var n = parseInt(v, 10); alvo[coluna] = isNaN(n) ? null : n; return; }
+    alvo[coluna] = v;
+  });
+  return alvo;
+}
+
+/* D-q57-09: mesma barreira do `check` do banco, escrita na tela para o
+   usuário ver o erro antes de mandar. Sem trim, sem normalização — o valor é
+   comparado como veio. */
+function linkSeguro(u) {
+  if (typeof u !== 'string') return '';
+  return /^https?:\/\//i.test(u) ? u : '';
+}
+
+/* Mesmo nome do helper equivalente em maquinas/app.js, de propósito — mesma
+   ideia, vale ser reconhecível. Uma lista, quatro pontos de chamada (botão da
+   ficha, abertura do formulário, gravação e o campo de estado no formulário). */
+function podeEditarCadastro() {
+  if (window._modoObservador) return false;
+  var r = ctUser ? ctUser.role : '';
+  return r === 'admin' || r === 'gestor';
 }
 
 /* ── ponte de campos de logs_manutencao ── */
@@ -1504,6 +1577,18 @@ function renderAlerts(){
 function openDrawer(){ el('drawer').classList.add('open'); document.body.style.overflow='hidden'; }
 function closeDrawer(){ el('drawer').classList.remove('open'); document.body.style.overflow=''; }
 
+/* Um campo de link vira âncora SÓ quando linkSeguro devolver algo — valor
+   gravado que não passe (ex: javascript:, ou herança de um cadastro antigo)
+   aparece como texto simples, nunca como âncora (D-q57-09/T-q57-01). */
+function campoLinkFicha(rotulo, valor){
+  if(!valor) return '<div class="dfield"><label>'+rotulo+'</label><div class="dval">—</div></div>';
+  var seguro = linkSeguro(valor);
+  var conteudo = seguro
+    ? '<a href="'+esc(seguro)+'" target="_blank" rel="noopener">'+esc(valor)+'</a>'
+    : esc(valor);
+  return '<div class="dfield"><label>'+rotulo+'</label><div class="dval">'+conteudo+'</div></div>';
+}
+
 function openDetail(id){
   var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
   var logs = getEquipLog(id);
@@ -1513,19 +1598,56 @@ function openDetail(id){
   var ni = nextPmoc(e,'inspecao'); var np = nextPmoc(e,'preventiva');
   var btuK = e.btu? (e.btu/1000).toFixed(0)+'K BTU' : '—';
   var kw = e.btu? (e.btu/3412).toFixed(2)+' kW' : '—';
+  var tr = e.btu? (e.btu/12000).toFixed(2)+' TR' : '—';
 
-  el('dh-id').textContent = '#'+id+' · '+esc(e.area);
+  el('dh-id').textContent = '#'+id+' · '+(e.area||'');
   el('dh-local').textContent = e.local;
   el('dh-predio').textContent = e.predio;
   el('dh-pills').innerHTML = statusPill(e.funciona)+critPill(crit);
 
-  var logHtml = '';
-  if(logs.length){
-    logHtml = '<div class="ds"><div class="ds-title"><i class="fas fa-history mr1" aria-hidden="true"></i>Histórico de Manutenção ('+logs.length+')</div>';
-    logs.forEach(function(entry){
+  el('drawer-body').innerHTML =
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-map-marker-alt mr1" aria-hidden="true"></i>1 · Local</div>' +
+    '<div class="dfields2">' +
+    '<div class="dfield"><label>Área</label><div class="dval">'+esc(e.area)+'</div></div>' +
+    '<div class="dfield"><label>Prédio</label><div class="dval">'+esc(e.predio)+'</div></div>' +
+    '<div class="dfield"><label>Local</label><div class="dval">'+esc(e.local)+'</div></div>' +
+    '<div class="dfield"><label>Patrimônio</label><div class="dval">'+(e.patrimonio?esc(e.patrimonio):'—')+'</div></div>' +
+    '</div></div>' +
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>2 · Dados do equipamento</div>' +
+    '<div class="dfields2">' +
+    '<div class="dfield"><label>Tipo</label><div class="dval">'+esc(e.tipo)+'</div></div>' +
+    '<div class="dfield"><label>Fabricante</label><div class="dval">'+(e.fabricante&&e.fabricante!=='-'?esc(e.fabricante):'—')+'</div></div>' +
+    '<div class="dfield"><label>Modelo</label><div class="dval">'+(e.modelo?esc(e.modelo):'—')+'</div></div>' +
+    '<div class="dfield"><label>Capacidade</label><div class="dval">'+btuK+' / '+kw+' / '+tr+'</div></div>' +
+    '<div class="dfield"><label>Tensão nominal</label><div class="dval">'+(e.tensao||'—')+'V</div></div>' +
+    '<div class="dfield"><label>Corrente nominal</label><div class="dval">'+(e.correnteNominal||'—')+'A</div></div>' +
+    '<div class="dfield"><label>Refrigerante</label><div class="dval">'+(e.refrigerante?esc(e.refrigerante):'—')+'</div></div>' +
+    '<div class="dfield"><label>Data de fabricação</label><div class="dval">'+(e.dataFabricacao?fmtDate(e.dataFabricacao):'—')+'</div></div>' +
+    '<div class="dfield"><label>Data de instalação</label><div class="dval">'+(e.dataInstalacao?fmtDate(e.dataInstalacao):'—')+'</div></div>' +
+    campoLinkFicha('Link', e.link) +
+    campoLinkFicha('Manual', e.manualUrl) +
+    '</div></div>' +
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-calendar-check mr1" aria-hidden="true"></i>3 · Estado e PMOC</div>' +
+    '<div class="dfields2">' +
+    '<div class="dfield"><label>Estado</label><div class="dval">'+statusPill(e.funciona)+'</div></div>' +
+    '<div class="dfield"><label>Criticidade</label><div class="dval">'+esc(crit)+'</div></div>' +
+    '<div class="dfield"><label>Idade aparente</label><div class="dval">'+(e.estado?esc(e.estado):'—')+'</div></div>' +
+    '<div class="dfield"><label>h/semana</label><div class="dval">'+(horas||'—')+'h</div></div>' +
+    '<div class="dfield"><label>Última manutenção</label><div class="dval">'+(lastDate?fmtDate(lastDate):'—')+'</div></div>' +
+    '<div class="dfield"><label>Próx. Inspeção</label><div class="dval">'+dueBadgeHtml(ni)+'</div></div>' +
+    '<div class="dfield"><label>Próx. Preventiva</label><div class="dval">'+dueBadgeHtml(np)+'</div></div>' +
+    '</div>' +
+    (e.obs?'<div class="dfield" style="margin-top:4px"><label>Observações</label><div class="dval" style="color:#E52207;font-weight:600">'+esc(e.obs)+'</div></div>':'') +
+    '</div>' +
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-history mr1" aria-hidden="true"></i>4 · Histórico de OS/manutenções ('+logs.length+')</div>' +
+    (logs.length ? logs.map(function(entry){
       var done = (entry.checklist||[]).filter(function(c){return c.done;}).length;
       var tot = (entry.checklist||[]).length;
-      logHtml += '<div class="log-entry">' +
+      return '<div class="log-entry">' +
         '<div class="le-hdr">' +
         '<span class="le-date">'+fmtDate(entry.date)+'</span>' +
         '<span class="le-tipo">'+esc(entry.tipo||'')+'</span>' +
@@ -1537,36 +1659,13 @@ function openDetail(id){
         (MAN_FLUXO_OK?'<button class="btn-sm" style="margin-top:4px;margin-right:6px;background:#E8ECF5;color:#1351B4" onclick="manAbrirOS(\''+esc(entry.id||'')+'\')"><i class="fas fa-clipboard-list mr1" aria-hidden="true"></i>Abrir OS</button>':'') +
         '<button class="le-del" onclick="delLog('+id+',\''+esc(entry.id||'')+'\')" style="margin-top:4px"><i class="fas fa-trash mr1" aria-hidden="true"></i>Excluir</button>' +
         '</div>';
-    });
-    logHtml += '</div>';
-  }
-
-  el('drawer-body').innerHTML =
-    '<div class="ds">' +
-    '<div class="ds-title"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>Dados do Equipamento</div>' +
-    '<div class="dfields2">' +
-    '<div class="dfield"><label>Tipo</label><div class="dval">'+esc(e.tipo)+'</div></div>' +
-    '<div class="dfield"><label>Fabricante</label><div class="dval">'+(e.fabricante&&e.fabricante!=='-'?esc(e.fabricante):'—')+'</div></div>' +
-    '<div class="dfield"><label>Capacidade</label><div class="dval">'+btuK+' / '+kw+'</div></div>' +
-    '<div class="dfield"><label>Tensão</label><div class="dval">'+(e.tensao||'—')+'V</div></div>' +
-    '<div class="dfield"><label>Corrente</label><div class="dval">'+(e.correnteNominal||'—')+'A</div></div>' +
-    '<div class="dfield"><label>h/semana</label><div class="dval">'+(horas||'—')+'h</div></div>' +
-    '</div>' +
-    (e.patrimonio?'<div class="dfield"><label>Patrimônio</label><div class="dval">'+esc(e.patrimonio)+'</div></div>':'') +
-    (e.obs?'<div class="dfield" style="margin-top:4px"><label>Observações</label><div class="dval" style="color:#E52207;font-weight:600">'+esc(e.obs)+'</div></div>':'') +
-    '</div>' +
-    '<div class="ds">' +
-    '<div class="ds-title"><i class="fas fa-calendar-check mr1" aria-hidden="true"></i>Cronograma PMOC</div>' +
-    '<div class="dfields2">' +
-    '<div class="dfield"><label>Última manut.</label><div class="dval">'+(lastDate?fmtDate(lastDate):'—')+'</div></div>' +
-    '<div class="dfield"><label>Criticidade</label><div class="dval">'+crit+'</div></div>' +
-    '<div class="dfield"><label>Próx. Inspeção</label><div class="dval">'+dueBadgeHtml(ni)+'</div></div>' +
-    '<div class="dfield"><label>Próx. Preventiva</label><div class="dval">'+dueBadgeHtml(np)+'</div></div>' +
-    '</div></div>' +
-    logHtml;
+    }).join('') : '<div class="empty" style="padding:10px 0"><p>Nenhuma OS/manutenção registrada ainda.</p></div>') +
+    '</div>';
 
   el('drawer-footer').innerHTML =
     '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>' +
+    '<button class="btn-secondary" onclick="printFicha('+id+')" title="Imprimir ficha" aria-label="Imprimir ficha"><i class="fas fa-print" aria-hidden="true"></i></button>' +
+    (podeEditarCadastro()?'<button class="btn-secondary" onclick="openEquipForm('+id+')"><i class="fas fa-pen mr1" aria-hidden="true"></i>Editar cadastro</button>':'') +
     '<button class="btn-primary" onclick="openLogForm('+id+')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Registrar OS/Manutenção</button>';
 
   openDrawer();
@@ -1640,6 +1739,99 @@ function markAllChk(n){
   var allOn = Array.from(chks).every(function(c){ return c.checked; });
   chks.forEach(function(c){ c.checked=!allOn; });
   updateChkCnt();
+}
+
+/* ── cadastro do equipamento: formulário e gravação ── */
+var EQUIP_ROTULOS = {
+  area:'Área', predio:'Prédio', local:'Local', tipo:'Tipo', fabricante:'Fabricante',
+  modelo:'Modelo', btu:'BTU', funciona:'Estado', estado:'Idade aparente',
+  criticidade:'Criticidade', tensao:'Tensão nominal (V)', correnteNominal:'Corrente nominal (A)',
+  patrimonio:'Patrimônio', dataFabricacao:'Data de fabricação', dataInstalacao:'Data de instalação',
+  refrigerante:'Refrigerante', link:'Link', manualUrl:'Manual',
+  refrigPermanente:'Refrigeração permanente', horasDia:'Horas/dia', diasSemana:'Dias/semana', obs:'Observações'
+};
+var EQUIP_CRITICIDADES = ['CRÍTICA','ALTA','MÉDIA','BAIXA'];
+var EQUIP_IDADES = ['NOVA','SEMI','VELHA'];
+
+/* Um campo por item de EQUIP_EDITAVEIS — três <select> de lista fechada
+   (Estado, Criticidade, Idade aparente) e o resto por tipo de dado. O select
+   ligado à coluna `estado` é rotulado "Idade aparente" e SÓ isso — nunca
+   "Estado" (D-q57-02), com uma linha de ajuda explicando a herança do nome. */
+function campoEquipForm(chave, e){
+  var id = 'equip-'+chave;
+  var rot = EQUIP_ROTULOS[chave] || chave;
+  if (chave==='funciona') {
+    var optsFn = EQUIP_ORDEM.map(function(k){ return '<option value="'+k+'"'+(equipEstado(e)===k?' selected':'')+'>'+esc(EQUIP_ESTADOS[k].rotulo)+'</option>'; }).join('');
+    return '<div><label class="fgl">Estado</label><select class="fgs" id="'+id+'">'+optsFn+'</select></div>';
+  }
+  if (chave==='criticidade') {
+    var optsCr = EQUIP_CRITICIDADES.map(function(c){ return '<option value="'+c+'"'+(e.criticidade===c?' selected':'')+'>'+c+'</option>'; }).join('');
+    return '<div><label class="fgl">Criticidade</label><select class="fgs" id="'+id+'">'+optsCr+'</select></div>';
+  }
+  if (chave==='estado') {
+    var optsId = EQUIP_IDADES.map(function(s){ return '<option value="'+s+'"'+(e.estado===s?' selected':'')+'>'+s+'</option>'; }).join('');
+    return '<div><label class="fgl">Idade aparente</label><select class="fgs" id="'+id+'">'+optsId+'</select>' +
+      '<div style="font-size:10px;color:#999;margin-top:4px">A coluna se chama <code>estado</code> no banco por herança, mas guarda a idade aparente do aparelho — não o funcionamento, que vive em "Estado" acima.</div></div>';
+  }
+  if (chave==='refrigPermanente') {
+    return '<label class="chk-item" style="margin-top:4px;align-self:end"><input type="checkbox" id="'+id+'"'+(e.refrigPermanente?' checked':'')+'/><span>'+esc(rot)+'</span></label>';
+  }
+  if (chave==='obs') {
+    return '<div class="fg-full"><label class="fgl">'+esc(rot)+'</label><textarea class="fgt" id="'+id+'">'+esc(e.obs||'')+'</textarea></div>';
+  }
+  if (chave==='dataFabricacao' || chave==='dataInstalacao') {
+    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="date" value="'+esc(e[chave]||'')+'"/></div>';
+  }
+  if (chave==='link' || chave==='manualUrl') {
+    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="url" placeholder="https://…" value="'+esc(e[chave]||'')+'"/></div>';
+  }
+  if (chave==='correnteNominal') {
+    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="number" step="0.1" value="'+(e[chave]||'')+'"/></div>';
+  }
+  if (EQUIP_NUMERICOS.indexOf(chave)>=0) {
+    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="number" step="1" value="'+(e[chave]||'')+'"/></div>';
+  }
+  return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="text" value="'+esc(e[chave]||'')+'"/></div>';
+}
+
+function openEquipForm(id){
+  var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
+  if (!podeEditarCadastro()) { showToast('Sem permissão para editar cadastro','error'); return; }
+  el('dh-id').textContent = 'Editar cadastro · #'+id;
+  el('dh-local').textContent = e.local;
+  el('dh-predio').textContent = e.predio;
+  el('dh-pills').innerHTML = statusPill(e.funciona);
+  var campos = EQUIP_EDITAVEIS.map(function(k){ return campoEquipForm(k, e); }).join('');
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-edit mr1" aria-hidden="true"></i>Editar cadastro</div>' +
+    '<div class="fg2">'+campos+'</div></div>';
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="openDetail('+id+')">Cancelar</button>' +
+    '<button class="btn-primary" onclick="salvarEquip('+id+')"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar</button>';
+  openDrawer();
+}
+
+async function salvarEquip(id){
+  if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
+  if (!podeEditarCadastro()) { showToast('Sem permissão para editar cadastro','error'); return; } // guarda na ação, não só no botão (D-l7n-03)
+  var patch = {};
+  EQUIP_EDITAVEIS.forEach(function(k){
+    var campo = el('equip-'+k);
+    if (!campo) return;
+    patch[k] = (k==='refrigPermanente') ? campo.checked : campo.value;
+  });
+  if (patch.link && !linkSeguro(patch.link)) { showToast('Link inválido — use http:// ou https://','error'); return; }
+  if (patch.manualUrl && !linkSeguro(patch.manualUrl)) { showToast('Manual inválido — use http:// ou https://','error'); return; }
+  var db = equipParaDb(patch);
+  var r = await supa.from('equipamentos').update(db).eq('id',id).select().single();
+  if(r.error){ showToast('Erro: '+r.error.message,'error'); return; }
+  var idx = DATA.findIndex(function(x){ return x.id===id; });
+  if(idx>=0) DATA[idx] = dbToEquip(r.data);
+  saveData();
+  showToast('Cadastro atualizado','ok');
+  openDetail(id);
+  renderDash();
+  renderInv();
 }
 
 /* ── encerramento de OS: última manutenção ── */
@@ -3271,14 +3463,27 @@ renderLoginMobile = function(){
 };
 
 /* ══ IMPRESSÃO DA OS ══ */
-function ctPrintOS(osId){
-  var o = ctOS.find(function(x){return x.id===osId;}); if(!o) return;
-  var e = ctEquip(o.equip_id);
-  var itens = ctOrc[osId]||[], regs = ctExec[osId]||[], comps = ctComp[osId]||[], evts = ctEvt[osId]||[];
-  var total = ctOrcTotal(osId), compTotal = ctCompTotal(osId);
-  var st = (CT_STATUS[o.status]||{}).label || o.status;
-  function row2(l,v){ return '<tr><td class="l">'+l+'</td><td>'+(v||'—')+'</td></tr>'; }
-  var h = '<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8"/><title>'+esc(o.numero)+'</title><style>' +
+/* Tabela de duas colunas, usada pelos dois consumidores da folha timbrada. */
+function row2(l,v){ return '<tr><td class="l">'+l+'</td><td>'+(v||'—')+'</td></tr>'; }
+
+/* ── folha timbrada A4: dois consumidores (D-q57-10) ── */
+/* ctPrintOS (contratação) e printFicha (ficha do equipamento) chamam esta
+   função — ela guarda só o que é comum: DOCTYPE, o CSS de A4 inteiro, o
+   cabeçalho (logo + linha institucional do CMASM), a grade de assinaturas, o
+   rodapé com data/hora de geração, e o window.open + document.write +
+   document.close + print com o mesmo aviso de pop-up bloqueado. `corpo` e
+   `subtitulo` chegam como HTML JÁ ESCAPADO pelo chamador em cada interpolação
+   (T-q57-02) — esta função não escapa o que recebe pronto, só o que recebe
+   como dado cru (titulo, papel/nome das assinaturas). */
+function imprimirDocumento(opcoes){
+  opcoes = opcoes || {};
+  var titulo = opcoes.titulo || '';
+  var subtitulo = opcoes.subtitulo || '';
+  var corpo = opcoes.corpo || '';
+  var assinaturas = opcoes.assinaturas || [];
+  var rodape = opcoes.rodape || ('Documento gerado pelo PMOC.Refrigeração · CMASM/DME em '+new Date().toLocaleString('pt-BR'));
+  var ass = assinaturas.map(function(a){ return '<div>'+esc(a.papel)+'<br/>'+esc(a.nome||'')+'</div>'; }).join('');
+  var h = '<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8"/><title>'+esc(titulo)+'</title><style>' +
     'body{font-family:Arial,sans-serif;font-size:10pt;color:#1B1B1B;margin:14mm}' +
     'h1{font-size:14pt;color:#071D41;margin:0}h2{font-size:10pt;color:#1351B4;border-bottom:1.5px solid #1351B4;padding-bottom:2px;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.4px}' +
     'table{width:100%;border-collapse:collapse;font-size:9pt}td,th{padding:4px 6px;border:1px solid #CCC;vertical-align:top;text-align:left}' +
@@ -3290,42 +3495,59 @@ function ctPrintOS(osId){
     '.meta{font-size:8pt;color:#888}@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}' +
     '@page{size:A4;margin:12mm}</style></head><body>' +
     '<div class="hdr"><img src="'+CT_LOGO_URI+'" style="width:52px;height:52px"/>' +
-    '<div style="flex:1"><h1>ORDEM DE SERVIÇO — '+esc(o.numero)+'</h1>' +
+    '<div style="flex:1"><h1>'+esc(titulo)+'</h1>' +
     '<div class="meta">CMASM · Divisão de Manutenção Especializada · UASG 744030 · ARP Nº 04/2024 (PE 90026/2024 — CMRJ) · Processo 63099.002208/2025-06</div></div>' +
-    '<div style="text-align:right;font-size:9pt"><strong>'+esc(st)+'</strong><br/><span class="meta">'+(o.ne?esc(o.ne):'')+'</span></div></div>' +
-    '<h2>1. Identificação</h2><table>' +
+    '<div style="text-align:right;font-size:9pt">'+subtitulo+'</div></div>' +
+    corpo +
+    (ass?'<div class="ass">'+ass+'</div>':'') +
+    '<div class="meta" style="margin-top:8mm;border-top:1px solid #CCC;padding-top:2mm">'+esc(rodape)+'</div>' +
+    '</body></html>';
+  var w = window.open('','_blank','width=900,height=700');
+  if(!w){ showToast('Permita pop-ups para imprimir','error'); return; }
+  w.document.write(h);
+  w.document.close();
+  setTimeout(function(){ try{ w.print(); }catch(e){} }, 700);
+}
+
+function ctPrintOS(osId){
+  var o = ctOS.find(function(x){return x.id===osId;}); if(!o) return;
+  var e = ctEquip(o.equip_id);
+  var itens = ctOrc[osId]||[], regs = ctExec[osId]||[], comps = ctComp[osId]||[], evts = ctEvt[osId]||[];
+  var total = ctOrcTotal(osId), compTotal = ctCompTotal(osId);
+  var st = (CT_STATUS[o.status]||{}).label || o.status;
+  var corpo = '<h2>1. Identificação</h2><table>' +
     row2('Equipamento', '#'+o.equip_id+' — '+esc(e.predio)+' / '+esc(e.local)+' ('+esc(e.tipo)+(e.btu?', '+(e.btu/1000).toFixed(0)+'K BTU':'')+')') +
     row2('Empresa', esc(o.empresa||'')+' · '+esc(o.ne||'')) +
     row2('Solicitante', esc(o.solicitante||'')+' em '+fmtDate(o.data_solicitacao)) +
     row2('Problema / serviço', esc(o.problema||'')) + '</table>';
   if(itens.length){
-    h += '<h2>2. Orçamento aprovado</h2><table><tr><th>Tipo</th><th>Descrição</th><th class="num">Qtd</th><th class="num">Vlr Unit.</th><th class="num">Total</th></tr>' +
+    corpo += '<h2>2. Orçamento aprovado</h2><table><tr><th>Tipo</th><th>Descrição</th><th class="num">Qtd</th><th class="num">Vlr Unit.</th><th class="num">Total</th></tr>' +
       itens.map(function(i){ return '<tr><td>'+(i.tipo==='SERVICO'?'Serviço':'Material')+'</td><td>'+esc(i.descricao)+'</td>' +
         '<td class="num">'+i.qtd+'</td><td class="num">'+fmtMoney(i.valor_unit)+'</td><td class="num">'+fmtMoney(i.qtd*i.valor_unit)+'</td></tr>'; }).join('') +
       '<tr class="tot"><td colspan="4">TOTAL ORÇADO</td><td class="num">'+fmtMoney(o.valor_orcado||total)+'</td></tr></table>' +
       (o.aprovador?'<div class="meta" style="margin-top:2mm">Aprovado por '+esc(o.aprovador)+' em '+fmtDate(o.data_aprovacao)+'.</div>':'');
   }
   if(regs.length){
-    h += '<h2>3. Execução</h2>';
+    corpo += '<h2>3. Execução</h2>';
     regs.forEach(function(r){
       var med = r.medicoes||{}, mt=[];
       if(med.temp_insuflamento!=null) mt.push('Insuflamento: '+med.temp_insuflamento+'°C');
       if(med.temp_retorno!=null) mt.push('Retorno: '+med.temp_retorno+'°C');
       if(med.corrente!=null) mt.push('Corrente: '+med.corrente+' A');
       if(med.pressao!=null) mt.push('Pressão: '+med.pressao+' psi');
-      h += '<table style="margin-bottom:3mm">'+row2('Data / Executor', fmtDate(r.data)+' · '+esc(r.executor||''))+
+      corpo += '<table style="margin-bottom:3mm">'+row2('Data / Executor', fmtDate(r.data)+' · '+esc(r.executor||''))+
         row2('Serviços', esc(r.descricao||''))+(mt.length?row2('Medições', mt.join(' · ')):'')+'</table>';
       var fs = (r.fotos||[]).map(function(p){
         var u = supa.storage.from('os-fotos').getPublicUrl(p).data.publicUrl;
         return '<img src="'+u+'"/>';
       }).join('');
-      if(fs) h += '<div class="fotos">'+fs+'</div>';
+      if(fs) corpo += '<div class="fotos">'+fs+'</div>';
     });
   }
-  h += '<h2>4. Fiscalização</h2><table>'+row2('Fiscal', esc(o.fiscal||'—')+(o.data_fiscalizacao?' em '+fmtDate(o.data_fiscalizacao):''))+
+  corpo += '<h2>4. Fiscalização</h2><table>'+row2('Fiscal', esc(o.fiscal||'—')+(o.data_fiscalizacao?' em '+fmtDate(o.data_fiscalizacao):''))+
     row2('Parecer', esc(o.parecer_fiscal||'—'))+'</table>';
   if(comps.length){
-    h += '<h2>5. Composição de pagamento — itens da ata</h2><table><tr><th>Item ARP</th><th>Descrição</th><th class="num">Qtd</th><th class="num">Vlr Unit.</th><th class="num">Total</th></tr>' +
+    corpo += '<h2>5. Composição de pagamento — itens da ata</h2><table><tr><th>Item ARP</th><th>Descrição</th><th class="num">Qtd</th><th class="num">Vlr Unit.</th><th class="num">Total</th></tr>' +
       comps.map(function(c){
         var it = ctArp.find(function(a){return a.item===c.item_arp;})||{descricao:'',valor_unit:0};
         return '<tr><td>'+c.item_arp+'</td><td>'+esc(it.descricao)+'</td><td class="num">'+c.qtd+'</td>' +
@@ -3334,25 +3556,90 @@ function ctPrintOS(osId){
       '<tr class="tot"><td colspan="4">TOTAL COMPOSTO</td><td class="num">'+fmtMoney(compTotal)+'</td></tr></table>' +
       '<div class="meta" style="margin-top:2mm">Diferença vs orçado: '+fmtMoney((o.valor_orcado||total)-compTotal)+'. Em atendimento ao art. 86 da Lei 14.133/2021 — pagamento composto por itens registrados na ARP; orçamento aprovado anexo.</div>';
   }
-  h += '<h2>'+(comps.length?'6':'5')+'. Certificação</h2><table>'+row2('Nota Fiscal', esc(o.nf||'—')+(o.data_nf?' de '+fmtDate(o.data_nf):''))+
+  corpo += '<h2>'+(comps.length?'6':'5')+'. Certificação</h2><table>'+row2('Nota Fiscal', esc(o.nf||'—')+(o.data_nf?' de '+fmtDate(o.data_nf):''))+
     row2('Certificador', esc(o.certificador||'—')+(o.data_certificacao?' em '+fmtDate(o.data_certificacao):''))+'</table>';
   if(evts.length){
-    h += '<h2>'+(comps.length?'7':'6')+'. Histórico (auditoria)</h2><table><tr><th>Data/Hora</th><th>Evento</th><th>Detalhe</th><th>Usuário</th></tr>' +
+    corpo += '<h2>'+(comps.length?'7':'6')+'. Histórico (auditoria)</h2><table><tr><th>Data/Hora</th><th>Evento</th><th>Detalhe</th><th>Usuário</th></tr>' +
       evts.map(function(ev){
         return '<tr><td>'+(ev.criado_em?new Date(ev.criado_em).toLocaleString('pt-BR'):'')+'</td><td>'+esc(ev.evento)+'</td>' +
           '<td>'+esc(ctEvtTexto(ev))+'</td>' +
           '<td>'+esc(ev.usuario||'')+'</td></tr>';
       }).join('')+'</table>';
   }
-  h += '<div class="ass"><div>Solicitante<br/>'+esc(o.solicitante||'')+'</div><div>Gestor Administrativo<br/>'+esc(o.aprovador||'')+'</div>' +
-    '<div>Fiscal<br/>'+esc(o.fiscal||'')+'</div><div>Certificador<br/>'+esc(o.certificador||'')+'</div></div>' +
-    '<div class="meta" style="margin-top:8mm;border-top:1px solid #CCC;padding-top:2mm">Documento gerado pelo PMOC.Refrigeração · CMASM/DME em '+new Date().toLocaleString('pt-BR')+'</div>' +
-    '</body></html>';
-  var w = window.open('','_blank','width=900,height=700');
-  if(!w){ showToast('Permita pop-ups para imprimir','error'); return; }
-  w.document.write(h);
-  w.document.close();
-  setTimeout(function(){ try{ w.print(); }catch(e){} }, 700);
+  imprimirDocumento({
+    titulo: 'ORDEM DE SERVIÇO — '+o.numero,
+    subtitulo: '<strong>'+esc(st)+'</strong><br/><span class="meta">'+(o.ne?esc(o.ne):'')+'</span>',
+    corpo: corpo,
+    assinaturas: [
+      {papel:'Solicitante', nome:o.solicitante||''},
+      {papel:'Gestor Administrativo', nome:o.aprovador||''},
+      {papel:'Fiscal', nome:o.fiscal||''},
+      {papel:'Certificador', nome:o.certificador||''}
+    ]
+  });
+}
+
+/* ── ficha: impressão A4 (D-q57-10, segundo consumidor de imprimirDocumento) ── */
+function printFicha(equipId){
+  var e = DATA.find(function(r){ return r.id===equipId; }); if(!e) return;
+  var logsTodos = getEquipLog(equipId);
+  var logs = logsTodos.slice(0, 10);
+  var horas = (e.horasDia||0)*(e.diasSemana||0);
+  var btuK = e.btu? (e.btu/1000).toFixed(0)+'K BTU' : '—';
+  var kw = e.btu? (e.btu/3412).toFixed(2)+' kW' : '—';
+  var lastDate = e.ultimaManutencao || getLatestLogDate(equipId);
+
+  var corpo = '<h2>1. Local</h2><table>' +
+    row2('Área', esc(e.area)) +
+    row2('Prédio', esc(e.predio)) +
+    row2('Local', esc(e.local)) +
+    row2('Patrimônio', e.patrimonio?esc(e.patrimonio):'') +
+    '</table>';
+
+  corpo += '<h2>2. Dados do equipamento</h2><table>' +
+    row2('Tipo', esc(e.tipo)) +
+    row2('Fabricante', e.fabricante&&e.fabricante!=='-'?esc(e.fabricante):'') +
+    row2('Modelo', e.modelo?esc(e.modelo):'') +
+    row2('Capacidade', btuK+' / '+kw) +
+    row2('Tensão nominal', e.tensao?e.tensao+'V':'') +
+    row2('Corrente nominal', e.correnteNominal?e.correnteNominal+'A':'') +
+    row2('Refrigerante', e.refrigerante?esc(e.refrigerante):'') +
+    row2('Data de fabricação', e.dataFabricacao?fmtDate(e.dataFabricacao):'') +
+    row2('Data de instalação', e.dataInstalacao?fmtDate(e.dataInstalacao):'') +
+    row2('Link', e.link?esc(e.link):'') +
+    row2('Manual', e.manualUrl?esc(e.manualUrl):'') +
+    '</table>';
+
+  corpo += '<h2>3. Estado e PMOC</h2><table>' +
+    row2('Estado', esc(rotuloEstadoEquip(e.funciona))) +
+    row2('Criticidade', esc(autoCrit(e)||'')) +
+    row2('Idade aparente', e.estado?esc(e.estado):'') +
+    row2('h/semana', horas?horas+'h':'') +
+    row2('Última manutenção', lastDate?fmtDate(lastDate):'') +
+    row2('Observações', e.obs?esc(e.obs):'') +
+    '</table>';
+
+  corpo += '<h2>4. Histórico de OS/manutenções ('+logs.length+' de '+logsTodos.length+')</h2>';
+  if(logs.length){
+    corpo += '<table><tr><th>Data</th><th>Tipo</th><th>Status</th><th>Técnico</th><th>Descrição</th></tr>' +
+      logs.map(function(entry){
+        return '<tr><td>'+fmtDate(entry.date)+'</td><td>'+esc(entry.tipo||'')+'</td>' +
+          '<td>'+esc(manRotulo(entry.status))+'</td><td>'+esc(entry.tecnico||'')+'</td>' +
+          '<td>'+esc(entry.desc||'')+'</td></tr>';
+      }).join('') + '</table>';
+  } else {
+    corpo += '<div class="meta">Nenhuma OS/manutenção registrada ainda.</div>';
+  }
+
+  imprimirDocumento({
+    titulo: 'FICHA DO EQUIPAMENTO — #'+equipId,
+    subtitulo: esc(e.predio)+' / '+esc(e.local),
+    corpo: corpo,
+    assinaturas: [
+      {papel:'Responsável técnico', nome:''},
+      {papel:'Chefe da DME', nome:''}
+    ]
+  });
 }
 </script>
 </body>
