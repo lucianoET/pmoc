@@ -33,6 +33,10 @@
 -- Aditivo, para ser rodado no SQL editor do Supabase — este arquivo só
 -- escreve o script, nunca o executa. Nenhum `drop table`, `drop column`
 -- nem `delete from` em lugar nenhum deste arquivo — o projeto arquiva.
+-- APLICADA EM PRODUÇÃO EM 21/08/2026, depois do deploy do frontend (D-q57-06),
+-- e conferida: 4 colunas novas em equipamentos, 3 em logs_manutencao, as duas
+-- travas no lugar, e os 171 estados migrados — 136 OP + 35 INOP, zero linha
+-- fora do vocabulário.
 -- ══════════════════════════════════════════════════════════════════
 
 -- 1) Quatro colunas novas em `equipamentos` — os dados fixos da ficha
