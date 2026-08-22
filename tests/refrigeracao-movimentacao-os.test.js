@@ -291,3 +291,328 @@ test('os quatro grep do PLAT-15 continuam em 0 em refrigeracao/index.html', () =
     assert.strictEqual((HTML.match(new RegExp(padrao.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length, 0, `"${padrao}" apareceu em refrigeracao/index.html`);
   }
 });
+
+// ══════════════════════════════════════════════════════════════════
+// Task 3 — a conferência aplicando cadastro, local e situação, com a
+// baixa gateada em admin. aplicarInstalacao/aplicarRemocao são
+// CONVERGENTES e IDEMPOTENTES (D-uyz-15) — um único .update( cada,
+// nenhuma escrita quando o alvo já bate com o estado atual.
+// ══════════════════════════════════════════════════════════════════
+
+function carregarAplicacao(opts) {
+  opts = opts || {};
+  const patchesEquip = [];
+  const updatesLog = [];
+  const toasts = [];
+  const chamadas = { manAbrirOS: 0, renderOS: 0, renderMovim: 0 };
+
+  const linhaBase = Object.assign({
+    id: 'log-1', equip_id: opts.equipId !== undefined ? opts.equipId : 10,
+    data_os: opts.date || '2026-08-21', status: opts.status || 'EXECUTADA',
+    tipo: opts.tipoOS || 'INSTALAÇÃO',
+  }, opts.linhaExtra || {});
+
+  const ctx = {
+    esc(s) { return s == null ? '' : String(s); },
+    el(id) { return (ctx._campos && ctx._campos[id]) || null; },
+    val(id) { return (ctx._valores && ctx._valores[id] !== undefined) ? ctx._valores[id] : ''; },
+    _valores: opts.valores || {},
+    _campos: opts.campos || {},
+    window: { _modoObservador: !!opts.observador },
+    ctUser: opts.ctUser !== undefined ? opts.ctUser : { nome: 'Gestora', role: 'gestor' },
+    DATA: opts.data || [],
+    showToast(msg, tipo) { toasts.push({ msg, tipo }); },
+    console: { warn() {}, error() {} },
+    today() { return '2026-08-21'; },
+    fmtDate(iso) { return iso || ''; },
+    supa: {
+      from(tabela) {
+        if (tabela === 'equipamentos') {
+          return {
+            update(patch) {
+              return {
+                eq(col, val) {
+                  if (opts.erroUpdateEquip) return Promise.resolve({ error: { message: 'falhou equipamento' } });
+                  patchesEquip.push({ id: val, patch: patch });
+                  return Promise.resolve({ error: null });
+                },
+              };
+            },
+          };
+        }
+        if (tabela === 'logs_manutencao') {
+          return {
+            update(patch) {
+              return {
+                eq(col, val) {
+                  return {
+                    select() {
+                      return {
+                        single() {
+                          if (opts.erroUpdateLog) return Promise.resolve({ error: { message: 'falhou log' } });
+                          updatesLog.push({ id: val, patch: patch });
+                          return Promise.resolve({ error: null, data: Object.assign({}, linhaBase, patch) });
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            },
+          };
+        }
+        throw new Error('tabela inesperada: ' + tabela);
+      },
+    },
+  };
+  ctx._logCache = {};
+  ctx._logCache[linhaBase.equip_id] = [Object.assign(
+    { id: linhaBase.id, status: linhaBase.status, date: linhaBase.data_os, tipo: linhaBase.tipo, checklist: [] },
+    opts.entryExtra || {}
+  )];
+
+  vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── situação patrimonial do equipamento: instalado/removido/baixado ── */', '/* ── alertas: contagem única ── */'), ctx);
+  vm.runInContext(recorte('function podeDarBaixa()', '/* ── ponte de campos de logs_manutencao ── */'), ctx);
+  vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
+  vm.runInContext(recorte('/* ── movimentação: instalação e remoção ── */', '/* ── fluxo da OS interna: tela e ações ── */'), ctx);
+  vm.runInContext(recorte('/* ── encerramento de OS: última manutenção ── */', 'async function saveLogEntry('), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: tela e ações ── */', 'function showSearch(){'), ctx);
+
+  // Overrides pós-carga — os `var` de nível superior já rodaram, então isto
+  // sobrescreve o estado inicial (LOCAIS_POR_ID vazio, LOCAIS_CARREGADOS
+  // falso) com a fixture do teste.
+  ctx.LOCAIS_POR_ID = opts.locaisPorId || {};
+  ctx.LOCAIS_CARREGADOS = opts.locaisCarregados !== undefined ? opts.locaisCarregados : true;
+  ctx.carregarLocais = async function () { ctx.LOCAIS_CARREGADOS = true; };
+
+  ctx.manAbrirOS = function () { chamadas.manAbrirOS++; };
+  ctx.renderOS = function () { chamadas.renderOS++; };
+  ctx.renderMovim = function () { chamadas.renderMovim++; };
+
+  ctx._patchesEquip = patchesEquip;
+  ctx._updatesLog = updatesLog;
+  ctx._toasts = toasts;
+  ctx._chamadas = chamadas;
+  return ctx;
+}
+
+// ── aplicarInstalacao ────────────────────────────────────────────────────
+test('aplicarInstalacao grava local_id, predio, local, data_instalacao (a data da OS) e situacao instalado, num único update', async () => {
+  const ctx = carregarAplicacao({
+    data: [{ id: 10, localId: null, predio: null, local: null, dataInstalacao: '', situacao: 'removido' }],
+    locaisPorId: { 5: { id: 5, nome: 'Sala 3', parent_id: 100 }, 100: { id: 100, nome: 'F21', parent_id: null } },
+  });
+  const ok = await ctx.aplicarInstalacao(10, { date: '2026-08-21', localDestinoId: 5 });
+  assert.strictEqual(ok, true);
+  assert.strictEqual(ctx._patchesEquip.length, 1);
+  const patch = ctx._patchesEquip[0].patch;
+  assert.strictEqual(patch.local_id, 5);
+  assert.strictEqual(patch.predio, 'F21');
+  assert.strictEqual(patch.local, 'Sala 3');
+  assert.strictEqual(patch.data_instalacao, '2026-08-21');
+  assert.strictEqual(patch.situacao, 'instalado');
+});
+
+test('aplicarInstalacao não escreve nada quando o equipamento já está exatamente no estado-alvo — conferir duas vezes não grava duas vezes', async () => {
+  const ctx = carregarAplicacao({
+    data: [{ id: 10, localId: 5, predio: 'F21', local: 'Sala 3', dataInstalacao: '2026-08-21', situacao: 'instalado' }],
+    locaisPorId: { 5: { id: 5, nome: 'Sala 3', parent_id: 100 }, 100: { id: 100, nome: 'F21', parent_id: null } },
+  });
+  const ok = await ctx.aplicarInstalacao(10, { date: '2026-08-21', localDestinoId: 5 });
+  assert.strictEqual(ok, true);
+  assert.strictEqual(ctx._patchesEquip.length, 0);
+});
+
+test('aplicarInstalacao recusa quando o destino não resolve na árvore de locais, sem gravar nada', async () => {
+  const ctx = carregarAplicacao({
+    data: [{ id: 10, situacao: 'removido' }],
+    locaisPorId: {},
+  });
+  const ok = await ctx.aplicarInstalacao(10, { date: '2026-08-21', localDestinoId: 999 });
+  assert.strictEqual(ok, false);
+  assert.strictEqual(ctx._patchesEquip.length, 0);
+  assert.ok(ctx._toasts.some((t) => t.tipo === 'error'));
+});
+
+test('aplicarInstalacao recusa máquina baixada', async () => {
+  const ctx = carregarAplicacao({
+    data: [{ id: 10, situacao: 'baixado' }],
+    locaisPorId: { 5: { id: 5, nome: 'Sala 3', parent_id: null } },
+  });
+  const ok = await ctx.aplicarInstalacao(10, { date: '2026-08-21', localDestinoId: 5 });
+  assert.strictEqual(ok, false);
+  assert.strictEqual(ctx._patchesEquip.length, 0);
+});
+
+test('aplicarInstalacao recusa quando a máquina substituída ainda está instalada, e a mensagem nomeia a OS de remoção que falta', async () => {
+  const ctx = carregarAplicacao({
+    data: [
+      { id: 10, situacao: 'removido' },
+      { id: 20, situacao: 'instalado' },
+    ],
+    locaisPorId: { 5: { id: 5, nome: 'Sala 3', parent_id: null } },
+  });
+  const ok = await ctx.aplicarInstalacao(10, { date: '2026-08-21', localDestinoId: 5, equipSubstituidoId: 20 });
+  assert.strictEqual(ok, false);
+  assert.strictEqual(ctx._patchesEquip.length, 0);
+  assert.ok(ctx._toasts.some((t) => t.tipo === 'error' && String(t.msg).includes('20')));
+});
+
+// ── aplicarRemocao ───────────────────────────────────────────────────────
+test('aplicarRemocao limpa local_id, predio, local, lat e lon, grava data_remocao com a data da OS e situacao removido', async () => {
+  const ctx = carregarAplicacao({
+    data: [{ id: 10, localId: 5, predio: 'F21', local: 'Sala 3', lat: -22.9, lon: -43.1, dataRemocao: '', situacao: 'instalado', funciona: 'OP' }],
+  });
+  const ok = await ctx.aplicarRemocao(10, { date: '2026-08-21', destinoRemocao: 'guardada' });
+  assert.strictEqual(ok, true);
+  assert.strictEqual(ctx._patchesEquip.length, 1);
+  const patch = ctx._patchesEquip[0].patch;
+  assert.strictEqual(patch.local_id, null);
+  assert.strictEqual(patch.predio, null);
+  assert.strictEqual(patch.local, null);
+  assert.strictEqual(patch.lat, null);
+  assert.strictEqual(patch.lon, null);
+  assert.strictEqual(patch.data_remocao, '2026-08-21');
+  assert.strictEqual(patch.situacao, 'removido');
+  assert.strictEqual('funciona' in patch, false); // D-uyz-20: situacao e funciona são eixos ortogonais
+});
+
+test('aplicarRemocao não escreve nada quando o equipamento já está exatamente no estado-alvo', async () => {
+  const ctx = carregarAplicacao({
+    data: [{ id: 10, localId: null, predio: null, local: null, lat: null, lon: null, dataRemocao: '2026-08-21', situacao: 'removido' }],
+  });
+  const ok = await ctx.aplicarRemocao(10, { date: '2026-08-21', destinoRemocao: 'guardada' });
+  assert.strictEqual(ok, true);
+  assert.strictEqual(ctx._patchesEquip.length, 0);
+});
+
+test('aplicarRemocao com destino baixa grava situacao baixado e data_baixa, e o patch não contém funciona', async () => {
+  const ctx = carregarAplicacao({
+    ctUser: { nome: 'Admin', role: 'admin' },
+    data: [{ id: 10, situacao: 'instalado', funciona: 'OP' }],
+  });
+  const ok = await ctx.aplicarRemocao(10, { date: '2026-08-21', destinoRemocao: 'baixa' });
+  assert.strictEqual(ok, true);
+  const patch = ctx._patchesEquip[0].patch;
+  assert.strictEqual(patch.situacao, 'baixado');
+  assert.strictEqual(patch.data_baixa, '2026-08-21');
+  assert.strictEqual('funciona' in patch, false);
+});
+
+test('aplicarRemocao recusa o destino baixa para gestor e para técnico, e aceita para admin', async () => {
+  for (const role of ['gestor', 'tecnico']) {
+    const ctx = carregarAplicacao({ ctUser: { nome: 'X', role: role }, data: [{ id: 10, situacao: 'instalado' }] });
+    const ok = await ctx.aplicarRemocao(10, { date: '2026-08-21', destinoRemocao: 'baixa' });
+    assert.strictEqual(ok, false, role + ' não deveria conseguir dar baixa');
+    assert.strictEqual(ctx._patchesEquip.length, 0);
+  }
+  const ctxAdmin = carregarAplicacao({ ctUser: { nome: 'Y', role: 'admin' }, data: [{ id: 10, situacao: 'instalado' }] });
+  const okAdmin = await ctxAdmin.aplicarRemocao(10, { date: '2026-08-21', destinoRemocao: 'baixa' });
+  assert.strictEqual(okAdmin, true);
+});
+
+test('aplicarRemocao recusa destino fora da lista fechada, sem gravar nada', async () => {
+  const ctx = carregarAplicacao({ data: [{ id: 10, situacao: 'instalado' }] });
+  const ok = await ctx.aplicarRemocao(10, { date: '2026-08-21', destinoRemocao: 'sucata' });
+  assert.strictEqual(ok, false);
+  assert.strictEqual(ctx._patchesEquip.length, 0);
+});
+
+// ── manConferir de movimentação — cadastro ANTES do status terminal ──────
+test('manConferir de uma OS de instalação chama aplicarInstalacao ANTES de gravar o status CONFERIDA', async () => {
+  const ctx = carregarAplicacao({
+    tipoOS: 'INSTALAÇÃO', status: 'EXECUTADA', equipId: 10,
+    data: [{ id: 10, situacao: 'removido' }],
+    locaisPorId: { 5: { id: 5, nome: 'Sala 3', parent_id: null } },
+    entryExtra: { localDestinoId: 5, checklist: [{ i: 0, label: 'x', done: true }] },
+  });
+  await ctx.manConferir('log-1', true);
+  assert.strictEqual(ctx._patchesEquip.length, 1, 'aplicarInstalacao deveria ter escrito em equipamentos');
+  assert.strictEqual(ctx._updatesLog.length, 1, 'o status deveria ter avançado para CONFERIDA');
+  assert.strictEqual(ctx._updatesLog[0].patch.status, 'CONFERIDA');
+});
+
+test('manConferir de movimentação com aplicarInstalacao falhando (destino não resolve) NÃO chama a porta de escrita do status', async () => {
+  const ctx = carregarAplicacao({
+    tipoOS: 'INSTALAÇÃO', status: 'EXECUTADA', equipId: 10,
+    data: [{ id: 10, situacao: 'removido' }],
+    locaisPorId: {}, // destino não resolve
+    entryExtra: { localDestinoId: 999 },
+  });
+  await ctx.manConferir('log-1', true);
+  assert.strictEqual(ctx._patchesEquip.length, 0);
+  assert.strictEqual(ctx._updatesLog.length, 0, 'status não pode ter avançado quando o cadastro falhou');
+});
+
+test('manConferir de uma remoção com destinoRemocao "baixa" recusa para gestor — não escreve nem cadastro nem status', async () => {
+  const ctx = carregarAplicacao({
+    tipoOS: 'REMOÇÃO', status: 'EXECUTADA', equipId: 10,
+    ctUser: { nome: 'Gestora', role: 'gestor' },
+    data: [{ id: 10, situacao: 'instalado' }],
+    entryExtra: { destinoRemocao: 'baixa', checklist: [{ i: 0, label: 'x', done: true }] },
+  });
+  await ctx.manConferir('log-1', true);
+  assert.strictEqual(ctx._patchesEquip.length, 0);
+  assert.strictEqual(ctx._updatesLog.length, 0);
+  assert.ok(ctx._toasts.some((t) => t.tipo === 'error'));
+});
+
+test('manConferir de uma remoção com destinoRemocao "baixa" e cargo admin aplica a baixa e confere', async () => {
+  const ctx = carregarAplicacao({
+    tipoOS: 'REMOÇÃO', status: 'EXECUTADA', equipId: 10,
+    ctUser: { nome: 'Admin', role: 'admin' },
+    data: [{ id: 10, situacao: 'instalado' }],
+    entryExtra: { destinoRemocao: 'baixa', checklist: [{ i: 0, label: 'x', done: true }] },
+  });
+  await ctx.manConferir('log-1', true);
+  assert.strictEqual(ctx._patchesEquip.length, 1);
+  assert.strictEqual(ctx._patchesEquip[0].patch.situacao, 'baixado');
+  assert.strictEqual(ctx._updatesLog.length, 1);
+  assert.strictEqual(ctx._updatesLog[0].patch.status, 'CONFERIDA');
+});
+
+// ── manTemEvidencia de movimentação (D-uyz-17) ────────────────────────────
+test('manTemEvidencia de uma OS de remoção aceita checklist de partes completo sem foto, e recusa checklist parcial sem foto', () => {
+  const ctx = carregarAplicacao({});
+  assert.strictEqual(ctx.manTemEvidencia({ tipo: 'REMOÇÃO', fotos: [], checklist: [{ done: true }, { done: true }] }), true);
+  assert.strictEqual(ctx.manTemEvidencia({ tipo: 'REMOÇÃO', fotos: [], checklist: [{ done: true }, { done: false }] }), false);
+  assert.strictEqual(ctx.manTemEvidencia({ tipo: 'REMOÇÃO', fotos: [], checklist: [] }), false);
+  assert.strictEqual(ctx.manTemEvidencia({ tipo: 'REMOÇÃO', fotos: ['a.jpg'], checklist: [] }), true);
+});
+
+test('manTemEvidencia de uma OS de instalação segue a mesma regra (foto OU checklist completo)', () => {
+  const ctx = carregarAplicacao({});
+  assert.strictEqual(ctx.manTemEvidencia({ tipo: 'INSTALAÇÃO', fotos: [], checklist: [{ done: true }] }), true);
+  assert.strictEqual(ctx.manTemEvidencia({ tipo: 'INSTALAÇÃO', fotos: [], checklist: [{ done: false }] }), false);
+});
+
+test('manTemEvidencia de uma OS de manutenção continua aceitando medição isolada (contrato antigo intacto)', () => {
+  const ctx = carregarAplicacao({});
+  assert.strictEqual(ctx.manTemEvidencia({ tipo: 'CORRETIVA', fotos: [], insuflamento: 12 }), true);
+  assert.strictEqual(ctx.manTemEvidencia({ tipo: 'CORRETIVA', fotos: [], checklist: [{ done: true }] }), false); // checklist não conta como evidência de manutenção
+});
+
+// ── fiação: a ordem certa em cada ramo ────────────────────────────────────
+test('o corpo de manConferir chama aplicarInstalacao/aplicarRemocao ANTES do update de status CONFERIDA', () => {
+  const ini = HTML.indexOf('async function manConferir(logId, aprovado){');
+  const fim = HTML.indexOf('\n}\n\n/* ═══', ini);
+  assert.ok(ini > 0 && fim > ini, 'manConferir não encontrada');
+  const corpo = HTML.slice(ini, fim);
+  const posAplicar = corpo.search(/aplicarInstalacao\(achado\.equipId|aplicarRemocao\(achado\.equipId/);
+  const posStatus = corpo.indexOf("status:'CONFERIDA'");
+  assert.ok(posAplicar >= 0, 'manConferir não chama aplicarInstalacao/aplicarRemocao');
+  assert.ok(posStatus > posAplicar, 'o update de status CONFERIDA deveria vir DEPOIS de aplicarInstalacao/aplicarRemocao (D-uyz-15)');
+});
+
+test('o corpo de manConferir continua chamando atualizarUltimaManutencao/atualizarEstadoEquip DEPOIS do update de status, só no ramo de manutenção', () => {
+  const ini = HTML.indexOf('async function manConferir(logId, aprovado){');
+  const fim = HTML.indexOf('\n}\n\n/* ═══', ini);
+  const corpo = HTML.slice(ini, fim);
+  const posStatus = corpo.indexOf("status:'CONFERIDA'");
+  const posUltima = corpo.indexOf('atualizarUltimaManutencao(achado.equipId');
+  assert.ok(posUltima > posStatus, 'atualizarUltimaManutencao deveria continuar DEPOIS do update de status — ordem de hoje intacta');
+  assert.match(corpo, /if\s*\(\s*!movimentacao\s*\)/, 'atualizarUltimaManutencao/atualizarEstadoEquip deveriam ficar fora do ramo de movimentação');
+});

@@ -485,6 +485,12 @@ function carregarFluxoCompleto(opts) {
     confirm() { return opts.confirmar !== false; },
     prompt() { return opts.motivoPrompt !== undefined ? opts.motivoPrompt : 'motivo'; },
     openDrawer() {}, closeDrawer() {},
+    // 260821-uyz: manConferir passou a ramificar por osEhMovimentacao/
+    // podeDarBaixa (definidas no bloco "movimentação", fora deste recorte
+    // de manutenção) — este gate é só sobre OS de manutenção comum, então
+    // os dois stubs abaixo mantêm o comportamento de sempre.
+    osEhMovimentacao() { return false; },
+    podeDarBaixa() { return false; },
     ctCompressFoto(file) {
       if (opts.falhaCompressao) return Promise.reject(new Error('falhou compressão'));
       return Promise.resolve({ _blob: true, nome: file && file.name });

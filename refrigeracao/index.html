@@ -2247,6 +2247,61 @@ async function atualizarEstadoEquip(equipId, estado){
   return true;
 }
 
+/* D-uyz-15: CONVERGENTES e IDEMPOTENTES — calculam o estado-alvo a partir
+   das colunas da própria OS, comparam com o atual e não escrevem quando já
+   é igual (mesma técnica de atualizarEstadoEquip/atualizarUltimaManutencao
+   e de baixarPecasDaOS() em Máquinas). Um único .update( cada uma — é o
+   que torna conferir a mesma OS duas vezes (ou um retry de rede)
+   inofensivo. */
+async function aplicarInstalacao(equipId, entry){
+  if (!LOCAIS_CARREGADOS) await carregarLocais();
+  var r = rotuloLocalDestino(entry.localDestinoId, LOCAIS_POR_ID);
+  if (!r) { showToast('Não foi possível resolver o local de destino — nada foi gravado', 'error'); return false; } // D-uyz-25: recusa em vez de gravar meia coisa
+  var e = DATA.find(function(x){ return x.id===equipId; });
+  if (!e) return false;
+  if (equipBaixado(e)) { showToast('Máquina baixada não pode ser instalada', 'error'); return false; } // D-uyz-05: baixado é terminal
+  if (entry.equipSubstituidoId) {
+    var substituida = DATA.find(function(x){ return x.id===entry.equipSubstituidoId; });
+    if (substituida && equipInstalado(substituida)) {
+      // D-uyz-14: a instalação de B não remove A — A precisa da própria OS de remoção.
+      showToast('#'+substituida.id+' ainda está instalada — abra a OS de Remoção dela antes', 'error');
+      return false;
+    }
+  }
+  var alvo = { local_id: entry.localDestinoId, predio: r.predio, local: r.local, data_instalacao: entry.date, situacao: 'instalado' };
+  var jaEstaAssim = e.localId===alvo.local_id && e.predio===alvo.predio && e.local===alvo.local &&
+    e.dataInstalacao===alvo.data_instalacao && equipSituacao(e)==='instalado';
+  if (jaEstaAssim) return true; // conferir duas vezes não grava duas vezes
+  var res = await supa.from('equipamentos').update(alvo).eq('id', equipId);
+  if (res.error) { showToast('Erro ao aplicar instalação: '+res.error.message, 'error'); return false; }
+  e.localId = alvo.local_id; e.predio = alvo.predio; e.local = alvo.local;
+  e.dataInstalacao = alvo.data_instalacao; e.situacao = alvo.situacao;
+  return true;
+}
+
+async function aplicarRemocao(equipId, entry){
+  var destino = entry.destinoRemocao;
+  if (['guardada','baixa'].indexOf(destino) < 0) { showToast('Destino da remoção inválido', 'error'); return false; }
+  if (destino==='baixa' && !podeDarBaixa()) { showToast('Só admin pode dar baixa patrimonial', 'error'); return false; } // D-uyz-07/23: guarda de tela — UX apenas, RLS não distingue cargo
+  var e = DATA.find(function(x){ return x.id===equipId; });
+  if (!e) return false;
+  var situacaoAlvo = destino==='baixa' ? 'baixado' : 'removido';
+  var alvo = { local_id: null, predio: null, local: null, lat: null, lon: null, data_remocao: entry.date, situacao: situacaoAlvo };
+  // D-uyz-19: a remoção limpa lat/lon junto do local — coordenada própria de
+  // máquina numa prateleira é dado falso.
+  if (destino==='baixa') alvo.data_baixa = entry.date; // D-uyz-18
+  var jaEstaAssim = e.localId==null && e.predio==null && e.local==null && (e.lat==null) && (e.lon==null) &&
+    e.dataRemocao===alvo.data_remocao && equipSituacao(e)===situacaoAlvo &&
+    (destino!=='baixa' || e.dataBaixa===alvo.data_baixa);
+  if (jaEstaAssim) return true;
+  var res = await supa.from('equipamentos').update(alvo).eq('id', equipId);
+  if (res.error) { showToast('Erro ao aplicar remoção: '+res.error.message, 'error'); return false; }
+  e.localId = null; e.predio = null; e.local = null; e.lat = null; e.lon = null;
+  e.dataRemocao = alvo.data_remocao; e.situacao = alvo.situacao;
+  if (destino==='baixa') e.dataBaixa = alvo.data_baixa;
+  return true; // funciona NÃO é tocada (D-uyz-20) — situacao e funciona são eixos ortogonais
+}
+
 async function saveLogEntry(equipId, clistLen){
   if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
   var date=val('log-date'), tipo=val('log-tipo');
@@ -2637,6 +2692,55 @@ async function salvarMovOS(){
   setTimeout(function(){ renderDash(); }, 100);
 }
 
+/* Painel próprio da movimentação na gaveta (chamado por manAbrirOS logo
+   depois do bloco "1 · Abertura"): origem, destino, caso derivado
+   (instalação) ou destino da remoção (com a baixa em destaque), máquina
+   substituída com link para a ficha, e o checklist de partes item a item
+   — não só o done/total que o cabeçalho já mostra. */
+function movPainelDaOS(entry, equipId, logId){
+  var h = '<div class="ds"><div class="ds-title"><i class="fas fa-truck-loading mr1" aria-hidden="true"></i>Movimentação</div>';
+  if (entry.tipo==='INSTALAÇÃO') {
+    var r = rotuloLocalDestino(entry.localDestinoId, LOCAIS_POR_ID);
+    var ocupantes = ocupantesDoLocal(entry.localDestinoId, equipId);
+    var caso = casoDeInstalacao(entry.localDestinoId, entry.equipSubstituidoId, ocupantes);
+    h += '<div class="dfield"><label>Destino</label><div class="dval">'+(r?esc(r.rotulo):'—')+'</div></div>' +
+      '<div class="dfield"><label>Caso</label><div class="dval">'+esc(CASOS_INSTALACAO[caso]||'')+'</div></div>';
+    if (entry.equipSubstituidoId) {
+      h += '<div class="dfield"><label>Máquina substituída</label><div class="dval">' +
+        '<a href="#" onclick="openDetail('+entry.equipSubstituidoId+');return false;">#'+entry.equipSubstituidoId+'</a></div></div>';
+    }
+  } else {
+    var origemNo = LOCAIS_POR_ID[entry.localOrigemId];
+    h += '<div class="dfield"><label>Origem</label><div class="dval">'+(origemNo?esc(origemNo.nome):'—')+'</div></div>' +
+      '<div class="dfield"><label>Destino</label><div class="dval">' +
+      (entry.destinoRemocao==='baixa' ? '<strong style="color:#E52207">Baixa patrimonial</strong>' : 'Guardada — volta ao inventário') +
+      '</div></div>';
+  }
+  var itens = entry.checklist||[];
+  var podeMarcar = entry.status==='EM_EXECUCAO' && manPode('executar');
+  h += '<label class="fgl" style="margin-top:8px">Checklist de partes</label>' +
+    itens.map(function(item,i){
+      return '<label class="chk-item"><input type="checkbox" '+(podeMarcar?'':'disabled ')+(item.done?'checked ':'')+
+        'onchange="manMarcarChecklist(\''+esc(logId)+'\','+i+',this.checked)"/><span>'+esc(item.label)+'</span></label>';
+    }).join('') +
+    '</div>';
+  return h;
+}
+
+/* Em EM_EXECUCAO e com manPode('executar'), os itens do checklist são
+   marcáveis — grava o array inteiro pela porta de escrita de sempre
+   (manAtualizarOS). */
+async function manMarcarChecklist(logId, indice, marcado){
+  var achado = manEntrada(logId); if(!achado) return;
+  if (!manPode('executar')) { showToast('Sem permissão para marcar checklist','error'); return; }
+  var lista = (achado.entry.checklist||[]).map(function(item, i){
+    if (i!==indice) return item;
+    var novo = {}; for (var k in item) novo[k] = item[k]; novo.done = marcado; return novo;
+  });
+  var ok = await manAtualizarOS(logId, achado.equipId, {checklist:lista});
+  if (ok) manAbrirOS(logId);
+}
+
 /* ── fluxo da OS interna: tela e ações ── */
 function manEntrada(logId){
   var achado = null;
@@ -2680,6 +2784,12 @@ function manAbrirOS(logId){
     (entry.desc?'<div class="dfield"><label>Problema relatado</label><div class="dval" style="font-size:13px">'+esc(entry.desc)+'</div></div>':'') +
     (tot?'<div class="le-chk"><i class="fas fa-tasks mr1" aria-hidden="true"></i>'+done+'/'+tot+' itens do checklist</div>':'') +
     '</div>';
+
+  if (osEhMovimentacao(entry)) {
+    // D-uyz: painel próprio de movimentação, logo depois do bloco 1 — não
+    // é um quinto bloco solto, é a mesma OS.
+    h += movPainelDaOS(entry, equipId, logId);
+  }
 
   if (!manSemFluxo(st)) {
     /* 2 · Delineamento */
@@ -2741,13 +2851,17 @@ function manAbrirOS(logId){
       if (entry.parecerConferencia) {
         h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px;margin-bottom:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida anteriormente: '+esc(entry.parecerConferencia)+'</div>';
       }
-      // D-q57-04: o estado muda na própria conferência do gestor, preso à OS que a causou.
-      var estadoAtualConf = equipEstado(e);
-      var optsConfEstado = (estadoAtualConf ? '' : '<option value="" selected disabled>(não cadastrado)</option>') +
-        EQUIP_ORDEM.map(function(k){ return '<option value="'+k+'"'+(estadoAtualConf===k?' selected':'')+'>'+esc(EQUIP_ESTADOS[k].rotulo)+'</option>'; }).join('');
-      h += '<label class="fgl">Estado do equipamento após a manutenção</label>' +
-        '<select class="fgs" id="man-conf-estado">'+optsConfEstado+'</select>' +
-        '<label class="fgl" style="margin-top:8px">Parecer (opcional ao conferir, obrigatório ao devolver)</label>' +
+      // D-q57-04: o estado muda na própria conferência do gestor, preso à OS
+      // que a causou. D-uyz-20: instalar/remover NÃO é diagnóstico de
+      // funcionamento — o seletor não aparece em OS de movimentação.
+      if (!osEhMovimentacao(entry)) {
+        var estadoAtualConf = equipEstado(e);
+        var optsConfEstado = (estadoAtualConf ? '' : '<option value="" selected disabled>(não cadastrado)</option>') +
+          EQUIP_ORDEM.map(function(k){ return '<option value="'+k+'"'+(estadoAtualConf===k?' selected':'')+'>'+esc(EQUIP_ESTADOS[k].rotulo)+'</option>'; }).join('');
+        h += '<label class="fgl">Estado do equipamento após a manutenção</label>' +
+          '<select class="fgs" id="man-conf-estado">'+optsConfEstado+'</select>';
+      }
+      h += '<label class="fgl" style="margin-top:8px">Parecer (opcional ao conferir, obrigatório ao devolver)</label>' +
         '<textarea class="fgt" id="man-conf-parecer" placeholder="Observações da conferência…"></textarea>' +
         '<div class="ct-btn-row">' +
         '<button class="btn-success" onclick="manConferir(\''+esc(logId)+'\',true)"><i class="fas fa-check mr1" aria-hidden="true"></i>Conferir e encerrar</button>' +
@@ -2819,6 +2933,15 @@ async function manCancelar(logId){
 
 /* ── fluxo da OS interna: evidência da execução (fotos + as cinco medições) ── */
 function manTemEvidencia(entry){
+  // D-uyz-17: OS de movimentação — foto OU checklist de partes COMPLETO.
+  // Medição de insuflamento não faz sentido em remoção (não há o que
+  // medir), então o ramo é por tipo de OS.
+  if (osEhMovimentacao(entry)) {
+    var temFoto = !!(entry.fotos && entry.fotos.length);
+    var lista = entry.checklist||[];
+    var checklistCompleto = lista.length>0 && lista.every(function(c){ return c.done; });
+    return temFoto || checklistCompleto;
+  }
   // D-q57-12: as três medições novas contam como evidência — são leitura de
   // instrumento igual às cinco de hoje.
   return !!((entry.fotos && entry.fotos.length) || entry.insuflamento || entry.retorno || entry.corrente || entry.pressao || entry.capMarcha || entry.capPartida || entry.tensaoMedida);
@@ -2885,15 +3008,35 @@ async function manRegistrarEvidencia(logId){
 
 async function manConferir(logId, aprovado){
   var achado = manEntrada(logId); if(!achado) return;
-  if (!manPode('conferir')) { showToast('Ação não permitida','error'); return; } // guarda na ação, não só na renderização (D-l7n-03)
+  var movimentacao = osEhMovimentacao(achado.entry);
+  // D-uyz-07: uma remoção com destino baixa exige podeDarBaixa() ALÉM de
+  // manPode('conferir') — um gestor confere remoção comum, não confere
+  // baixa. Guarda na ação, não só na renderização (D-l7n-03).
+  var exigeBaixa = movimentacao && achado.entry.tipo==='REMOÇÃO' && achado.entry.destinoRemocao==='baixa';
+  if (!manPode('conferir') || (exigeBaixa && !podeDarBaixa())) { showToast('Ação não permitida','error'); return; }
   var parecer = (val('man-conf-parecer')||'').trim();
   if (aprovado) {
     if (!manPodeIrPara(achado.entry.status,'CONFERIDA')) { showToast('Ação não permitida','error'); return; }
+    if (movimentacao) {
+      // D-uyz-15: cadastro gravado ANTES do status terminal — CONFERIDA é
+      // terminal (manProximos devolve []), então uma falha DEPOIS deixaria
+      // a OS fechada com o cadastro não aplicado e sem caminho de repetição.
+      // Falha aqui deixa a OS em EXECUTADA para o gestor repetir.
+      var aplicado = achado.entry.tipo==='INSTALAÇÃO'
+        ? await aplicarInstalacao(achado.equipId, achado.entry)
+        : await aplicarRemocao(achado.equipId, achado.entry);
+      if (!aplicado) return; // aborta sem mudar o status
+    }
     var nome = ctUser?ctUser.nome:'';
     var ok = await manAtualizarOS(logId, achado.equipId, {status:'CONFERIDA', conferente:nome, dataConferencia:today(), parecerConferencia:parecer||null}, 'OS conferida');
     if (ok) {
-      await atualizarUltimaManutencao(achado.equipId, achado.entry.date); // D-l7n-11: a data da OS, não a de hoje
-      await atualizarEstadoEquip(achado.equipId, val('man-conf-estado')); // D-q57-04: o estado escolhido na conferência
+      if (!movimentacao) {
+        // O ramo de manutenção NÃO muda: ultima_manutencao/estado são
+        // idempotentes por si (não retrocedem, não gravam igual) e não há
+        // o que repetir — ordem intacta, gate atual intacto.
+        await atualizarUltimaManutencao(achado.equipId, achado.entry.date); // D-l7n-11: a data da OS, não a de hoje
+        await atualizarEstadoEquip(achado.equipId, val('man-conf-estado')); // D-q57-04: o estado escolhido na conferência
+      }
       manAbrirOS(logId); renderOS();
     }
   } else {

@@ -1696,3 +1696,47 @@ confirma na tela de verdade.
       a gaveta **não** fecha durante a rolagem — esse era o defeito relatado.
 - [ ] No celular, arrastar a **alça** (a barrinha no topo da gaveta) para baixo e conferir que
       fecha nas duas posições: com a ficha no topo, e com a ficha rolada até o fim.
+
+## Refrigeração — OS de Instalação e de Remoção, com baixa patrimonial (21/08/2026)
+
+Quick task 260821-uyz. `supabase/42_refrigeracao_movimentacao.sql` escrita, aditiva, **ainda
+não aplicada** — rodar no SQL editor do Supabase, colar aqui o resultado do bloco de
+conferência do rodapé do próprio arquivo, e só então seguir o roteiro abaixo com sessão
+autenticada real. Até a migração ser aplicada, `MOV_OK` fica falso, o terceiro segmento da aba
+OS não aparece, e a tela é a de hoje (D-uyz-24) — o roteiro pressupõe a migração já aplicada.
+
+**Conferência pós-aplicação da migração 42 (colar aqui o resultado real):**
+
+```text
+(pendente — rodar depois de aplicar 42_refrigeracao_movimentacao.sql)
+```
+
+- [ ] Como técnico, na aba OS entrar no terceiro segmento **"Inst./Remoção"**, abrir uma OS de
+      **Remoção** de uma máquina instalada, marcar as partes do checklist, avançar até a
+      execução e o gestor conferir → a máquina some do mapa, do inventário padrão (chip
+      "Todos"), dos KPIs do dashboard e dos seletores de equipamento das duas OS (manutenção e
+      contratação), e passa a aparecer só no chip **"Removidos"** do inventário.
+- [ ] Abrir uma OS de **Instalação** dessa mesma máquina removida, em **outra sala** → o rótulo
+      do caso muda sozinho para "Novo local"; escolher uma sala que já tem outra máquina
+      instalada → o rótulo muda para "Mais uma máquina no mesmo local" — sem digitar nada, só
+      trocando o destino no `<select>`.
+- [ ] Instalar uma máquina com **substituição** de uma máquina que ainda está instalada → ao
+      conferir, a tela recusa e nomeia a OS de remoção que falta abrir primeiro.
+- [ ] Abrir uma OS de Remoção com destino **Baixa patrimonial**: confirmar que um usuário
+      **gestor** não consegue conferir (a ação é recusada com mensagem clara) e que um usuário
+      **admin** consegue — a máquina passa para o chip **"Baixados"** e o `<select>` de
+      equipamento da instalação deixa de oferecê-la.
+- [ ] No formulário de Instalação, usar **"➕ Cadastrar novo equipamento…"** para cadastrar uma
+      máquina na hora e confirmar que ela volta selecionada no `<select>`, pronta para escolher
+      o destino.
+- [ ] Conferir a mesma OS duas vezes (recarregando a página inteira entre as duas tentativas) →
+      confirmar que o cadastro do equipamento não muda na segunda vez (mesmo `local_id`,
+      `predio`, `local`, `situacao`) e que a OS continua com um único registro de conferência.
+- [ ] Abrir a tela em **375px** de largura e conferir que os três segmentos
+      ("Manutenção"/"Contratações"/"Inst./Remoção") cabem na barra sem cortar nenhum rótulo.
+
+**Pendência de RLS (D-uyz-23, sem eufemismo):** as policies de `equipamentos` e
+`logs_manutencao` continuam `to authenticated using (true)`, sem distinção de cargo — um
+técnico autenticado poderia gravar `situacao='baixado'` por uma chamada REST montada à mão. A
+tela não oferece o caminho (inclusive o da baixa, gateado a `admin`) e cada passo grava quem
+assinou, mas fechar de verdade exige uma migração de policy, fora deste escopo.
