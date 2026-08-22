@@ -3621,6 +3621,11 @@ async function doLoginRole(){
 #qr-pop{position:fixed;inset:0;z-index:300;background:rgba(7,29,65,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px}
 #qr-card{background:#fff;border-radius:18px;padding:22px;max-width:330px;width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.3)}
 #qr-svg-wrap svg{width:100%;max-width:250px;height:auto}
+/* ── QR da ficha (D-tyx-01/D-tyx-02): teto de largura próprio, 200px, não
+   compartilhado com o de 250px acima — a ficha divide a gaveta com quatro
+   outros blocos, o modal desenha sozinho num cartão de 330px. */
+.qr-ficha{text-align:center;margin:8px 0}
+.qr-ficha svg{width:100%;max-width:200px;height:auto}
 </style>
 <script>
 /* ══ QR CODE — tela inicial ══ */
@@ -3785,7 +3790,7 @@ function blocoQrFicha(id){
   var svg = qrSvgDe(url, 4);
   return '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-qrcode mr1" aria-hidden="true"></i>5 · Etiqueta, QR e NFC</div>' +
-    '<div style="text-align:center;margin:8px 0">' +
+    '<div class="qr-ficha">' +
     (svg ? svg : '<div style="color:#999;font-size:12px">QR indisponível — use a URL abaixo.</div>') +
     '</div>' +
     '<div style="word-break:break-all;background:#F8F9FA;border:1px solid #E0E0E0;border-radius:8px;padding:8px;font-size:11px;color:#444;margin-bottom:8px">'+esc(url)+'</div>' +
