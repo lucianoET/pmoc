@@ -184,7 +184,10 @@ function carregarSandboxSaveLogEntry(opts) {
   const ctx = {
     MAN_FLUXO_OK: !!opts.fluxoLigado,
     DATA: opts.data || [],
-    window: { _modoObservador: !!opts.observador },
+    // 260822-48m: o ponto de chamada real trocou window._modoObservador por
+    // somenteLeitura() (D-48m-01) — troca de stub, a asserção continua
+    // provando que este ponto honra o modo somente-leitura.
+    somenteLeitura() { return !!opts.observador; },
     showToast(msg, tipo) { ctx._toasts.push({ msg, tipo }); },
     _toasts: [],
     console: { warn() {}, error() {} },

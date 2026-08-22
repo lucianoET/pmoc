@@ -35,6 +35,11 @@ function carregarSandboxAlvo(searchInicial) {
     navTo(page, btn) { chamadas.navTo.push({ page: page, btn: btn }); },
     openDetail(id) { chamadas.openDetail.push(id); },
     el(id) { return 'el:' + id; },
+    // 260822-48m: este recorte passou a incluir a seção "sessão e modo
+    // observador" (D-48m-08, inserida logo antes do cabeçalho ACESSO LIVRE),
+    // cujo `window.sincronizarSessao = sincronizarSessao;` precisa de um
+    // `window` — este gate não testa observador, só evita o ReferenceError.
+    window: {},
   };
   vm.createContext(ctx);
   vm.runInContext(HTML.slice(ini, fim), ctx);

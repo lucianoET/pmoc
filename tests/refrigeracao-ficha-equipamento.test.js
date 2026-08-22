@@ -168,7 +168,10 @@ test('linkSeguro aceita http/https (inclusive maiúsculo) e recusa javascript:, 
 
 test('podeEditarCadastro é verdadeiro para admin/gestor, falso para tecnico/observador/vazio/nulo, e falso no modo observador mesmo com cargo admin', () => {
   const ctx = carregarSandboxPonte();
-  ctx.window = {};
+  // 260822-48m: o ponto de chamada real trocou window._modoObservador por
+  // somenteLeitura() (D-48m-01) — troca de stub, a asserção continua provando
+  // que este ponto honra o modo somente-leitura.
+  ctx.somenteLeitura = () => false;
   ctx.ctUser = { role: 'admin' };
   assert.equal(ctx.podeEditarCadastro(), true);
   ctx.ctUser = { role: 'gestor' };
@@ -182,7 +185,7 @@ test('podeEditarCadastro é verdadeiro para admin/gestor, falso para tecnico/obs
   ctx.ctUser = null;
   assert.equal(ctx.podeEditarCadastro(), false);
   ctx.ctUser = { role: 'admin' };
-  ctx.window = { _modoObservador: true };
+  ctx.somenteLeitura = () => true;
   assert.equal(ctx.podeEditarCadastro(), false);
 });
 

@@ -318,7 +318,10 @@ function carregarAplicacao(opts) {
     val(id) { return (ctx._valores && ctx._valores[id] !== undefined) ? ctx._valores[id] : ''; },
     _valores: opts.valores || {},
     _campos: opts.campos || {},
-    window: { _modoObservador: !!opts.observador },
+    // 260822-48m: o ponto de chamada real trocou window._modoObservador por
+    // somenteLeitura() (D-48m-01) — troca de stub, a asserção continua
+    // provando que este ponto honra o modo somente-leitura.
+    somenteLeitura() { return !!opts.observador; },
     ctUser: opts.ctUser !== undefined ? opts.ctUser : { nome: 'Gestora', role: 'gestor' },
     DATA: opts.data || [],
     showToast(msg, tipo) { toasts.push({ msg, tipo }); },

@@ -444,7 +444,7 @@ function linkSeguro(u) {
    ideia, vale ser reconhecível. Uma lista, quatro pontos de chamada (botão da
    ficha, abertura do formulário, gravação e o campo de estado no formulário). */
 function podeEditarCadastro() {
-  if (window._modoObservador) return false;
+  if (somenteLeitura()) return false;
   var r = ctUser ? ctUser.role : '';
   return r === 'admin' || r === 'gestor';
 }
@@ -454,7 +454,7 @@ function podeEditarCadastro() {
    chamada todos citando-a: o <select> de destino da remoção, o botão, o
    salvar (salvarMovOS) e a conferência (aplicarRemocao). */
 function podeDarBaixa() {
-  if (window._modoObservador) return false;
+  if (somenteLeitura()) return false;
   var r = ctUser ? ctUser.role : '';
   return r === 'admin';
 }
@@ -740,6 +740,7 @@ async function doLoginMobile() {
 document.addEventListener('DOMContentLoaded', function() {
   supa.auth.onAuthStateChange(async function(event, session) {
     if (!session) {
+      if (window.sincronizarSessao) window.sincronizarSessao(session);
       renderLoginMobile();
     } else {
       var lw = document.getElementById('login-mobile');
@@ -750,6 +751,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       // v2 fix: carrega os dados também no login manual (antes só carregava
       // quando a sessão já existia no carregamento da página)
+      if (window.sincronizarSessao) window.sincronizarSessao(session);
       if (window.initAppOnce) window.initAppOnce();
     }
   });
@@ -1239,7 +1241,7 @@ function statusPillOS(s){
 
 /* Dois wrappers que leem estado global — o gate testa a versão pura acima. */
 function manPode(acao){
-  if (window._modoObservador) return false;
+  if (somenteLeitura()) return false;
   return manPodeCargo(acao, ctUser && ctUser.role);
 }
 function manCargoAtual(){ return ctUser ? ctUser.role : ''; }
@@ -2067,7 +2069,7 @@ function openEquipForm(id){
 }
 
 async function salvarEquip(id){
-  if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
+  if (somenteLeitura()) { showToast('Modo somente leitura', ''); return; }
   if (!podeEditarCadastro()) { showToast('Sem permissão para editar cadastro','error'); return; } // guarda na ação, não só no botão (D-l7n-03)
   var patch = {};
   EQUIP_EDITAVEIS.forEach(function(k){
@@ -2115,7 +2117,7 @@ function openEquipNovo(aoCriar){
 }
 
 async function salvarEquipNovo(){
-  if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
+  if (somenteLeitura()) { showToast('Modo somente leitura', ''); return; }
   if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar equipamento','error'); return; } // guarda na ação, não só no botão
   var patch = {};
   EQUIP_EDITAVEIS.forEach(function(k){
@@ -2321,7 +2323,7 @@ async function aplicarRemocao(equipId, entry){
 }
 
 async function saveLogEntry(equipId, clistLen){
-  if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
+  if (somenteLeitura()) { showToast('Modo somente leitura', ''); return; }
   var date=val('log-date'), tipo=val('log-tipo');
   if(!date||!tipo){ showToast('Preencha data e tipo','error'); return; }
   var checklist=[];
@@ -2664,7 +2666,7 @@ function movOnChangeDestinoRemocao(){
 }
 
 async function salvarMovOS(){
-  if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
+  if (somenteLeitura()) { showToast('Modo somente leitura', ''); return; }
   if (!manPode('abrir')) { showToast('Sem permissão para abrir OS', 'error'); return; }
   var tipo = val('mov-tipo');
   if (MOV_TIPOS.indexOf(tipo) < 0) { showToast('Tipo inválido', 'error'); return; }
@@ -3292,6 +3294,62 @@ function aplicarAlvoFicha() {
 
 ALVO_FICHA = lerAlvoFicha(location.search);
 
+/* ── sessão e modo observador: leitura única, porta única ── */
+/* D-48m-01: as ocorrências de window._modoObservador ficam confinadas a
+   esta seção (escrita em entrarModoObservador/sairModoObservador, leitura
+   em somenteLeitura()). Os nove pontos espalhados pelo arquivo
+   (podeEditarCadastro, podeDarBaixa, manPode, salvarEquip, salvarEquipNovo,
+   saveLogEntry, salvarMovOS, ctCan e o `var ro` de ctOpenOS) passam a
+   chamar somenteLeitura() — nenhum deles volta a tocar a flag direto.
+   tests/refrigeracao-modo-observador.test.js falha se um décimo ponto de
+   leitura direta aparecer fora daqui. */
+var _sessaoAtiva = false; // D-48m-03: escrita só em sincronizarSessao()
+
+/* D-48m-02: leitura derivada, não confiada — uma sessão real vence uma
+   flag de observador esquecida, por construção. A fórmula é conjuntiva
+   de propósito: se _sessaoAtiva errar para false por algum motivo, quem
+   nunca passou pelo modo observador continua se comportando exatamente
+   como hoje (modo de falha seguro). */
+function somenteLeitura() {
+  return window._modoObservador === true && _sessaoAtiva !== true;
+}
+
+function entrarModoObservador() {
+  window._modoObservador = true;
+  var banner = document.createElement('div');
+  banner.id = 'obs-banner';
+  banner.innerHTML = '<i class="fas fa-eye" style="margin-right:6px"></i>Modo visualização — somente leitura';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#856404;color:#fff;text-align:center;padding:6px;font-size:12px;font-weight:600;z-index:9999;';
+  document.body.prepend(banner);
+}
+
+function sairModoObservador() {
+  window._modoObservador = false;
+  var banner = document.getElementById('obs-banner');
+  if (banner) banner.remove();
+}
+
+/* D-48m-03: única porta por onde uma mudança de sessão é aplicada — os
+   dois ramos do onAuthStateChange logo abaixo de "Auth state" (mais
+   adiante no arquivo) chamam esta função. */
+function sincronizarSessao(sessao) {
+  _sessaoAtiva = !!sessao;
+  if (sessao) {
+    sairModoObservador();
+  } else {
+    // D-48m-04: sem isto o conserto da flag desmascara uma escalada de
+    // privilégio — initAppOnce() retornaria pela guarda _appInited sem
+    // recarregar o perfil, mantendo o ctUser da sessão anterior.
+    // _appInited e ctUser são declarados adiante no arquivo; funciona
+    // porque esta função só é CHAMADA em tempo de execução (mesma
+    // observação já feita acima, sobre carregarPerfil).
+    _appInited = false;
+    ctUser = null;
+    sairModoObservador(); // D-48m-05: a tarja some também no ramo sem sessão
+  }
+}
+window.sincronizarSessao = sincronizarSessao;
+
 /* ── ACESSO LIVRE (modo observador, somente leitura) ── */
 async function acessoLivre() {
   var btn = document.querySelector('[onclick="acessoLivre()"]');
@@ -3304,8 +3362,6 @@ async function acessoLivre() {
     await loadLogsFromSupabase();
     await manSondarEsquema();
     await movSondarEsquema();
-    // Marca modo observador
-    window._modoObservador = true;
     // Remove tela de login
     var lw = document.getElementById('login-mobile');
     if (lw) lw.remove();
@@ -3314,12 +3370,8 @@ async function acessoLivre() {
     // Esconde FAB (sem permissão para criar OS)
     var fabEl = document.getElementById('fab');
     if (fabEl) fabEl.style.display = 'none';
-    // Banner de modo observador
-    var banner = document.createElement('div');
-    banner.id = 'obs-banner';
-    banner.innerHTML = '<i class="fas fa-eye" style="margin-right:6px"></i>Modo visualização — somente leitura';
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#856404;color:#fff;text-align:center;padding:6px;font-size:12px;font-weight:600;z-index:9999;';
-    document.body.prepend(banner);
+    // Liga o modo observador e a tarja (D-48m-01: única escrita, na seção acima)
+    entrarModoObservador();
     renderDash();
     renderInv();
     aplicarAlvoFicha();
@@ -3449,7 +3501,7 @@ function ctEquip(id){ return DATA.find(function(r){return r.id===id;}) || {local
 
 /* ══ PERMISSÕES ══ */
 function ctCan(acao){
-  if (window._modoObservador) return false;
+  if (somenteLeitura()) return false;
   var r = ctUser ? ctUser.role : 'admin';
   var m = {
     criar:      ['admin','gestor','tecnico'],
@@ -3749,7 +3801,7 @@ function ctOpenOS(osId){
   var regs = ctExec[osId]||[];
   var comps = ctComp[osId]||[];
   var total = ctOrcTotal(osId);
-  var ro = window._modoObservador;
+  var ro = somenteLeitura();
 
   el('dh-id').textContent = o.numero+' · '+(o.ne||'sem NE');
   el('dh-local').textContent = e.local;
