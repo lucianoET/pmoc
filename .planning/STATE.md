@@ -5,10 +5,10 @@ milestone_name: Consolidação da plataforma
 current_phase: 7
 current_phase_name: ui-ux-mobile
 status: verifying
-stopped_at: Completed quick task 260822-48m-refrigeracao-modo-observador-gruda-e-tra -- somenteLeitura()/sincronizarSessao() consertam o modo observador grudento e fecham a escalada de privilegio (sessao real nao zerava _appInited/ctUser); gate vermelho antes de verde; node --test 729/729
-last_updated: "2026-08-22T06:26:24.013Z"
-last_activity: 2026-08-19
-last_activity_desc: "Quick task 260819-863: D-06 fechada, `/calibracao` com login por cargo e escrita só para sessão autenticada (migração 39)"
+stopped_at: Completed quick task 260822-5hy-refrigeracao-exportacao-e-importacao-de- -- planilha de inventario (exportar/importar CSV) no modo perigoso escolhido pelo usuario (atualiza+cria+arquiva por ausencia); duas guardas estruturais (escopo por conteudo, teto de escala); node --test 772/772
+last_updated: "2026-08-22T07:34:51.314Z"
+last_activity: 2026-08-22
+last_activity_desc: "Quick task 260822-5hy: planilha do inventário da Refrigeração (exportar/importar CSV), modo atualiza+cria+arquiva escolhido pelo usuário contra recomendação, sobrevivível por escopo derivado do conteúdo e guarda de escala"
 progress:
   total_phases: 8
   completed_phases: 4
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 7 (ui-ux-mobile) — EXECUTED
 Plan: 1 of 1
 Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
-Last activity: 2026-08-19 — Quick task 260819-863: D-06 fechada, `/calibracao` com login por cargo e escrita só para sessão autenticada (migração 39)
+Last activity: 2026-08-22 — Quick task 260822-5hy: planilha do inventário da Refrigeração (exportar/importar CSV), modo atualiza+cria+arquiva escolhido pelo usuário contra recomendação, sobrevivível por escopo derivado do conteúdo e guarda de escala
 
 Progress: [██████████] 100% (v2.0)
 
@@ -87,6 +87,7 @@ Progress: [██████████] 100% (v2.0)
 | Phase quick-260821-q57 P1 | ~50min | 3 tasks | 11 files |
 | Phase quick-260821-tyx P01 | 20min | 2 tasks | 3 files |
 | Phase quick P260821-uyz | 29min | 3 tasks | 11 files |
+| Phase quick P260822-5hy | ~38min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -178,6 +179,7 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: 260821-uyz: equipamentos.situacao (instalado/removido/baixado, terminal) + logs_manutencao.local_destino_id/local_origem_id/equip_substituido_id/destino_remocao (migração 42, escrita, não aplicada); MOV_OK sonda própria separada de MAN_FLUXO_OK (D-uyz-13); casoDeInstalacao deriva os três casos do dado, nunca digitado (D-uyz-03)
 - [Phase ?]: 260821-uyz: aplicarInstalacao/aplicarRemocao convergentes e idempotentes, cadastro gravado ANTES do status terminal na conferência de movimentação (D-uyz-15); baixa patrimonial exige cargo admin, UX apenas (D-uyz-07/23); situacao e funciona são eixos ortogonais (D-uyz-20)
 - [Phase ?]: 260822-48m: somenteLeitura()/sincronizarSessao() como leitura-unica/porta-unica para o modo observador de /refrigeracao, com sessao ativa vencendo flag esquecida por construcao (D-48m-01..09)
+- [Phase ?]: D-5hy-01..25: planilha de inventario em CSV com arquivamento por ausencia (modo perigoso escolhido pelo usuario contra recomendacao), tornado sobrevivivel por escopo derivado do conteudo e guarda de escala
 
 ### Pending Todos
 
@@ -248,6 +250,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-22T06:26:23.768Z
-Stopped at: Completed quick task 260822-48m-refrigeracao-modo-observador-gruda-e-tra -- somenteLeitura()/sincronizarSessao() consertam o modo observador grudento e fecham a escalada de privilegio (sessao real nao zerava _appInited/ctUser); gate vermelho antes de verde; node --test 729/729
+Last session: 2026-08-22T07:34:45.158Z
+Stopped at: Completed quick task 260822-5hy-refrigeracao-exportacao-e-importacao-de- -- planilha de inventario (exportar/importar CSV) no modo perigoso escolhido pelo usuario (atualiza+cria+arquiva por ausencia); duas guardas estruturais (escopo por conteudo, teto de escala); node --test 772/772
 Resume file: None
