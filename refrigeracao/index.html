@@ -816,6 +816,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button class="chip" onclick="setOSChip(this,'aberto')">Em aberto</button>
         <button class="chip" onclick="setOSChip(this,'aprovacao')">P/ aprovar</button>
         <button class="chip" onclick="setOSChip(this,'concluida')">Concluída</button>
+        <button class="chip" onclick="setOSChip(this,'cancelada')">Cancelada</button>
         <button class="chip" onclick="setOSChip(this,'critica')">Crítica</button>
       </div>
       <div class="sec-head">
@@ -1531,21 +1532,38 @@ function setOSChip(btn, val){
   renderOS();
 }
 
+/* Regra dos chips da aba OS, em função pura — o "Todos" é a FILA DE
+   TRABALHO, não o arquivo: uma OS conferida ou cancelada só aparece no chip
+   que a nomeia. Antes ela ficava no Todos para sempre, e a lista crescia
+   monótona até esconder o que ainda precisa de alguém. "Crítica" continua
+   respondendo pelo equipamento, não pelo estado da OS — é a pergunta "que
+   máquina crítica passou por aqui", e recortá-la por estado responderia
+   outra coisa. */
+function osNoChip(chip, entry, ehCritica){
+  var n = manNormalizar(entry.status);
+  if(chip==='aberto')    return manPendente(entry.status);
+  if(chip==='aprovacao') return n==='APROVACAO';
+  if(chip==='concluida') return n==='CONFERIDA';
+  if(chip==='cancelada') return n==='CANCELADA';
+  if(chip==='critica')   return !!ehCritica;
+  return !manEhTerminal(entry.status); // 'todos' e qualquer chip desconhecido
+}
+
 function renderOS(){
   var all = getAllOSEntries().filter(function(o){
     if(osEhMovimentacao(o.entry)) return false; // D-uyz-01: as OS de movimentação vivem no terceiro segmento
-    if(osChip==='aberto') return manPendente(o.entry.status);
-    if(osChip==='aprovacao') return manNormalizar(o.entry.status)==='APROVACAO';
-    if(osChip==='concluida') return manNormalizar(o.entry.status)==='CONFERIDA';
-    if(osChip==='critica') return autoCrit(o.equip)==='CRÍTICA';
-    return true;
+    return osNoChip(osChip, o.entry, autoCrit(o.equip)==='CRÍTICA');
   });
 
   el('os-cnt').textContent = all.length;
 
   if(!all.length){
+    var vazioMsg = osChip==='concluida' ? 'Nenhuma OS concluída.'
+      : osChip==='cancelada' ? 'Nenhuma OS cancelada.'
+      : osChip==='todos' ? 'Nenhuma OS em andamento.<br>As concluídas e canceladas estão nos chips ao lado.'
+      : 'Nenhuma OS neste filtro.';
     el('os-list').innerHTML = '<div class="empty"><i class="fas fa-clipboard-list" aria-hidden="true"></i>' +
-      '<p>Nenhuma OS registrada.<br>Toque <strong>+</strong> para criar uma nova.</p></div>';
+      '<p>'+vazioMsg+'<br>Toque <strong>+</strong> para criar uma nova.</p></div>';
     return;
   }
 
@@ -1800,7 +1818,7 @@ function renderAlerts(){
    DRAWER / DETAIL
 ═══════════════════════════════════════════════════════════ */
 function openDrawer(){ el('drawer').classList.add('open'); document.body.style.overflow='hidden'; }
-function closeDrawer(){ el('drawer').classList.remove('open'); document.body.style.overflow=''; }
+function closeDrawer(){ MAN_EDIT_ID = null; el('drawer').classList.remove('open'); document.body.style.overflow=''; }
 
 /* Um campo de link vira âncora SÓ quando linkSeguro devolver algo — valor
    gravado que não passe (ex: javascript:, ou herança de um cadastro antigo)
@@ -2717,7 +2735,9 @@ function movPainelDaOS(entry, equipId, logId){
       '</div></div>';
   }
   var itens = entry.checklist||[];
-  var podeMarcar = entry.status==='EM_EXECUCAO' && manPode('executar');
+  /* O técnico marca durante a execução; o gestor corrige depois, em
+     qualquer estado — mesma regra do botão Corrigir do bloco 1. */
+  var podeMarcar = (entry.status==='EM_EXECUCAO' && manPode('executar')) || podeEditarCadastro();
   h += '<label class="fgl" style="margin-top:8px">Checklist de partes</label>' +
     itens.map(function(item,i){
       return '<label class="chk-item"><input type="checkbox" '+(podeMarcar?'':'disabled ')+(item.done?'checked ':'')+
@@ -2732,13 +2752,111 @@ function movPainelDaOS(entry, equipId, logId){
    (manAtualizarOS). */
 async function manMarcarChecklist(logId, indice, marcado){
   var achado = manEntrada(logId); if(!achado) return;
-  if (!manPode('executar')) { showToast('Sem permissão para marcar checklist','error'); return; }
+  if (!manPode('executar') && !podeEditarCadastro()) { showToast('Sem permissão para marcar checklist','error'); return; }
   var lista = (achado.entry.checklist||[]).map(function(item, i){
     if (i!==indice) return item;
     var novo = {}; for (var k in item) novo[k] = item[k]; novo.done = marcado; return novo;
   });
   var ok = await manAtualizarOS(logId, achado.equipId, {checklist:lista});
   if (ok) manAbrirOS(logId);
+}
+
+/* ── correção de dados pelo gestor ──
+   A gaveta da OS sempre foi só leitura: um erro de digitação na data, no
+   tipo ou numa medição só saía com um UPDATE no SQL editor. Pior no fim do
+   fluxo — em CONFERIDA e em CANCELADA manProximos() devolve [] e a gaveta
+   não oferece ação nenhuma, exatamente onde o erro já está congelado.
+   Aqui o gestor (podeEditarCadastro: admin/gestor, nunca observador)
+   corrige os dados em QUALQUER estado, terminal inclusive, e também nas
+   linhas legadas sem fluxo.
+   O que este formulário NÃO faz é mover a OS: `status` fica fora do patch.
+   Corrigir um dado e reabrir um processo encerrado são atos diferentes —
+   quem confere assina a conferência, e uma OS que voltasse a andar por um
+   campo de formulário deixaria a assinatura no lugar afirmando algo que
+   não vale mais. */
+var MAN_EDIT_ID = null;
+
+function manEditarDados(logId){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para corrigir a OS','error'); return; }
+  MAN_EDIT_ID = logId;
+  manAbrirOS(logId);
+}
+function manCancelarEdicao(logId){ MAN_EDIT_ID = null; manAbrirOS(logId); }
+
+/* Número de campo: vazio vira null (a coluna é anulável), texto inválido
+   vira null também — nunca NaN, que o PostgREST recusaria com um erro que
+   não diz qual campo. */
+/* esc() devolve '' para qualquer valor falso — inclusive o número 0, que é
+   medição legítima (pressão, corrente). Daí este par próprio: só null e
+   string vazia viram campo vazio. */
+function manValCampo(v){ return (v===null || v===undefined || v==='') ? '' : esc(String(v)); }
+
+function manNumOuNull(id){
+  var campo = el(id); if (!campo) return null;
+  var v = String(campo.value||'').trim();
+  if (v === '') return null;
+  var n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function manFormDados(entry, logId){
+  var mov = osEhMovimentacao(entry);
+  var tipoHtml = mov
+    ? '<div class="dval" style="font-size:13px">'+esc(entry.tipo||'—')+'</div>' +
+      '<div style="font-size:11px;color:#999">Tipo fixo: OS de movimentação (D-uyz-21).</div>'
+    : '<select class="fgs" id="man-ed-tipo">' +
+      MAINT_TIPOS.map(function(t){ return '<option value="'+t+'"'+(entry.tipo===t?' selected':'')+'>'+t+'</option>'; }).join('') +
+      (MAINT_TIPOS.indexOf(entry.tipo)<0 && entry.tipo ? '<option value="'+esc(entry.tipo)+'" selected>'+esc(entry.tipo)+'</option>' : '') +
+      '</select>';
+  return '<div class="fg2">' +
+    '<div><label class="fgl">Data</label><input class="fgi" id="man-ed-data" type="date" value="'+esc(entry.date||'')+'"/></div>' +
+    '<div><label class="fgl">Tipo</label>'+tipoHtml+'</div></div>' +
+    '<label class="fgl" style="margin-top:8px">Técnico</label>' +
+    '<input class="fgi" id="man-ed-tecnico" type="text" value="'+esc(entry.tecnico||'')+'"/>' +
+    '<label class="fgl" style="margin-top:8px">Problema relatado / serviço</label>' +
+    '<textarea class="fgt" id="man-ed-desc">'+esc(entry.desc||'')+'</textarea>' +
+    '<label class="fgl" style="margin-top:10px;display:block">Medições</label>' +
+    '<div class="fg2">' +
+    '<div><label class="fgl">Insuflamento (°C)</label><input class="fgi" id="man-ed-ins" type="number" step="0.1" value="'+manValCampo(entry.insuflamento)+'"/></div>' +
+    '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="man-ed-ret" type="number" step="0.1" value="'+manValCampo(entry.retorno)+'"/></div>' +
+    '<div><label class="fgl">Corrente (A)</label><input class="fgi" id="man-ed-corr" type="number" step="0.1" value="'+manValCampo(entry.corrente)+'"/></div>' +
+    '<div><label class="fgl">Pressão (psi)</label><input class="fgi" id="man-ed-press" type="number" step="1" value="'+manValCampo(entry.pressao)+'"/></div>' +
+    '<div><label class="fgl">Cap. marcha (µF)</label><input class="fgi" id="man-ed-cap-marcha" type="number" step="0.1" value="'+manValCampo(entry.capMarcha)+'"/></div>' +
+    '<div><label class="fgl">Cap. partida (µF)</label><input class="fgi" id="man-ed-cap-partida" type="number" step="0.1" value="'+manValCampo(entry.capPartida)+'"/></div>' +
+    '<div><label class="fgl">Tensão (V)</label><input class="fgi" id="man-ed-tensao" type="number" step="0.1" value="'+manValCampo(entry.tensaoMedida)+'"/></div></div>' +
+    '<div class="ct-btn-row" style="margin-top:10px">' +
+    '<button class="btn-success" onclick="manSalvarDados(\''+esc(logId)+'\')"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar correção</button>' +
+    '<button class="btn-secondary" onclick="manCancelarEdicao(\''+esc(logId)+'\')"><i class="fas fa-times mr1" aria-hidden="true"></i>Cancelar</button></div>' +
+    '<div style="font-size:11px;color:#999;margin-top:6px">O estado da OS não muda aqui — correção de dado não move o processo.</div>';
+}
+
+async function manSalvarDados(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  // guarda na ação, não só no botão (D-l7n-03)
+  if (!podeEditarCadastro()) { showToast('Sem permissão para corrigir a OS','error'); return; }
+  var data = (el('man-ed-data')||{}).value || '';
+  if (!data) { showToast('A data da OS não pode ficar vazia','error'); return; }
+  var ins = manNumOuNull('man-ed-ins'), ret = manNumOuNull('man-ed-ret');
+  var patch = {
+    date: data,
+    tecnico: (el('man-ed-tecnico')||{}).value || '',
+    desc: (el('man-ed-desc')||{}).value || '',
+    insuflamento: ins,
+    retorno: ret,
+    deltaT: manDeltaT(ins, ret),
+    corrente: manNumOuNull('man-ed-corr'),
+    pressao: manNumOuNull('man-ed-press'),
+    capMarcha: manNumOuNull('man-ed-cap-marcha'),
+    capPartida: manNumOuNull('man-ed-cap-partida'),
+    tensaoMedida: manNumOuNull('man-ed-tensao')
+  };
+  var campoTipo = el('man-ed-tipo'); // ausente em OS de movimentação: o tipo fica como está
+  if (campoTipo) patch.tipo = campoTipo.value;
+  var ok = await manAtualizarOS(logId, achado.equipId, patch, 'Dados corrigidos');
+  if (!ok) return;
+  MAN_EDIT_ID = null;
+  manAbrirOS(logId);
+  renderOS(); renderMovim();
 }
 
 /* ── fluxo da OS interna: tela e ações ── */
@@ -2775,15 +2893,21 @@ function manAbrirOS(logId){
 
   var done = (entry.checklist||[]).filter(function(c){ return c.done; }).length;
   var tot = (entry.checklist||[]).length;
-  h += '<div class="ds"><div class="ds-title"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i>1 · Abertura</div>' +
-    '<div class="dfields2">' +
+  var editando = (MAN_EDIT_ID === logId);
+  h += '<div class="ds"><div class="ds-title"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i>1 · Abertura' +
+    (podeEditarCadastro() && !editando
+      ? '<button class="btn-secondary" style="float:right;padding:2px 10px;font-size:11px" onclick="manEditarDados(\''+esc(logId)+'\')" title="Corrigir os dados desta OS"><i class="fas fa-pen mr1" aria-hidden="true"></i>Corrigir</button>'
+      : '') +
+    '</div>';
+  h += editando ? manFormDados(entry, logId) :
+    ('<div class="dfields2">' +
     '<div class="dfield"><label>Data</label><div class="dval" style="font-size:13px">'+fmtDate(entry.date)+'</div></div>' +
     '<div class="dfield"><label>Tipo</label><div class="dval" style="font-size:13px">'+esc(entry.tipo||'—')+'</div></div>' +
     '</div>' +
     (entry.tecnico?'<div class="dfield"><label>Técnico</label><div class="dval" style="font-size:13px">'+esc(entry.tecnico)+'</div></div>':'') +
     (entry.desc?'<div class="dfield"><label>Problema relatado</label><div class="dval" style="font-size:13px">'+esc(entry.desc)+'</div></div>':'') +
-    (tot?'<div class="le-chk"><i class="fas fa-tasks mr1" aria-hidden="true"></i>'+done+'/'+tot+' itens do checklist</div>':'') +
-    '</div>';
+    (tot?'<div class="le-chk"><i class="fas fa-tasks mr1" aria-hidden="true"></i>'+done+'/'+tot+' itens do checklist</div>':''));
+  h += '</div>';
 
   if (osEhMovimentacao(entry)) {
     // D-uyz: painel próprio de movimentação, logo depois do bloco 1 — não
