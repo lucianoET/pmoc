@@ -80,6 +80,25 @@ HTML sem login faria toda gravação no `/calibracao` falhar até o deploy sair.
 ordem inversa não há janela quebrada: com o login no ar e as policies ainda
 antigas, tudo funciona igual.
 
+## Aplicada e verificada em produção (19/08/2026)
+
+Na ordem certa: PR mergeada → Vercel publicou o `/calibracao` com login
+(conferido buscando `__calIniciar` no HTML servido) → migração 39 aplicada.
+
+A conferência foi **pela porta da frente**, com a `anon key` que está no HTML,
+contra a API REST — `pg_policies` mostraria o que foi escrito, não o que o
+Postgres faz com ele:
+
+| tentativa (anon) | antes | agora |
+|---|---|---|
+| `INSERT` em `cal_labs` | criava a linha | **401** `new row violates row-level security policy` |
+| `UPDATE` em `cal_equipamentos` (linha existente) | gravava | **200 `[]`** — não enxerga a linha para escrever |
+| `SELECT` | lia | **200**, segue lendo (é o que o cargo Livre precisa) |
+
+Nada foi alterado na sondagem: 38 instrumentos, 8 laboratórios, 12 PS, e o `obs`
+do instrumento sondado continua nulo. As policies ficaram duas por tabela — a
+`_tudo` em `{authenticated}`, a `_sel` em `{public}`.
+
 ## Fica em aberto
 
 As senhas de cargo continuam no `cmasm2026` inicial — pendência já registrada,
