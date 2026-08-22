@@ -193,3 +193,40 @@ test('os quatro grep do PLAT-15 continuam em 0 — refrigeração segue congelad
     assert.strictEqual((HTML.match(new RegExp(padrao.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length, 0, `"${padrao}" apareceu em refrigeracao/index.html`);
   }
 });
+
+// 260821-uyz (Task 1): removido/baixado somem das operações — KPIs, alertas
+// e PMOC leem só equipamentosOperacionais(DATA). alertasPmoc CONTINUA pura,
+// sem filtrar por dentro — é o que mantém este gate válido em vez de verde
+// por acidente.
+test('o corpo de renderDash chama equipamentosOperacionais(DATA) e passa o resultado para alertasPmoc', () => {
+  const ini = HTML.indexOf('function renderDash(){');
+  const fim = HTML.indexOf('var CRIT_ORDEM =');
+  assert.ok(ini > 0 && fim > ini, 'renderDash / CRIT_ORDEM não encontrados');
+  const corpo = HTML.slice(ini, fim);
+  assert.match(corpo, /equipamentosOperacionais\(DATA\)/);
+  assert.match(corpo, /alertasPmoc\(opDATA/);
+});
+
+test('o corpo de renderAlerts chama alertasPmoc(equipamentosOperacionais(DATA)', () => {
+  const ini = HTML.indexOf('function renderAlerts(){');
+  const fim = HTML.indexOf('DRAWER / DETAIL', ini);
+  assert.ok(ini > 0 && fim > ini, 'renderAlerts / próxima seção não encontrados');
+  const corpo = HTML.slice(ini, fim);
+  assert.match(corpo, /alertasPmoc\(equipamentosOperacionais\(DATA\)/);
+});
+
+test('o corpo de renderPmoc filtra a partir de equipamentosOperacionais(DATA)', () => {
+  const ini = HTML.indexOf('function renderPmoc(){');
+  const fim = HTML.indexOf('el(\'pmoc-cnt\')', ini) > 0 ? HTML.indexOf('\n}', HTML.indexOf('function renderPmoc(){')) : -1;
+  assert.ok(ini > 0, 'renderPmoc não encontrada');
+  const corpo = HTML.slice(ini, HTML.indexOf('\n}\n', ini));
+  assert.match(corpo, /equipamentosOperacionais\(DATA\)/);
+});
+
+test('alertasPmoc continua pura — o corpo dela não menciona equipInstalado (o contrato não mudou)', () => {
+  const ini = HTML.indexOf('function alertasPmoc(');
+  const fim = HTML.indexOf('function contarOSPendentes(', ini);
+  assert.ok(ini > 0 && fim > ini, 'alertasPmoc / contarOSPendentes não encontrados');
+  const corpo = HTML.slice(ini, fim);
+  assert.doesNotMatch(corpo, /equipInstalado/, 'alertasPmoc não deveria filtrar por dentro — quem filtra é o chamador');
+});

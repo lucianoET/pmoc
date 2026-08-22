@@ -141,6 +141,8 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
 .pill-media{background:#E3F2FD;color:#1565C0}
 .pill-baixa{background:#F1F8E9;color:#33691E}
 .pill-tipo{background:#F3F4F6;color:#555}
+.pill-sit-removido{background:#F3F4F6;color:#555}
+.pill-sit-baixado{background:#FDECEA;color:#B71C1C}
 .ec-info{display:flex;gap:12px;font-size:11px;color:#888}
 .ec-info span i{margin-right:3px}
 
@@ -389,7 +391,8 @@ var CAMPOS_EQUIP = {
   link: 'link', manualUrl: 'manual_url',
   areaM2: 'area_m2', peDireito: 'pe_direito', nPessoas: 'n_pessoas',
   dissipacaoW: 'dissipacao_w', fatorInsolacao: 'fator_insolacao',
-  localId: 'local_id', lat: 'lat', lon: 'lon'
+  localId: 'local_id', lat: 'lat', lon: 'lon',
+  situacao: 'situacao', dataRemocao: 'data_remocao', dataBaixa: 'data_baixa'
 };
 
 /* Lista fechada do que o formulário de cadastro GRAVA (D-q57-08). `lat`/`lon`/
@@ -397,7 +400,12 @@ var CAMPOS_EQUIP = {
    `ultimaManutencao` fica de fora porque é derivada da conferência da OS
    (atualizarUltimaManutencao) — um formulário de cadastro que gravasse
    qualquer um dos dois desfaria em silêncio o trabalho de outro módulo. `id`
-   fica de fora porque nunca se edita a própria chave. */
+   fica de fora porque nunca se edita a própria chave. `situacao`/
+   `dataRemocao`/`dataBaixa` ficam de fora pelo MESMO motivo (D-uyz-12): elas
+   mudam só por conferência de OS de movimentação (aplicarInstalacao/
+   aplicarRemocao) — um <select> de situação no cadastro deixaria qualquer
+   gestor dar baixa numa máquina sem OS, sem checklist de partes, sem
+   assinatura e sem a trava de admin. */
 var EQUIP_EDITAVEIS = [
   'area', 'predio', 'local', 'tipo', 'fabricante', 'modelo', 'btu',
   'funciona', 'estado', 'criticidade', 'tensao', 'correnteNominal',
@@ -746,6 +754,8 @@ document.addEventListener('DOMContentLoaded', function() {
         <button class="chip" onclick="setChip(this,'vencidos')">Vencidos</button>
         <button class="chip" onclick="setChip(this,'vermelha')">Área Vermelha</button>
         <button class="chip" onclick="setChip(this,'azul')">Área Azul</button>
+        <button class="chip" onclick="setChip(this,'removidos')">Removidos</button>
+        <button class="chip" onclick="setChip(this,'baixados')">Baixados</button>
       </div>
       <div class="sec-head">
         <span class="sec-title" id="inv-label">Equipamentos</span>
@@ -962,6 +972,70 @@ function statusPill(fn){
   return '<span class="pill '+cfg.classe+'"><i class="fas '+cfg.icone+'" aria-hidden="true"></i> '+esc(cfg.curto)+'</span>';
 }
 
+/* ── situação patrimonial do equipamento: instalado/removido/baixado ── */
+/* D-uyz-05/11/20: `situacao` é um vocabulário fechado de três palavras,
+   ORTOGONAL a `funciona` — uma diz onde a máquina está no ciclo
+   patrimonial, a outra diz se ela funciona. `baixado` é terminal: uma OS
+   de instalação recusa máquina baixada (D-uyz-14).
+   `instalado` não desenha pílula nenhuma na lista — é o caso normal de
+   171 de 171 hoje; uma pílula em todo cartão seria ruído. As classes
+   novas chamam-se pill-sit-removido/pill-sit-baixado — NUNCA pill-baixa,
+   que já existe e é a criticidade BAIXA. */
+var EQUIP_SITUACOES = {
+  'instalado': {rotulo:'Instalado',           curto:'INSTALADO', classe:'',                  icone:'fa-check'},
+  'removido':  {rotulo:'Removido — sem local', curto:'REMOVIDO',  classe:'pill-sit-removido', icone:'fa-box'},
+  'baixado':   {rotulo:'Baixado',              curto:'BAIXADO',   classe:'pill-sit-baixado',  icone:'fa-ban'}
+};
+var SITUACAO_ORDEM = ['instalado','removido','baixado'];
+
+/* D-uyz-11: duas respostas DIFERENTES para dois problemas diferentes.
+   undefined/null/'' → 'instalado': é o banco SEM a migração 42, ou uma
+   consulta que não pediu a coluna — nesse caso as 171 máquinas de hoje
+   ESTÃO instaladas; traduzir para null faria os KPIs zerarem no minuto
+   do deploy, sem erro nenhum no console. Texto fora da lista fechada →
+   null, que a tela mostra como desconhecido — é lixo, não ausência. Sem
+   trim, sem conversão de caixa, sem conversão para texto (ASVS V5) —
+   mesma técnica de normalizarEstadoEquip/normalizarFlora. */
+function normalizarSituacaoEquip(v){
+  if (v===undefined || v===null || v==='') return 'instalado';
+  if (EQUIP_SITUACOES.hasOwnProperty(v)) return v;
+  return null;
+}
+function equipSituacao(e){ return normalizarSituacaoEquip(e && e.situacao); }
+function equipInstalado(e){ return equipSituacao(e)==='instalado'; }
+function equipRemovido(e){ return equipSituacao(e)==='removido'; }
+function equipBaixado(e){ return equipSituacao(e)==='baixado'; }
+function rotuloSituacaoEquip(v){
+  var n = normalizarSituacaoEquip(v);
+  return n ? EQUIP_SITUACOES[n].rotulo : 'Situação desconhecida';
+}
+/* instalado devolve string vazia — nenhuma pílula no caso normal. */
+function situacaoPill(v){
+  var n = normalizarSituacaoEquip(v);
+  if (!n || n==='instalado') return '';
+  var cfg = EQUIP_SITUACOES[n];
+  return '<span class="pill '+cfg.classe+'"><i class="fas '+cfg.icone+'" aria-hidden="true"></i> '+esc(cfg.curto)+'</span>';
+}
+
+/* Ponto único que o resto da tela chama para excluir removido/baixado das
+   operações — KPIs, alertas, PMOC, gráficos e os dois seletores de
+   equipamento das OS (D-uyz-10). Preserva a ordem da lista recebida. */
+function equipamentosOperacionais(lista){
+  return (lista||[]).filter(equipInstalado);
+}
+
+/* Quantos removidos/baixados casam com a mesma busca textual de
+   filtrarInventario — para a tela vazia poder DIZER que eles existem em
+   vez de calar (D-uyz-10). Pura, sem DOM. */
+function contarNaoOperacionais(dados, busca){
+  var q = (busca||'').toLowerCase().trim();
+  return (dados||[]).filter(function(e){
+    if (equipInstalado(e)) return false;
+    if (q && !((e.local||'').toLowerCase().includes(q)||(e.predio||'').toLowerCase().includes(q)||(e.fabricante||'').toLowerCase().includes(q))) return false;
+    return true;
+  }).length;
+}
+
 /* ── alertas: contagem única ── */
 function equipSemHist(e){
   return !e.ultimaManutencao && !getLatestLogDate(e.id);
@@ -1157,11 +1231,14 @@ function navTo(page, btn){
 ═══════════════════════════════════════════════════════════ */
 function renderDash(){
   var now = new Date();
-  var total = DATA.length;
-  var ok = DATA.filter(function(e){ return equipOperante(e); }).length;
+  // D-uyz-10: removido/baixado não participam da operação — KPIs, alertas
+  // e PMOC leem só o que está instalado, calculado UMA VEZ no topo.
+  var opDATA = equipamentosOperacionais(DATA);
+  var total = opDATA.length;
+  var ok = opDATA.filter(function(e){ return equipOperante(e); }).length;
   var pct = total?Math.round(ok/total*100):0;
-  var critica = DATA.filter(function(e){ return autoCrit(e)==='CRÍTICA'; }).length;
-  var ag = alertasPmoc(DATA, now);
+  var critica = opDATA.filter(function(e){ return autoCrit(e)==='CRÍTICA'; }).length;
+  var ag = alertasPmoc(opDATA, now);
   var nok = ag.nok.length;
   var restricao = ag.restricao.length;
   var semHist = ag.semHist.length;
@@ -1214,7 +1291,7 @@ function renderDash(){
   el('dash-alerts-section').innerHTML = alertHtml;
 
   // PMOC próximas
-  var pmocDue = DATA.filter(function(e){
+  var pmocDue = opDATA.filter(function(e){
     var nx=nextPmoc(e,'inspecao');
     return nx && ((nx-now)/86400000)<30;
   }).sort(function(a,b){
@@ -1244,7 +1321,7 @@ function renderDash(){
   var osPend = contarOSPendentes(osAll);
   el('os-badge').textContent = osPend;
   el('os-badge').style.display = osPend>0?'block':'none';
-  var pmocVenc = DATA.filter(function(e){ var nx=nextPmoc(e,'inspecao'); return nx&&nx<now; }).length;
+  var pmocVenc = opDATA.filter(function(e){ var nx=nextPmoc(e,'inspecao'); return nx&&nx<now; }).length;
   el('pmoc-badge').textContent = pmocVenc;
   el('pmoc-badge').style.display = pmocVenc>0?'block':'none';
   el('os-cnt').textContent = osAll.length;
@@ -1301,10 +1378,15 @@ function setChip(btn, val){
    não garantia). Dois consumidores: a lista da tela (renderInv) e a folha de
    etiquetas (etiquetasDoInventario, D-s3h-08). Sem ordenar — cmpInv continua
    sendo quem ordena, com gate próprio. */
+/* D-uyz-10: removido/baixado somem dos chips de sempre e ganham dois chips
+   próprios (D-uyz-05) — a busca textual continua valendo dentro de cada um. */
 function filtrarInventario(dados, busca, chip){
   var q = (busca||'').toLowerCase().trim();
   return (dados||[]).filter(function(e){
     if(q && !((e.local||'').toLowerCase().includes(q)||(e.predio||'').toLowerCase().includes(q)||(e.fabricante||'').toLowerCase().includes(q))) return false;
+    if(chip==='removidos') return equipRemovido(e);
+    if(chip==='baixados') return equipBaixado(e);
+    if(!equipInstalado(e)) return false; // qualquer outro chip (inclusive 'todos') exige instalado antes da regra de hoje
     if(chip==='nok') return equipInoperante(e);
     if(chip==='ok') return equipOperante(e);
     if(chip==='or') return equipComRestricao(e);
@@ -1318,19 +1400,38 @@ function filtrarInventario(dados, busca, chip){
 }
 
 function renderInv(){
-  var list = filtrarInventario(DATA, (el('inv-search')||{value:''}).value, invChip).sort(cmpInv);
+  var busca = (el('inv-search')||{value:''}).value;
+  var list = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
 
   el('inv-cnt').textContent = list.length;
-  el('inv-label').textContent = list.length===DATA.length ? 'Todos os Equipamentos' : 'Filtrado';
+  // D-uyz-10: "Todos os Equipamentos" só quando o chip é 'todos' e não há
+  // não-operacional escondido; havendo, o rótulo diz "Instalados" — o
+  // total deixou de ser o total do inventário inteiro.
+  if (invChip==='todos') {
+    var haNaoOperacional = DATA.some(function(e){ return !equipInstalado(e); });
+    el('inv-label').textContent = haNaoOperacional ? 'Instalados' : 'Todos os Equipamentos';
+  } else {
+    el('inv-label').textContent = list.length===DATA.length ? 'Todos os Equipamentos' : 'Filtrado';
+  }
 
   if(!list.length){
     /* "Vencidos" vazio quase nunca significa "em dia": hoje 169 dos 171 equipamentos
        não têm histórico, e sem data anterior nextPmoc() não tem de onde contar. */
-    var vazio = invChip==='vencidos'
-      ? '<i class="fas fa-calendar-check" aria-hidden="true"></i><p>Nenhum vencimento em aberto.<br>' +
+    var naoOper = contarNaoOperacionais(DATA, busca);
+    var vazio;
+    if (invChip==='vencidos') {
+      vazio = '<i class="fas fa-calendar-check" aria-hidden="true"></i><p>Nenhum vencimento em aberto.<br>' +
         DATA.filter(function(e){ return !proxManut(e); }).length +
-        ' equipamento(s) ainda sem histórico de manutenção — sem data anterior não há vencimento a calcular.</p>'
-      : '<i class="fas fa-search" aria-hidden="true"></i><p>Nenhum equipamento encontrado</p>';
+        ' equipamento(s) ainda sem histórico de manutenção — sem data anterior não há vencimento a calcular.</p>';
+    } else if (invChip!=='removidos' && invChip!=='baixados' && naoOper>0) {
+      /* A busca não achou nenhum instalado, mas achou removido/baixado — a
+         tela DIZ que eles existem em vez de calar (D-uyz-10). */
+      vazio = '<i class="fas fa-box" aria-hidden="true"></i><p>Nenhum equipamento instalado encontrado.<br>' +
+        naoOper + ' equipamento(s) removido(s)/baixado(s) casam com a busca — veja os chips ' +
+        '<strong>Removidos</strong>/<strong>Baixados</strong>.</p>';
+    } else {
+      vazio = '<i class="fas fa-search" aria-hidden="true"></i><p>Nenhum equipamento encontrado</p>';
+    }
     el('inv-list').innerHTML = '<div class="empty">' + vazio + '</div>';
     return;
   }
@@ -1347,7 +1448,7 @@ function renderInv(){
       '<div class="ec-predio">'+esc(e.predio)+' · '+esc(e.area)+'</div>' +
       '</div></div>' +
       '<div class="ec-status">' +
-      statusPill(e.funciona)+critPill(autoCrit(e))+
+      statusPill(e.funciona)+critPill(autoCrit(e))+situacaoPill(e.situacao)+
       '<span class="pill pill-tipo">'+esc(e.tipo)+'</span></div>' +
       '<div class="ec-info">' +
       '<span><i class="fas fa-snowflake" aria-hidden="true"></i>'+btuK+'</span>' +
@@ -1441,7 +1542,8 @@ function openNewOSForm(){
   el('dh-predio').textContent = 'CMASM · DME';
   el('dh-pills').innerHTML = '';
 
-  var opts = DATA.map(function(e){ return '<option value="'+e.id+'">#'+e.id+' — '+e.predio+' / '+e.local+'</option>'; }).join('');
+  // D-uyz-10: não se abre OS de manutenção para máquina que não está instalada.
+  var opts = equipamentosOperacionais(DATA).map(function(e){ return '<option value="'+e.id+'">#'+e.id+' — '+e.predio+' / '+e.local+'</option>'; }).join('');
   el('drawer-body').innerHTML =
     '<div class="ds"><div class="ds-title"><i class="fas fa-search mr1" aria-hidden="true"></i>Equipamento</div>' +
     '<div class="dfield"><label class="fgl">Selecione</label>' +
@@ -1481,7 +1583,7 @@ function setPmocChip(btn, val){
 
 function renderPmoc(){
   var now = new Date();
-  var list = DATA.filter(function(e){
+  var list = equipamentosOperacionais(DATA).filter(function(e){
     var nx = nextPmoc(e,'inspecao');
     if(pmocChip==='vencida') return nx && nx<now;
     if(pmocChip==='sem-hist') return !e.ultimaManutencao && !getLatestLogDate(e.id);
@@ -1525,7 +1627,7 @@ function renderPmoc(){
 ═══════════════════════════════════════════════════════════ */
 function renderAlerts(){
   var now = new Date();
-  var ag = alertasPmoc(DATA, now);
+  var ag = alertasPmoc(equipamentosOperacionais(DATA), now);
   var nokList = ag.nok.slice()
     .sort(function(a,b){ var o=['CRÍTICA','ALTA','MÉDIA','BAIXA']; return o.indexOf(autoCrit(a))-o.indexOf(autoCrit(b)); });
   var restList = ag.restricao.slice()
@@ -1626,19 +1728,29 @@ function openDetail(id){
   var tr = e.btu? (e.btu/12000).toFixed(2)+' TR' : '—';
 
   el('dh-id').textContent = '#'+id+' · '+(e.area||'');
-  el('dh-local').textContent = e.local;
-  el('dh-predio').textContent = e.predio;
-  el('dh-pills').innerHTML = statusPill(e.funciona)+critPill(crit);
+  el('dh-local').textContent = equipInstalado(e) ? e.local : rotuloSituacaoEquip(e.situacao);
+  el('dh-predio').textContent = equipInstalado(e) ? e.predio : '';
+  el('dh-pills').innerHTML = statusPill(e.funciona)+critPill(crit)+situacaoPill(e.situacao);
+
+  // D-uyz-10/f: máquina não instalada não mostra predio/local vazios — mostra
+  // uma linha honesta dizendo o que aconteceu e quando (sem inventar dado).
+  var blocoLocal = equipInstalado(e)
+    ? '<div class="dfields2">' +
+      '<div class="dfield"><label>Área</label><div class="dval">'+esc(e.area)+'</div></div>' +
+      '<div class="dfield"><label>Prédio</label><div class="dval">'+esc(e.predio)+'</div></div>' +
+      '<div class="dfield"><label>Local</label><div class="dval">'+esc(e.local)+'</div></div>' +
+      '<div class="dfield"><label>Patrimônio</label><div class="dval">'+(e.patrimonio?esc(e.patrimonio):'—')+'</div></div>' +
+      '</div>'
+    : '<div class="dfield"><div class="dval" style="color:#B71C1C;font-weight:600">' +
+      (equipBaixado(e)
+        ? 'Baixado' + (e.dataBaixa ? ' em '+fmtDate(e.dataBaixa) : '')
+        : 'Sem local — removido' + (e.dataRemocao ? ' em '+fmtDate(e.dataRemocao) : '')) +
+      '</div></div>';
 
   el('drawer-body').innerHTML =
     '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-map-marker-alt mr1" aria-hidden="true"></i>1 · Local</div>' +
-    '<div class="dfields2">' +
-    '<div class="dfield"><label>Área</label><div class="dval">'+esc(e.area)+'</div></div>' +
-    '<div class="dfield"><label>Prédio</label><div class="dval">'+esc(e.predio)+'</div></div>' +
-    '<div class="dfield"><label>Local</label><div class="dval">'+esc(e.local)+'</div></div>' +
-    '<div class="dfield"><label>Patrimônio</label><div class="dval">'+(e.patrimonio?esc(e.patrimonio):'—')+'</div></div>' +
-    '</div></div>' +
+    blocoLocal + '</div>' +
     '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>2 · Dados do equipamento</div>' +
     '<div class="dfields2">' +
@@ -2757,7 +2869,8 @@ function ctNovaOS(){
   el('dh-local').textContent = 'Solicitação de serviço';
   el('dh-predio').textContent = 'Selecione a máquina e descreva o problema';
   el('dh-pills').innerHTML = '';
-  var opts = DATA.slice().sort(function(a,b){ return (equipInoperante(a)?0:1)-(equipInoperante(b)?0:1); })
+  // D-uyz-10: não se abre contratação para máquina que não está instalada.
+  var opts = equipamentosOperacionais(DATA).slice().sort(function(a,b){ return (equipInoperante(a)?0:1)-(equipInoperante(b)?0:1); })
     .map(function(e){ return '<option value="'+e.id+'">'+(equipInoperante(e)?'⛔ ':'')+'#'+e.id+' — '+esc(e.predio)+' / '+esc(e.local)+' ('+esc(e.tipo)+')</option>'; }).join('');
   el('drawer-body').innerHTML =
     '<div class="ds"><div class="ds-title"><i class="fas fa-snowflake mr1" aria-hidden="true"></i>Máquina</div>' +
@@ -3330,7 +3443,10 @@ function dvRenderCharts(){
     var kpi = el('kpi-area');
     kpi.insertAdjacentElement('afterend', host);
   }
-  var ativos = DATA.filter(function(e){ return e.tipo!=='RETIRADO'; });
+  // D-uyz-10: só instalado entra no gráfico. O filtro legado de RETIRADO fica —
+  // casa com zero linha hoje (as 2 foram excluídas na importação) e removê-lo
+  // seria conserto não pedido.
+  var ativos = equipamentosOperacionais(DATA).filter(function(e){ return e.tipo!=='RETIRADO'; });
   // D-q57-07: um aparelho com restrição está ligado e consome energia — continua
   // entrando no cálculo de potência/kWh, diferente do KPI "Fora de Operação" (só INOP).
   var emOperacao = ativos.filter(function(e){ return equipOperante(e) || equipComRestricao(e); });

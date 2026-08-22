@@ -260,13 +260,19 @@ const CONFIG_POR_MODULO = {
   },
   climatizacao: {
     tabela: 'equipamentos',
-    colunas: 'id, tipo, predio, local, funciona, estado, patrimonio, local_id, lat, lon',
+    colunas: 'id, tipo, predio, local, funciona, estado, patrimonio, local_id, lat, lon, situacao',
     colunaAtivo: null,
     colunaOrdem: 'predio',
     colunaRotulo: 'tipo',
     colunaDetalhe: 'local',
     colunaSubtipo: 'tipo',
     colunaEstado: 'funciona',
+    // D-uyz: duas perguntas diferentes de colunaAtivo — equipamentos não
+    // tem coluna de arquivamento (colunaAtivo continua null), e a
+    // situação patrimonial não é arquivamento. Só climatizacao declara
+    // colunaSituacao — as outras quatro famílias não ganham nada aqui.
+    colunaSituacao: 'situacao',
+    situacaoVisivel: 'instalado',
   },
 }
 
@@ -295,8 +301,29 @@ export async function carregarAtivosDoModulo(modulo) {
   // devolveria erro do Postgres em vez de lista. O filtro é aplicado só
   // onde a coluna existe.
   if (config.colunaAtivo) consulta = consulta.eq(config.colunaAtivo, true)
+  if (config.colunaSituacao) consulta = consulta.eq(config.colunaSituacao, config.situacaoVisivel)
   const { data, error } = await consulta.order(config.colunaOrdem)
   if (error) {
+    // D-uyz-24: num banco sem a migração 42, `situacao` não existe — o
+    // select acima devolve 400 do PostgREST e a camada inteira viraria
+    // lista vazia (171 marcadores sumindo sem nada dizendo por quê). Um
+    // único recuo: repete a consulta sem a coluna e sem o filtro, com
+    // aviso no console — só o SEGUNDO erro chama mostrarErroDeCarga.
+    if (config.colunaSituacao) {
+      console.warn(
+        `mapa-dados: ${config.tabela} sem a coluna de situação (banco sem a migração 42?) — repetindo sem ela.`,
+        error.message
+      )
+      let retentativa = supa.from(config.tabela).select(config.colunas.replace(/,\s*situacao/, ''))
+      if (config.colunaAtivo) retentativa = retentativa.eq(config.colunaAtivo, true)
+      const semSituacao = await retentativa.order(config.colunaOrdem)
+      if (semSituacao.error) {
+        console.error(`mapa-dados: falha ao carregar ${config.tabela} —`, semSituacao.error.message)
+        mostrarErroDeCarga(`Não foi possível carregar os ativos de ${modulo}. ${semSituacao.error.message}`)
+        return []
+      }
+      return semSituacao.data || []
+    }
     console.error(`mapa-dados: falha ao carregar ${config.tabela} —`, error.message)
     mostrarErroDeCarga(`Não foi possível carregar os ativos de ${modulo}. ${error.message}`)
     return []

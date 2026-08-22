@@ -342,3 +342,74 @@ test('a legenda é desenhada a partir de ESTADOS e mapa/index.html não ganhou c
   assert.deepEqual(hex, [], `mapa/index.html declarou cor em hex: ${hex.join(', ')}`)
   assert.ok(!/#[0-9a-fA-F]{6}/.test(ler(GEOMETRIA).split('Bloco 8')[0]), 'apareceu cor antes do bloco de estado do núcleo puro')
 })
+
+// ══════════════════════════════════════════════════════════════════
+// Quick 260821-uyz — situação patrimonial no /mapa (Task 1).
+// ══════════════════════════════════════════════════════════════════
+
+// ── 14. só climatizacao declara colunaSituacao ──────────────────────────
+test('só climatizacao declara colunaSituacao — as outras quatro famílias não ganham nada', () => {
+  const dados = ler(DADOS)
+  for (const modulo of Object.keys(MODULOS_ESPERADOS)) {
+    const bloco = blocoDoModulo(dados, modulo)
+    if (modulo === 'climatizacao') {
+      assert.match(bloco, /colunaSituacao:\s*'situacao'/, 'climatizacao deveria declarar colunaSituacao')
+      assert.match(bloco, /situacaoVisivel:\s*'instalado'/, 'climatizacao deveria declarar situacaoVisivel')
+      assert.match(bloco, /colunaAtivo:\s*null/, 'climatizacao continua sem colunaAtivo — situação não é arquivamento')
+    } else {
+      assert.doesNotMatch(bloco, /colunaSituacao/, `${modulo} não deveria declarar colunaSituacao`)
+    }
+  }
+})
+
+// Fake chainable supabase client: conta quantas vezes `.from(` inicia uma
+// consulta nova (o que uma retentativa faz) e devolve a resposta da fila.
+function criarSupaFalso(respostas) {
+  let chamadas = 0
+  const supa = {
+    from() {
+      const idx = Math.min(chamadas, respostas.length - 1)
+      chamadas++
+      const builder = {
+        select() { return builder },
+        eq() { return builder },
+        order() { return Promise.resolve(respostas[idx]) },
+      }
+      return builder
+    },
+  }
+  return { supa, contarChamadas: () => chamadas }
+}
+
+// ── 15. carregarAtivosDoModulo recua uma vez sem a coluna de situação ───
+test('carregarAtivosDoModulo repete a consulta sem situacao uma única vez quando a primeira erra, e devolve as linhas da segunda', async () => {
+  const { definirCliente, carregarAtivosDoModulo } = await import('../mapa/mapa-dados.js')
+  const linhas = [{ id: 1, tipo: 'SPLIT' }]
+  const { supa, contarChamadas } = criarSupaFalso([
+    { data: null, error: { message: 'column equipamentos.situacao does not exist' } },
+    { data: linhas, error: null },
+  ])
+  definirCliente(supa)
+  const resultado = await carregarAtivosDoModulo('climatizacao')
+  assert.equal(contarChamadas(), 2, 'deveria ter tentado exatamente duas vezes')
+  assert.deepEqual(resultado, linhas)
+})
+
+test('carregarAtivosDoModulo não repete quando a primeira consulta funciona', async () => {
+  const { definirCliente, carregarAtivosDoModulo } = await import('../mapa/mapa-dados.js')
+  const linhas = [{ id: 1, tipo: 'SPLIT', situacao: 'instalado' }]
+  const { supa, contarChamadas } = criarSupaFalso([{ data: linhas, error: null }])
+  definirCliente(supa)
+  const resultado = await carregarAtivosDoModulo('climatizacao')
+  assert.equal(contarChamadas(), 1, 'não deveria ter repetido a consulta')
+  assert.deepEqual(resultado, linhas)
+})
+
+test('carregarAtivosDoModulo de um módulo sem colunaSituacao não recua no erro — devolve lista vazia direto', async () => {
+  const { definirCliente, carregarAtivosDoModulo } = await import('../mapa/mapa-dados.js')
+  const { supa, contarChamadas } = criarSupaFalso([{ data: null, error: { message: 'falha qualquer' } }])
+  definirCliente(supa)
+  const resultado = await carregarAtivosDoModulo('maquinas')
+  assert.equal(contarChamadas(), 1, 'módulo sem colunaSituacao não deveria tentar duas vezes')
+  assert.deepEqual(resultado, [])
+})

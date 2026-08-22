@@ -19,6 +19,10 @@ const SQL_04 = fs.readFileSync(path.join(RAIZ, 'supabase', '04_refrigeracao_sche
 const SQL_19 = fs.readFileSync(path.join(RAIZ, 'supabase', '19_cmasm_locais_unificado.sql'), 'utf8');
 const SQL_25 = fs.readFileSync(path.join(RAIZ, 'supabase', '25_mapa_geometria_posicao.sql'), 'utf8');
 const SQL_41 = fs.readFileSync(path.join(RAIZ, 'supabase', '41_refrigeracao_ficha_estado.sql'), 'utf8');
+// 260821-uyz: a migração 42 acrescenta situacao/data_remocao/data_baixa em
+// equipamentos — sem somá-la aqui este gate voltaria a afirmar que a união
+// das migrações é a verdade, quando não seria mais.
+const SQL_42 = fs.readFileSync(path.join(RAIZ, 'supabase', '42_refrigeracao_movimentacao.sql'), 'utf8');
 
 // ── colunas reais de `equipamentos` (união das 4 migrações) ──────────────
 function colunasDaCreateTable() {
@@ -40,6 +44,7 @@ const COLUNAS_EQUIPAMENTOS = [
   ...colunasAddColumn(SQL_19, 'equipamentos'),
   ...colunasAddColumn(SQL_25, 'equipamentos'),
   ...colunasAddColumn(SQL_41, 'equipamentos'),
+  ...colunasAddColumn(SQL_42, 'equipamentos'),
 ];
 
 function carregarSandboxPonte() {

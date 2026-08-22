@@ -216,6 +216,13 @@ function carregarSandboxFiltro(overrides) {
     equipInoperante: (e) => e.funciona === 'NOK',
     equipOperante: (e) => e.funciona === 'OK',
     equipComRestricao: (e) => e.funciona === 'OR',
+    // 260821-uyz: filtrarInventario passou a exigir equipInstalado antes da
+    // regra de cada chip (D-uyz-10). Nenhum item de EQUIPS_FILTRO tem
+    // `situacao` — mesmo comportamento de normalizarSituacaoEquip: ausência
+    // conta como instalado.
+    equipInstalado: (e) => !e.situacao || e.situacao === 'instalado',
+    equipRemovido: (e) => e.situacao === 'removido',
+    equipBaixado: (e) => e.situacao === 'baixado',
     autoCrit: (e) => e.criticidade,
     isVencido: (e) => !!e._vencido,
     equipEstado: () => 'OP',
