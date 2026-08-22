@@ -1680,3 +1680,19 @@ fato visitou, que reproduzia o defeito.
 - [ ] Abrir a ficha de um equipamento, "Imprimir ficha" (ou qualquer impressão de OS) e conferir
       que o cabeçalho sai com o logo — o documento impresso é uma janela `about:blank` sem base,
       então só prova algo se o logo aparecer ali, não só na tela.
+
+## Refrigeração — QR da ficha com largura limitada e gaveta que não fecha ao rolar (21/08/2026)
+
+Quick task 260821-tyx. Dois defeitos de interface relatados pelo usuário em produção, o gate
+prova a regra (CSS e a função pura do gesto) e não a fiação do toque — o roteiro abaixo é o que
+confirma na tela de verdade.
+
+- [ ] No desktop, abrir a ficha de qualquer equipamento e conferir que o QR do bloco 5 é um
+      quadrado de ~200px — não mais esticado pela largura da janela — e que os botões "Copiar
+      link" e "Imprimir etiqueta" ficam visíveis sem precisar rolar a tela na horizontal.
+- [ ] No celular, abrir a mesma ficha e conferir que o QR está do mesmo tamanho de sempre — o
+      teto de 200px não muda nada ali, a gaveta já tem menos que isso de largura.
+- [ ] No celular, rolar a ficha inteira para baixo até chegar ao bloco 5 (QR/NFC) e conferir que
+      a gaveta **não** fecha durante a rolagem — esse era o defeito relatado.
+- [ ] No celular, arrastar a **alça** (a barrinha no topo da gaveta) para baixo e conferir que
+      fecha nas duas posições: com a ficha no topo, e com a ficha rolada até o fim.

@@ -2308,20 +2308,41 @@ function showSearch(){
 /* ═══════════════════════════════════════════════════════════
    SWIPE DRAWER
 ═══════════════════════════════════════════════════════════ */
+/* gestoFechaGaveta é pura, fora da IIFE (D-tyx-03), para o gate exercitá-la
+   em Node como função de números — não uma regex sobre o arquivo. Fecha só
+   em dois casos (D-tyx-04): o toque começou fora do corpo rolável (alça,
+   cabeçalho, rodapé), ou começou com o conteúdo já no topo (scrollTop<=0).
+   Rolar a ficha (scrollTop>0) nunca fecha — é o defeito relatado. Gesto
+   predominantemente lateral cancela (D-tyx-05). */
+var GESTO_MIN_PX = 60;
+
+function gestoFechaGaveta(inicioForaDoCorpo, rolagemInicial, dy, dx){
+  if(!(dy > GESTO_MIN_PX)) return false;
+  if(Math.abs(dx) > Math.abs(dy)) return false;
+  if(inicioForaDoCorpo) return true;
+  return rolagemInicial <= 0;
+}
+
 (function(){
-  var panel, startY, startScroll, dragging;
+  var startY, startX, startScroll, inicioForaDoCorpo, dragging;
   document.addEventListener('touchstart', function(e){
-    panel = el('drawer-panel');
     if(!el('drawer').classList.contains('open')) return;
+    var panel = el('drawer-panel');
+    var body = el('drawer-body');
+    if(!panel || !panel.contains(e.target)) return;
     var touch = e.touches[0];
     startY = touch.clientY;
+    startX = touch.clientX;
+    startScroll = body ? body.scrollTop : 0;
+    inicioForaDoCorpo = !(body && body.contains(e.target));
     dragging = false;
   }, {passive:true});
   document.addEventListener('touchmove', function(e){
     if(!el('drawer').classList.contains('open')) return;
     var touch = e.touches[0];
     var dy = touch.clientY - startY;
-    if(dy>60){ dragging=true; }
+    var dx = touch.clientX - startX;
+    dragging = gestoFechaGaveta(inicioForaDoCorpo, startScroll, dy, dx);
   }, {passive:true});
   document.addEventListener('touchend', function(e){
     if(dragging){ closeDrawer(); dragging=false; }
