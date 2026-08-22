@@ -5033,6 +5033,477 @@ function printFicha(equipId){
     ]
   });
 }
+
+/* ── planilha do inventário: núcleo puro ── */
+/* quick-260822-5hy. Exportar/reimportar o cadastro por CSV, no modo que o
+   usuário escolheu (atualiza + cria + arquiva por ausência) depois de eu
+   recomendar contra — o trabalho aqui é tornar o modo sobrevivível, não
+   recusá-lo. Nada neste bloco toca DOM nem `supa` (D-5hy-03): tudo aqui é
+   função pura, testável em Node, consumida pela tela em
+   "planilha do inventário: tela e gravação" logo abaixo. */
+
+var PLANILHA_MARCA = '#pmoc-refrigeracao';
+var PLANILHA_VERSAO = 'v1';
+var PLANILHA_SEP = ';';
+var PLANILHA_FRACAO_ARQUIVAR = 0.10;
+var PLANILHA_PISO_ARQUIVAR = 5;
+
+/* As duas colunas que a planilha mostra mas nunca grava (D-5hy-07): sem
+   `situacao` a planilha pareceria 171 linhas iguais quando algumas não
+   estão mais no cadastro ativo; `ultimaManutencao` é o que quem edita mais
+   quer ver ao lado. Nenhuma das duas está em EQUIP_EDITAVEIS, e continua
+   fora — uma divergência nelas é ignorada e anunciada, nunca gravada. */
+var PLANILHA_LEITURA = {
+  situacao: 'Situação (somente leitura)',
+  ultimaManutencao: 'Última manutenção (somente leitura)'
+};
+
+/* D-5hy-06: as colunas nascem de EQUIP_EDITAVEIS, nunca de uma segunda
+   lista escrita à mão — escrever as 22 colunas de novo criaria duas listas
+   que divergem no primeiro campo novo. As coordenadas geográficas e o
+   vínculo com o local não entram (D-5hy-08): posição é trabalho de campo
+   do mapa operacional, e nenhuma delas está em EQUIP_EDITAVEIS. */
+function planilhaColunas(){
+  var cols = [{chave:'id', rotulo:'id', leitura:true}];
+  Object.keys(PLANILHA_LEITURA).forEach(function(k){
+    cols.push({chave:k, rotulo:PLANILHA_LEITURA[k], leitura:true});
+  });
+  EQUIP_EDITAVEIS.forEach(function(k){
+    cols.push({chave:k, rotulo: EQUIP_ROTULOS[k] || k, leitura:false});
+  });
+  return cols;
+}
+
+/* Mesma forma de maquinas/app.js:2782/2787 (a forma, copiada; nada é
+   importado — a refrigeração é congelada e standalone, D-04), reescrita em
+   ES5. Uma célula começando com =, +, - ou @ vira comando ao abrir na
+   planilha; csvSeguro prefixa aspa simples para desarmar, csvEscape cerca
+   em aspas quando o texto carrega separador, aspas ou quebra de linha. */
+function csvSeguro(valor){
+  var texto = String(valor === null || valor === undefined ? '' : valor);
+  return /^[=+\-@]/.test(texto) ? "'" + texto : texto;
+}
+function csvEscape(valor){
+  var texto = String(valor === null || valor === undefined ? '' : valor);
+  return /[";\n]/.test(texto) ? '"' + texto.replace(/"/g, '""') + '"' : texto;
+}
+
+/* D-5hy-22: desfaz csvSeguro na leitura. Sem isso, uma observação começando
+   com hífen voltaria diferente do que saiu e o ciclo fechado (D-5hy-04)
+   quebraria. Só remove quando o caractere seguinte é um dos quatro — um
+   apóstrofo seguido de letra é texto do usuário, preservado como veio. */
+function csvSemGuarda(t){
+  if (typeof t !== 'string' || t.charAt(0) !== "'") return t;
+  return /^[=+\-@]/.test(t.slice(1)) ? t.slice(1) : t;
+}
+
+function planPad2(n){ return (n < 10 ? '0' : '') + n; }
+
+/* D-5hy-12: a serialização única — consumida tanto pela exportação quanto
+   pelo diff da importação. Comparar SEMPRE esta forma (nunca o valor
+   tipado) é o que faz D-5hy-04 valer por construção e some com a briga
+   null vs 0 de correnteNominal. Data em ISO; booleano na palavra afirmativa
+   ou negativa (nunca célula vazia, D-5hy-19); resto pelo texto cru, vazio
+   só quando o valor é nulo/indefinido. Exporta o valor BRUTO das três
+   listas fechadas (funciona/criticidade/idade aparente), nunca o rótulo. */
+function planilhaValor(chave, e){
+  if (!e) return '';
+  if (chave === 'id') return e.id === null || e.id === undefined ? '' : String(e.id);
+  if (chave === 'situacao') return normalizarSituacaoEquip(e.situacao) || '';
+  if (chave === 'ultimaManutencao') return e.ultimaManutencao || '';
+  if (chave === 'funciona') return normalizarEstadoEquip(e.funciona) || '';
+  if (chave === 'refrigPermanente') {
+    if (e.refrigPermanente === true) return 'SIM';
+    if (e.refrigPermanente === false) return 'NÃO';
+    return '';
+  }
+  var v = e[chave];
+  if (v === null || v === undefined) return '';
+  return String(v);
+}
+
+/* D-5hy-13: a primeira linha do CSV declara o próprio escopo. Começa com #
+   — visivelmente não-dado no Excel, e fora do conjunto de guarda de
+   fórmula (=+-@). */
+function planilhaLinhaEscopo(qtdInstaladosNoArquivo, escopoCompleto, dataIso){
+  return [
+    PLANILHA_MARCA,
+    PLANILHA_VERSAO,
+    'escopo=' + (escopoCompleto ? 'completo' : 'parcial'),
+    'instalados=' + qtdInstaladosNoArquivo,
+    'exportado=' + dataIso
+  ].join(PLANILHA_SEP);
+}
+
+/* Quando a primeira célula não começa com a marca, devolve null — a linha 1
+   é tratada como cabeçalho, e um arquivo feito à mão continua funcionando,
+   só que sem arquivar (D-5hy-13). */
+function lerLinhaEscopo(celulas){
+  if (!celulas || !celulas.length || String(celulas[0] || '').indexOf(PLANILHA_MARCA) !== 0) return null;
+  var out = {versao: celulas[1] || '', escopo: '', instalados: null};
+  for (var i = 2; i < celulas.length; i++){
+    var par = String(celulas[i] || '').split('=');
+    if (par[0] === 'escopo') out.escopo = par.slice(1).join('=');
+    if (par[0] === 'instalados') out.instalados = parseInt(par[1], 10);
+  }
+  return out;
+}
+
+/* D-5hy-14: o escopo é derivado do CONTEÚDO, nunca do estado da tela (chip
+   ativo, texto da busca) — um estado de tela é falsificável por qualquer
+   alteração futura no filtro; a comparação de conjuntos não. `lista` é
+   sempre um subconjunto de `dados` (vem de filtrarInventario(DATA,...)),
+   então "completo" vale sse todo item ativo de `dados` está em `lista`. */
+function escopoCompletoDe(lista, dados){
+  var idsLista = {};
+  (lista || []).forEach(function(e){ idsLista[e.id] = true; });
+  return (dados || []).every(function(e){
+    return !equipInstalado(e) || idsLista.hasOwnProperty(e.id);
+  });
+}
+
+/* montarCsv recebe `dados` (o DATA inteiro), não só a contagem: precisa
+   dele tanto para o total de instalados quanto para escopoCompletoDe — um
+   número sozinho não bastaria para decidir completude por conjunto
+   (D-5hy-14). Sem a marca de ordem de byte, que a tela acrescenta no
+   download (Tarefa 2). */
+function montarCsv(lista, dados, dataIso){
+  lista = lista || [];
+  dados = dados || [];
+  var instaladosTotal = dados.filter(equipInstalado).length;
+  var completo = escopoCompletoDe(lista, dados);
+  var colunas = planilhaColunas();
+  var linhas = [];
+  linhas.push(planilhaLinhaEscopo(instaladosTotal, completo, dataIso));
+  linhas.push(colunas.map(function(c){ return csvEscape(csvSeguro(c.rotulo)); }).join(PLANILHA_SEP));
+  lista.forEach(function(e){
+    linhas.push(colunas.map(function(c){ return csvEscape(csvSeguro(planilhaValor(c.chave, e))); }).join(PLANILHA_SEP));
+  });
+  return linhas.join('\n');
+}
+
+/* Máquina de estados de um caractere por vez — o coração do task (o parser
+   é onde o gate tem de morder, não o caminho feliz). Fora/dentro de aspas;
+   "" dentro de aspas emite uma aspa; separador e quebra de linha só
+   terminam campo/linha FORA de aspas — dentro delas viram texto normal, o
+   que preserva quebra de linha embutida numa observação. \r\n e \r sozinho
+   tratados sem deixar retorno de carro no último campo. Marca de ordem de
+   byte removida se for o primeiro caractere do texto inteiro (nunca gruda
+   no primeiro cabeçalho). Cada célula passa por csvSemGuarda ao ser
+   emitida. Texto vazio devolve lista vazia, sem lançar. */
+function csvParse(texto){
+  var t = String(texto || '');
+  if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1);
+  var linhas = [];
+  var linha = [];
+  var campo = '';
+  var dentroAspas = false;
+  var i = 0;
+  var n = t.length;
+  while (i < n){
+    var c = t.charAt(i);
+    if (dentroAspas){
+      if (c === '"'){
+        if (t.charAt(i + 1) === '"'){ campo += '"'; i += 2; continue; }
+        dentroAspas = false; i++; continue;
+      }
+      campo += c; i++; continue;
+    }
+    if (c === '"'){ dentroAspas = true; i++; continue; }
+    if (c === PLANILHA_SEP){ linha.push(csvSemGuarda(campo)); campo = ''; i++; continue; }
+    if (c === '\r'){
+      linha.push(csvSemGuarda(campo)); campo = '';
+      linhas.push(linha); linha = [];
+      i++;
+      if (t.charAt(i) === '\n') i++;
+      continue;
+    }
+    if (c === '\n'){
+      linha.push(csvSemGuarda(campo)); campo = '';
+      linhas.push(linha); linha = [];
+      i++; continue;
+    }
+    campo += c; i++;
+  }
+  // última linha sem quebra final — mas se ela é só a cauda vazia de uma
+  // quebra de linha que já fechou a linha anterior, não vira linha nova.
+  if (campo !== '' || linha.length){
+    linha.push(csvSemGuarda(campo));
+    linhas.push(linha);
+  }
+  return linhas;
+}
+
+/* D-5hy-09: casamento por igualdade estrita do rótulo do cabeçalho, ordem
+   de coluna irrelevante — o Excel reordena. Coluna com rótulo desconhecido
+   é ignorada e devolvida em `ignoradas`, pelo nome; coluna conhecida
+   ausente é legítima (uma planilha com só id + Observações atualiza só
+   observações). Sem coluna id, `temId` sai falso e o chamador recusa o
+   arquivo inteiro. */
+function mapearCabecalho(celulas){
+  var colunas = planilhaColunas();
+  var porRotulo = {};
+  colunas.forEach(function(c){ porRotulo[c.rotulo] = c; });
+  var porChave = {};
+  var ignoradas = [];
+  var temId = false;
+  (celulas || []).forEach(function(rotulo, idx){
+    var c = porRotulo.hasOwnProperty(rotulo) ? porRotulo[rotulo] : null;
+    if (!c){ ignoradas.push(rotulo); return; }
+    porChave[c.chave] = idx;
+    if (c.chave === 'id') temId = true;
+  });
+  return {porChave: porChave, ignoradas: ignoradas, temId: temId};
+}
+
+/* D-5hy-18: data validada por RECONSTRUÇÃO (monta a data e confere se os
+   três componentes voltam iguais), nunca por expressão regular sozinha —
+   é o único jeito honesto de pegar 31/02. dd/mm/aa é recusado por século
+   ambíguo; um número puro é a data virada serial do Excel, e escolher
+   entre a época de 1900 e a de 1904 seria chutar. */
+function celulaParaData(t){
+  if (/^\d{2}\/\d{2}\/\d{2}$/.test(t)){
+    return {ok:false, erro:'ano com dois dígitos é ambíguo — use aaaa-mm-dd ou dd/mm/aaaa'};
+  }
+  var mIso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  var mBr = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(t);
+  if (!mIso && !mBr){
+    if (/^\d+(\.\d+)?$/.test(t)) return {ok:false, erro:'célula formatada como número — provável data serial do Excel'};
+    return {ok:false, erro:'data em formato não reconhecido — use aaaa-mm-dd ou dd/mm/aaaa'};
+  }
+  var ano, mes, dia;
+  if (mIso){ ano = parseInt(mIso[1], 10); mes = parseInt(mIso[2], 10); dia = parseInt(mIso[3], 10); }
+  else { dia = parseInt(mBr[1], 10); mes = parseInt(mBr[2], 10); ano = parseInt(mBr[3], 10); }
+  var d = new Date(Date.UTC(ano, mes - 1, dia));
+  if (d.getUTCFullYear() !== ano || d.getUTCMonth() !== (mes - 1) || d.getUTCDate() !== dia){
+    return {ok:false, erro:'data impossível'};
+  }
+  return {ok:true, valor: ano + '-' + planPad2(mes) + '-' + planPad2(dia)};
+}
+
+/* D-5hy-20: vírgula decimal aceita (o Excel em pt-BR escreve 7,5); duas
+   vírgulas ou separador de milhar (ponto convivendo com vírgula) são
+   recusados em vez de adivinhados. */
+function celulaParaCorrente(t){
+  var virgulas = (t.match(/,/g) || []).length;
+  if (virgulas > 1) return {ok:false, erro:'corrente com mais de um separador decimal'};
+  if (virgulas === 1 && t.indexOf('.') >= 0) return {ok:false, erro:'corrente com separador de milhar não é aceito — use só vírgula ou ponto decimal'};
+  var normalizado = virgulas === 1 ? t.replace(',', '.') : t;
+  if (!/^-?\d+(\.\d+)?$/.test(normalizado)) return {ok:false, erro:'corrente inválida'};
+  return {ok:true, valor: parseFloat(normalizado)};
+}
+
+/* Travessia de tipos de D-5hy-18/19/20/21, uma célula por vez. `texto` chega
+   cru — a mesma forma que planilhaValor produziria para uma célula intocada,
+   o que é o que faz o diff (planoDeImportacao) funcionar por comparação de
+   texto contra texto, nunca de valor tipado contra valor tipado. */
+function celulaParaValor(chave, texto){
+  var t = texto === null || texto === undefined ? '' : String(texto);
+  if (chave === 'refrigPermanente'){
+    var up = t.trim().toUpperCase(); // D-5hy-19: normalização EXPLÍCITA, não implícita
+    if (up === '') return {ok:true, valor:null};
+    if (up === 'SIM' || up === '1' || up === 'VERDADEIRO' || up === 'TRUE') return {ok:true, valor:true};
+    if (up === 'NÃO' || up === 'NAO' || up === '0' || up === 'FALSO' || up === 'FALSE') return {ok:true, valor:false};
+    return {ok:false, erro:'valor booleano não reconhecido — use SIM ou NÃO'};
+  }
+  if (chave === 'dataFabricacao' || chave === 'dataInstalacao'){
+    if (t === '') return {ok:true, valor:null};
+    return celulaParaData(t);
+  }
+  if (chave === 'correnteNominal'){
+    if (t === '') return {ok:true, valor:null};
+    return celulaParaCorrente(t);
+  }
+  if (EQUIP_NUMERICOS.indexOf(chave) >= 0){
+    if (t === '') return {ok:true, valor:null};
+    if (!/^-?\d+$/.test(t)) return {ok:false, erro:'esperado número inteiro'};
+    return {ok:true, valor: parseInt(t, 10)};
+  }
+  if (chave === 'funciona'){
+    if (t === '') return {ok:true, valor:null};
+    if (EQUIP_ORDEM.indexOf(t) < 0) return {ok:false, erro:'estado fora da lista fechada (' + EQUIP_ORDEM.join('/') + ')'};
+    return {ok:true, valor:t};
+  }
+  if (chave === 'criticidade'){
+    if (t === '') return {ok:true, valor:null};
+    if (EQUIP_CRITICIDADES.indexOf(t) < 0) return {ok:false, erro:'criticidade fora da lista fechada'};
+    return {ok:true, valor:t};
+  }
+  if (chave === 'estado'){
+    if (t === '') return {ok:true, valor:null};
+    if (EQUIP_IDADES.indexOf(t) < 0) return {ok:false, erro:'idade aparente fora da lista fechada'};
+    return {ok:true, valor:t};
+  }
+  if (chave === 'link' || chave === 'manualUrl'){
+    if (t === '') return {ok:true, valor:null};
+    if (!linkSeguro(t)) return {ok:false, erro:'link inválido — use http:// ou https://'};
+    return {ok:true, valor:t};
+  }
+  return {ok:true, valor: t === '' ? null : t};
+}
+
+/* D-5hy-15: guarda de escala. Este banco nunca registrou uma remoção (0 de
+   171) — um primeiro lote grande é, por evidência, muito mais provável que
+   seja acidente de planilha do que remoção em massa real. Piso de 5 para
+   um inventário pequeno não travar o uso normal. */
+function tetoArquivar(instalados){
+  return Math.max(PLANILHA_PISO_ARQUIVAR, Math.ceil(instalados * PLANILHA_FRACAO_ARQUIVAR));
+}
+
+/* A função pura central — sem DOM, sem rede, sem conhecer `supa`. Ordem que
+   importa: casar cabeçalho → percorrer linhas produzindo atualizar/criar/
+   erros → só então decidir arquivar, avaliando as três pré-condições de
+   D-5hy-13 e depois a guarda de escala (D-5hy-15). Um arquivo com qualquer
+   linha recusada não arquiva nada (D-5hy-11), mas atualizar/criar das
+   linhas boas continuam valendo. */
+function planoDeImportacao(texto, dados){
+  dados = dados || [];
+  var linhasCsv = csvParse(texto);
+  var plano = {
+    escopo: null, versaoArquivo: null, instaladosDeclarados: null,
+    instaladosAgora: dados.filter(equipInstalado).length,
+    atualizar: [], criar: [], arquivar: [], erros: [], ignoradas: [],
+    leituraIgnorada: [], bloqueios: [], teto: 0
+  };
+  if (!linhasCsv.length){
+    plano.bloqueios.push('arquivo vazio');
+    return plano;
+  }
+
+  var idxCabecalho = 0;
+  var linhaEscopo = lerLinhaEscopo(linhasCsv[0]);
+  if (linhaEscopo){
+    plano.escopo = linhaEscopo.escopo;
+    plano.versaoArquivo = linhaEscopo.versao;
+    plano.instaladosDeclarados = linhaEscopo.instalados;
+    idxCabecalho = 1;
+  }
+
+  var cabecalho = linhasCsv[idxCabecalho];
+  if (!cabecalho){
+    plano.bloqueios.push('arquivo sem cabeçalho');
+    return plano;
+  }
+  var mapa = mapearCabecalho(cabecalho);
+  plano.ignoradas = mapa.ignoradas;
+  if (!mapa.temId){
+    plano.bloqueios.push('arquivo sem coluna id — recusado inteiro, não há chave para casar');
+    return plano;
+  }
+
+  var porId = {};
+  dados.forEach(function(e){ porId[e.id] = e; });
+
+  // primeira passada: separa id inválido (nunca coagido a número) e conta
+  // repetição de id — D-5hy-10, as três formas de errar a chave.
+  var idxPrimeiraLinha = idxCabecalho + 1;
+  var candidatas = [];
+  var idsVistos = {};
+  for (var li = idxPrimeiraLinha; li < linhasCsv.length; li++){
+    var cels = linhasCsv[li];
+    var numeroLinha = li + 1;
+    var idTexto = cels[mapa.porChave.id];
+    idTexto = idTexto === undefined || idTexto === null ? '' : String(idTexto);
+    if (idTexto !== '' && !/^\d{1,9}$/.test(idTexto)){
+      plano.erros.push({linha: numeroLinha, coluna: 'id', mensagem: 'id inválido — não é número'});
+      continue;
+    }
+    if (idTexto !== '') idsVistos[idTexto] = (idsVistos[idTexto] || 0) + 1;
+    candidatas.push({numeroLinha: numeroLinha, cels: cels, idTexto: idTexto});
+  }
+
+  candidatas.forEach(function(item){
+    var numeroLinha = item.numeroLinha, cels = item.cels, idTexto = item.idTexto;
+    if (idTexto !== '' && idsVistos[idTexto] > 1){
+      plano.erros.push({linha: numeroLinha, coluna: 'id', mensagem: 'id repetido no arquivo — qual vence não é decisão que o app possa tomar sozinho'});
+      return;
+    }
+    var equipAtual = null;
+    if (idTexto !== ''){
+      equipAtual = porId.hasOwnProperty(idTexto) ? porId[idTexto] : null;
+      if (!equipAtual){
+        plano.erros.push({linha: numeroLinha, coluna: 'id', mensagem: 'id não existe no inventário'});
+        return;
+      }
+    }
+
+    var patch = {};
+    var camposMudados = [];
+    var erroLinha = false;
+    EQUIP_EDITAVEIS.forEach(function(chave){
+      if (!mapa.porChave.hasOwnProperty(chave)) return; // coluna ausente é legítimo — atualiza só o que veio
+      var textoCel = cels[mapa.porChave[chave]];
+      var r = celulaParaValor(chave, textoCel);
+      if (!r.ok){
+        plano.erros.push({linha: numeroLinha, coluna: EQUIP_ROTULOS[chave] || chave, mensagem: r.erro});
+        erroLinha = true;
+        return;
+      }
+      var novoSerial = textoCel === null || textoCel === undefined ? '' : String(textoCel);
+      if (equipAtual){
+        var atualSerial = planilhaValor(chave, equipAtual);
+        if (atualSerial !== novoSerial){ patch[chave] = r.valor; camposMudados.push(chave); }
+      } else if (r.valor !== null && r.valor !== undefined && r.valor !== ''){
+        patch[chave] = r.valor;
+      }
+    });
+
+    // D-5hy-07: coluna somente-leitura divergente nunca entra no patch —
+    // só é contada e nomeada.
+    Object.keys(PLANILHA_LEITURA).forEach(function(chaveLeitura){
+      if (!mapa.porChave.hasOwnProperty(chaveLeitura)) return;
+      var textoCel = cels[mapa.porChave[chaveLeitura]];
+      var novoSerial = textoCel === null || textoCel === undefined ? '' : String(textoCel);
+      var atualSerial = equipAtual ? planilhaValor(chaveLeitura, equipAtual) : '';
+      if (atualSerial !== novoSerial){
+        plano.leituraIgnorada.push({linha: numeroLinha, coluna: PLANILHA_LEITURA[chaveLeitura]});
+      }
+    });
+
+    if (erroLinha) return;
+    if (equipAtual){
+      if (camposMudados.length > 0) plano.atualizar.push({id: equipAtual.id, equip: equipAtual, patch: patch, campos: camposMudados});
+    } else {
+      plano.criar.push({linha: numeroLinha, patch: patch});
+    }
+  });
+
+  // D-5hy-16: arquivar nunca inclui quem não está instalado, e presença no
+  // arquivo nunca muda situação — só a AUSÊNCIA de um id instalado é o gatilho.
+  var idsNoArquivo = {};
+  candidatas.forEach(function(item){ if (item.idTexto !== '') idsNoArquivo[item.idTexto] = true; });
+  var candidatosArquivar = dados.filter(function(e){
+    return equipInstalado(e) && !idsNoArquivo.hasOwnProperty(String(e.id));
+  });
+  plano.teto = tetoArquivar(plano.instaladosAgora);
+
+  var podeArquivar = true;
+  if (!linhaEscopo){
+    plano.bloqueios.push('arquivo sem linha de escopo — arquivamento desligado');
+    podeArquivar = false;
+  } else if (linhaEscopo.escopo !== 'completo'){
+    plano.bloqueios.push('escopo parcial declarado no arquivo — este arquivo nunca arquiva');
+    podeArquivar = false;
+  }
+  if (plano.erros.length > 0){
+    plano.bloqueios.push('arquivo tem linha(s) recusada(s) — um arquivo com identidade corrompida não arquiva nada');
+    podeArquivar = false;
+  }
+  if (linhaEscopo && linhaEscopo.instalados !== plano.instaladosAgora){
+    plano.bloqueios.push('contagem de instalados do arquivo (' + linhaEscopo.instalados + ') diverge da atual (' + plano.instaladosAgora + ') — o inventário mudou desde a exportação');
+    podeArquivar = false;
+  }
+  if (podeArquivar && candidatosArquivar.length > plano.teto){
+    plano.bloqueios.push('arquivamento de ' + candidatosArquivar.length + ' equipamento(s) excede o teto de ' + plano.teto + ' — reduza o arquivo ou use a OS de movimentação');
+    podeArquivar = false;
+  }
+  if (podeArquivar){
+    plano.arquivar = candidatosArquivar.map(function(e){ return {id: e.id, predio: e.predio, local: e.local}; });
+  }
+
+  return plano;
+}
+/* ── planilha do inventário: tela e gravação ── */
 </script>
 </body>
 </html>
