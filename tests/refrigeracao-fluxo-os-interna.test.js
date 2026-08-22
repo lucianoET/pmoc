@@ -391,7 +391,7 @@ test('a equivalência agrupa sem renomear (D-l7n-01/02): a pílula do concluído
   const pillLegado = ctx.statusPillOS('CONCLUÍDA');
   assert.ok(pillLegado.indexOf('CONCLUÍDA') >= 0);
   assert.ok(pillLegado.indexOf('Conferida') < 0);
-  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONFERIDA'); // mesmo caindo junto no chip "Conferida"
+  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONFERIDA'); // mesmo caindo junto no chip "Concluída"
   const pillDesconhecido = ctx.statusPillOS('ALGO_ESTRANHO<script>');
   assert.ok(pillDesconhecido.indexOf('ALGO_ESTRANHO') >= 0);
   assert.ok(pillDesconhecido.indexOf('<script>') < 0); // esc() ativo
