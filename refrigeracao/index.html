@@ -1404,7 +1404,11 @@ function cmpInv(a, b){
   }
   return (a.local||'').localeCompare(b.local||'','pt-BR');
 }
-function setInvOrdem(val){ invOrdem = val; renderInv(); }
+/* D-8rz-07: o cabeçalho de coluna e o seletor de sempre nunca ficam ativos ao
+   mesmo tempo — mexer no seletor cede o comando de volta a ele, zerando a
+   ordenação de cabeçalho. TAB_ESTADO mora no bloco novo, no fim do arquivo;
+   esta função só é CHAMADA depois de todos os scripts terem carregado. */
+function setInvOrdem(val){ invOrdem = val; TAB_ESTADO.inv.ord = {coluna:null, dir:null}; renderInv(); }
 
 function setChip(btn, val){
   document.querySelectorAll('#inv-chips .chip').forEach(function(c){ c.classList.remove('active'); });
@@ -1422,9 +1426,16 @@ function setChip(btn, val){
    sendo quem ordena, com gate próprio. */
 /* D-uyz-10: removido/baixado somem dos chips de sempre e ganham dois chips
    próprios (D-uyz-05) — a busca textual continua valendo dentro de cada um. */
-function filtrarInventario(dados, busca, chip){
+/* D-8rz-09: quarto parâmetro opcional — filtro por coluna da tabela de
+   computador. Ausente, o comportamento é BYTE A BYTE o de antes (é isso que
+   mantém verde tests/refrigeracao-qr-nfc.test.js, que chama com três
+   argumentos). Presente, aplica-se em CONJUNÇÃO com o filtro de sempre,
+   por COLS_INV — que mora no bloco novo, no fim do arquivo; esta função só
+   é CHAMADA depois de todos os scripts terem carregado. Tela, etiqueta e
+   CSV passam pelos mesmos quatro argumentos (D-8rz-09) — nunca divergem. */
+function filtrarInventario(dados, busca, chip, filtrosColuna){
   var q = (busca||'').toLowerCase().trim();
-  return (dados||[]).filter(function(e){
+  var out = (dados||[]).filter(function(e){
     if(q && !((e.local||'').toLowerCase().includes(q)||(e.predio||'').toLowerCase().includes(q)||(e.fabricante||'').toLowerCase().includes(q))) return false;
     if(chip==='removidos') return equipRemovido(e);
     if(chip==='baixados') return equipBaixado(e);
@@ -1439,11 +1450,28 @@ function filtrarInventario(dados, busca, chip){
     if(chip==='azul') return e.area==='AZUL';
     return true;
   });
+  if(filtrosColuna){
+    var pares = [];
+    for(var k in filtrosColuna){
+      if(Object.prototype.hasOwnProperty.call(filtrosColuna,k) && filtrosColuna[k]) pares.push([k, filtrosColuna[k]]);
+    }
+    if(pares.length){
+      out = out.filter(function(e){
+        return pares.every(function(par){
+          var col = null;
+          for(var i=0;i<COLS_INV.length;i++){ if(COLS_INV[i].id===par[0]){ col=COLS_INV[i]; break; } }
+          if(!col) return true; // coluna de filtro ausente da definição é ignorada, não zera a lista
+          return tabNormalizar(col.texto(e)).indexOf(tabNormalizar(par[1])) >= 0;
+        });
+      });
+    }
+  }
+  return out;
 }
 
 function renderInv(){
   var busca = (el('inv-search')||{value:''}).value;
-  var list = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
+  var list = filtrarInventario(DATA, busca, invChip, TAB_ESTADO.inv.filtros).sort(cmpInv);
 
   el('inv-cnt').textContent = list.length;
   // D-uyz-10: "Todos os Equipamentos" só quando o chip é 'todos' e não há
@@ -1507,7 +1535,7 @@ function renderInv(){
    sai com exatamente o que a tela está mostrando agora. */
 function etiquetasDoInventario(){
   var busca = (el('inv-search')||{value:''}).value;
-  var lista = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
+  var lista = filtrarInventario(DATA, busca, invChip, TAB_ESTADO.inv.filtros).sort(cmpInv);
   imprimirEtiquetas(lista);
 }
 
@@ -5563,7 +5591,7 @@ function abrirPainelPlanilha(){
    precedente de imprimirEtiquetas. */
 function exportarInventarioCsv(){
   var busca = (el('inv-search') || {value:''}).value;
-  var lista = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
+  var lista = filtrarInventario(DATA, busca, invChip, TAB_ESTADO.inv.filtros).sort(cmpInv);
   if (!lista.length){ showToast('Nenhum equipamento na seleção atual', 'error'); return; }
   var texto = montarCsv(lista, DATA, today());
   baixarPlanilha(texto, 'pmoc-refrigeracao-inventario-' + today() + '.csv');
@@ -5725,6 +5753,312 @@ async function aplicarPlanoPlanilha(){
   renderInv();
   closeDrawer();
   showToast(falhas ? (falhas + ' gravação(ões) falharam — confira o inventário') : 'Planilha aplicada', falhas ? 'error' : 'ok');
+}
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   VERSÃO DE COMPUTADOR (quick-260822-8rz) — D-8rz-01: todo o layout de
+   computador vive dentro de @media (min-width:1024px) em refrigeracao/
+   index.html, o mesmo arquivo, sempre congelado e standalone (D-04). Nada
+   de dado, fluxo ou regra de negócio muda — é camada de apresentação.
+
+   D-8rz-03: a ideia de um núcleo genérico de ordenação/filtro de tabela já
+   usada noutros módulos é REPLICADA aqui, nunca importada — D-04 proíbe
+   este módulo de puxar qualquer coisa da pasta comum a outros módulos.
+═══════════════════════════════════════════════════════════════════════ */
+
+/* ── tabelas de desktop: núcleo puro ── */
+/* Nenhuma API de navegador nesta seção — testável em Node puro, mesmo
+   padrão núcleo-puro/aplicador-de-DOM já usado noutros pontos da
+   plataforma. */
+var BP_DESKTOP = 1024;
+
+function modoDaTela(largura){ return largura>=BP_DESKTOP ? 'tabela' : 'cartao'; }
+
+/* Ciclo travado, uma coluna por vez: sem ordem → crescente → decrescente →
+   sem ordem. Qualquer valor que não seja 'asc'/'desc' entra como "sem
+   ordem" — mesma queda defensiva do núcleo de ordenação já usado noutros
+   módulos. */
+function tabProximaOrdem(dir){
+  if(dir==='asc') return 'desc';
+  if(dir==='desc') return null;
+  return 'asc';
+}
+
+/* minúsculas + NFD sem diacríticos, tolerando nulo/indefinido/número. */
+function tabNormalizar(texto){
+  return String(texto===null||texto===undefined?'':texto).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+}
+
+/* Vazio para fins de ordenação: nulo/indefinido/texto vazio/NaN. Zero NÃO
+   é vazio — 0 é informação real, não ausência dela. */
+function tabVazio(v){
+  return v===null || v===undefined || v==='' || (typeof v==='number' && isNaN(v));
+}
+
+function _tabColuna(colunas, id){
+  for(var i=0;i<(colunas||[]).length;i++){ if(colunas[i].id===id) return colunas[i]; }
+  return null;
+}
+
+/* Ordena sempre pelo DADO PRINCIPAL (valor()), nunca pelo texto que a
+   célula imprime nem pelo que o filtro casa (texto()) — é o que faz
+   "Prédio · Área" ordenar pelo prédio, e criticidade ordenar pela ordem
+   semântica em vez da alfabética. Vazio sempre no fim, nas duas direções:
+   não é "menor", é "não informado". Coluna ausente de `colunas` devolve 0
+   — nem ordena, nem quebra. */
+function tabComparar(a, b, coluna, dir, colunas){
+  var col = _tabColuna(colunas, coluna);
+  if(!col) return 0;
+
+  if(col.tipo==='numero'){
+    var va = col.valor(a), vb = col.valor(b);
+    var vaVazio = tabVazio(va), vbVazio = tabVazio(vb);
+    if(vaVazio && vbVazio) return 0;
+    if(vaVazio) return 1;
+    if(vbVazio) return -1;
+    return dir==='desc' ? (vb-va) : (va-vb);
+  }
+
+  var ta = col.valor(a), tb = col.valor(b);
+  var taVazio = tabVazio(ta), tbVazio = tabVazio(tb);
+  if(taVazio && tbVazio) return 0;
+  if(taVazio) return 1;
+  if(tbVazio) return -1;
+  var cmp = String(ta).localeCompare(String(tb), 'pt-BR');
+  return dir==='desc' ? -cmp : cmp;
+}
+
+/* Filtra por subcadeia normalizada sobre texto() de cada coluna com filtro
+   preenchido (conjunção — todos os filtros ativos precisam casar), depois
+   ordena. Sem ord.coluna preserva a ordem de entrada. Sem sintaxe de
+   comparação — '>'/'<' num campo de filtro são texto como qualquer outro
+   caractere. Coluna de filtro ausente de `colunas` é ignorada, não zera a
+   lista inteira. */
+function tabAplicar(lista, ord, filtros, colunas){
+  var filtrosAtivos = [];
+  for(var k in (filtros||{})){
+    if(Object.prototype.hasOwnProperty.call(filtros||{}, k) && filtros[k]) filtrosAtivos.push([k, filtros[k]]);
+  }
+  var resultado = filtrosAtivos.length
+    ? (lista||[]).filter(function(item){
+        return filtrosAtivos.every(function(par){
+          var col = _tabColuna(colunas, par[0]);
+          if(!col) return true;
+          return tabNormalizar(col.texto(item)).indexOf(tabNormalizar(par[1])) >= 0;
+        });
+      })
+    : (lista||[]).slice();
+
+  if(ord && ord.coluna){
+    resultado = resultado.slice().sort(function(a,b){ return tabComparar(a,b,ord.coluna,ord.dir,colunas); });
+  }
+  return resultado;
+}
+
+/* ── tabelas de desktop: colunas ── */
+/* Cada coluna é {id, rotulo, tipo:'texto'|'numero', valor(x), texto(x),
+   celula(x)}. valor() é o DADO PRINCIPAL, usado para ordenar. texto() é o
+   que aparece na célula sem celula() E o que o filtro casa — por isso tem
+   de conter a palavra que o usuário digitaria. celula() é opcional e
+   devolve HTML já escapado (pílula, distintivo); sem celula(), a tabela
+   imprime esc(texto(x)). */
+
+var COLS_INV = [
+  { id:'id', rotulo:'#', tipo:'numero',
+    valor:function(e){ return e.id; },
+    texto:function(e){ return '#'+e.id; } },
+  { id:'local', rotulo:'Local', tipo:'texto',
+    valor:function(e){ return e.local; },
+    texto:function(e){ return e.local; } },
+  { id:'predio', rotulo:'Prédio · Área', tipo:'texto',
+    valor:function(e){ return e.predio; },
+    texto:function(e){ return (e.predio||'')+' · '+(e.area||''); } },
+  { id:'tipo', rotulo:'Tipo', tipo:'texto',
+    valor:function(e){ return e.tipo; },
+    texto:function(e){ return e.tipo; } },
+  { id:'btu', rotulo:'BTU', tipo:'numero',
+    valor:function(e){ return e.btu||null; },
+    texto:function(e){ if(!e.btu) return ''; return e.btu>=1000 ? (e.btu/1000).toFixed(0)+'K BTU' : e.btu+' BTU'; } },
+  { id:'estado', rotulo:'Estado', tipo:'texto',
+    valor:function(e){ return rotuloEstadoEquip(e.funciona); },
+    texto:function(e){
+      var base = rotuloEstadoEquip(e.funciona);
+      var sit = (e.situacao && e.situacao!=='instalado') ? ' '+rotuloSituacaoEquip(e.situacao) : '';
+      return base+sit;
+    },
+    celula:function(e){ return statusPill(e.funciona)+situacaoPill(e.situacao); } },
+  { id:'criticidade', rotulo:'Criticidade', tipo:'numero',
+    valor:function(e){ var v=CRIT_ORDEM[autoCrit(e)]; return v===undefined?99:v; },
+    texto:function(e){ return autoCrit(e); },
+    celula:function(e){ return critPill(autoCrit(e)); } },
+  { id:'prox', rotulo:'Próx. manutenção', tipo:'numero',
+    valor:function(e){ var d=proxManut(e); return d?d.getTime():null; },
+    texto:function(e){ var d=proxManut(e); return d?fmtDate(d.toISOString().slice(0,10)):'Sem hist.'; },
+    celula:function(e){ return dueBadgeHtml(proxManut(e)); } }
+];
+
+var COLS_OS = [
+  { id:'data', rotulo:'Data', tipo:'numero',
+    valor:function(o){ return Date.parse(o.entry.date); },
+    texto:function(o){ return fmtDate(o.entry.date); } },
+  { id:'local', rotulo:'Local', tipo:'texto',
+    valor:function(o){ return o.equip.local; },
+    texto:function(o){ return o.equip.local; } },
+  { id:'predio', rotulo:'Prédio', tipo:'texto',
+    valor:function(o){ return o.equip.predio; },
+    texto:function(o){ return o.equip.predio; } },
+  { id:'tipo', rotulo:'Tipo', tipo:'texto',
+    valor:function(o){ return o.entry.tipo; },
+    texto:function(o){ return o.entry.tipo; } },
+  { id:'estado', rotulo:'Estado', tipo:'texto',
+    valor:function(o){ return manRotulo(o.entry.status); },
+    texto:function(o){ return manRotulo(o.entry.status); },
+    celula:function(o){ return statusPillOS(o.entry.status); } },
+  { id:'tecnico', rotulo:'Técnico', tipo:'texto',
+    valor:function(o){ return o.entry.tecnico; },
+    texto:function(o){ return o.entry.tecnico; } }
+];
+
+/* A mesma linha que renderMovim já monta, extraída em duas formas: texto
+   puro (filtro/ordenação) e HTML (célula) — nenhuma regra nova. */
+function movimDestinoTexto(o){
+  if(o.entry.tipo==='INSTALAÇÃO'){
+    var ocupantes = ocupantesDoLocal(o.entry.localDestinoId, o.equipId);
+    var caso = casoDeInstalacao(o.entry.localDestinoId, o.entry.equipSubstituidoId, ocupantes);
+    return CASOS_INSTALACAO[caso] || '';
+  }
+  return o.entry.destinoRemocao==='baixa' ? 'Baixa patrimonial' : 'Guardada — volta ao inventário';
+}
+function movimDestinoHtml(o){
+  if(o.entry.tipo==='INSTALAÇÃO') return esc(movimDestinoTexto(o));
+  return o.entry.destinoRemocao==='baixa'
+    ? '<strong style="color:#E52207">Baixa patrimonial</strong>'
+    : 'Guardada — volta ao inventário';
+}
+
+var COLS_MOVIM = [
+  COLS_OS[0], COLS_OS[1], COLS_OS[2], COLS_OS[3], COLS_OS[4],
+  { id:'destino', rotulo:'Destino', tipo:'texto',
+    valor:movimDestinoTexto,
+    texto:movimDestinoTexto,
+    celula:movimDestinoHtml }
+];
+
+var COLS_PMOC = [
+  { id:'predio', rotulo:'Prédio', tipo:'texto',
+    valor:function(e){ return e.predio; },
+    texto:function(e){ return e.predio; } },
+  { id:'local', rotulo:'Local', tipo:'texto',
+    valor:function(e){ return e.local; },
+    texto:function(e){ return e.local; } },
+  { id:'tipo', rotulo:'Tipo', tipo:'texto',
+    valor:function(e){ return e.tipo; },
+    texto:function(e){ return e.tipo; } },
+  { id:'criticidade', rotulo:'Criticidade', tipo:'numero',
+    valor:function(e){ var v=CRIT_ORDEM[autoCrit(e)]; return v===undefined?99:v; },
+    texto:function(e){ return autoCrit(e); },
+    celula:function(e){ return critPill(autoCrit(e)); } },
+  { id:'inspecao', rotulo:'Inspeção', tipo:'numero',
+    valor:function(e){ var d=nextPmoc(e,'inspecao'); return d?d.getTime():null; },
+    texto:function(e){ var d=nextPmoc(e,'inspecao'); return d?fmtDate(d.toISOString().slice(0,10)):'Sem hist.'; },
+    celula:function(e){ return dueBadgeHtml(nextPmoc(e,'inspecao')); } },
+  { id:'preventiva', rotulo:'Preventiva', tipo:'numero',
+    valor:function(e){ var d=nextPmoc(e,'preventiva'); return d?d.getTime():null; },
+    texto:function(e){ var d=nextPmoc(e,'preventiva'); return d?fmtDate(d.toISOString().slice(0,10)):'Sem hist.'; },
+    celula:function(e){ return dueBadgeHtml(nextPmoc(e,'preventiva')); } },
+  { id:'registros', rotulo:'Registros', tipo:'numero',
+    valor:function(e){ return getEquipLog(e.id).length; },
+    texto:function(e){ return String(getEquipLog(e.id).length); } }
+];
+
+var COLS_ALERT = [
+  { id:'motivo', rotulo:'Motivo', tipo:'texto',
+    valor:function(l){ return l.motivo; },
+    texto:function(l){ return l.motivo; } },
+  { id:'local', rotulo:'Local', tipo:'texto',
+    valor:function(l){ return l.equip.local; },
+    texto:function(l){ return l.equip.local; } },
+  { id:'predio', rotulo:'Prédio', tipo:'texto',
+    valor:function(l){ return l.equip.predio; },
+    texto:function(l){ return l.equip.predio; } },
+  { id:'criticidade', rotulo:'Criticidade', tipo:'numero',
+    valor:function(l){ var v=CRIT_ORDEM[autoCrit(l.equip)]; return v===undefined?99:v; },
+    texto:function(l){ return autoCrit(l.equip); },
+    celula:function(l){ return critPill(autoCrit(l.equip)); } },
+  { id:'detalhe', rotulo:'Detalhe', tipo:'texto',
+    valor:function(l){ return l.detalhe; },
+    texto:function(l){ return l.detalhe; } }
+];
+
+var COLS_CONTRAT = [
+  { id:'numero', rotulo:'Número', tipo:'texto',
+    valor:function(o){ return o.numero; },
+    texto:function(o){ return o.numero; } },
+  { id:'local', rotulo:'Local', tipo:'texto',
+    valor:function(o){ return ctEquip(o.equip_id).local; },
+    texto:function(o){ return ctEquip(o.equip_id).local; } },
+  { id:'predio', rotulo:'Prédio', tipo:'texto',
+    valor:function(o){ return ctEquip(o.equip_id).predio; },
+    texto:function(o){ return ctEquip(o.equip_id).predio; } },
+  { id:'empresa', rotulo:'Empresa', tipo:'texto',
+    valor:function(o){ return o.empresa; },
+    texto:function(o){ return o.empresa; } },
+  { id:'valor', rotulo:'Valor', tipo:'numero',
+    valor:function(o){ return o.valor_orcado || ctOrcTotal(o.id) || null; },
+    texto:function(o){ var v=o.valor_orcado||ctOrcTotal(o.id); return v?fmtMoney(v):''; } },
+  { id:'ne', rotulo:'NE', tipo:'texto',
+    valor:function(o){ return o.ne; },
+    texto:function(o){ return o.ne; } },
+  { id:'estado', rotulo:'Estado', tipo:'texto',
+    valor:function(o){ return (CT_STATUS[o.status]||CT_STATUS['SOLICITADA']).label; },
+    texto:function(o){ return (CT_STATUS[o.status]||CT_STATUS['SOLICITADA']).label; },
+    celula:function(o){ return ctStatusPill(o.status); } }
+];
+
+/* ── tabelas de desktop: estado por tabela ── */
+/* D-8rz-16: uma entrada por tabela — ordenar o inventário não pode
+   reordenar a lista de OS. */
+var TAB_ESTADO = {
+  inv:     {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
+  os:      {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
+  movim:   {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
+  pmoc:    {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
+  alert:   {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
+  contrat: {ord:{coluna:null,dir:null}, filtros:{}, aberto:false}
+};
+
+/* ── tabelas de desktop: linhas de alerta ── */
+/* Achata o agregado de alertasPmoc numa lista de {motivo, equip, detalhe},
+   uma linha por par motivo×equipamento, na ordem das seções de hoje
+   (inoperante, restrição, vencida, sem histórico) e, dentro das três
+   primeiras, na mesma ordem de criticidade que renderAlerts já aplica —
+   sem histórico não é reordenada por criticidade em nenhum dos dois
+   lugares, hoje ou aqui. */
+function linhasAlertas(ag, agora){
+  agora = agora || new Date();
+  var ordemCrit = ['CRÍTICA','ALTA','MÉDIA','BAIXA'];
+  function porCriticidade(lista){
+    return (lista||[]).slice().sort(function(a,b){
+      return ordemCrit.indexOf(autoCrit(a)) - ordemCrit.indexOf(autoCrit(b));
+    });
+  }
+  var linhas = [];
+  porCriticidade(ag.nok).forEach(function(e){
+    linhas.push({motivo:'Inoperante', equip:e, detalhe:e.obs||''});
+  });
+  porCriticidade(ag.restricao).forEach(function(e){
+    linhas.push({motivo:'Com restrições', equip:e, detalhe:e.obs||''});
+  });
+  porCriticidade(ag.vencidos).forEach(function(e){
+    var nx = nextPmoc(e,'inspecao');
+    var diff = nx ? Math.round((agora-nx)/86400000) : 0;
+    linhas.push({motivo:'PMOC vencida', equip:e, detalhe:'Vencida há '+diff+'d'});
+  });
+  (ag.semHist||[]).forEach(function(e){
+    linhas.push({motivo:'Sem histórico', equip:e, detalhe:'Nenhum registro de manutenção'});
+  });
+  return linhas;
 }
 </script>
 </body>

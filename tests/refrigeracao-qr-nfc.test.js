@@ -228,6 +228,11 @@ function carregarSandboxFiltro(overrides) {
     equipInstalado: (e) => !e.situacao || e.situacao === 'instalado',
     equipRemovido: (e) => e.situacao === 'removido',
     equipBaixado: (e) => e.situacao === 'baixado',
+    // 260822-8rz: renderInv/etiquetasDoInventario/exportarInventarioCsv
+    // passam TAB_ESTADO.inv.filtros como quarto argumento de
+    // filtrarInventario (D-8rz-09) — vazio aqui reproduz o comportamento
+    // de três argumentos que este gate já provava.
+    TAB_ESTADO: { inv: { filtros: {} } },
     autoCrit: (e) => e.criticidade,
     isVencido: (e) => !!e._vencido,
     equipEstado: () => 'OP',
