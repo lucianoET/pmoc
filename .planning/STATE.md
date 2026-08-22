@@ -5,8 +5,8 @@ milestone_name: Consolidação da plataforma
 current_phase: 7
 current_phase_name: ui-ux-mobile
 status: verifying
-stopped_at: Completed quick task 260821-td4-refrigeracao-caminhos-de-asset-absolutos -- as 7 referencias de asset da refrigeracao (5 de marcacao + 2 new URL) em caminho absoluto de raiz, CT_APP_URL corrigido, atalho de PNG estatico removido de qrRender; gate de caminhos deixa de excluir a refrigeracao e ganha forma positiva + teste de new URL; node --test 629/629
-last_updated: "2026-08-22T00:23:46.524Z"
+stopped_at: Completed quick task 260821-tyx-refrigeracao-qr-da-ficha-com-largura-lim -- teto de 200px no QR da ficha (.qr-ficha svg) separado dos 250px do modal, e gestoFechaGaveta pura fecha a gaveta so quando o toque comeca fora do corpo rolavel ou com scrollTop<=0; node --test 647/647
+last_updated: "2026-08-22T00:46:36.633Z"
 last_activity: 2026-08-19
 last_activity_desc: "Quick task 260819-863: D-06 fechada, `/calibracao` com login por cargo e escrita só para sessão autenticada (migração 39)"
 progress:
@@ -85,6 +85,7 @@ Progress: [██████████] 100% (v2.0)
 | Phase 10-mapa-operacional P08 | 45min | 3 tasks | 4 files |
 | Phase quick P260821-l7n | 35min | 3 tasks | 6 files |
 | Phase quick-260821-q57 P1 | ~50min | 3 tasks | 11 files |
+| Phase quick-260821-tyx P01 | 20min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,7 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: 260821-s3h: link profundo ?equip= consumido uma vez por carga (ALVO_FICHA, top-level), aplicado nos dois caminhos de entrada (initAppOnce/acessoLivre); qrGetUrl() passa a delegar em urlBaseApp() -- corrige vazamento pre-existente de ?equip= no QR do app inteiro (D-s3h-05)
 - [Phase ?]: 260821-s3h: filtrarInventario extraida de renderInv com dois consumidores (tela + etiquetasDoInventario); imprimirDocumento ganha parametro estilo (terceiro consumidor: etiqueta); NFC condicional (Chrome/Android, https) com frase propria por falha (5 casos por e.name), URL sempre visivel para gravacao manual quando o botao nao aparece
 - [Phase ?]: 260821-td4: gate de caminhos passa a cobrir a refrigeracao (deixou de estar excluida por escrito) -- forma positiva de caminho (^[A-Za-z0-9_./-]+$) substitui lista de exclusoes, terceiro teste escopado cobre new URL(...); CT_QR_BRAND sai de qrRender, QR sempre gerado da URL viva (D-td4-01..07)
+- [Phase ?]: 260821-tyx: teto de 200px em .qr-ficha svg (D-tyx-01/02), separado dos 250px do modal; gestoFechaGaveta pura fecha a gaveta so quando o toque comeca fora do corpo rolavel ou com #drawer-body.scrollTop<=0 (D-tyx-03..07), corrigindo panel/startScroll declarados e nunca lidos
 
 ### Pending Todos
 
@@ -239,6 +241,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-22T00:23:38.107Z
-Stopped at: Completed quick task 260821-td4-refrigeracao-caminhos-de-asset-absolutos -- as 7 referencias de asset da refrigeracao (5 de marcacao + 2 new URL) em caminho absoluto de raiz, CT_APP_URL corrigido, atalho de PNG estatico removido de qrRender; gate de caminhos deixa de excluir a refrigeracao e ganha forma positiva + teste de new URL; node --test 629/629
+Last session: 2026-08-22T00:46:36.613Z
+Stopped at: Completed quick task 260821-tyx-refrigeracao-qr-da-ficha-com-largura-lim -- teto de 200px no QR da ficha (.qr-ficha svg) separado dos 250px do modal, e gestoFechaGaveta pura fecha a gaveta so quando o toque comeca fora do corpo rolavel ou com scrollTop<=0; node --test 647/647
 Resume file: None
