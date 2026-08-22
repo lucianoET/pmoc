@@ -1660,3 +1660,23 @@ Quick task 260821-s3h. Sem migração — só frontend (D-s3h-13).
 - [ ] Num iPhone (ou no Firefox), abrir a mesma ficha e confirmar que o botão "Gravar tag NFC"
       **não** aparece, e que no lugar dele está a instrução de gravar a URL com um app de NFC
       (ex.: NFC Tools), com a URL completa visível acima.
+
+## Refrigeração — caminhos de asset absolutos de raiz (21/08/2026)
+
+Quick task 260821-td4. Conserto de bug reportado pelo usuário em produção ("o qr nao esta
+carregando"): o `vercel.json` reescreve `/refrigeracao` **sem barra final**, e nessa URL o
+navegador resolvia caminho relativo simples contra a raiz do site — `qrcode.js` (e mais 6
+referências) em 404. A mesma conferência **com barra final** (`/refrigeracao/`) já passava
+antes deste conserto e por isso **não prova nada**: é a rota sem barra, a que o usuário de
+fato visitou, que reproduzia o defeito.
+
+- [ ] Abrir `https://pmoc-orcin.vercel.app/refrigeracao` **sem barra final** (não deixar o
+      navegador completar sozinho) e conferir que o logo da topbar desenha — antes aparecia
+      como quadro de imagem quebrada, exatamente como no screenshot que o usuário mandou.
+- [ ] Na mesma URL, conferir o favicon na aba do navegador.
+- [ ] Ainda na mesma URL, abrir o modal de QR do app (ícone `#qr-mini` na tela inicial) e
+      conferir que ele desenha um **SVG gerado na hora** — não uma imagem estática — apontando
+      para `https://pmoc-orcin.vercel.app/refrigeracao`.
+- [ ] Abrir a ficha de um equipamento, "Imprimir ficha" (ou qualquer impressão de OS) e conferir
+      que o cabeçalho sai com o logo — o documento impresso é uma janela `about:blank` sem base,
+      então só prova algo se o logo aparecer ali, não só na tela.
