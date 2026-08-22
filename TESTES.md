@@ -1740,3 +1740,21 @@ OS não aparece, e a tela é a de hoje (D-uyz-24) — o roteiro pressupõe a mig
 técnico autenticado poderia gravar `situacao='baixado'` por uma chamada REST montada à mão. A
 tela não oferece o caminho (inclusive o da baixa, gateado a `admin`) e cada passo grava quem
 assinou, mas fechar de verdade exige uma migração de policy, fora deste escopo.
+
+## Refrigeração — modo observador não gruda mais (22/08/2026)
+
+Quick task 260822-48m. Frontend puro, nenhuma migração. Roteiro na mesma aba, **sem recarregar
+a página** entre os passos — o ponto do conserto é justamente não precisar de F5.
+
+- [ ] Abrir `/refrigeracao` deslogado, clicar em **"Visualizar sem login"** → confirmar a tarja
+      amarela "Modo visualização — somente leitura" no topo, e que abrir um equipamento não
+      mostra o botão "Editar cadastro" (ou que clicar nele avisa "Modo somente leitura").
+- [ ] **Sem recarregar**, sair do modo observador (voltar à tela de login) e entrar como
+      **Gestor** com senha real → a tarja deve sumir sozinha, e "Editar cadastro" na ficha do
+      equipamento deve funcionar normalmente.
+- [ ] Ainda como Gestor, clicar em **Sair** → a tela de login volta **sem** a tarja por cima
+      (ela também não pode reaparecer sozinha).
+- [ ] Clicar de novo em **"Visualizar sem login"**, confirmar a tarja de volta, sair do
+      observador e entrar como **Técnico** → confirmar que as permissões são as do **Técnico**
+      (não as do Gestor da sessão anterior) — por exemplo, abrir uma OS de manutenção e
+      confirmar que as ações restritas a Gestor/Admin não aparecem.
