@@ -17,6 +17,11 @@ const HTML = fs.readFileSync(path.join(__dirname, '..', 'refrigeracao', 'index.h
 const SQL_40 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '40_refrigeracao_os_fluxo.sql'), 'utf8');
 const SQL_41 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '41_refrigeracao_ficha_estado.sql'), 'utf8');
 const SQL_04 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '04_refrigeracao_schema.sql'), 'utf8');
+// 260821-uyz: a migração 42 acrescenta quatro colunas de movimentação em
+// logs_manutencao (local_destino_id/local_origem_id/equip_substituido_id/
+// destino_remocao) — sem somá-la aqui este gate voltaria a afirmar que a
+// união das migrações é a verdade, quando não seria mais.
+const SQL_42 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '42_refrigeracao_movimentacao.sql'), 'utf8');
 
 function recorte(marcadorIni, marcadorFim) {
   const ini = HTML.indexOf(marcadorIni);
@@ -69,6 +74,16 @@ function colunasNovasMigracao41() {
   return nomes;
 }
 
+// 260821-uyz (Task 2): a migração 42 acrescenta quatro colunas de
+// movimentação em logs_manutencao.
+function colunasNovasMigracao42() {
+  const re = /alter table logs_manutencao add column if not exists (\w+)/g;
+  const nomes = [];
+  let m;
+  while ((m = re.exec(SQL_42))) nomes.push(m[1]);
+  return nomes;
+}
+
 // ── ponte de campos ── (CAMPOS_LOG / dbToLog / logParaDb)
 function carregarPonte() {
   const ctx = {};
@@ -89,7 +104,7 @@ test('toda coluna criada pela migração 40 aparece como valor em CAMPOS_LOG (D-
 
 test('todo valor de CAMPOS_LOG é uma coluna real (união das colunas da migração 04 com as da 40 e da 41)', () => {
   const ctx = carregarPonte();
-  const colunasReais = colunasLogsManutencao04().concat(colunasNovasMigracao40(), colunasNovasMigracao41());
+  const colunasReais = colunasLogsManutencao04().concat(colunasNovasMigracao40(), colunasNovasMigracao41(), colunasNovasMigracao42());
   Object.keys(ctx.CAMPOS_LOG).forEach((k) => {
     const col = ctx.CAMPOS_LOG[k];
     assert.ok(colunasReais.includes(col), `CAMPOS_LOG.${k} = "${col}" não é coluna real de logs_manutencao`);

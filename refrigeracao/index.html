@@ -449,6 +449,16 @@ function podeEditarCadastro() {
   return r === 'admin' || r === 'gestor';
 }
 
+/* D-uyz-07: a baixa exige cargo admin, não gestor — desinstalar é ato de
+   manutenção, dar baixa é ato patrimonial formal. Uma lista, os pontos de
+   chamada todos citando-a: o <select> de destino da remoção, o botão, o
+   salvar (salvarMovOS) e a conferência (aplicarRemocao). */
+function podeDarBaixa() {
+  if (window._modoObservador) return false;
+  var r = ctUser ? ctUser.role : '';
+  return r === 'admin';
+}
+
 /* ── ponte de campos de logs_manutencao ── */
 /* Todo o camelCase do app ↔ snake_case do Postgres de logs_manutencao passa
    por este mapa só — lido por dbToLog (entrada) e logParaDb (saída). Um campo
@@ -481,7 +491,11 @@ var CAMPOS_LOG = {
   parecerAprovacao: 'parecer_aprovacao',
   conferente: 'conferente',
   dataConferencia: 'data_conferencia',
-  parecerConferencia: 'parecer_conferencia'
+  parecerConferencia: 'parecer_conferencia',
+  localDestinoId: 'local_destino_id',
+  localOrigemId: 'local_origem_id',
+  equipSubstituidoId: 'equip_substituido_id',
+  destinoRemocao: 'destino_remocao'
 };
 
 function dbToLog(r) {
@@ -555,11 +569,22 @@ function getLatestLogDate(id){
 
 async function addLogEntryAsync(equipId, entry) {
   try {
-    var { data, error } = await supa.from('logs_manutencao').insert({
+    // D-uyz: as quatro colunas de movimentação passam pela ponte única
+    // (logParaDb) em vez de mais quatro nomes enumerados à mão aqui — numa
+    // OS de manutenção comum elas vêm undefined e o JSON enviado nem as
+    // menciona (undefined não serializa), então nada muda para ela.
+    var extraMov = logParaDb({
+      localDestinoId: entry.localDestinoId,
+      localOrigemId: entry.localOrigemId,
+      equipSubstituidoId: entry.equipSubstituidoId,
+      destinoRemocao: entry.destinoRemocao
+    });
+    var payload = Object.assign({
       equip_id: equipId, data_os: entry.date, tipo: entry.tipo,
       status: entry.status, tecnico: entry.tecnico || null,
       descricao: entry.desc || null, checklist: entry.checklist || []
-    }).select().single();
+    }, extraMov);
+    var { data, error } = await supa.from('logs_manutencao').insert(payload).select().single();
     if (error) throw error;
     if (!_logCache[equipId]) _logCache[equipId] = [];
     _logCache[equipId].unshift(dbToLog(data));
@@ -600,6 +625,19 @@ async function manAtualizarOS(logId, equipId, patch, msg) {
   }
   if (msg) showToast(msg, 'ok');
   return true;
+}
+
+/* D-uyz-13: sonda PRÓPRIA, separada de manSondarEsquema/MAN_FLUXO_OK.
+   Estender manSondarEsquema para pedir também as colunas da migração 42
+   desligaria o fluxo INTEIRO num banco com 40+41 e sem 42 — uma regressão
+   do que entrou hoje. São duas perguntas diferentes; são duas sondas. O
+   terceiro segmento exige MAN_FLUXO_OK && MOV_OK. */
+var MOV_OK = false;
+
+async function movSondarEsquema() {
+  var r = await supa.from('logs_manutencao').select('id,local_destino_id,destino_remocao').limit(1);
+  MOV_OK = !r.error;
+  return MOV_OK;
 }
 
 // carregarPerfil só é CHAMADA em initAppOnce, depois de todos os scripts terem rodado — por isso pode atribuir a ctUser mesmo estando num bloco <script> anterior ao que a declara.
@@ -1495,6 +1533,7 @@ function setOSChip(btn, val){
 
 function renderOS(){
   var all = getAllOSEntries().filter(function(o){
+    if(osEhMovimentacao(o.entry)) return false; // D-uyz-01: as OS de movimentação vivem no terceiro segmento
     if(osChip==='aberto') return manPendente(o.entry.status);
     if(osChip==='aprovacao') return manNormalizar(o.entry.status)==='APROVACAO';
     if(osChip==='concluida') return manNormalizar(o.entry.status)==='CONFERIDA';
@@ -1527,6 +1566,65 @@ function renderOS(){
       '</div>' +
       (o.entry.tecnico?'<div style="font-size:12px;color:#666;margin-top:2px"><i class="fas fa-user mr1" aria-hidden="true"></i>'+esc(o.entry.tecnico)+'</div>':'') +
       (o.entry.desc?'<div class="os-desc">'+esc(o.entry.desc)+'</div>':'') +
+      '</div>';
+  }).join('');
+}
+
+/* Quantos equipamentos INSTALADOS hoje apontam para este local — a base de
+   D-uyz-03 (casoDeInstalacao). excluirEquipId evita contar a própria
+   máquina quando ela já estiver instalada no destino escolhido. */
+function ocupantesDoLocal(localId, excluirEquipId){
+  if (localId===undefined || localId===null) return 0;
+  return DATA.filter(function(e){
+    return equipInstalado(e) && e.localId===localId && e.id!==excluirEquipId;
+  }).length;
+}
+
+/* renderMovim é o espelho de renderOS: lista só as OS de movimentação,
+   ordenadas como getAllOSEntries() já ordena. Reusa .os-card/statusPillOS/
+   manClasseCard/critPill e acrescenta uma linha com o rótulo do caso
+   (instalação) ou o destino (remoção, com "Baixa patrimonial" em
+   destaque). Clicar abre manAbrirOS — é a mesma OS, na mesma gaveta. */
+function renderMovim(){
+  var all = getAllOSEntries().filter(function(o){
+    if(!osEhMovimentacao(o.entry)) return false;
+    if(movChipSel==='aberto') return manPendente(o.entry.status);
+    if(movChipSel==='aprovacao') return manNormalizar(o.entry.status)==='APROVACAO';
+    if(movChipSel==='instalacoes') return o.entry.tipo==='INSTALAÇÃO';
+    if(movChipSel==='remocoes') return o.entry.tipo==='REMOÇÃO';
+    return true;
+  });
+
+  el('os-cnt').textContent = all.length;
+
+  if(!all.length){
+    el('os-list').innerHTML = '<div class="empty"><i class="fas fa-truck-loading" aria-hidden="true"></i>' +
+      '<p>Nenhuma OS de instalação/remoção registrada.<br>Toque <strong>+</strong> para criar uma nova.</p></div>';
+    return;
+  }
+
+  el('os-list').innerHTML = all.map(function(o){
+    var st = o.entry.status||'ABERTA';
+    var cls = manClasseCard(st);
+    var linha;
+    if (o.entry.tipo==='INSTALAÇÃO') {
+      var ocupantes = ocupantesDoLocal(o.entry.localDestinoId, o.equipId);
+      var caso = casoDeInstalacao(o.entry.localDestinoId, o.entry.equipSubstituidoId, ocupantes);
+      linha = esc(CASOS_INSTALACAO[caso] || '');
+    } else {
+      linha = o.entry.destinoRemocao==='baixa'
+        ? '<strong style="color:#E52207">Baixa patrimonial</strong>'
+        : 'Guardada — volta ao inventário';
+    }
+    return '<div class="os-card '+cls+'" onclick="manAbrirOS(\''+esc(o.entry.id||'')+'\')">' +
+      '<div class="os-hdr"><div><div class="os-local">'+esc(o.equip.local)+'</div>' +
+      '<div class="os-predio">'+esc(o.equip.predio)+'</div></div>' +
+      statusPillOS(st)+'</div>' +
+      '<div class="os-meta">'+critPill(autoCrit(o.equip))+
+      '<span class="pill pill-tipo">'+esc(o.entry.tipo||'—')+'</span>' +
+      '<span style="font-size:11px;color:#888"><i class="fas fa-calendar mr1" aria-hidden="true"></i>'+fmtDate(o.entry.date)+'</span>' +
+      '</div>' +
+      '<div class="os-desc">'+linha+'</div>' +
       '</div>';
   }).join('');
 }
@@ -1815,7 +1913,7 @@ function openDetail(id){
 ═══════════════════════════════════════════════════════════ */
 function openLogForm(equipId){
   var e = DATA.find(function(r){ return r.id===equipId; }); if(!e) return;
-  var clist = CHECKLIST[e.tipo] || CHECKLIST['SPLIT'];
+  var clist = checklistDaOS(null, e.tipo); // D-uyz-16: ponto único — manutenção cai na tabela CHECKLIST de sempre
   var tipoOpts = MAINT_TIPOS.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('');
   var chkHtml = clist.map(function(item,i){
     return '<label class="chk-item"><input type="checkbox" id="chk-'+i+'"/><span>'+esc(item)+'</span></label>';
@@ -1971,6 +2069,53 @@ async function salvarEquip(id){
   openDetail(id);
   renderDash();
   renderInv();
+}
+
+/* D-uyz-08: instalar máquina que ainda não existe no cadastro faz parte do
+   fluxo — reusa campoEquipForm/EQUIP_EDITAVEIS/equipParaDb/linkSeguro/
+   podeEditarCadastro sobre um objeto vazio, sem alterar o caminho de
+   edição. A situação do equipamento novo NÃO é escolhida aqui: nasce
+   'instalado' pelo default do banco (migração 42) — a conferência da OS
+   é quem confirma; no intervalo, a máquina recém-cadastrada aparece como
+   instalada sem local, que é a verdade do momento. */
+var _aoCriarEquipCallback = null;
+function openEquipNovo(aoCriar){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar equipamento','error'); return; }
+  _aoCriarEquipCallback = aoCriar || null;
+  el('dh-id').textContent = 'Cadastrar novo equipamento';
+  el('dh-local').textContent = '';
+  el('dh-predio').textContent = '';
+  el('dh-pills').innerHTML = '';
+  var campos = EQUIP_EDITAVEIS.map(function(k){ return campoEquipForm(k, {}); }).join('');
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-plus mr1" aria-hidden="true"></i>Novo equipamento</div>' +
+    '<div class="fg2">'+campos+'</div></div>';
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
+    '<button class="btn-primary" onclick="salvarEquipNovo()"><i class="fas fa-save mr1" aria-hidden="true"></i>Cadastrar</button>';
+  openDrawer();
+}
+
+async function salvarEquipNovo(){
+  if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
+  if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar equipamento','error'); return; } // guarda na ação, não só no botão
+  var patch = {};
+  EQUIP_EDITAVEIS.forEach(function(k){
+    var campo = el('equip-'+k);
+    if (!campo) return;
+    patch[k] = (k==='refrigPermanente') ? campo.checked : campo.value;
+  });
+  if (patch.link && !linkSeguro(patch.link)) { showToast('Link inválido — use http:// ou https://','error'); return; }
+  if (patch.manualUrl && !linkSeguro(patch.manualUrl)) { showToast('Manual inválido — use http:// ou https://','error'); return; }
+  var db = equipParaDb(patch);
+  var r = await supa.from('equipamentos').insert(db).select().single();
+  if(r.error){ showToast('Erro: '+r.error.message,'error'); return; }
+  var novo = dbToEquip(r.data);
+  DATA.push(novo);
+  saveData();
+  showToast('Equipamento cadastrado','ok');
+  var cb = _aoCriarEquipCallback; _aoCriarEquipCallback = null;
+  if (cb) cb(novo.id); else openDetail(novo.id);
 }
 
 /* ── ficha: medições acompanhadas ── */
@@ -2137,6 +2282,359 @@ async function delLog(equipId, logId){
   showToast('Registro excluído','del');
   openDetail(equipId);
   renderDash();
+}
+
+/* ── movimentação: instalação e remoção ── */
+/* D-uyz-01/02: terceiro segmento do seg-toggle de OS, reusando o fluxo de
+   6 estados e a ficha que entraram hoje (260821-l7n/q57). Tudo puro,
+   sem API de navegador — o gate exercita em Node. */
+var MOV_TIPOS = ['INSTALAÇÃO','REMOÇÃO'];
+/* D-uyz-21: MOV_TIPOS nunca entram em MAINT_TIPOS — o formulário de
+   manutenção não tem onde pôr destino/origem/substituída/destino da
+   remoção, e uma OS INSTALAÇÃO/REMOÇÃO nascida por lá seria uma OS que a
+   conferência não consegue aplicar. MAINT_TIPOS não é tocada. */
+function osEhMovimentacao(entry){ return MOV_TIPOS.indexOf(entry && entry.tipo) >= 0; }
+
+/* D-uyz-16: o checklist é escolhido primeiro pelo tipo da OS, depois pelo
+   tipo do equipamento — as mesmas quatro chaves de CHECKLIST, com o mesmo
+   recuo para SPLIT que openLogForm já usa. JANELA é bloco único: sem
+   condensadora nem linha frigorígena separadas, nos dois sentidos. */
+var CHECKLIST_REMOCAO_PADRAO = [
+  'Evaporadora desmontada e retirada',
+  'Condensadora desmontada e retirada',
+  'Linha frigorígena recolhida (com recolhimento do gás)',
+  'Dreno removido e ponto vedado',
+  'Suportes/mão-francesa retirados',
+  'Alimentação elétrica desligada e ponto isolado',
+  'Local limpo e furos vedados'
+];
+var CHECKLIST_REMOCAO = {
+  'SPLIT': CHECKLIST_REMOCAO_PADRAO,
+  'PISO/TETO': CHECKLIST_REMOCAO_PADRAO,
+  'SELF CONTAINED': CHECKLIST_REMOCAO_PADRAO,
+  'JANELA': [
+    'Aparelho retirado',
+    'Moldura/vedação do vão',
+    'Alimentação elétrica isolada',
+    'Suportes retirados',
+    'Vão vedado'
+  ]
+};
+var CHECKLIST_INSTALACAO_PADRAO = [
+  'Fixação de suportes',
+  'Posicionamento das unidades',
+  'Linha frigorígena conectada',
+  'Teste de estanqueidade/vácuo',
+  'Dreno com caimento verificado',
+  'Alimentação elétrica e disjuntor',
+  'Teste de funcionamento e medição inicial'
+];
+var CHECKLIST_INSTALACAO = {
+  'SPLIT': CHECKLIST_INSTALACAO_PADRAO,
+  'PISO/TETO': CHECKLIST_INSTALACAO_PADRAO,
+  'SELF CONTAINED': CHECKLIST_INSTALACAO_PADRAO,
+  'JANELA': [
+    'Aparelho posicionado no vão',
+    'Moldura/vedação do vão',
+    'Alimentação elétrica e disjuntor',
+    'Suportes fixados',
+    'Teste de funcionamento'
+  ]
+};
+function checklistDaOS(tipoOS, tipoEquip){
+  var tabela = tipoOS==='REMOÇÃO' ? CHECKLIST_REMOCAO : tipoOS==='INSTALAÇÃO' ? CHECKLIST_INSTALACAO : CHECKLIST;
+  return tabela[tipoEquip] || tabela['SPLIT'];
+}
+
+/* D-uyz-03: os três casos de instalação são DERIVADOS do dado gravado,
+   nunca digitados. Ordem exata: substituída preenchida → substituição
+   (mesmo com o destino já ocupado); senão destino com ao menos um
+   equipamento instalado → adicional; senão → novo local.
+   ocupantesDoDestino é NÚMERO, calculado pelo chamador a partir de DATA. */
+var CASOS_INSTALACAO = {
+  'substituicao': 'Substituição de máquina removida',
+  'adicional':    'Mais uma máquina no mesmo local',
+  'novo-local':   'Novo local'
+};
+function casoDeInstalacao(destinoId, substituidoId, ocupantesDoDestino){
+  if (substituidoId) return 'substituicao';
+  if ((ocupantesDoDestino||0) > 0) return 'adicional';
+  return 'novo-local';
+}
+
+/* D-uyz-25: predio/local são derivados de cmasm_locais no momento da
+   escolha do destino, nunca congelados na OS — a árvore tem exatamente
+   dois níveis (sala → edificação), então um único passo por parent_id já
+   resolve o par. Guarda de ciclo (mesma técnica de localAscendente em
+   mapa/mapa-geometria.js): parent_id não tem restrição de aciclicidade no
+   Postgres, e um cadastro circular travaria a aba sem erro nenhum.
+   Devolve null quando o id não está no índice — é o que faz
+   aplicarInstalacao recusar em vez de gravar meia coisa. */
+function rotuloLocalDestino(id, porId){
+  if (id===undefined || id===null || !porId || !Object.prototype.hasOwnProperty.call(porId, id)) return null;
+  var no = porId[id];
+  var predioNo = no;
+  var visitados = {};
+  visitados[no.id] = true;
+  while (predioNo.parent_id!==undefined && predioNo.parent_id!==null &&
+         !visitados[predioNo.parent_id] &&
+         Object.prototype.hasOwnProperty.call(porId, predioNo.parent_id)) {
+    visitados[predioNo.parent_id] = true;
+    predioNo = porId[predioNo.parent_id];
+  }
+  var rotulo = (predioNo===no) ? String(no.nome) : (predioNo.nome+' / '+no.nome);
+  return { predio: predioNo.nome, local: no.nome, rotulo: rotulo };
+}
+
+/* ── movimentação: carga dos locais, sob demanda ── */
+/* Fora do Promise.all principal, como carregarCatalogoReparos()/
+   carregarItensOS()/carregarCompras() em Máquinas — sob demanda, ao abrir
+   o formulário de movimentação e ao aplicar uma instalação. No erro,
+   deixa LOCAIS vazio e LOCAIS_CARREGADOS falso, e o formulário desabilita
+   o salvar em vez de oferecer um <select> vazio que grava null. */
+var LOCAIS = [];
+var LOCAIS_POR_ID = {};
+var LOCAIS_CARREGADOS = false;
+async function carregarLocais(){
+  try {
+    var r = await supa.from('cmasm_locais').select('id,nome,tipo,parent_id,ativo').eq('ativo', true).order('nome');
+    if (r.error) throw r.error;
+    LOCAIS = r.data || [];
+    LOCAIS_POR_ID = {};
+    LOCAIS.forEach(function(l){ LOCAIS_POR_ID[l.id] = l; });
+    LOCAIS_CARREGADOS = true;
+    return true;
+  } catch(e) {
+    LOCAIS = []; LOCAIS_POR_ID = {}; LOCAIS_CARREGADOS = false;
+    return false;
+  }
+}
+
+/* ── movimentação: formulário e gravação ── */
+/* Uma gaveta, dois corpos (instalação/remoção), redesenhados ao trocar o
+   <select> de tipo e, dentro de cada um, ao trocar equipamento/destino —
+   é o que torna D-uyz-03 visível em vez de implícito. */
+async function openMovForm(tipoInicial){
+  if (!LOCAIS_CARREGADOS) await carregarLocais();
+  el('dh-id').textContent = 'Nova OS · Instalação/Remoção';
+  el('dh-local').textContent = 'Selecione o tipo e o equipamento';
+  el('dh-predio').textContent = 'CMASM · DME';
+  el('dh-pills').innerHTML = '';
+
+  var tipo = MOV_TIPOS.indexOf(tipoInicial)>=0 ? tipoInicial : MOV_TIPOS[0];
+  var tipoOpts = MOV_TIPOS.map(function(t){ return '<option value="'+t+'"'+(t===tipo?' selected':'')+'>'+t+'</option>'; }).join('');
+
+  el('drawer-body').innerHTML =
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-truck-loading mr1" aria-hidden="true"></i>Dados da movimentação</div>' +
+    '<div class="fg2">' +
+    '<div><label class="fgl">Data</label><input class="fgi" id="mov-data" type="date" value="'+today()+'"/></div>' +
+    '<div><label class="fgl">Tipo</label><select class="fgs" id="mov-tipo" onchange="movMontarCorpo()">'+tipoOpts+'</select></div>' +
+    '<div class="fg-full"><label class="fgl">Técnico responsável</label><input class="fgi" id="mov-tec" type="text" placeholder="Nome do técnico"/></div>' +
+    '</div>' +
+    '<label class="fgl">Descrição</label>' +
+    '<textarea class="fgt" id="mov-desc" placeholder="Observações da movimentação…"></textarea>' +
+    (!LOCAIS_CARREGADOS ? '<div style="font-size:11px;color:#E52207;margin-top:6px"><i class="fas fa-exclamation-triangle mr1" aria-hidden="true"></i>Não foi possível carregar os locais — tente de novo.</div>' : '') +
+    '</div>' +
+    '<div id="mov-corpo"></div>';
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
+    '<button class="btn-primary" id="mov-btn-salvar" onclick="salvarMovOS()"><i class="fas fa-save mr1" aria-hidden="true"></i>Abrir OS</button>';
+  openDrawer();
+  movMontarCorpo();
+}
+
+/* Salas ativas, rotuladas por rotuloLocalDestino (prédio no rótulo) —
+   175 dos 190 ativos posicionados apontam para sala (D-uyz nota de campo). */
+function movOptsLocais(){
+  return LOCAIS.map(function(l){
+    var r = rotuloLocalDestino(l.id, LOCAIS_POR_ID);
+    return '<option value="'+l.id+'">'+esc(r ? r.rotulo : l.nome)+'</option>';
+  }).join('');
+}
+
+function movMontarCorpo(){
+  var tipo = val('mov-tipo');
+  var corpo = el('mov-corpo'); if (!corpo) return;
+  corpo.innerHTML = tipo==='REMOÇÃO' ? movCorpoRemocao() : movCorpoInstalacao();
+  if (tipo==='REMOÇÃO') { movOnChangeEquipRemocao(); }
+  else { movOnChangeEquipInstalacao(); }
+}
+
+function movCorpoInstalacao(){
+  // D-uyz-05: removido é quem pode ser instalado — baixado é terminal e não entra.
+  var candidatos = equipRemovido ? DATA.filter(equipRemovido) : [];
+  var opts = candidatos.map(function(e){ return '<option value="'+e.id+'">#'+e.id+' — '+esc(e.fabricante||'')+' '+esc(e.tipo||'')+'</option>'; }).join('');
+  opts += '<option value="novo">➕ Cadastrar novo equipamento…</option>';
+  return '<div class="ds"><div class="ds-title"><i class="fas fa-snowflake mr1" aria-hidden="true"></i>Equipamento</div>' +
+    '<select class="fgs" id="mov-equip-sel" onchange="movOnChangeEquipInstalacao()">'+opts+'</select>' +
+    '<label class="fgl" style="margin-top:8px">Local de destino</label>' +
+    '<select class="fgs" id="mov-destino-sel" onchange="movOnChangeDestino()">'+movOptsLocais()+'</select>' +
+    '<label class="fgl" style="margin-top:8px">Máquina substituída (opcional)</label>' +
+    '<select class="fgs" id="mov-substituido-sel" onchange="movAtualizarCaso()"><option value="">— nenhuma —</option></select>' +
+    '<div id="mov-caso" style="margin-top:8px;font-size:12px;color:#1351B4;font-weight:700"></div>' +
+    '</div>' +
+    '<div class="ds"><div class="ds-title"><i class="fas fa-tasks mr1" aria-hidden="true"></i>Checklist de instalação</div>' +
+    '<div id="mov-checklist"></div></div>';
+}
+
+function movCorpoRemocao(){
+  var instalados = equipInstalado ? DATA.filter(equipInstalado) : [];
+  var opts = instalados.map(function(e){ return '<option value="'+e.id+'">#'+e.id+' — '+esc(e.predio||'')+' / '+esc(e.local||'')+'</option>'; }).join('');
+  var podeBaixa = podeDarBaixa();
+  return '<div class="ds"><div class="ds-title"><i class="fas fa-snowflake mr1" aria-hidden="true"></i>Equipamento</div>' +
+    '<select class="fgs" id="mov-equip-sel" onchange="movOnChangeEquipRemocao()">'+opts+'</select>' +
+    '<div id="mov-origem" style="margin-top:8px;font-size:12px;color:#666"></div>' +
+    '<label class="fgl" style="margin-top:8px">Destino</label>' +
+    '<select class="fgs" id="mov-destino-remocao-sel" onchange="movOnChangeDestinoRemocao()">' +
+    '<option value="guardada">Guardada — volta ao inventário</option>' +
+    (podeBaixa ? '<option value="baixa">Baixa patrimonial</option>' : '') +
+    '</select>' +
+    '<div id="mov-aviso-baixa" style="display:none;margin-top:6px;font-size:11px;color:#E52207"><i class="fas fa-exclamation-triangle mr1" aria-hidden="true"></i>Baixa patrimonial é irreversível.</div>' +
+    '</div>' +
+    '<div class="ds"><div class="ds-title"><i class="fas fa-tasks mr1" aria-hidden="true"></i>Checklist de remoção — partes</div>' +
+    '<div id="mov-checklist"></div></div>';
+}
+
+function movEquipSelecionado(){
+  var v = val('mov-equip-sel');
+  if (!v || v==='novo') return null;
+  return DATA.find(function(e){ return e.id===parseInt(v); }) || null;
+}
+
+function movRenderChecklist(tipoOS, tipoEquip){
+  var lista = checklistDaOS(tipoOS, tipoEquip);
+  var host = el('mov-checklist'); if (!host) return;
+  host.innerHTML = lista.map(function(item,i){
+    return '<label class="chk-item"><input type="checkbox" id="mov-chk-'+i+'"/><span>'+esc(item)+'</span></label>';
+  }).join('') +
+  '<div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">' +
+  '<span style="font-size:11px;color:#aaa" id="mov-chk-cnt">0 / '+lista.length+' verificados</span>' +
+  '<button onclick="movMarcarTodos('+lista.length+')" style="all:unset;cursor:pointer;color:#1351B4;font-size:12px;font-weight:700"><i class="fas fa-check-double mr1" aria-hidden="true"></i>Marcar todos</button>' +
+  '</div>';
+  host.querySelectorAll('.chk-item input').forEach(function(chk){
+    chk.addEventListener('change', movAtualizarChkCnt);
+  });
+}
+function movAtualizarChkCnt(){
+  var host = el('mov-checklist'); if (!host) return;
+  var done = host.querySelectorAll('.chk-item input:checked').length;
+  var tot = host.querySelectorAll('.chk-item input').length;
+  var cnt = el('mov-chk-cnt'); if (cnt) cnt.textContent = done+' / '+tot+' verificados';
+}
+function movMarcarTodos(n){
+  var host = el('mov-checklist'); if (!host) return;
+  var chks = host.querySelectorAll('.chk-item input');
+  var allOn = Array.from(chks).every(function(c){ return c.checked; });
+  chks.forEach(function(c){ c.checked=!allOn; });
+  movAtualizarChkCnt();
+}
+
+/* D-uyz-08: "➕ Cadastrar novo equipamento…" abre o cadastro em modo
+   criação e volta com o id novo selecionado. */
+function movOnChangeEquipInstalacao(){
+  var v = val('mov-equip-sel');
+  if (v==='novo') {
+    openEquipNovo(function(novoId){
+      movMontarCorpo();
+      setTimeout(function(){ var sel = el('mov-equip-sel'); if (sel) sel.value = String(novoId); movOnChangeEquipInstalacao(); }, 0);
+    });
+    return;
+  }
+  var e = movEquipSelecionado();
+  movRenderChecklist('INSTALAÇÃO', e ? e.tipo : 'SPLIT');
+  movAtualizarCaso();
+}
+
+function movOnChangeDestino(){
+  var destinoId = parseInt(val('mov-destino-sel'));
+  var equipAtual = movEquipSelecionado();
+  var ocupantes = DATA.filter(function(e){ return equipInstalado(e) && e.localId===destinoId; });
+  var sel = el('mov-substituido-sel');
+  if (sel) {
+    sel.innerHTML = '<option value="">— nenhuma —</option>' +
+      ocupantes.map(function(e){ return '<option value="'+e.id+'">#'+e.id+' — '+esc(e.fabricante||'')+' '+esc(e.tipo||'')+'</option>'; }).join('');
+  }
+  movAtualizarCaso();
+}
+
+function movAtualizarCaso(){
+  var destinoId = parseInt(val('mov-destino-sel'));
+  var substituidoId = val('mov-substituido-sel') ? parseInt(val('mov-substituido-sel')) : null;
+  var equipAtual = movEquipSelecionado();
+  var ocupantes = DATA.filter(function(e){ return equipInstalado(e) && e.localId===destinoId; }).length;
+  var caso = casoDeInstalacao(destinoId, substituidoId, ocupantes);
+  var host = el('mov-caso'); if (!host) return;
+  var aviso = '';
+  if (substituidoId) {
+    var substituida = DATA.find(function(e){ return e.id===substituidoId; });
+    if (substituida && equipInstalado(substituida)) {
+      aviso = '<div style="color:#E52207;margin-top:4px"><i class="fas fa-exclamation-triangle mr1" aria-hidden="true"></i>' +
+        '#'+substituida.id+' ainda está instalada — abra a OS de Remoção dela antes de confirmar esta instalação.</div>';
+    }
+  }
+  host.innerHTML = 'Caso: '+esc(CASOS_INSTALACAO[caso]||'')+aviso;
+}
+
+function movOnChangeEquipRemocao(){
+  var e = movEquipSelecionado();
+  var host = el('mov-origem');
+  if (host) host.textContent = e ? ('Origem: '+(e.predio||'')+' / '+(e.local||'')) : '';
+  movRenderChecklist('REMOÇÃO', e ? e.tipo : 'SPLIT');
+  movOnChangeDestinoRemocao();
+}
+
+function movOnChangeDestinoRemocao(){
+  var destino = val('mov-destino-remocao-sel');
+  var aviso = el('mov-aviso-baixa');
+  if (aviso) aviso.style.display = destino==='baixa' ? 'block' : 'none';
+}
+
+async function salvarMovOS(){
+  if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
+  if (!manPode('abrir')) { showToast('Sem permissão para abrir OS', 'error'); return; }
+  var tipo = val('mov-tipo');
+  if (MOV_TIPOS.indexOf(tipo) < 0) { showToast('Tipo inválido', 'error'); return; }
+  var date = val('mov-data');
+  if (!date) { showToast('Preencha a data', 'error'); return; }
+  var equip = movEquipSelecionado();
+  if (!equip) { showToast('Selecione o equipamento', 'error'); return; }
+
+  var host = el('mov-checklist');
+  var checklist = [];
+  if (host) {
+    host.querySelectorAll('.chk-item').forEach(function(row, i){
+      var chk = row.querySelector('input'), lbl = row.querySelector('span');
+      if (chk && lbl) checklist.push({i:i, label:lbl.textContent.trim(), done:chk.checked});
+    });
+  }
+
+  var patch = {
+    date: date, tipo: tipo, status: 'ABERTA', // D-l7n-06: status nunca vem de campo
+    tecnico: val('mov-tec').trim(), desc: val('mov-desc').trim(), checklist: checklist
+  };
+
+  if (tipo==='INSTALAÇÃO') {
+    if (equipBaixado(equip)) { showToast('Máquina baixada não pode ser instalada', 'error'); return; }
+    var destinoId = parseInt(val('mov-destino-sel'));
+    if (!destinoId || !LOCAIS_POR_ID[destinoId]) { showToast('Selecione o local de destino', 'error'); return; }
+    patch.localDestinoId = destinoId;
+    var substituidoVal = val('mov-substituido-sel');
+    if (substituidoVal) patch.equipSubstituidoId = parseInt(substituidoVal);
+  } else {
+    var destinoRem = val('mov-destino-remocao-sel');
+    if (['guardada','baixa'].indexOf(destinoRem) < 0) { showToast('Selecione o destino da remoção', 'error'); return; }
+    if (destinoRem==='baixa' && !podeDarBaixa()) { showToast('Só admin pode dar baixa', 'error'); return; } // guarda na ação (D-l7n-03)
+    patch.destinoRemocao = destinoRem;
+    patch.localOrigemId = equip.localId || null;
+  }
+
+  var logId = await addLogEntryAsync(equip.id, patch);
+  if (!logId) return;
+  showToast('OS aberta com sucesso', 'ok');
+  manAbrirOS(logId);
+  renderMovim();
+  setTimeout(function(){ renderDash(); }, 100);
 }
 
 /* ── fluxo da OS interna: tela e ações ── */
@@ -2538,6 +3036,7 @@ async function acessoLivre() {
     DATA = data.map(dbToEquip);
     await loadLogsFromSupabase();
     await manSondarEsquema();
+    await movSondarEsquema();
     // Marca modo observador
     window._modoObservador = true;
     // Remove tela de login
@@ -2574,6 +3073,7 @@ async function initAppOnce(){
   await loadDataFromSupabase();
   await loadLogsFromSupabase();
   await manSondarEsquema();
+  await movSondarEsquema();
   await carregarPerfil();
   setupRealtime();
   renderDash();
@@ -2612,6 +3112,11 @@ setInterval(async function(){
 .seg-toggle{display:flex;background:#E8ECF5;border-radius:12px;padding:3px;margin-bottom:10px}
 .seg-btn{flex:1;border:none;background:none;padding:9px 6px;border-radius:10px;font-size:13px;font-weight:700;color:#666;cursor:pointer;transition:all .15s}
 .seg-btn.active{background:#fff;color:#1351B4;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+/* D-uyz-01: com três segmentos o ícone come os ~20px que faltam para
+   "Contratações" caber inteiro — rótulo cortado dentro de botão é
+   defeito, não detalhe. */
+.seg-toggle.tres .seg-btn{font-size:12px;padding:9px 4px;white-space:nowrap}
+.seg-toggle.tres .seg-btn i{display:none}
 .ct-card{background:#fff;border-radius:12px;padding:14px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,.07);border-left:4px solid #1351B4;cursor:pointer}
 .ct-card:active{transform:scale(.98)}
 .ct-num{font-size:11px;color:#aaa;font-weight:800;letter-spacing:.3px}
@@ -2759,15 +3264,21 @@ function ctSaldoNE(ne){
 }
 
 /* ══ TOGGLE / LISTA ══ */
+/* D-uyz-01: terceiro segmento — Manutenção | Contratações | Inst./Remoção —
+   só entra quando MAN_FLUXO_OK && MOV_OK (D-uyz-24). Sem as duas flags a
+   função faz EXATAMENTE o que fazia antes: dois botões, sem a classe
+   `tres`. */
 function ctInjectToggle(){
   if(el('ct-toggle')) return;
   var page = el('page-os'); if(!page) return;
+  var tresSegmentos = MAN_FLUXO_OK && MOV_OK;
   var div = document.createElement('div');
   div.id = 'ct-toggle';
-  div.className = 'seg-toggle';
+  div.className = 'seg-toggle' + (tresSegmentos ? ' tres' : '');
   div.innerHTML =
-    '<button class="seg-btn active" id="seg-pmoc" onclick="ctSetMode(\'pmoc\')"><i class="fas fa-tools mr1" aria-hidden="true"></i>Manutenção</button>' +
-    '<button class="seg-btn" id="seg-contrat" onclick="ctSetMode(\'contrat\')"><i class="fas fa-file-signature mr1" aria-hidden="true"></i>Contratações</button>';
+    '<button class="seg-btn active" id="seg-pmoc" onclick="ctSetMode(\'pmoc\')" title="Manutenção" aria-label="Manutenção"><i class="fas fa-tools mr1" aria-hidden="true"></i>Manutenção</button>' +
+    '<button class="seg-btn" id="seg-contrat" onclick="ctSetMode(\'contrat\')" title="Contratações" aria-label="Contratações"><i class="fas fa-file-signature mr1" aria-hidden="true"></i>Contratações</button>' +
+    (tresSegmentos ? '<button class="seg-btn" id="seg-movim" onclick="ctSetMode(\'movim\')" title="Instalação e Remoção" aria-label="Instalação e Remoção"><i class="fas fa-truck-loading mr1" aria-hidden="true"></i>Inst./Remoção</button>' : '');
   page.insertBefore(div, page.firstChild);
   var chips = document.createElement('div');
   chips.id = 'ct-chips';
@@ -2780,20 +3291,44 @@ function ctInjectToggle(){
     '<button class="chip" onclick="ctSetChip(this,\'encerradas\')">Encerradas</button>' +
     '<button class="chip" onclick="ctSetChip(this,\'saldo\')">Saldo Atas</button>';
   page.insertBefore(chips, el('os-chips'));
+  if (tresSegmentos) {
+    var movChips = document.createElement('div');
+    movChips.id = 'movim-chips';
+    movChips.className = 'chips';
+    movChips.style.display = 'none';
+    movChips.innerHTML =
+      '<button class="chip active" onclick="ctSetMovChip(this,\'todas\')">Todas</button>' +
+      '<button class="chip" onclick="ctSetMovChip(this,\'aberto\')">Em aberto</button>' +
+      '<button class="chip" onclick="ctSetMovChip(this,\'aprovacao\')">P/ aprovar</button>' +
+      '<button class="chip" onclick="ctSetMovChip(this,\'instalacoes\')">Instalações</button>' +
+      '<button class="chip" onclick="ctSetMovChip(this,\'remocoes\')">Remoções</button>';
+    page.insertBefore(movChips, el('os-chips'));
+  }
 }
 
 async function ctSetMode(m){
   ctMode = m;
-  var sp=el('seg-pmoc'), sc=el('seg-contrat');
+  var sp=el('seg-pmoc'), sc=el('seg-contrat'), sm=el('seg-movim');
   if(sp) sp.className = 'seg-btn'+(m==='pmoc'?' active':'');
   if(sc) sc.className = 'seg-btn'+(m==='contrat'?' active':'');
+  if(sm) sm.className = 'seg-btn'+(m==='movim'?' active':'');
   el('os-chips').style.display = m==='pmoc'?'flex':'none';
   el('ct-chips').style.display = m==='contrat'?'flex':'none';
+  var mc = el('movim-chips'); if(mc) mc.style.display = m==='movim'?'flex':'none';
   var title = document.querySelector('#page-os .sec-title');
-  if(title) title.textContent = m==='contrat' ? 'Contratações (ARP)' : 'Ordens de Serviço';
+  if(title) title.textContent = m==='contrat' ? 'Contratações (ARP)' : (m==='movim' ? 'Instalação e Remoção' : 'Ordens de Serviço');
   if(m==='contrat'){ await ctEnsureLoaded(); ctRenderList(); }
+  else if(m==='movim'){ if(!LOCAIS_CARREGADOS) await carregarLocais(); renderMovim(); }
   else renderOS();
 }
+
+function ctSetMovChip(btn, v){
+  document.querySelectorAll('#movim-chips .chip').forEach(function(c){ c.classList.remove('active'); });
+  btn.classList.add('active');
+  movChipSel = v;
+  renderMovim();
+}
+var movChipSel = 'todas';
 
 function ctSetChip(btn, v){
   document.querySelectorAll('#ct-chips .chip').forEach(function(c){ c.classList.remove('active'); });
@@ -3342,12 +3877,14 @@ async function ctDelComp(osId, compId){
 /* ══ INTEGRAÇÃO COM O APP ══ */
 var _origOpenNewOS = openNewOS;
 openNewOS = function(){
-  if(ctMode==='contrat') ctNovaOS();
+  if(ctMode==='movim') openMovForm();
+  else if(ctMode==='contrat') ctNovaOS();
   else _origOpenNewOS();
 };
 
 var _origRenderOS = renderOS;
 renderOS = function(){
+  if(ctMode==='movim'){ renderMovim(); return; }
   if(ctMode==='contrat'){ ctRenderList(); return; }
   _origRenderOS();
 };
