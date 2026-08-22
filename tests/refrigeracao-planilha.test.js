@@ -503,3 +503,154 @@ test('o bloco de importar do painel é condicionado a podeEditarCadastro()', () 
   const corpo = tela.slice(ini, fim);
   assert.match(corpo, /if\s*\(\s*podeEditarCadastro\(\)\s*\)/);
 });
+
+// ═════════════ 8. TELA — importação, conferência e gravação (Tarefa 3) ═══
+
+// supa falso: registra cada chamada (tabela, tipo de operação, payload,
+// filtro eq/in) e resolve conforme `comportamento` — usado para provar que
+// aplicarPlanoPlanilha produz exatamente as três formas de chamada
+// esperadas, sem tocar um Supabase de verdade.
+function criarSupaFake(comportamento) {
+  const chamadas = [];
+  function resolver(registro) {
+    chamadas.push(registro);
+    return Promise.resolve(comportamento ? comportamento(registro) : { error: null });
+  }
+  const supa = {
+    from(tabela) {
+      return {
+        update(payload) {
+          const registro = { tabela, tipo: 'update', payload };
+          return {
+            eq(campo, valor) { registro.eq = { campo, valor }; return resolver(registro); },
+            in(campo, valores) { registro.in = { campo, valores }; return resolver(registro); },
+          };
+        },
+        insert(payload) {
+          return resolver({ tabela, tipo: 'insert', payload });
+        },
+      };
+    },
+  };
+  return { supa, chamadas };
+}
+
+// Carrega A+B+C+D+E (a seção de tela inteira, incluindo o que a Tarefa 2 já
+// deixou) no mesmo contexto — aplicarPlanoPlanilha/aoEscolherArquivoPlanilha
+// vivem em E e dependem do núcleo de D e da ponte de A.
+function carregarSandboxTela(supaFake, ctUserRole) {
+  const ctx = carregarSandbox();
+  ctx.ctUser = ctUserRole === undefined ? { role: 'gestor' } : ctUserRole;
+  ctx.DATA = [];
+  ctx.supa = (supaFake || criarSupaFake()).supa;
+  ctx.toasts = [];
+  ctx.showToast = (msg, tipo) => { ctx.toasts.push({ msg, tipo }); };
+  ctx.closeDrawer = () => { ctx.drawerFechada = true; };
+  ctx.openDrawer = () => {};
+  ctx.loadDataFromSupabase = async () => true;
+  ctx.saveData = () => {};
+  ctx.renderDash = () => {};
+  ctx.renderInv = () => {};
+  ctx.el = () => ({});
+  vm.runInContext(recorteTela(), ctx);
+  return ctx;
+}
+
+test('aplicarPlanoPlanilha: um plano com as três operações produz exatamente três formas de chamada, e o payload do arquivamento tem uma única chave cujo valor é o segundo item de SITUACAO_ORDEM', async () => {
+  const fake = criarSupaFake();
+  const ctx = carregarSandboxTela(fake);
+  ctx.PLANO_PLANILHA = {
+    atualizar: [{ id: 1, equip: equip({ id: 1 }), patch: { area: 'AZUL' }, campos: ['area'] }],
+    criar: [{ linha: 5, patch: { area: 'VERMELHA', predio: 'F21', local: 'Sala 9' } }],
+    arquivar: [{ id: 9, predio: 'MK48', local: 'Sala 1' }],
+  };
+  await ctx.aplicarPlanoPlanilha();
+
+  assert.equal(fake.chamadas.length, 3, 'esperada exatamente uma chamada por operação');
+  // três FORMAS de chamada, não três tipos de verbo: update-por-eq
+  // (atualizar), insert (criar) e update-por-in (arquivar) — as duas
+  // primeiras são tipo 'update' mas se distinguem por eq/in.
+  const atualizacoesPorId = fake.chamadas.filter((c) => c.tipo === 'update' && c.eq);
+  const insercoes = fake.chamadas.filter((c) => c.tipo === 'insert');
+  const arquivamentos = fake.chamadas.filter((c) => c.tipo === 'update' && c.in);
+  assert.equal(atualizacoesPorId.length, 1); // atualizar
+  assert.equal(insercoes.length, 1); // criar
+  assert.equal(arquivamentos.length, 1); // arquivar
+  const arquivamento = fake.chamadas.find((c) => c.in);
+  assert.ok(arquivamento, 'a chamada de arquivamento precisa usar .in(...)');
+  const chavesPayload = Object.keys(arquivamento.payload);
+  assert.equal(chavesPayload.length, 1);
+  assert.equal(chavesPayload[0], 'situacao');
+  assert.equal(arquivamento.payload.situacao, ctx.SITUACAO_ORDEM[1]);
+  assert.equal(ctx.SITUACAO_ORDEM[1], 'removido');
+});
+
+test('o payload da criação não contém chave de situação nenhuma', async () => {
+  const fake = criarSupaFake();
+  const ctx = carregarSandboxTela(fake);
+  ctx.PLANO_PLANILHA = {
+    atualizar: [],
+    criar: [{ linha: 5, patch: { area: 'VERMELHA', predio: 'F21', local: 'Sala 9' } }],
+    arquivar: [],
+  };
+  await ctx.aplicarPlanoPlanilha();
+  const insercao = fake.chamadas.find((c) => c.tipo === 'insert');
+  assert.ok(insercao);
+  const payload = insercao.payload[0];
+  assert.equal(payload.situacao, undefined);
+  assert.equal(payload.data_remocao, undefined);
+  assert.equal(payload.data_baixa, undefined);
+});
+
+test('um erro na atualização de um id não impede a criação nem o arquivamento, e a mensagem final reporta a falha', async () => {
+  const fake = criarSupaFake((registro) => {
+    if (registro.tipo === 'update' && registro.eq && registro.eq.valor === 1) {
+      return { error: { message: 'falhou' } };
+    }
+    return { error: null };
+  });
+  const ctx = carregarSandboxTela(fake);
+  ctx.PLANO_PLANILHA = {
+    atualizar: [{ id: 1, equip: equip({ id: 1 }), patch: { area: 'AZUL' }, campos: ['area'] }],
+    criar: [{ linha: 5, patch: { area: 'VERMELHA', predio: 'F21', local: 'Sala 9' } }],
+    arquivar: [{ id: 9, predio: 'MK48', local: 'Sala 1' }],
+  };
+  await ctx.aplicarPlanoPlanilha();
+  assert.equal(fake.chamadas.length, 3, 'as outras duas operações precisam ter acontecido apesar da falha');
+  assert.ok(fake.chamadas.some((c) => c.tipo === 'insert'));
+  assert.ok(fake.chamadas.some((c) => c.in));
+  const ultimoToast = ctx.toasts[ctx.toasts.length - 1];
+  assert.match(ultimoToast.msg, /falh/i);
+  assert.equal(ultimoToast.tipo, 'error');
+});
+
+test('estrutural: aoEscolherArquivoPlanilha e aplicarPlanoPlanilha chamam ambos somenteLeitura e podeEditarCadastro', () => {
+  const tela = recorteTela();
+  function corpoDe(nomeFuncao, proximaFuncao) {
+    const ini = tela.indexOf('function ' + nomeFuncao + '(');
+    const fim = proximaFuncao ? tela.indexOf('\n' + proximaFuncao, ini) : tela.length;
+    assert.ok(ini > 0 && fim > ini, `função ${nomeFuncao} não encontrada`);
+    return tela.slice(ini, fim);
+  }
+  const corpoEscolher = corpoDe('aoEscolherArquivoPlanilha', 'function planilhaFraseItem(');
+  assert.match(corpoEscolher, /somenteLeitura\(\)/);
+  assert.match(corpoEscolher, /podeEditarCadastro\(\)/);
+
+  const corpoAplicar = corpoDe('aplicarPlanoPlanilha', null); // última função da seção — vai até o fim do recorte
+  assert.match(corpoAplicar, /somenteLeitura\(\)/);
+  assert.match(corpoAplicar, /podeEditarCadastro\(\)/);
+});
+
+test('estrutural: renderConferenciaPlanilha não contém chamada a supa', () => {
+  const tela = recorteTela();
+  const ini = tela.indexOf('function renderConferenciaPlanilha(');
+  const fim = tela.indexOf('\nasync function aplicarPlanoPlanilha(', ini);
+  const corpo = tela.slice(ini, fim);
+  assert.doesNotMatch(corpo, /\bsupa\./);
+});
+
+test('estrutural: a única ocorrência de .update( com chave de situação em toda a seção de tela é a do arquivamento', () => {
+  const tela = recorteTela();
+  const ocorrencias = tela.match(/\.update\([^)]*situacao[^)]*\)/g) || [];
+  assert.equal(ocorrencias.length, 1, `esperada 1 ocorrência, achadas: ${JSON.stringify(ocorrencias)}`);
+});

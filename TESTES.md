@@ -1758,3 +1758,50 @@ a página** entre os passos — o ponto do conserto é justamente não precisar 
       observador e entrar como **Técnico** → confirmar que as permissões são as do **Técnico**
       (não as do Gestor da sessão anterior) — por exemplo, abrir uma OS de manutenção e
       confirmar que as ações restritas a Gestor/Admin não aparecem.
+
+## Refrigeração — planilha do inventário: exportar e importar (22/08/2026)
+
+Quick task 260822-5hy. **O usuário escolheu deliberadamente o modo de importação mais
+perigoso** (atualiza + cria + arquiva por ausência), depois de eu recomendar contra — este
+roteiro existe para confirmar, com dados reais, que as guardas escritas no gate (escopo
+derivado do conteúdo, guarda de escala, conferência nominal) seguram na tela de verdade, não só
+no `node --test`. Nenhuma migração; o botão fica no ícone `#btn-planilha` da faixa do
+Inventário, antes de `#btn-etiquetas`.
+
+- [ ] Como Gestor ou Admin, no Inventário, clicar no ícone da planilha (`#btn-planilha`) com o
+      chip **"Todos"** e a busca vazia → o painel diz **"Escopo: completo (171 de 171
+      instalados) — este arquivo poderá arquivar por ausência"**.
+- [ ] Exportar o CSV, **sem editar nada**, e reimportar o mesmo arquivo → a tela de conferência
+      mostra **0 atualizar · 0 criar · 0 arquivar**, sem erros nem ignorados, e o botão Aplicar
+      vem desabilitado (nada a fazer) — é a prova de que exportar e importar falam a mesma
+      língua (D-5hy-04).
+- [ ] Abrir o CSV exportado no Excel, editar **uma célula** de um equipamento (por exemplo,
+      Observações) e reimportar → a conferência mostra **1 atualizar**, nomeando só o campo que
+      mudou naquele equipamento, e nenhum outro.
+- [ ] Filtrar o inventário por um chip (por exemplo, "Área Vermelha"), abrir o painel → o texto
+      muda para **"Escopo: parcial (N de 171) — este arquivo nunca arquivará"**. Exportar esse
+      arquivo filtrado e reimportá-lo (sem editar) → a conferência mostra **0 arquivar**, com o
+      bloqueio "escopo parcial declarado no arquivo" — mesmo que centenas de equipamentos
+      estejam ausentes do arquivo.
+- [ ] Pegar um CSV **completo** exportado, abrir num editor de texto e apagar as linhas de **20**
+      equipamentos (mais do que o teto de 18, que é `max(5, 10% de 171)`) → reimportar mostra o
+      bloqueio "excede o teto de 18", com o caminho alternativo (reduzir o arquivo ou usar a OS
+      de movimentação) escrito na tela — e **0 arquivar**.
+- [ ] No mesmo arquivo completo, apagar as linhas de **10** equipamentos (dentro do teto) →
+      reimportar mostra a **lista nominal** dos 10 (`#id · prédio · local`), sem corte, antes de
+      qualquer gravação; clicar **Aplicar** e conferir que esses 10 equipamentos somem do chip
+      "Todos" e passem a aparecer só no chip **"Removidos"** — nunca "Baixados" (D-5hy-02: a
+      baixa patrimonial continua exclusiva da OS de movimentação, cargo admin).
+- [ ] Editar uma célula de uma coluna somente-leitura (**Situação** ou **Última manutenção**) no
+      arquivo antes de reimportar → a conferência reporta a célula como **ignorada**, nomeando a
+      coluna, e não altera nada no cadastro.
+- [ ] Renomear uma coluna do cabeçalho para algo inventado (por exemplo, trocar "Fabricante" por
+      "Marca") e reimportar → a conferência lista essa coluna em **Ignorados**, pelo nome, e o
+      campo Fabricante não muda em nenhum equipamento (coluna ausente é legítimo).
+- [ ] Como **observador** (sem login), abrir o painel da planilha → só o bloco Exportar aparece;
+      o bloco Importar mostra a frase de que exige cargo de gestor ou admin, sem `<input
+      type=file>` nenhum.
+- [ ] Digitar uma linha nova no arquivo com `id` vazio, com prédio/local/tipo preenchidos →
+      reimportar mostra **1 criar**; Aplicar e conferir que o equipamento novo aparece no
+      inventário com a situação **Instalado** (default do banco, nunca escolhida pela
+      planilha).

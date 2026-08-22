@@ -5363,7 +5363,7 @@ function planoDeImportacao(texto, dados){
   var plano = {
     escopo: null, versaoArquivo: null, instaladosDeclarados: null,
     instaladosAgora: dados.filter(equipInstalado).length,
-    atualizar: [], criar: [], arquivar: [], erros: [], ignoradas: [],
+    atualizar: [], criar: [], arquivar: [], candidatosArquivar: [], erros: [], ignoradas: [],
     leituraIgnorada: [], bloqueios: [], teto: 0
   };
   if (!linhasCsv.length){
@@ -5498,8 +5498,14 @@ function planoDeImportacao(texto, dados){
     plano.bloqueios.push('arquivamento de ' + candidatosArquivar.length + ' equipamento(s) excede o teto de ' + plano.teto + ' — reduza o arquivo ou use a OS de movimentação');
     podeArquivar = false;
   }
+  // candidatosArquivar é sempre populada (informativa) — é o que permite a
+  // tela mostrar, em tom neutro, quem SERIA arquivado mesmo quando uma
+  // guarda desligou o arquivamento; `arquivar` só recebe a mesma lista
+  // quando as pré-condições de fato passam, e é `arquivar` (nunca
+  // candidatosArquivar) que aplicarPlanoPlanilha lê para gravar.
+  plano.candidatosArquivar = candidatosArquivar.map(function(e){ return {id: e.id, predio: e.predio, local: e.local}; });
   if (podeArquivar){
-    plano.arquivar = candidatosArquivar.map(function(e){ return {id: e.id, predio: e.predio, local: e.local}; });
+    plano.arquivar = plano.candidatosArquivar;
   }
 
   return plano;
@@ -5576,6 +5582,149 @@ function baixarPlanilha(texto, nome){
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/* Guardada no idioma de _aoCriarEquipCallback — uma global só, lida por
+   renderConferenciaPlanilha e aplicarPlanoPlanilha. */
+var PLANO_PLANILHA = null;
+
+/* D-5hy-05: guarda dupla na AÇÃO (somenteLeitura + podeEditarCadastro), não
+   só no botão. input.value='' no fim para que escolher o MESMO arquivo de
+   novo volte a disparar onchange. */
+function aoEscolherArquivoPlanilha(input){
+  if (somenteLeitura()){ showToast('Modo somente leitura', ''); input.value=''; return; }
+  if (!podeEditarCadastro()){ showToast('Sem permissão para importar cadastro','error'); input.value=''; return; }
+  var file = input.files && input.files[0];
+  if (!file){ return; }
+  var reader = new FileReader();
+  reader.onerror = function(){ showToast('Erro ao ler o arquivo','error'); };
+  reader.onload = function(){
+    PLANO_PLANILHA = planoDeImportacao(String(reader.result || ''), DATA);
+    renderConferenciaPlanilha(PLANO_PLANILHA);
+  };
+  reader.readAsText(file, 'utf-8');
+  input.value = '';
+}
+
+function planilhaFraseItem(item){
+  return '#' + item.id + ' · ' + esc(item.predio || '') + ' · ' + esc(item.local || '');
+}
+
+/* D-5hy-03: reescreve o corpo da gaveta — nada foi gravado ainda. Ordem de
+   leitura deliberada, do mais perigoso ao menos: arquivar primeiro (a
+   operação que o usuário não pode descobrir depois), erros, atualizar,
+   criar, ignorados — nunca calar nenhum bloco. */
+function renderConferenciaPlanilha(plano){
+  var htmlArquivar;
+  if (plano.bloqueios.length === 0){
+    htmlArquivar = plano.arquivar.length
+      ? '<ul style="margin:0;padding-left:18px">' + plano.arquivar.map(function(a){ return '<li>' + planilhaFraseItem(a) + '</li>'; }).join('') + '</ul>'
+      : '<div style="font-size:12px;color:#666">Nenhum equipamento seria arquivado.</div>';
+  } else {
+    htmlArquivar =
+      '<ul style="margin:0 0 8px;padding-left:18px;color:#B46800;font-size:12px">' +
+      plano.bloqueios.map(function(b){ return '<li>' + esc(b) + '</li>'; }).join('') +
+      '</ul>' +
+      (plano.candidatosArquivar.length
+        ? '<div style="font-size:11px;color:#999;margin-bottom:4px">Arquivamento desligado — lista abaixo é só informativa:</div>' +
+          '<ul style="margin:0;padding-left:18px;color:#999">' + plano.candidatosArquivar.map(function(a){ return '<li>' + planilhaFraseItem(a) + '</li>'; }).join('') + '</ul>'
+        : '');
+  }
+
+  var htmlErros = '';
+  if (plano.erros.length){
+    htmlErros =
+      '<div class="ds"><div class="ds-title" style="color:#E52207"><i class="fas fa-times-circle mr1" aria-hidden="true"></i>Erros (' + plano.erros.length + ')</div>' +
+      '<div style="font-size:11px;color:#666;margin-bottom:6px">Um arquivo com linha recusada não arquiva nada (D-5hy-11) — atualizar e criar das linhas boas continuam valendo.</div>' +
+      '<table class="tbl"><tr><th>Linha</th><th>Coluna</th><th>Motivo</th></tr>' +
+      plano.erros.map(function(e){ return '<tr><td>' + e.linha + '</td><td>' + esc(e.coluna) + '</td><td>' + esc(e.mensagem) + '</td></tr>'; }).join('') +
+      '</table></div>';
+  }
+
+  var htmlAtualizar =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-edit mr1" aria-hidden="true"></i>Atualizar (' + plano.atualizar.length + ')</div>' +
+    (plano.atualizar.length
+      ? '<ul style="margin:0;padding-left:18px;font-size:12px">' + plano.atualizar.map(function(a){
+          return '<li>#' + a.id + ' — ' + a.campos.map(function(c){ return esc(EQUIP_ROTULOS[c] || c); }).join(', ') + '</li>';
+        }).join('') + '</ul>'
+      : '<div style="font-size:12px;color:#666">Nada a atualizar.</div>') +
+    '</div>';
+
+  var htmlCriar =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-plus mr1" aria-hidden="true"></i>Criar (' + plano.criar.length + ')</div>' +
+    (plano.criar.length
+      ? '<ul style="margin:0;padding-left:18px;font-size:12px">' + plano.criar.map(function(c){
+          return '<li>linha ' + c.linha + ' — ' + esc(c.patch.predio || '') + ' / ' + esc(c.patch.local || '') + '</li>';
+        }).join('') + '</ul>'
+      : '<div style="font-size:12px;color:#666">Nada a criar.</div>') +
+    '</div>';
+
+  var ignoradosPartes = [];
+  if (plano.ignoradas.length) ignoradosPartes.push(plano.ignoradas.length + ' coluna(s) desconhecida(s): ' + plano.ignoradas.map(function(c){ return esc(c); }).join(', '));
+  if (plano.leituraIgnorada.length) ignoradosPartes.push(plano.leituraIgnorada.length + ' célula(s) em coluna somente-leitura ignorada(s)'); // D-5hy-07
+  var htmlIgnorados =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-eye-slash mr1" aria-hidden="true"></i>Ignorados</div>' +
+    (ignoradosPartes.length
+      ? '<div style="font-size:12px;color:#666">' + ignoradosPartes.join('<br/>') + '</div>'
+      : '<div style="font-size:12px;color:#666">Nada ignorado.</div>') +
+    '</div>';
+
+  el('dh-id').textContent = 'Conferência da planilha';
+  el('dh-local').textContent = '';
+  el('dh-predio').textContent = '';
+  el('dh-pills').innerHTML = '';
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-box mr1" aria-hidden="true"></i>Arquivar (' + plano.arquivar.length + ')</div>' + htmlArquivar + '</div>' +
+    htmlErros + htmlAtualizar + htmlCriar + htmlIgnorados;
+
+  var podeAplicar = (plano.atualizar.length + plano.criar.length + plano.arquivar.length) > 0;
+  var resumo = plano.atualizar.length + ' atualizar · ' + plano.criar.length + ' criar · ' + plano.arquivar.length + ' arquivar';
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="abrirPainelPlanilha()">Cancelar</button>' +
+    '<button class="btn-primary"' + (podeAplicar ? '' : ' disabled') + ' onclick="aplicarPlanoPlanilha()"><i class="fas fa-save mr1" aria-hidden="true"></i>Aplicar (' + resumo + ')</button>';
+}
+
+/* A ÚNICA porta de gravação da planilha. Reconfere as duas guardas (não só
+   na abertura do arquivo). Três blocos, nesta ordem: atualizar (um update
+   por linha, payloads diferentes, acumulando falhas sem abortar as demais),
+   criar (um único insert — situação não vai no payload, nasce do default do
+   banco), arquivar (uma única chamada, FORA de equipParaDb — que
+   descartaria a chave, e com razão: a coluna não está em EQUIP_EDITAVEIS —
+   e sem nenhum outro campo no payload, D-5hy-02/17). */
+async function aplicarPlanoPlanilha(){
+  if (somenteLeitura()){ showToast('Modo somente leitura', ''); return; }
+  if (!podeEditarCadastro()){ showToast('Sem permissão para importar cadastro','error'); return; }
+  var plano = PLANO_PLANILHA;
+  if (!plano) return;
+  var falhas = 0;
+
+  for (var i = 0; i < plano.atualizar.length; i++){
+    var item = plano.atualizar[i];
+    var r = await supa.from('equipamentos').update(equipParaDb(item.patch)).eq('id', item.id);
+    if (r.error) falhas++;
+  }
+
+  if (plano.criar.length){
+    var payload = plano.criar.map(function(c){ return equipParaDb(c.patch); });
+    var rc = await supa.from('equipamentos').insert(payload);
+    if (rc.error) falhas++;
+  }
+
+  if (plano.arquivar.length){
+    var ids = plano.arquivar.map(function(a){ return a.id; });
+    // fora de equipParaDb (descartaria a chave — situacao não está em
+    // EQUIP_EDITAVEIS) e sem nenhum outro campo no payload (D-5hy-02/17).
+    var ra = await supa.from('equipamentos').update({situacao: SITUACAO_ORDEM[1]}).in('id', ids);
+    if (ra.error) falhas++;
+  }
+
+  PLANO_PLANILHA = null;
+  await loadDataFromSupabase();
+  saveData();
+  renderDash();
+  renderInv();
+  closeDrawer();
+  showToast(falhas ? (falhas + ' gravação(ões) falharam — confira o inventário') : 'Planilha aplicada', falhas ? 'error' : 'ok');
 }
 </script>
 </body>
