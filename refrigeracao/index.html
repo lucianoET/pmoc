@@ -815,7 +815,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button class="chip active" onclick="setOSChip(this,'todos')">Todos</button>
         <button class="chip" onclick="setOSChip(this,'aberto')">Em aberto</button>
         <button class="chip" onclick="setOSChip(this,'aprovacao')">P/ aprovar</button>
-        <button class="chip" onclick="setOSChip(this,'concluida')">Concluída</button>
+        <button class="chip" onclick="setOSChip(this,'concluida')">Conferida</button>
         <button class="chip" onclick="setOSChip(this,'critica')">Crítica</button>
       </div>
       <div class="sec-head">
@@ -1140,7 +1140,7 @@ var MAN_STATUS = {
   'CONFERIDA':    {label:'Conferida',                             tom:'ok',    step:5},
   'CANCELADA':    {label:'Cancelada',                             tom:'neutro',step:-1}
 };
-var MAN_STEPS = ['Abertura','Delineam.','Aprovação','Execução','Executada','Conclusão'];
+var MAN_STEPS = ['Abertura','Delineam.','Aprovação','Execução','Executada','Conferência'];
 var MAN_ORDEM = ['ABERTA','DELINEAMENTO','APROVACAO','EM_EXECUCAO','EXECUTADA','CONFERIDA'];
 
 /* D-l7n-02: a equivalência AGRUPA (filtro, badge, classe do cartão), nunca
@@ -2837,7 +2837,7 @@ function manAbrirOS(logId){
         '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" capture="environment" multiple/>' +
         '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="manRegistrarEvidencia(\''+esc(logId)+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar evidência</button></div>';
       if (manTemEvidencia(entry) && manPode('executar') && manPodeIrPara(st,'EXECUTADA')) {
-        h += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
+        h += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Enviar p/ conferência</button>';
       }
     }
     h += '</div>';
@@ -2869,7 +2869,7 @@ function manAbrirOS(logId){
     } else if (entry.parecerConferencia) {
       h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida: '+esc(entry.parecerConferencia)+'</div>';
     } else {
-      h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
+      h += '<div style="font-size:12px;color:#999">Aguardando o fim da execução.</div>';
     }
     h += '</div>';
   }
@@ -2889,7 +2889,7 @@ async function manMudarStatus(logId, novo){
   var atual = achado.entry.status;
   var acao = MAN_ACAO_DESTINO[novo];
   if (!manPodeIrPara(atual, novo) || !manPode(acao)) { showToast('Ação não permitida','error'); return; }
-  if (novo==='EXECUTADA' && !manTemEvidencia(achado.entry)) { showToast('Registre ao menos uma evidência antes de concluir a execução','error'); return; } // D-l7n-09: botão escondido não é validação
+  if (novo==='EXECUTADA' && !manTemEvidencia(achado.entry)) { showToast('Registre ao menos uma evidência antes de enviar para conferência','error'); return; } // D-l7n-09: botão escondido não é validação
   var ok = await manAtualizarOS(logId, achado.equipId, {status:novo});
   if (ok) { manAbrirOS(logId); renderOS(); }
 }
