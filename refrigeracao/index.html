@@ -3234,6 +3234,7 @@ function gestoFechaGaveta(inicioForaDoCorpo, rolagemInicial, dy, dx){
 (function(){
   var startY, startX, startScroll, inicioForaDoCorpo, dragging;
   document.addEventListener('touchstart', function(e){
+    if(TELA_LARGA) return; // D-8rz-17: painel lateral de notebook não fecha por arrastar
     if(!el('drawer').classList.contains('open')) return;
     var panel = el('drawer-panel');
     var body = el('drawer-body');
@@ -4648,7 +4649,152 @@ async function doLoginRole(){
    outros blocos, o modal desenha sozinho num cartão de 330px. */
 .qr-ficha{text-align:center;margin:8px 0}
 .qr-ficha svg{width:100%;max-width:200px;height:auto}
-</style>
+@media (min-width:1024px){
+  /* ── layout de computador — quick-260822-8rz, D-8rz-01/19 ── */
+  /* Todo o CSS novo do módulo mora dentro deste bloco único, e todo
+     seletor de tabela é escopado em .lista-tabela — nunca um seletor de
+     elemento solto (tabela, cabeçalho, linha, célula), que atingiria as
+     12 tabelas de impressão e a do painel de erros da planilha, no
+     celular inclusive. */
+
+  /* Navegação lateral fixa, sem mexer na marcação: #app vira grade de duas
+     colunas/duas linhas, a barra do topo ocupa a linha inteira, #bottom-nav
+     ocupa a coluna esquerda e #content o resto. */
+  #app{
+    display:grid;
+    grid-template-columns:220px 1fr;
+    grid-template-rows:56px 1fr;
+    grid-template-areas:"topo topo" "nav conteudo";
+    height:100vh;height:100dvh;
+  }
+  #topbar{ grid-area:topo; }
+  #content{ grid-area:conteudo; }
+
+  #bottom-nav{
+    grid-area:nav;
+    flex-direction:column;
+    align-items:stretch;
+    border-top:none;
+    border-right:1px solid #E0E0E0;
+    box-shadow:none;
+    padding-bottom:0;
+    overflow-y:auto;
+  }
+  .nav-btn{
+    flex-direction:row;
+    justify-content:flex-start;
+    gap:10px;
+    padding:12px 16px;
+    font-size:14px;
+    position:relative;
+  }
+  .nav-btn i{ width:20px; flex-shrink:0; text-align:center; }
+  /* Estado ativo com quatro sinais (barra + fundo + peso + cor), como o
+     /mapa fixou em 260819-4gq — uma borda de 1px não se lê de relance. A
+     barra é ::before para o texto não pular quando ela acende. */
+  .nav-btn::before{
+    content:'';
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:4px;
+    background:transparent;
+  }
+  .nav-btn.active{ background:rgba(19,81,180,.08); font-weight:700; }
+  .nav-btn.active::before{ background:#1351B4; }
+  .nav-badge{
+    position:static;
+    top:auto; right:auto;
+    transform:none;
+    margin-left:auto;
+  }
+
+  /* Largura útil: o conteúdo para de esticar em 1400px. */
+  .page{
+    max-width:1400px;
+    margin:0 auto;
+    padding:20px 24px 32px;
+  }
+  #fab{ bottom:24px; }
+  #toast{ bottom:calc(24px + 12px); }
+  /* D-8rz-20: cabeçalho da tabela gruda no topo, .search-wrap deixa de
+     grudar — as duas em top:0 se sobreporiam. */
+  .search-wrap{ position:static; }
+
+  /* ── tabela (D-8rz-19: tudo escopado em .lista-tabela) ── */
+  .lista-tabela{
+    width:100%;
+    border-collapse:collapse;
+    background:#fff;
+    border-radius:12px;
+    overflow:hidden;
+    box-shadow:0 1px 4px rgba(0,0,0,.07);
+  }
+  .lista-tabela th,
+  .lista-tabela td{
+    padding:10px 12px;
+    font-size:13px;
+    text-align:left;
+    border-bottom:1px solid #F0F0F0;
+  }
+  .lista-tabela th.num,
+  .lista-tabela td.num{ text-align:right; }
+  .lista-tabela thead th{
+    position:sticky; top:0; z-index:2;
+    background:#F8F9FA;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.3px;
+    color:#555;
+    white-space:nowrap;
+  }
+  .lista-tabela tbody tr:nth-child(even){ background:#FAFBFC; }
+  .lista-tabela tbody tr:hover{ background:#EEF2FA; cursor:pointer; }
+  .lista-tabela .th-acao{
+    background:none; border:none; cursor:pointer;
+    color:inherit; font:inherit; padding:2px 4px; margin-left:4px;
+  }
+  .lista-tabela .th-acao:focus-visible{ outline:2px solid #1351B4; outline-offset:1px; }
+  .lista-tabela .cel-abrir{
+    background:none; border:none; padding:0; margin:0;
+    font:inherit; color:inherit; text-align:left; cursor:pointer;
+  }
+  .lista-tabela input[type=search]{
+    width:100%;
+    padding:6px 8px;
+    border:1px solid #E0E0E0;
+    border-radius:6px;
+    font-size:12px;
+    background:#fff;
+  }
+  .lista-tabela :focus-visible{ outline:2px solid #1351B4; outline-offset:-2px; }
+
+  .tab-barra{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:8px;
+    font-size:12px;
+    color:#777;
+  }
+  .tab-barra button{
+    background:#E8ECF5; color:#1351B4;
+    border:none; border-radius:8px;
+    padding:4px 10px; font-size:12px;
+    font-weight:600; cursor:pointer;
+  }
+
+  /* ── gaveta vira painel lateral (D-8rz-17) — marcação de #drawer intacta ── */
+  #drawer-panel{
+    top:0; right:0; bottom:0; left:auto;
+    width:min(560px,46vw);
+    max-height:none;
+    border-radius:0;
+    transform:translateX(100%);
+  }
+  #drawer.open #drawer-panel{ transform:translateX(0); }
+  #drawer-handle{ display:none; }
+  #drawer-footer{ padding:12px 16px; }
+}</style>
 <script>
 /* ══ QR CODE — tela inicial ══ */
 var CT_APP_URL = 'https://pmoc-orcin.vercel.app/refrigeracao';
@@ -5756,6 +5902,13 @@ async function aplicarPlanoPlanilha(){
 }
 </script>
 <script>
+/* Nota (D-8rz-04): o CSS de computador desta tarefa mora dentro do bloco
+   de estilo que já existe logo acima do carregamento de qrcode.js, não num
+   bloco novo — um bloco a mais DEPOIS da folha de impressão embutida em
+   texto de JavaScript deslocaria a impressão digital do CSS de celular por
+   uma quebra de linha (o gate mede blocos de estilo concatenados na ordem
+   em que aparecem no arquivo), mesmo sem mudar um pixel do celular. */
+
 /* ═══════════════════════════════════════════════════════════════════════
    VERSÃO DE COMPUTADOR (quick-260822-8rz) — D-8rz-01: todo o layout de
    computador vive dentro de @media (min-width:1024px) em refrigeracao/
@@ -6060,6 +6213,54 @@ function linhasAlertas(ag, agora){
   });
   return linhas;
 }
+
+/* ── tabelas de desktop: modo de tela ── */
+/* TELA_LARGA é a ÚNICA variável que os renderizadores leem para decidir
+   cartão x tabela — modoDaTela() é quem decide de fato (pura, testada),
+   esta seção só guarda o resultado e reage à mudança de largura. */
+var TELA_LARGA = false;
+
+function aplicarModoDeTela(largura){
+  var modo = modoDaTela(largura);
+  TELA_LARGA = (modo==='tabela');
+  return modo;
+}
+
+/* Descobre a página ativa pela marcação (.page.active, a mesma que navTo()
+   já usa) e chama o renderizador dela. A aba de OS despacha sozinha entre
+   manutenção/contratações/movimentação via ctMode — chamar renderOS() é
+   suficiente e não duplica aquela regra. */
+function renderPaginaAtiva(){
+  var ativa = document.querySelector('.page.active');
+  if(!ativa) return;
+  var id = ativa.id || '';
+  if(id==='page-dash') renderDash();
+  else if(id==='page-inv') renderInv();
+  else if(id==='page-os') renderOS();
+  else if(id==='page-pmoc') renderPmoc();
+  else if(id==='page-alert') renderAlerts();
+}
+
+function iniciarModoDeTela(){
+  var mq = window.matchMedia('(min-width:'+BP_DESKTOP+'px)');
+  aplicarModoDeTela(window.innerWidth);
+  function aoMudar(){
+    aplicarModoDeTela(window.innerWidth);
+    renderPaginaAtiva(); // D-8rz-24: só a página ativa é redesenhada
+  }
+  if(mq.addEventListener) mq.addEventListener('change', aoMudar);
+  else if(mq.addListener) mq.addListener(aoMudar); // fallback ES5 seguro
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  iniciarModoDeTela();
+});
+
+/* Escape fecha a gaveta nas duas larguras — num celular não há teclado, e
+   num painel lateral de computador é o caminho esperado. */
+document.addEventListener('keydown', function(e){
+  if(e.key==='Escape' && el('drawer') && el('drawer').classList.contains('open')) closeDrawer();
+});
 </script>
 </body>
 </html>

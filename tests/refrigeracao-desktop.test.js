@@ -342,3 +342,57 @@ test('os quatro grep do PLAT-15 continuam em 0 — refrigeração segue congelad
     );
   }
 });
+
+// ═══════════ TAREFA 2 — layout de computador ═════════════════════════════
+
+function todosOsAtMedia(html) {
+  var blocos = [];
+  var re = /<style>([\s\S]*?)<\/style>/g;
+  var m;
+  while ((m = re.exec(html))) blocos.push(m[1]);
+  var achados = [];
+  blocos.forEach(function (css) {
+    var re2 = /@media[^{]*/g;
+    var mm;
+    while ((mm = re2.exec(css))) achados.push(mm[0].trim());
+  });
+  return achados;
+}
+
+test('existe exatamente um @media NOVO dentro dos blocos <style>, e ele é (min-width:1024px)', () => {
+  // A regex ingênua de <style>…</style> também casa com a folha de
+  // impressão embutida como texto de JavaScript (o único @media que já
+  // existia antes desta tarefa, D-8rz-04) — legítimo, pré-existente, fora
+  // do escopo desta tarefa. Filtrado explicitamente, não ignorado por acaso.
+  const medias = todosOsAtMedia(HTML).filter((m) => m !== '@media print');
+  assert.equal(medias.length, 1, `esperado 1 @media novo, achados: ${JSON.stringify(medias)}`);
+  assert.equal(medias[0], '@media (min-width:1024px)');
+});
+
+test('nenhum seletor de elemento nu (table{, th{, td{, tr{) foi acrescentado nas folhas embutidas', () => {
+  const ocorrencias = (HTML.match(/(^|\})\s*(table|th|td|tr)\s*\{/gm) || []).length;
+  assert.equal(ocorrencias, 0);
+});
+
+test('#bottom-nav continua com exatamente cinco .nav-btn na marcação — a navegação lateral é a mesma barra, deitada por CSS', () => {
+  const ini = HTML.indexOf('<div id="bottom-nav">');
+  assert.ok(ini > 0, '#bottom-nav não encontrado');
+  const fim = HTML.indexOf('</div>', ini);
+  const trecho = HTML.slice(ini, fim);
+  const qtd = (trecho.match(/class="nav-btn/g) || []).length;
+  assert.equal(qtd, 5);
+});
+
+test('aplicarModoDeTela(1023)/(1024) gravam TELA_LARGA como falso/verdadeiro — comportamento em node:vm, não regex', () => {
+  const ctx = carregarSandbox();
+  ctx.aplicarModoDeTela(1023);
+  assert.equal(ctx.TELA_LARGA, false);
+  ctx.aplicarModoDeTela(1024);
+  assert.equal(ctx.TELA_LARGA, true);
+});
+
+test('aplicarModoDeTela devolve o modo calculado por modoDaTela', () => {
+  const ctx = carregarSandbox();
+  assert.equal(ctx.aplicarModoDeTela(500), 'cartao');
+  assert.equal(ctx.aplicarModoDeTela(1600), 'tabela');
+});
