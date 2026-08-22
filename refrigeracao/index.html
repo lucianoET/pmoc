@@ -8,9 +8,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="theme-color" content="#071D41"/>
 <title>PMOC.Refrigeração | CMASM</title>
-<link rel="icon" href="icone-192.png"/>
-<link rel="apple-touch-icon" href="icone-apple-180.png"/>
-<link rel="manifest" href="manifest.json"/>
+<link rel="icon" href="/refrigeracao/icone-192.png"/>
+<link rel="apple-touch-icon" href="/refrigeracao/icone-apple-180.png"/>
+<link rel="manifest" href="/refrigeracao/manifest.json"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" crossorigin="anonymous"/>
 <style>
 /* ═══════════════════════════════════════════
@@ -715,7 +715,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <!-- TOP BAR -->
   <div id="topbar">
-    <img src="icone-192.png" alt="" style="width:30px;height:30px;flex-shrink:0"/>
+    <img src="/refrigeracao/icone-192.png" alt="" style="width:30px;height:30px;flex-shrink:0"/>
     <div class="logo">PMOC.Refrigeração <span>CMASM · DME · UASG 744030</span></div>
     <button id="topbar-action" onclick="showSearch()" title="Buscar" aria-label="Buscar equipamento"><i class="fas fa-search" aria-hidden="true"></i></button><button onclick="supa.auth.signOut()" style="background:none;border:none;color:rgba(255,255,255,.7);font-size:16px;cursor:pointer;padding:8px;width:40px;height:40px;display:flex;align-items:center;justify-content:center" title="Sair" aria-label="Sair"><i class="fas fa-sign-out-alt" aria-hidden="true"></i></button>
   </div>
@@ -3502,7 +3502,7 @@ ctLoad = function(){
 .rl-btn.sel i,.rl-btn.sel span{color:#1351B4}
 </style>
 <script>
-var CT_LOGO_URI = new URL('icone-192.png', location.href).href;
+var CT_LOGO_URI = new URL('/refrigeracao/icone-192.png', location.href).href;
 var CT_LOGINS = [
   {email:'gestor@pmoc.local',  label:'Gestor',       icon:'fa-user-tie'},
   {email:'fiscal@pmoc.local',  label:'Fiscal',       icon:'fa-user-shield'},
@@ -3615,7 +3615,7 @@ async function doLoginRole(){
      v5 — QR CODE (tela inicial) + IMPRESSÃO DA OS
      Lib QR: qrcode-generator 1.4.4 (MIT, Kazuhiko Arase) embutida.
 ═══════════════════════════════════════════════════════════════════ -->
-<script src="qrcode.js"></script>
+<script src="/refrigeracao/qrcode.js"></script>
 <style>
 #qr-mini{position:absolute;top:14px;right:14px;width:42px;height:42px;border-radius:12px;background:#fff;border:1.5px solid #E0E0E0;color:#1351B4;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.1);z-index:5}
 #qr-pop{position:fixed;inset:0;z-index:300;background:rgba(7,29,65,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:24px}
@@ -3624,8 +3624,7 @@ async function doLoginRole(){
 </style>
 <script>
 /* ══ QR CODE — tela inicial ══ */
-var CT_APP_URL = 'https://pmoc-refrigeracao.vercel.app';
-var CT_QR_BRAND = new URL('qr-brand.png', location.href).href;
+var CT_APP_URL = 'https://pmoc-orcin.vercel.app/refrigeracao';
 function qrGetUrl(){
   return urlBaseApp();
 }
@@ -3639,11 +3638,6 @@ function qrRender(){
   var url = qrGetUrl();
   if(!url){
     wrap.innerHTML = '<div style="padding:26px 12px;color:#999;font-size:12px;line-height:1.5"><i class="fas fa-link" style="font-size:22px;display:block;margin-bottom:8px;color:#DDD"></i>Informe abaixo o endereço (URL) onde o app está hospedado para gerar o QR.</div>';
-    return;
-  }
-  // QR oficial (com logo central) quando aponta para o endereço padrão do app
-  if(url.replace(/\/$/,'') === CT_APP_URL || url.indexOf(CT_APP_URL) === 0){
-    wrap.innerHTML = '<img src="'+CT_QR_BRAND+'" style="width:100%;max-width:250px" alt="QR"/>';
     return;
   }
   try{

@@ -160,7 +160,7 @@ function carregarSandboxQr(overrides) {
   const chamadas = { showToast: [], imprimirDocumento: [] };
   const ctx = {
     PARAM_FICHA: 'equip',
-    CT_APP_URL: 'https://pmoc-refrigeracao.vercel.app',
+    CT_APP_URL: 'https://pmoc-orcin.vercel.app/refrigeracao',
     location: { protocol: 'https:', origin: 'https://x.tld', pathname: '/refrigeracao' },
     localStorage: { getItem: function () { return null; } },
     linkSeguro(u) { return typeof u === 'string' && /^https?:\/\//i.test(u) ? u : ''; },
