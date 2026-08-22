@@ -396,3 +396,136 @@ test('aplicarModoDeTela devolve o modo calculado por modoDaTela', () => {
   assert.equal(ctx.aplicarModoDeTela(500), 'cartao');
   assert.equal(ctx.aplicarModoDeTela(1600), 'tabela');
 });
+
+// ═══════════ TAREFA 3 — desenhista único, seis adaptadores ═══════════════
+
+const COLS_TESTE = [
+  { id: 'nome', rotulo: 'Nome', tipo: 'texto', valor: (x) => x.nome, texto: (x) => x.nome },
+  { id: 'valor', rotulo: 'Valor', tipo: 'numero', valor: (x) => x.valor, texto: (x) => String(x.valor) },
+];
+
+test('tabCorpo de uma lista de três itens devolve três <tr>', () => {
+  const ctx = carregarSandbox();
+  const itens = [
+    { id: 1, nome: 'A', valor: 3 },
+    { id: 2, nome: 'B', valor: 1 },
+    { id: 3, nome: 'C', valor: 2 },
+  ];
+  const html = ctx.tabCorpo('inv', COLS_TESTE, itens, 'openDetail');
+  assert.equal((html.match(/<tr/g) || []).length, 3);
+});
+
+test('ordenar por uma coluna numérica muda a ordem dos identificadores na saída', () => {
+  const ctx = carregarSandbox();
+  const itens = [
+    { id: 1, nome: 'A', valor: 3 },
+    { id: 2, nome: 'B', valor: 1 },
+    { id: 3, nome: 'C', valor: 2 },
+  ];
+  ctx.TAB_ESTADO.inv.ord = { coluna: 'valor', dir: 'asc' };
+  const html = ctx.tabCorpo('inv', COLS_TESTE, itens, 'openDetail');
+  const ids = Array.from(html.matchAll(/<tr onclick="openDetail\((\d+)\)">/g)).map((m) => m[1]);
+  eq(ids, ['2', '3', '1']);
+});
+
+test('um filtro por coluna reduz a contagem de <tr>', () => {
+  const ctx = carregarSandbox();
+  const itens = [
+    { id: 1, nome: 'Alfa', valor: 1 },
+    { id: 2, nome: 'Beta', valor: 2 },
+  ];
+  ctx.TAB_ESTADO.inv.filtros = { nome: 'alfa' };
+  const html = ctx.tabCorpo('inv', COLS_TESTE, itens, 'openDetail');
+  assert.equal((html.match(/<tr/g) || []).length, 1);
+});
+
+test('um campo com <script> no valor do filtro sai escapado no cabeçalho gerado — nem <script cru nem aspas cruas no value', () => {
+  const ctx = carregarSandbox();
+  ctx.TAB_ESTADO.inv.aberto = true;
+  ctx.TAB_ESTADO.inv.filtros = { nome: '"><script>alert(1)</script>' };
+  const html = ctx.tabCabecalho('inv', COLS_TESTE);
+  assert.doesNotMatch(html, /<script>alert/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.doesNotMatch(html, /value=""><script/);
+});
+
+test('aria-sort acompanha o ciclo de ordenação', () => {
+  const ctx = carregarSandbox();
+  ctx.TAB_ESTADO.inv.ord = { coluna: 'valor', dir: 'asc' };
+  assert.match(ctx.tabCabecalho('inv', COLS_TESTE), /aria-sort="ascending"/);
+  ctx.TAB_ESTADO.inv.ord = { coluna: 'valor', dir: 'desc' };
+  assert.match(ctx.tabCabecalho('inv', COLS_TESTE), /aria-sort="descending"/);
+  ctx.TAB_ESTADO.inv.ord = { coluna: null, dir: null };
+  assert.match(ctx.tabCabecalho('inv', COLS_TESTE), /aria-sort="none"/);
+});
+
+test('a primeira célula de dado traz um <button> com stopPropagation, e a <tr> também é clicável para o mouse', () => {
+  const ctx = carregarSandbox();
+  const itens = [{ id: 1, nome: 'A', valor: 3 }];
+  const html = ctx.tabCorpo('inv', COLS_TESTE, itens, 'openDetail');
+  assert.match(html, /<button[^>]*onclick="event\.stopPropagation\(\);openDetail\(1\)"/);
+  assert.match(html, /<tr onclick="openDetail\(1\)">/);
+});
+
+test('tabOrdenarColuna: outra coluna começa em asc; a mesma avança no ciclo até voltar a nulo', () => {
+  const ctx = carregarSandbox();
+  ctx.renderInv = () => {}; // tabRedesenhar chama o dono da tabela — sem DOM real aqui
+  ctx.tabOrdenarColuna('inv', 'valor');
+  eq(ctx.TAB_ESTADO.inv.ord, { coluna: 'valor', dir: 'asc' });
+  ctx.tabOrdenarColuna('inv', 'valor');
+  eq(ctx.TAB_ESTADO.inv.ord, { coluna: 'valor', dir: 'desc' });
+  ctx.tabOrdenarColuna('inv', 'valor');
+  assert.equal(ctx.TAB_ESTADO.inv.ord.coluna, null);
+});
+
+test('tabAlternarFiltros: fechar limpa os filtros — um filtro invisível é pior que nenhum', () => {
+  const ctx = carregarSandbox();
+  ctx.renderInv = () => {};
+  ctx.TAB_ESTADO.inv.filtros = { nome: 'x' };
+  ctx.TAB_ESTADO.inv.aberto = true;
+  ctx.tabAlternarFiltros('inv', 'nome');
+  assert.equal(ctx.TAB_ESTADO.inv.aberto, false);
+  eq(ctx.TAB_ESTADO.inv.filtros, {});
+});
+
+test('as seis tabelas têm sua própria chamada tabDesenhar — um desenhista, seis adaptadores', () => {
+  for (const tid of ['inv', 'os', 'movim', 'pmoc', 'alert', 'contrat']) {
+    assert.match(HTML, new RegExp(`tabDesenhar\\('${tid}'`), `tabDesenhar('${tid}' não encontrado`);
+  }
+});
+
+test('estrutural: as guardas de TELA_LARGA em renderInv/renderOS/renderMovim/renderPmoc/ctRenderList vêm depois do primeiro "return;" do corpo (o ramo de lista vazia)', () => {
+  const casos = [
+    ['renderInv', "tabDesenhar('inv'"],
+    ['renderOS', "tabDesenhar('os'"],
+    ['renderMovim', "tabDesenhar('movim'"],
+    ['renderPmoc', "tabDesenhar('pmoc'"],
+    ['ctRenderList', "tabDesenhar('contrat'"],
+  ];
+  casos.forEach(([fn, guarda]) => {
+    const iniFn = HTML.indexOf(`function ${fn}(){`);
+    assert.ok(iniFn > 0, `${fn} não encontrada`);
+    const posGuarda = HTML.indexOf(guarda, iniFn);
+    assert.ok(posGuarda > iniFn, `guarda "${guarda}" não encontrada dentro de ${fn}`);
+    const posReturn = HTML.indexOf('return;', iniFn);
+    assert.ok(posReturn > iniFn && posReturn < posGuarda, `guarda de ${fn} não vem depois do ramo de lista vazia`);
+  });
+});
+
+test('estrutural: a guarda de renderAlerts entra depois dos quatro conjuntos calculados (forma própria, D-8rz-23)', () => {
+  const iniAlerts = HTML.indexOf('function renderAlerts(){');
+  assert.ok(iniAlerts > 0, 'renderAlerts não encontrada');
+  const posSemHistCrit = HTML.indexOf('var semHistCrit', iniAlerts);
+  const posGuardaAlert = HTML.indexOf("tabDesenhar('alert'", iniAlerts);
+  assert.ok(posSemHistCrit > iniAlerts, 'var semHistCrit não encontrada em renderAlerts');
+  assert.ok(posGuardaAlert > posSemHistCrit, 'guarda de renderAlerts não vem depois dos quatro conjuntos calculados');
+});
+
+test('atualizarBadgeAlertas é chamada nos dois ramos de renderAlerts — sem duplicar a contagem do distintivo', () => {
+  const iniAlerts = HTML.indexOf('function renderAlerts(){');
+  const fimAlerts = HTML.indexOf('\nfunction atualizarBadgeAlertas', iniAlerts);
+  assert.ok(iniAlerts > 0 && fimAlerts > iniAlerts, 'renderAlerts / atualizarBadgeAlertas não encontrados');
+  const corpo = HTML.slice(iniAlerts, fimAlerts);
+  const ocorrencias = (corpo.match(/atualizarBadgeAlertas\(ag\)/g) || []).length;
+  assert.equal(ocorrencias, 2);
+});

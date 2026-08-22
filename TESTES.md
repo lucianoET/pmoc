@@ -1805,3 +1805,36 @@ Inventário, antes de `#btn-etiquetas`.
       reimportar mostra **1 criar**; Aplicar e conferir que o equipamento novo aparece no
       inventário com a situação **Instalado** (default do banco, nunca escolhida pela
       planilha).
+
+## Refrigeração — versão de computador: tabelas, navegação lateral, gaveta em painel (22/08/2026)
+
+Quick task 260822-8rz. Camada de apresentação pura — nenhum dado, fluxo ou regra de negócio
+muda. Todo o CSS novo mora dentro de um único `@media (min-width:1024px)`, e o `node --test`
+prova por comparação byte-a-byte (`tests/fixtures/refrigeracao-css-mobile.css`) que nada fora
+dessa faixa de largura foi alterado — mas ninguém, nem o agente, exercitou isto num navegador
+de verdade: sem Playwright nem credenciais neste ambiente, a conferência abaixo fica pendente
+para o usuário, como já registrado no PLAT-15/16 da Fase 5.
+
+- [ ] Abrir `/refrigeracao` numa janela de **1440px** (ou redimensionar o navegador para além de
+      1024px): a navegação passa da barra inferior de 5 ícones para uma **coluna à esquerda**,
+      com o item ativo marcado por barra colorida + fundo tingido + negrito (não só uma borda).
+- [ ] Nas seis listas — **Inventário, OS-Manutenção, Inst./Remoção, PMOC, Alertas,
+      Contratações** — confirmar que cada uma virou uma **tabela de verdade** (cabeçalho,
+      linhas zebradas, sem cartão nenhum).
+- [ ] Em cada tabela: clicar no ícone `⇅`/`↑`/`↓` de uma coluna ordena por ela; clicar de novo
+      inverte; um terceiro clique devolve ao "sem ordem" e o **seletor "Ordenar: …" de sempre
+      volta a mandar** no Inventário (D-8rz-07) — a tela deve mostrar qual dos dois está valendo
+      (botão "Limpar ordenação" aceso quando o cabeçalho está no comando).
+- [ ] Clicar no ícone `⌕` de uma coluna abre um campo de busca **por aquela coluna só**; digitar
+      **não deve tirar o foco do campo a cada letra** (D-8rz-15); fechar o filtro (clicar de novo
+      no `⌕`) limpa o texto digitado.
+- [ ] Clicar em qualquer linha (fora do texto) e também **tabular até a primeira célula e
+      apertar Enter** — os dois caminhos precisam abrir **a mesma ficha/gaveta** que o cartão
+      abre no celular.
+- [ ] A gaveta abre como **painel lateral pela direita** (não mais de baixo para cima); arrastar
+      o conteúdo da gaveta com o mouse/touch **não fecha** mais; apertar **Esc** fecha.
+- [ ] Redimensionar a janela de **1440px para 900px e de volta**, com um chip selecionado, texto
+      digitado na busca e a gaveta aberta: nada disso deve se perder ao cruzar o limiar de
+      1024px (D-8rz-24).
+- [ ] Reduzir para **375px** (celular): a tela deve ficar **idêntica à de hoje** — cartões, barra
+      inferior de 5 ícones, gaveta subindo de baixo. Nenhuma tabela deve aparecer.

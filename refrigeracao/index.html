@@ -1505,6 +1505,7 @@ function renderInv(){
     el('inv-list').innerHTML = '<div class="empty">' + vazio + '</div>';
     return;
   }
+  if(TELA_LARGA){ el('inv-list').innerHTML = tabDesenhar('inv', COLS_INV, list, 'openDetail'); return; }
   el('inv-list').innerHTML = list.map(function(e){
     var estEq = equipEstado(e);
     var fn = estEq==='OP'?'ok':estEq==='INOP'?'nok':estEq==='OR'?'or':'ver';
@@ -1598,6 +1599,8 @@ function renderOS(){
     return;
   }
 
+  if(TELA_LARGA){ el('os-list').innerHTML = tabDesenhar('os', COLS_OS, all, MAN_FLUXO_OK ? 'manAbrirOS' : 'openDetail'); return; }
+
   el('os-list').innerHTML = all.map(function(o){
     var st = o.entry.status||'PENDENTE';
     var cls = manClasseCard(st);
@@ -1651,6 +1654,8 @@ function renderMovim(){
       '<p>Nenhuma OS de instalação/remoção registrada.<br>Toque <strong>+</strong> para criar uma nova.</p></div>';
     return;
   }
+
+  if(TELA_LARGA){ el('os-list').innerHTML = tabDesenhar('movim', COLS_MOVIM, all, 'manAbrirOS'); return; }
 
   el('os-list').innerHTML = all.map(function(o){
     var st = o.entry.status||'ABERTA';
@@ -1752,6 +1757,8 @@ function renderPmoc(){
     return;
   }
 
+  if(TELA_LARGA){ el('pmoc-list').innerHTML = tabDesenhar('pmoc', COLS_PMOC, list, 'openDetail'); return; }
+
   el('pmoc-list').innerHTML = list.map(function(e){
     var nx = nextPmoc(e,'inspecao');
     var np = nextPmoc(e,'preventiva');
@@ -1782,6 +1789,14 @@ function renderAlerts(){
   var vencList = ag.vencidos.slice()
     .sort(function(a,b){ var o=['CRÍTICA','ALTA','MÉDIA','BAIXA']; return o.indexOf(autoCrit(a))-o.indexOf(autoCrit(b)); });
   var semHistCrit = ag.semHist.filter(function(e){ return autoCrit(e)==='CRÍTICA'; });
+
+  if(TELA_LARGA){
+    atualizarBadgeAlertas(ag);
+    var linhasTab = linhasAlertas(ag, now);
+    if(!linhasTab.length){ el('alert-list').innerHTML = '<div class="empty"><i class="fas fa-check-circle" style="color:#168821"></i><p>Nenhum alerta ativo!</p></div>'; return; }
+    el('alert-list').innerHTML = '<div style="font-size:11px;color:#888;padding:2px 2px 8px">Total sem repetição: '+ag.total+'. Um equipamento aparece em mais de uma seção quando tem mais de um motivo.</div>' + tabDesenhar('alert', COLS_ALERT, linhasTab, 'openDetail');
+    return;
+  }
 
   var html = '';
 
@@ -1841,6 +1856,13 @@ function renderAlerts(){
 
   el('alert-list').innerHTML = html;
 
+  atualizarBadgeAlertas(ag);
+}
+
+/* Extraído dos dois ramos de renderAlerts (celular e tabela de desktop) —
+   duplicar duas linhas de contagem é exatamente a classe de defeito que
+   este módulo já corrigiu duas vezes (260821-jpd). */
+function atualizarBadgeAlertas(ag){
   el('alert-badge').textContent = ag.total;
   el('alert-badge').style.display = ag.total>0?'block':'none';
 }
@@ -3700,6 +3722,7 @@ function ctRenderList(){
       '<p>Nenhuma contratação neste filtro.<br>Toque <strong>+</strong> para abrir uma solicitação.</p></div>';
     return;
   }
+  if(TELA_LARGA){ el('os-list').innerHTML = tabDesenhar('contrat', COLS_CONTRAT, list, 'ctOpenOS'); return; }
   el('os-list').innerHTML = list.map(function(o){
     var e = ctEquip(o.equip_id);
     var st = CT_STATUS[o.status]||CT_STATUS['SOLICITADA'];
@@ -6261,6 +6284,167 @@ document.addEventListener('DOMContentLoaded', function(){
 document.addEventListener('keydown', function(e){
   if(e.key==='Escape' && el('drawer') && el('drawer').classList.contains('open')) closeDrawer();
 });
+
+/* ── tabelas de desktop: cabeçalho e linhas ── */
+/* Um desenhista só (D-8rz-12): tabDesenhar/tabCabecalho/tabCorpo/tabBarra
+   são as mesmas quatro funções para as seis tabelas — o que muda é a
+   definição de coluna (COLS_*) e o par (nome da função que abre a ficha,
+   argumento por item), nunca o desenho. */
+
+/* Resolve, por tabela, o argumento (já pronto para virar texto de
+   onclick — aspeado quando o id é string) que aoAbrir recebe para cada
+   item. Uma entrada por tabela, mesmo espírito de TAB_ESTADO (D-8rz-16):
+   uma tabela nunca lê a regra de outra. */
+var TAB_ARG = {
+  inv:     function(e){ return String(e.id); },
+  pmoc:    function(e){ return String(e.id); },
+  alert:   function(l){ return String(l.equip.id); },
+  contrat: function(o){ return "'"+String(o.id).replace(/'/g,"\\'")+"'"; },
+  os:      function(o){ return MAN_FLUXO_OK ? ("'"+esc(o.entry.id||'')+"'") : String(o.equipId); },
+  movim:   function(o){ return "'"+esc(o.entry.id||'')+"'"; }
+};
+
+/* Lembra colunas/itens/aoAbrir do último desenho de cada tabela — é o que
+   permite tabAplicarFiltro (disparado a cada tecla) redesenhar só o
+   <tbody> sem precisar que o onchange inline carregue a lista inteira. */
+var TAB_CACHE = {};
+
+function tabDesenhar(tid, colunas, itens, aoAbrir){
+  TAB_CACHE[tid] = {colunas:colunas, itens:itens, aoAbrir:aoAbrir};
+  var estado = TAB_ESTADO[tid];
+  var visiveis = tabAplicar(itens, estado.ord, estado.filtros, colunas);
+  return tabBarra(tid, visiveis.length, itens.length) +
+    '<table class="lista-tabela">' +
+    tabCabecalho(tid, colunas) +
+    '<tbody id="tbody-'+tid+'">' + tabCorpo(tid, colunas, itens, aoAbrir) + '</tbody>' +
+    '</table>';
+}
+
+function tabCabecalho(tid, colunas){
+  var estado = TAB_ESTADO[tid];
+  var linhaRotulos = '<tr>' + colunas.map(function(col){
+    var ativo = estado.ord.coluna===col.id;
+    var dir = ativo ? estado.ord.dir : null;
+    var ariaSort = dir==='asc' ? 'ascending' : (dir==='desc' ? 'descending' : 'none');
+    var seta = dir==='asc' ? '↑' : (dir==='desc' ? '↓' : '⇅');
+    var classeNum = col.tipo==='numero' ? ' class="num"' : '';
+    var filtroPreenchido = !!(estado.filtros && estado.filtros[col.id]);
+    return '<th'+classeNum+' aria-sort="'+ariaSort+'">' +
+      '<button type="button" class="th-acao" onclick="tabOrdenarColuna(\''+tid+'\',\''+col.id+'\')" title="Ordenar por '+esc(col.rotulo)+'" aria-label="Ordenar por '+esc(col.rotulo)+'">'+esc(col.rotulo)+' '+seta+'</button>' +
+      '<button type="button" class="th-acao" onclick="tabAlternarFiltros(\''+tid+'\',\''+col.id+'\')" title="Filtrar '+esc(col.rotulo)+'" aria-label="Filtrar '+esc(col.rotulo)+'"'+(filtroPreenchido?' style="color:#1351B4;font-weight:800"':'')+'>⌕</button>' +
+      '</th>';
+  }).join('') + '</tr>';
+
+  var linhaFiltros = '';
+  if(estado.aberto){
+    linhaFiltros = '<tr>' + colunas.map(function(col){
+      var valor = (estado.filtros && estado.filtros[col.id]) || '';
+      return '<th><input type="search" id="tabf-'+tid+'-'+col.id+'" aria-label="Filtrar '+esc(col.rotulo)+'" value="'+esc(valor)+'" oninput="tabAplicarFiltro(\''+tid+'\',\''+col.id+'\',this.value)"/></th>';
+    }).join('') + '</tr>';
+  }
+  return '<thead>'+linhaRotulos+linhaFiltros+'</thead>';
+}
+
+function tabCorpo(tid, colunas, itens, aoAbrir){
+  var estado = TAB_ESTADO[tid];
+  var visiveis = tabAplicar(itens, estado.ord, estado.filtros, colunas);
+  var resolverArg = TAB_ARG[tid] || function(){ return ''; };
+  return visiveis.map(function(item){
+    var onclickLinha = aoAbrir+'('+resolverArg(item)+')';
+    var celulas = colunas.map(function(col, idx){
+      var classeNum = col.tipo==='numero' ? ' class="num"' : '';
+      var conteudo = col.celula ? col.celula(item) : esc(col.texto(item));
+      if(idx===0){
+        // D-8rz-22: a primeira célula é um <button> de verdade — caminho
+        // por teclado sem tabindex fingido — e para o clique dela não
+        // disparar duas vezes o onclick da <tr>.
+        conteudo = '<button type="button" class="cel-abrir" onclick="event.stopPropagation();'+onclickLinha+'">'+conteudo+'</button>';
+      }
+      return '<td'+classeNum+'>'+conteudo+'</td>';
+    }).join('');
+    return '<tr onclick="'+onclickLinha+'">'+celulas+'</tr>';
+  }).join('');
+}
+
+function tabBarra(tid, visiveis, total){
+  var estado = TAB_ESTADO[tid];
+  var temOrdem = !!(estado.ord && estado.ord.coluna);
+  var temFiltro = Object.keys(estado.filtros||{}).some(function(k){ return estado.filtros[k]; });
+  if(!temOrdem && !temFiltro) return '';
+  var html = '<div class="tab-barra"><span>'+visiveis+' de '+total+'</span>';
+  if(temOrdem) html += '<button type="button" onclick="tabLimparOrdem(\''+tid+'\')">Limpar ordenação</button>';
+  if(temFiltro) html += '<button type="button" onclick="tabLimparFiltros(\''+tid+'\')">Limpar filtros</button>';
+  html += '</div>';
+  return html;
+}
+
+/* Chama o renderizador DONO daquela tabela — a contagem de #inv-cnt/
+   #os-cnt/#pmoc-cnt e o rótulo continuam saindo de um lugar só. */
+function tabRedesenhar(tid){
+  if(tid==='inv') renderInv();
+  else if(tid==='os') renderOS();
+  else if(tid==='movim') renderMovim();
+  else if(tid==='pmoc') renderPmoc();
+  else if(tid==='alert') renderAlerts();
+  else if(tid==='contrat') ctRenderList();
+}
+
+function tabOrdenarColuna(tid, coluna){
+  var estado = TAB_ESTADO[tid];
+  if(estado.ord.coluna!==coluna){
+    estado.ord = {coluna:coluna, dir:'asc'};
+  } else {
+    estado.ord.dir = tabProximaOrdem(estado.ord.dir);
+    if(!estado.ord.dir) estado.ord.coluna = null;
+  }
+  tabRedesenhar(tid);
+}
+
+/* Abre/fecha a linha de filtro. Fechar LIMPA os filtros — um filtro
+   invisível escondendo linhas é pior que nenhum filtro. */
+function tabAlternarFiltros(tid, coluna){
+  var estado = TAB_ESTADO[tid];
+  if(estado.aberto){
+    estado.aberto = false;
+    estado.filtros = {};
+  } else {
+    estado.aberto = true;
+  }
+  tabRedesenhar(tid);
+  if(estado.aberto){
+    var campo = document.getElementById('tabf-'+tid+'-'+coluna);
+    if(campo) campo.focus();
+  }
+}
+
+/* D-8rz-15: grava e redesenha SÓ o corpo — redesenhar o cabeçalho a cada
+   tecla mataria o foco e o cursor do campo de filtro. */
+function tabAplicarFiltro(tid, coluna, valor){
+  TAB_ESTADO[tid].filtros[coluna] = valor;
+  var cache = TAB_CACHE[tid];
+  if(!cache) return;
+  var tbody = document.getElementById('tbody-'+tid);
+  if(tbody) tbody.innerHTML = tabCorpo(tid, cache.colunas, cache.itens, cache.aoAbrir);
+}
+
+function tabLimparOrdem(tid){
+  TAB_ESTADO[tid].ord = {coluna:null, dir:null};
+  tabRedesenhar(tid);
+}
+function tabLimparFiltros(tid){
+  TAB_ESTADO[tid].filtros = {};
+  tabRedesenhar(tid);
+}
+
+/* Publicadas no escopo global — o arquivo usa onclick/oninput embutidos
+   como idioma, e estas funções precisam ser alcançáveis por nome. */
+if(typeof window!=='undefined'){
+  window.tabOrdenarColuna = tabOrdenarColuna;
+  window.tabAlternarFiltros = tabAlternarFiltros;
+  window.tabAplicarFiltro = tabAplicarFiltro;
+  window.tabLimparOrdem = tabLimparOrdem;
+  window.tabLimparFiltros = tabLimparFiltros;
+}
 </script>
 </body>
 </html>
