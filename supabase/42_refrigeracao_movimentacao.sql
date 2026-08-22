@@ -41,6 +41,11 @@
 -- Aditivo, para ser rodado no SQL editor do Supabase — este arquivo só
 -- escreve o script, nunca o executa. Nenhum `drop table`, `drop column`
 -- nem `delete from` em lugar nenhum deste arquivo — o projeto arquiva.
+-- APLICADA EM PRODUÇÃO EM 21/08/2026, depois do deploy do frontend, e
+-- conferida: 3 colunas novas em equipamentos (situacao NOT NULL) e 4 em
+-- logs_manutencao, as 3 travas no lugar, e as 171 linhas em
+-- situacao='instalado' — nenhuma outra situação, funciona intacto
+-- (136 OP + 35 INOP).
 -- ══════════════════════════════════════════════════════════════════
 
 -- 1) `equipamentos.situacao` — nasce com default, preenchendo as 171
