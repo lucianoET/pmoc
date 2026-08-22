@@ -450,3 +450,56 @@ test('D-5hy-08: o núcleo puro não referencia coordenadas nem vínculo organiza
   assert.doesNotMatch(nucleo, /\blon\b/);
   assert.doesNotMatch(nucleo, /\blocal_id\b/);
 });
+
+// ═════════════════ 7. TELA — exportação (Tarefa 2) ═══════════════════════
+
+function recorteTela() {
+  const ini = HTML.indexOf('/* ── planilha do inventário: tela e gravação ── */');
+  const fim = HTML.indexOf('</script>', ini);
+  assert.ok(ini > 0 && fim > ini, 'recorte da seção de tela e gravação não encontrado');
+  return HTML.slice(ini, fim);
+}
+
+test('#btn-planilha existe, com aria-label e class sec-etq, antes de #btn-etiquetas na mesma .sec-head', () => {
+  const iniSecHead = HTML.indexOf('<div class="sec-head">\n        <span class="sec-title" id="inv-label">');
+  assert.ok(iniSecHead > 0, '.sec-head do inventário não encontrada');
+  const fimSecHead = HTML.indexOf('</div>', HTML.indexOf('id="inv-cnt"', iniSecHead));
+  const trecho = HTML.slice(iniSecHead, fimSecHead);
+  const posPlanilha = trecho.indexOf('id="btn-planilha"');
+  const posEtiquetas = trecho.indexOf('id="btn-etiquetas"');
+  assert.ok(posPlanilha > 0, '#btn-planilha não encontrado na .sec-head do inventário');
+  assert.ok(posEtiquetas > 0, '#btn-etiquetas não encontrado');
+  assert.ok(posPlanilha < posEtiquetas, '#btn-planilha precisa vir antes de #btn-etiquetas (D-5hy-23)');
+  const botao = trecho.slice(trecho.lastIndexOf('<button', posPlanilha), trecho.indexOf('</button>', posPlanilha) + '</button>'.length);
+  assert.match(botao, /aria-label="/);
+  assert.match(botao, /class="sec-etq"/);
+});
+
+test('exportarInventarioCsv invoca filtrarInventario e cmpInv — a exportação é a seleção filtrada (D-5hy-24), nunca DATA direto', () => {
+  const tela = recorteTela();
+  const ini = tela.indexOf('function exportarInventarioCsv(');
+  const fim = tela.indexOf('\n}', ini);
+  const corpo = tela.slice(ini, fim);
+  assert.match(corpo, /filtrarInventario\(/);
+  assert.match(corpo, /\.sort\(cmpInv\)/);
+  assert.doesNotMatch(corpo, /montarCsv\(DATA,/, 'não pode montar o CSV direto de DATA sem passar pela seleção filtrada');
+});
+
+test('baixarPlanilha grava a marca de ordem de byte como sequência de escape, o tipo com charset=utf-8, e revoga a URL do objeto', () => {
+  const tela = recorteTela();
+  const ini = tela.indexOf('function baixarPlanilha(');
+  const fim = tela.indexOf('\n}', ini);
+  const corpo = tela.slice(ini, fim);
+  assert.match(corpo, /\\uFEFF/, 'a marca de ordem de byte precisa ser a sequência de escape \\uFEFF, nunca o caractere colado');
+  assert.doesNotMatch(corpo, /['"]﻿/, 'o caractere de ordem de byte não pode estar colado literal no código-fonte');
+  assert.match(corpo, /charset=utf-8/);
+  assert.match(corpo, /revokeObjectURL/);
+});
+
+test('o bloco de importar do painel é condicionado a podeEditarCadastro()', () => {
+  const tela = recorteTela();
+  const ini = tela.indexOf('function abrirPainelPlanilha(');
+  const fim = tela.indexOf('\nfunction exportarInventarioCsv(', ini);
+  const corpo = tela.slice(ini, fim);
+  assert.match(corpo, /if\s*\(\s*podeEditarCadastro\(\)\s*\)/);
+});

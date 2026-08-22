@@ -805,6 +805,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <option value="criticidade">Ordenar: criticidade</option>
           <option value="vencimento">Ordenar: próxima manutenção</option>
         </select>
+        <button class="sec-etq" id="btn-planilha" title="Exportar ou importar a planilha do inventário" aria-label="Exportar ou importar a planilha do inventário" onclick="abrirPainelPlanilha()"><i class="fas fa-file-csv" aria-hidden="true"></i></button>
         <button class="sec-etq" id="btn-etiquetas" title="Imprimir etiquetas dos equipamentos filtrados" aria-label="Imprimir etiquetas dos equipamentos filtrados" onclick="etiquetasDoInventario()"><i class="fas fa-tags" aria-hidden="true"></i></button>
         <span class="sec-count" id="inv-cnt">171</span>
       </div>
@@ -5504,6 +5505,78 @@ function planoDeImportacao(texto, dados){
   return plano;
 }
 /* ── planilha do inventário: tela e gravação ── */
+/* D-5hy-23: um botão só na .sec-head (#btn-planilha, antes de
+   #btn-etiquetas), abrindo a gaveta com o painel abaixo — a importação
+   precisa de um lugar para explicar antes do seletor de arquivo, e a gaveta
+   é esse lugar. */
+function abrirPainelPlanilha(){
+  var busca = (el('inv-search') || {value:''}).value;
+  var lista = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
+  var instaladosTotal = DATA.filter(equipInstalado).length;
+  var instaladosNaLista = lista.filter(equipInstalado).length;
+  var completo = escopoCompletoDe(lista, DATA);
+  // D-5hy-24: exporta o FILTRADO — o usuário aprende a regra do escopo no
+  // momento em que ela se aplica, antes de qualquer arquivo existir.
+  var fraseEscopo = completo
+    ? 'Escopo: completo (' + instaladosNaLista + ' de ' + instaladosTotal + ' instalados) — este arquivo poderá arquivar por ausência.'
+    : 'Escopo: parcial (' + instaladosNaLista + ' de ' + instaladosTotal + ' instalados) — este arquivo nunca arquivará.';
+
+  el('dh-id').textContent = 'Planilha do inventário';
+  el('dh-local').textContent = lista.length + ' equipamento(s) na seleção atual';
+  el('dh-predio').textContent = '';
+  el('dh-pills').innerHTML = '';
+
+  var blocoImportar;
+  if (podeEditarCadastro()) {
+    // D-5hy-05: importar exige gestor/admin — conferido aqui na abertura E
+    // de novo em aoEscolherArquivoPlanilha/aplicarPlanoPlanilha, não só no
+    // botão.
+    blocoImportar =
+      '<div class="ds"><div class="ds-title"><i class="fas fa-file-import mr1" aria-hidden="true"></i>Importar</div>' +
+      '<div style="font-size:12px;color:#666;margin-bottom:6px">A importação pode atualizar cadastros, criar equipamentos novos e arquivar por ausência — nada é gravado antes de uma tela de conferência que nomeia, um a um, os equipamentos que seriam arquivados.</div>' +
+      '<div style="font-size:12px;color:#666;margin-bottom:8px">Arquivar aqui é sempre a situação de removido. A baixa patrimonial continua sendo exclusiva da conferência de OS de movimentação, com cargo admin.</div>' +
+      '<input type="file" id="planilha-arquivo" accept=".csv,text/csv" onchange="aoEscolherArquivoPlanilha(this)"/>' +
+      '</div>';
+  } else {
+    blocoImportar =
+      '<div class="ds"><div class="ds-title"><i class="fas fa-file-import mr1" aria-hidden="true"></i>Importar</div>' +
+      '<div style="font-size:12px;color:#888">Importar a planilha exige cargo de gestor ou admin.</div></div>';
+  }
+
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-file-export mr1" aria-hidden="true"></i>Exportar</div>' +
+    '<div style="font-size:12px;color:' + (completo ? '#666' : '#B46800') + ';margin-bottom:8px">' + esc(fraseEscopo) + '</div>' +
+    '<button class="btn-primary" onclick="exportarInventarioCsv()"><i class="fas fa-download mr1" aria-hidden="true"></i>Exportar CSV (' + lista.length + ')</button>' +
+    '</div>' + blocoImportar;
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="closeDrawer()">Fechar</button>';
+  openDrawer();
+}
+
+/* D-s3h-08: seleção vazia avisa e não abre janela nem gera arquivo, mesmo
+   precedente de imprimirEtiquetas. */
+function exportarInventarioCsv(){
+  var busca = (el('inv-search') || {value:''}).value;
+  var lista = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
+  if (!lista.length){ showToast('Nenhum equipamento na seleção atual', 'error'); return; }
+  var texto = montarCsv(lista, DATA, today());
+  baixarPlanilha(texto, 'pmoc-refrigeracao-inventario-' + today() + '.csv');
+}
+
+/* Marca de ordem de byte escrita como sequência de escape (nunca colada
+   literal — colada, é invisível no editor e a próxima pessoa a mexer no
+   arquivo a apaga sem ver). URL.revokeObjectURL no fim: maquinas/app.js
+   nunca revoga (vazamento de objeto por download); aqui não se repete. */
+function baixarPlanilha(texto, nome){
+  var blob = new Blob(['\uFEFF' + texto], {type:'text/csv;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>
