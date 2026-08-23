@@ -3624,8 +3624,20 @@ function manEntrada(logId){
   return achado;
 }
 
-function manAbrirOS(logId){
-  var achado = manEntrada(logId); if(!achado) return;
+/* D-jar-20: código novo da OS dentro desta seção, imediatamente antes de
+   manAbrirOS — os recortes dos gates de OS (tests/refrigeracao-os-
+   unificada.test.js) alcançam esta seção inteira.
+   D-jar-05: uma fonte, duas apresentações. manMontarOS devolve
+   {equipId, entry, ident, regua, contexto:[], trabalho:[], rodape:{gaveta,
+   pagina}} — a fronteira entre contexto e trabalho é um CORTE DE PREFIXO da
+   ordem de montagem de sempre, nunca uma reordenação: (1) régua/nota, (2)
+   1 · Abertura, (3) Movimentação/Executor ficam em contexto; (4) 2..4/5,
+   Itens, Registro ficam em trabalho, na mesma sequência de antes. Nenhuma
+   vírgula de conteúdo foi reescrita nesta extração — byte a byte o mesmo
+   HTML de antes, provado por fixture (D-jar-17,
+   tests/fixtures/refrigeracao-os-gaveta.json). */
+function manMontarOS(logId){
+  var achado = manEntrada(logId); if(!achado) return null;
   var equipId = achado.equipId, e = achado.equip || {local:'—',predio:''}, entry = achado.entry;
   var st = entry.status;
   // 260823-cf8: o fluxo é resolvido UMA VEZ por abertura da gaveta — osFluxoDe
@@ -3652,28 +3664,33 @@ function manAbrirOS(logId){
   var flTemExecutada = osEhMovimentacao(entry) || osEtapas(flOS).indexOf('EXECUTADA')>=0;
   var flContrato = UNI_OK && !osEhMovimentacao(entry) && osTipoExecutor(entry)==='contrato';
 
-  el('dh-id').textContent = 'OS · #'+equipId;
-  el('dh-local').textContent = e.local;
-  el('dh-predio').textContent = e.predio;
-  el('dh-pills').innerHTML = statusPillOS(st, flTipo);
+  var ident = {
+    id: 'OS · #'+equipId,
+    local: e.local,
+    predio: e.predio,
+    pills: statusPillOS(st, flTipo)
+  };
 
-  var h = '';
+  var regua;
   if (manSemFluxo(st)) {
     // D-l7n-02: linha sem fluxo não mostra régua — afirmaria uma aprovação que ninguém deu.
-    h += '<div style="font-size:12px;color:#999;margin-bottom:8px"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>Registro direto — não percorreu as etapas de aprovação.</div>';
+    regua = '<div style="font-size:12px;color:#999;margin-bottom:8px"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>Registro direto — não percorreu as etapas de aprovação.</div>';
   } else {
-    h += reguaPassos(osPasso(flOS, st), osCurtos(flOS));
+    regua = reguaPassos(osPasso(flOS, st), osCurtos(flOS));
   }
+
+  var contexto = [];
+  var trabalho = [];
 
   var done = (entry.checklist||[]).filter(function(c){ return c.done; }).length;
   var tot = (entry.checklist||[]).length;
   var editando = (MAN_EDIT_ID === logId);
-  h += '<div class="ds"><div class="ds-title"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i>1 · Abertura' +
+  var b1 = '<div class="ds"><div class="ds-title"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i>1 · Abertura' +
     (podeEditarCadastro() && !editando
       ? '<button class="btn-secondary" style="float:right;padding:2px 10px;font-size:11px" onclick="manEditarDados(\''+esc(logId)+'\')" title="Corrigir os dados desta OS"><i class="fas fa-pen mr1" aria-hidden="true"></i>Corrigir</button>'
       : '') +
     '</div>';
-  h += editando ? manFormDados(entry, logId) :
+  b1 += editando ? manFormDados(entry, logId) :
     ('<div class="dfields2">' +
     '<div class="dfield"><label>Data</label><div class="dval" style="font-size:13px">'+fmtDate(entry.date)+'</div></div>' +
     '<div class="dfield"><label>Tipo</label><div class="dval" style="font-size:13px">'+esc(entry.tipo||'—')+'</div></div>' +
@@ -3681,16 +3698,17 @@ function manAbrirOS(logId){
     (entry.tecnico?'<div class="dfield"><label>Técnico</label><div class="dval" style="font-size:13px">'+esc(entry.tecnico)+'</div></div>':'') +
     (entry.desc?'<div class="dfield"><label>Problema relatado</label><div class="dval" style="font-size:13px">'+esc(entry.desc)+'</div></div>':'') +
     (tot?'<div class="le-chk"><i class="fas fa-tasks mr1" aria-hidden="true"></i>'+done+'/'+tot+' itens do checklist</div>':''));
-  h += '</div>';
+  b1 += '</div>';
+  contexto.push(b1);
 
   if (osEhMovimentacao(entry)) {
     // D-uyz: painel próprio de movimentação, logo depois do bloco 1 — não
     // é um quinto bloco solto, é a mesma OS.
-    h += movPainelDaOS(entry, equipId, logId);
+    contexto.push(movPainelDaOS(entry, equipId, logId));
   } else if (UNI_OK) {
     // D-cf8-29: bloco de executor NUNCA em OS de movimentação. Atrás de
     // UNI_OK — sem a migração 43 nenhuma OS tem tipo_executor real.
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-cog mr1" aria-hidden="true"></i>Executor</div>' +
+    contexto.push('<div class="ds"><div class="ds-title"><i class="fas fa-user-cog mr1" aria-hidden="true"></i>Executor</div>' +
       '<div class="dfield"><label>Tipo</label><div class="dval" style="font-size:13px">'+esc(osRotuloExecutor(entry))+'</div></div>' +
       (entry.executorSetor?'<div class="dfield"><label>Setor</label><div class="dval" style="font-size:13px">'+esc(entry.executorSetor)+'</div></div>':'') +
       (entry.executorPessoas?'<div class="dfield"><label>Pessoa(s)</label><div class="dval" style="font-size:13px">'+esc(entry.executorPessoas)+'</div></div>':'') +
@@ -3701,45 +3719,46 @@ function manAbrirOS(logId){
       (entry.instrumento?'<div class="dfield"><label>Instrumento</label><div class="dval" style="font-size:13px">'+esc(OS_INSTRUMENTOS[entry.instrumento]||entry.instrumento)+'</div></div>':'') +
       (entry.processo?'<div class="dfield"><label>Processo</label><div class="dval" style="font-size:13px">'+esc(entry.processo)+'</div></div>':'') +
       (entry.ne?'<div class="dfield"><label>NE</label><div class="dval" style="font-size:13px">'+esc(entry.ne)+'</div></div>':'') +
-      '</div>';
+      '</div>');
   }
 
   if (!manSemFluxo(st)) {
     /* 2 · Delineamento */
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-stethoscope mr1" aria-hidden="true"></i>2 · Delineamento</div>';
+    var b2 = '<div class="ds"><div class="ds-title"><i class="fas fa-stethoscope mr1" aria-hidden="true"></i>2 · Delineamento</div>';
     if (entry.delineadoPor) {
-      h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Delineado por '+esc(entry.delineadoPor)+' em '+fmtDate((entry.delineadoEm||'').slice(0,10))+'</div>';
+      b2 += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Delineado por '+esc(entry.delineadoPor)+' em '+fmtDate((entry.delineadoEm||'').slice(0,10))+'</div>';
     }
     if (st==='ABERTA' && manPode('delinear') && manPodeIrPara(st,'DELINEAMENTO',flTipo)) {
-      h += '<button class="btn-primary" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'DELINEAMENTO\')"><i class="fas fa-play mr1" aria-hidden="true"></i>Iniciar delineamento</button>';
+      b2 += '<button class="btn-primary" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'DELINEAMENTO\')"><i class="fas fa-play mr1" aria-hidden="true"></i>Iniciar delineamento</button>';
     }
     if (st==='DELINEAMENTO' && manPode('delinear') && manPodeIrPara(st,'APROVACAO',flTipo)) {
-      h += '<label class="fgl" style="margin-top:8px">Diagnóstico / serviços a executar</label>' +
+      b2 += '<label class="fgl" style="margin-top:8px">Diagnóstico / serviços a executar</label>' +
         '<textarea class="fgt" id="man-delin-desc">'+esc(entry.desc||'')+'</textarea>' +
         '<button class="btn-primary" style="width:100%;margin-top:8px" onclick="manDelinear(\''+esc(logId)+'\')"><i class="fas fa-paper-plane mr1" aria-hidden="true"></i>Enviar para aprovação</button>';
     }
     if (entry.parecerAprovacao && (st==='DELINEAMENTO'||st==='APROVACAO')) {
-      h += '<div style="margin-top:8px;font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida: '+esc(entry.parecerAprovacao)+'</div>';
+      b2 += '<div style="margin-top:8px;font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida: '+esc(entry.parecerAprovacao)+'</div>';
     }
     if (entry.aprovador) {
-      h += '<div style="margin-top:8px;font-size:11px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovado por '+esc(entry.aprovador)+' em '+fmtDate(entry.dataAprovacao)+'</div>';
+      b2 += '<div style="margin-top:8px;font-size:11px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovado por '+esc(entry.aprovador)+' em '+fmtDate(entry.dataAprovacao)+'</div>';
     }
     if (st==='APROVACAO' && manPode('aprovar') && manPodeIrPara(st,'EM_EXECUCAO',flTipo)) {
-      h += '<div class="ct-btn-row">' +
+      b2 += '<div class="ct-btn-row">' +
         '<button class="btn-success" onclick="manAprovar(\''+esc(logId)+'\')"><i class="fas fa-check mr1" aria-hidden="true"></i>Aprovar</button>' +
         '<button class="btn-danger" onclick="manDevolver(\''+esc(logId)+'\')"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button></div>';
     }
-    h += '</div>';
+    b2 += '</div>';
+    trabalho.push(b2);
 
     /* 3 · Execução — evidência: fotos comprimidas + as cinco medições (D-l7n-09).
        260823-cf8 (D-cf8-04/24): sem conferência, EM_EXECUCAO conclui direto
        — o seletor de estado do equipamento e o botão migram para o FIM
        deste bloco, com o rótulo "Concluir OS". flComConferencia decide
        qual das duas saídas este bloco oferece; nunca as duas juntas. */
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-hard-hat mr1" aria-hidden="true"></i>3 · Execução</div>';
-    h += manRenderEvidencia(entry);
+    var b3 = '<div class="ds"><div class="ds-title"><i class="fas fa-hard-hat mr1" aria-hidden="true"></i>3 · Execução</div>';
+    b3 += manRenderEvidencia(entry);
     if (st==='EM_EXECUCAO' && manPode('executar')) {
-      h += '<div style="margin-top:8px;border-top:1px dashed #DDD;padding-top:10px">' +
+      b3 += '<div style="margin-top:8px;border-top:1px dashed #DDD;padding-top:10px">' +
         '<div class="fg2">' +
         '<div><label class="fgl">Insufl. (°C)</label><input class="fgi" id="man-ex-ti" type="number" step="0.1"/></div>' +
         '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="man-ex-tr" type="number" step="0.1"/></div>' +
@@ -3755,29 +3774,30 @@ function manAbrirOS(logId){
         '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="manRegistrarEvidencia(\''+esc(logId)+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar evidência</button></div>';
       if (flTemExecutada) {
         if (manTemEvidencia(entry) && manPode('executar') && manPodeIrPara(st,'EXECUTADA',flTipo)) {
-          h += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
+          b3 += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
         }
       } else if (manTemEvidencia(entry) && manPode('concluir') && manPodeIrPara(st,flTerminal,flTipo)) {
         var estadoAtualConcl = equipEstado(e);
         var optsConclEstado = (estadoAtualConcl ? '' : '<option value="" selected disabled>(não cadastrado)</option>') +
           EQUIP_ORDEM.map(function(k){ return '<option value="'+k+'"'+(estadoAtualConcl===k?' selected':'')+'>'+esc(EQUIP_ESTADOS[k].rotulo)+'</option>'; }).join('');
-        h += '<label class="fgl" style="margin-top:10px;display:block">Estado do equipamento após a manutenção</label>' +
+        b3 += '<label class="fgl" style="margin-top:10px;display:block">Estado do equipamento após a manutenção</label>' +
           '<select class="fgs" id="man-conf-estado">'+optsConclEstado+'</select>' +
           '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manConcluir(\''+esc(logId)+'\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir OS</button>';
       }
     }
-    h += '</div>';
+    b3 += '</div>';
+    trabalho.push(b3);
 
     /* 4 · Conferência — SÓ existe quando o fluxo do momento tem essa etapa
        (D-cf8-04): fluxo legado (UNI_OK falso) e OS de movimentação. */
     if (flComConferencia) {
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Conferência</div>';
+    var b4 = '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Conferência</div>';
     if (entry.conferente) {
-      h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Conferido por '+esc(entry.conferente)+' em '+fmtDate(entry.dataConferencia)+'</div>' +
+      b4 += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Conferido por '+esc(entry.conferente)+' em '+fmtDate(entry.dataConferencia)+'</div>' +
         (entry.parecerConferencia?'<div class="le-desc" style="margin-top:4px">'+esc(entry.parecerConferencia)+'</div>':'');
     } else if (manPode('conferir') && manPodeIrPara(st,flTerminal,flTipo)) {
       if (entry.parecerConferencia) {
-        h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px;margin-bottom:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida anteriormente: '+esc(entry.parecerConferencia)+'</div>';
+        b4 += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px;margin-bottom:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida anteriormente: '+esc(entry.parecerConferencia)+'</div>';
       }
       // D-q57-04: o estado muda na própria conferência do gestor, preso à OS
       // que a causou. D-uyz-20: instalar/remover NÃO é diagnóstico de
@@ -3786,20 +3806,21 @@ function manAbrirOS(logId){
         var estadoAtualConf = equipEstado(e);
         var optsConfEstado = (estadoAtualConf ? '' : '<option value="" selected disabled>(não cadastrado)</option>') +
           EQUIP_ORDEM.map(function(k){ return '<option value="'+k+'"'+(estadoAtualConf===k?' selected':'')+'>'+esc(EQUIP_ESTADOS[k].rotulo)+'</option>'; }).join('');
-        h += '<label class="fgl">Estado do equipamento após a manutenção</label>' +
+        b4 += '<label class="fgl">Estado do equipamento após a manutenção</label>' +
           '<select class="fgs" id="man-conf-estado">'+optsConfEstado+'</select>';
       }
-      h += '<label class="fgl" style="margin-top:8px">Parecer (opcional ao conferir, obrigatório ao devolver)</label>' +
+      b4 += '<label class="fgl" style="margin-top:8px">Parecer (opcional ao conferir, obrigatório ao devolver)</label>' +
         '<textarea class="fgt" id="man-conf-parecer" placeholder="Observações da conferência…"></textarea>' +
         '<div class="ct-btn-row">' +
         '<button class="btn-success" onclick="manConferir(\''+esc(logId)+'\',true)"><i class="fas fa-check mr1" aria-hidden="true"></i>Conferir e encerrar</button>' +
         '<button class="btn-danger" onclick="manConferir(\''+esc(logId)+'\',false)"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button></div>';
     } else if (entry.parecerConferencia) {
-      h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida: '+esc(entry.parecerConferencia)+'</div>';
+      b4 += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida: '+esc(entry.parecerConferencia)+'</div>';
     } else {
-      h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
+      b4 += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
     }
-    h += '</div>';
+    b4 += '</div>';
+    trabalho.push(b4);
     } else if (flContrato) {
       /* 260823-cf8: Fiscalização e NF/Composição/Certificação — só em OS
          de contrato (D-cf8-06), blocos da gaveta única em vez de uma
@@ -3807,30 +3828,31 @@ function manAbrirOS(logId){
          (D-cf8-20). */
       var passoAtual = osPasso(flOS, st);
       if (passoAtual >= 4) {
-        h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Fiscalização</div>';
+        var b4f = '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Fiscalização</div>';
         if (entry.fiscal) {
-          h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovada por '+esc(entry.fiscal)+' em '+fmtDate(entry.dataFiscalizacao)+'</div>' +
+          b4f += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovada por '+esc(entry.fiscal)+' em '+fmtDate(entry.dataFiscalizacao)+'</div>' +
             (entry.parecerFiscal?'<div class="le-desc" style="margin-top:4px">'+esc(entry.parecerFiscal)+'</div>':'');
         } else if (st==='EXECUTADA' && manPode('fiscalizar') && manPodeIrPara(st,'FISCALIZADA',flTipo)) {
-          h += '<label class="fgl">Parecer do fiscal</label>' +
+          b4f += '<label class="fgl">Parecer do fiscal</label>' +
             '<textarea class="fgt" id="man-fis-parecer" placeholder="Serviços conferidos conforme orçamento aprovado…"></textarea>' +
             '<div class="ct-btn-row">' +
             '<button class="btn-success" onclick="manFiscalizar(\''+esc(logId)+'\',true)"><i class="fas fa-check mr1" aria-hidden="true"></i>Aprovar execução</button>' +
             '<button class="btn-danger" onclick="manFiscalizar(\''+esc(logId)+'\',false)"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button></div>';
         } else {
-          h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
+          b4f += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
         }
-        h += '</div>';
+        b4f += '</div>';
+        trabalho.push(b4f);
       }
       if (passoAtual >= 5) {
-        h += osComposicaoAtaHtml(logId, entry, st);
+        trabalho.push(osComposicaoAtaHtml(logId, entry, st));
       }
     }
 
     // D-cf8-05/29: itens em toda OS que não seja de movimentação, atrás de
     // UNI_OK (a tabela os_itens só existe com a migração 43).
     if (UNI_OK && !osEhMovimentacao(entry)) {
-      h += osItensHtml(logId, entry);
+      trabalho.push(osItensHtml(logId, entry));
     }
   }
 
@@ -3838,20 +3860,57 @@ function manAbrirOS(logId){
   // toda OS, atrás de UNI_OK — a tabela os_comentarios só existe com a
   // migração 43.
   if (UNI_OK) {
-    h += osComentariosHtml(logId);
+    trabalho.push(osComentariosHtml(logId));
   }
 
-  el('drawer-body').innerHTML = h;
-
-  var foot = '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>';
+  var footGaveta = '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>';
   if (flContrato) {
-    foot += '<button class="btn-secondary" onclick="imprimirOS(\''+esc(logId)+'\')" title="Imprimir OS" aria-label="Imprimir OS"><i class="fas fa-print" aria-hidden="true"></i></button>';
+    footGaveta += '<button class="btn-secondary" onclick="imprimirOS(\''+esc(logId)+'\')" title="Imprimir OS" aria-label="Imprimir OS"><i class="fas fa-print" aria-hidden="true"></i></button>';
   }
-  if (manPode('cancelar') && manPodeIrPara(st,'CANCELADA',flTipo)) {
-    foot += '<button class="btn-danger" style="flex:1" onclick="manCancelar(\''+esc(logId)+'\')"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelar OS</button>';
+  var podeCancelarAgora = manPode('cancelar') && manPodeIrPara(st,'CANCELADA',flTipo);
+  if (podeCancelarAgora) {
+    footGaveta += '<button class="btn-danger" style="flex:1" onclick="manCancelar(\''+esc(logId)+'\')"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelar OS</button>';
   }
-  el('drawer-footer').innerHTML = foot;
+
+  // D-jar-11: rodape.pagina leva as MESMAS ações de hoje, sem inventar
+  // nenhuma — muda só a forma: rotuladas em texto (há largura na faixa),
+  // sem o botão de fechar (na página o equivalente é #osd-voltar, à
+  // esquerda da faixa — navegação, não ação).
+  var footPagina = '';
+  if (flContrato) {
+    footPagina += '<button class="btn-secondary" onclick="imprimirOS(\''+esc(logId)+'\')"><i class="fas fa-print mr1" aria-hidden="true"></i>Imprimir OS</button>';
+  }
+  if (podeCancelarAgora) {
+    footPagina += '<button class="btn-danger" onclick="manCancelar(\''+esc(logId)+'\')"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelar OS</button>';
+  }
+
+  return {
+    equipId: equipId, entry: entry,
+    ident: ident,
+    regua: regua,
+    contexto: contexto,
+    trabalho: trabalho,
+    rodape: { gaveta: footGaveta, pagina: footPagina }
+  };
+}
+
+/* D-jar-04: manAbrirOS continua sendo a porta única — mesmo nome, mesma
+   assinatura, os 25 pontos de chamada intocados. Nesta tarefa (Task 1) só
+   delega para osAbrirGaveta, para o fixture provar a extração isolada da
+   mudança de continente; o ramo de TELA_LARGA entra na Task 2. */
+function osAbrirGaveta(logId){
+  var m = manMontarOS(logId); if(!m) return;
+  el('dh-id').textContent = m.ident.id;
+  el('dh-local').textContent = m.ident.local;
+  el('dh-predio').textContent = m.ident.predio;
+  el('dh-pills').innerHTML = m.ident.pills;
+  el('drawer-body').innerHTML = m.regua + m.contexto.join('') + m.trabalho.join('');
+  el('drawer-footer').innerHTML = m.rodape.gaveta;
   openDrawer();
+}
+
+function manAbrirOS(logId){
+  osAbrirGaveta(logId);
 }
 
 async function manMudarStatus(logId, novo){

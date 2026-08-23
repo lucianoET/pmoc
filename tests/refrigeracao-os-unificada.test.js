@@ -724,18 +724,32 @@ test('o seletor de executor de openLogForm não desabilita nenhuma opção (cont
   assert.doesNotMatch(corpo, /disabled/);
 });
 
-test('o corpo de manAbrirOS resolve o fluxo por osFluxoDe e desenha a régua por osPasso/osCurtos, nunca MAN_STEPS fixo', () => {
-  const corpo = recorte('function manAbrirOS(logId){', 'async function manMudarStatus(');
+// 260823-jar (D-jar-18): manAbrirOS foi extraído em manMontarOS (a fonte
+// única, gaveta E página) + osAbrirGaveta (o consumidor da gaveta);
+// manAbrirOS virou um despachante. Os três recortes abaixo mudam de alvo
+// porque o FATO mudou — o que era o corpo de manAbrirOS agora é o corpo
+// de manMontarOS. Precedente D-92t-15: gate reescrito, nunca apagado.
+test('o corpo de manMontarOS resolve o fluxo por osFluxoDe e desenha a régua por osPasso/osCurtos, nunca MAN_STEPS fixo', () => {
+  const corpo = recorte('function manMontarOS(logId){', 'function osAbrirGaveta(');
   assert.match(corpo, /var flOS = osFluxoDe\(entry\);/);
   assert.match(corpo, /reguaPassos\(osPasso\(flOS, st\), osCurtos\(flOS\)\)/);
   assert.doesNotMatch(corpo, /reguaPassos\(manPasso\(st\), MAN_STEPS\)/);
 });
 
-test('o corpo de manAbrirOS só desenha o bloco 4 · Conferência quando flComConferencia, e sempre desenha itens/comentários atrás de UNI_OK', () => {
-  const corpo = recorte('function manAbrirOS(logId){', 'async function manMudarStatus(');
+test('o corpo de manMontarOS só desenha o bloco 4 · Conferência quando flComConferencia, e sempre desenha itens/comentários atrás de UNI_OK', () => {
+  const corpo = recorte('function manMontarOS(logId){', 'function osAbrirGaveta(');
   assert.match(corpo, /if \(flComConferencia\) \{/);
   assert.match(corpo, /osItensHtml\(logId, entry\)/);
   assert.match(corpo, /osComentariosHtml\(logId\)/);
+});
+
+test('o corpo de manAbrirOS NÃO monta bloco por conta própria — despachante puro, delega para osAbrirGaveta (D-jar-18)', () => {
+  const corpo = recorte('function manAbrirOS(logId){', 'async function manMudarStatus(');
+  assert.doesNotMatch(corpo, /var flOS = osFluxoDe/);
+  assert.doesNotMatch(corpo, /reguaPassos\(/);
+  assert.doesNotMatch(corpo, /osItensHtml\(/);
+  assert.doesNotMatch(corpo, /osComentariosHtml\(/);
+  assert.match(corpo, /osAbrirGaveta\(logId\);/);
 });
 
 // ══════════════════════════════════════════════════════════════════
@@ -759,8 +773,8 @@ test('D-cf8-22: nenhuma chamada de banco às quatro filhas dormentes (os_orcamen
   });
 });
 
-test('o corpo de manAbrirOS condiciona Fiscalização/Composição da ata a flContrato, e nunca em OS de movimentação', () => {
-  const corpo = recorte('function manAbrirOS(logId){', 'async function manMudarStatus(');
+test('o corpo de manMontarOS condiciona Fiscalização/Composição da ata a flContrato, e nunca em OS de movimentação (D-jar-18)', () => {
+  const corpo = recorte('function manMontarOS(logId){', 'function osAbrirGaveta(');
   assert.match(corpo, /var flContrato = UNI_OK && !osEhMovimentacao\(entry\)/);
   assert.match(corpo, /else if \(flContrato\) \{/);
   assert.match(corpo, /osComposicaoAtaHtml\(logId, entry, st\)/);
