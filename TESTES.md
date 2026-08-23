@@ -1868,3 +1868,47 @@ mesma pendência de PLAT-15/16 e de 260822-8rz (sem Playwright nem navegador nes
 - [ ] **375px (celular):** idêntico a hoje, com a barra inferior de cinco botões; a única
       diferença visível é a marca sem a segunda linha (a inscrição institucional) e os dois
       rótulos renomeados (Painel, Parque).
+
+## Refrigeração — a ficha do equipamento como página inteira no computador (23/08/2026)
+
+Quick task 260823-92t. Em `>=1024px` a ficha deixa de ser painel lateral e vira **página
+inteira**, ocupando largura e altura da viewport, com três colunas que rolam por dentro
+enquanto a página não rola. Abaixo de 1024px nada muda — provado por fixture byte a byte
+(`tests/fixtures/refrigeracao-ficha-gaveta.json`), não afirmado. Camada de apresentação pura —
+nenhum dado, fluxo ou regra de negócio muda. `node --test` cobre a lógica em Node (`node:vm`,
+sem DOM real); a conferência visual abaixo fica pendente para o usuário, mesma pendência de
+PLAT-15/16, 260822-8rz e 260823-3a6 (sem Playwright nem navegador neste ambiente).
+
+- [ ] **1440px, abrindo pelo Parque:** clicar numa linha da tabela do Parque abre a ficha como
+      **página inteira** — faixa de cabeçalho no topo (botão "Voltar ao Parque", identificação,
+      pílulas de estado/criticidade/situação, e à direita "Imprimir ficha" / "Editar cadastro" /
+      "Registrar OS-Manutenção") e, abaixo, **três colunas**: a primeira com Local e Dados do
+      equipamento, a do meio (mais larga) com Estado e PMOC, a terceira com Histórico e
+      Etiqueta/QR/NFC. A **página não rola** — só as colunas rolam, cada uma por dentro, e o
+      cabeçalho da faixa fica sempre visível.
+- [ ] **Voltar:** clicar em "Voltar ao Parque" (ou apertar Esc) devolve exatamente à tela de
+      onde a ficha foi aberta, com a lista/filtro intactos.
+- [ ] **Abrindo pelos Alertas e pelo PMOC:** repetir a abertura a partir de uma linha de Alertas
+      e de uma linha do PMOC — o botão de voltar deve nomear o destino certo ("Voltar aos
+      Alertas", "Voltar ao PMOC") e o clique deve realmente voltar para lá, não para o Parque.
+- [ ] **Link profundo (`?equip=`) em tela larga:** abrir uma URL com `?equip=<id>` numa janela
+      já em >=1024px — a ficha deve abrir como página, com a origem sendo o Parque (é a lista
+      que contém todo equipamento) e a URL deve voltar a `/refrigeracao` limpa (sem o
+      `?equip=`) depois de abrir.
+- [ ] **Cruzar o limiar, página → gaveta:** com a ficha aberta como página em 1440px, estreitar
+      a janela para menos de 1024px (ou girar um tablet) — a página deve dar lugar à gaveta de
+      sempre, **com o mesmo equipamento**, e a tela de baixo (Parque/Alertas/PMOC, conforme a
+      origem) deve estar lá por baixo, intacta.
+- [ ] **Cruzar o limiar, gaveta → página:** abrir a ficha em menos de 1024px (gaveta subindo de
+      baixo) e alargar a janela para 1440px — a gaveta deve fechar e a mesma ficha deve abrir
+      como página inteira.
+- [ ] **Formulário sobrevive ao redimensionamento:** com a ficha aberta como página, clicar em
+      "Registrar OS-Manutenção" (ou "Editar cadastro") — o formulário abre na gaveta clássica,
+      por cima da página. Digitar algo num campo e então estreitar a janela: o texto digitado
+      deve **continuar lá**, o formulário não pode ser descartado nem trocado pela ficha.
+- [ ] **1024px exatos (a faixa apertada):** os pares de campo (Área/Prédio, Tipo/Fabricante,
+      etc.) devem colapsar para **um por linha** dentro de cada coluna, e nada deve rolar na
+      página — só as colunas.
+- [ ] **375px (celular), com a ficha aberta:** deve ser **idêntica à de hoje** — gaveta subindo
+      de baixo, mesmo conteúdo, mesmos botões (Fechar/Imprimir/Editar cadastro/Registrar
+      OS/Manutenção).

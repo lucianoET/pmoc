@@ -1706,6 +1706,7 @@ function renderMovim(){
 }
 
 function openNewOS(){
+  FICHA_ABERTA = null; // D-92t: cruzar o limiar com um formulário não o descarta
   // Abre formulário para selecionar equipamento
   openNewOSForm();
 }
@@ -1893,7 +1894,7 @@ function atualizarBadgeAlertas(ag){
    DRAWER / DETAIL
 ═══════════════════════════════════════════════════════════ */
 function openDrawer(){ el('drawer').classList.add('open'); document.body.style.overflow='hidden'; }
-function closeDrawer(){ MAN_EDIT_ID = null; el('drawer').classList.remove('open'); document.body.style.overflow=''; }
+function closeDrawer(){ MAN_EDIT_ID = null; FICHA_ABERTA = null; el('drawer').classList.remove('open'); document.body.style.overflow=''; }
 
 /* Um campo de link vira âncora SÓ quando linkSeguro devolver algo — valor
    gravado que não passe (ex: javascript:, ou herança de um cadastro antigo)
@@ -2126,6 +2127,39 @@ function voltarDaFicha(){
   navTo(FICHA_ORIGEM, botaoDaAba(FICHA_ORIGEM));
 }
 
+/* D-92t (Task 3): o gancho de cruzar o limiar de largura já existe
+   (iniciarModoDeTela chama renderPaginaAtiva a cada mudança) — esta função
+   só corrige o CONTINENTE quando ele está errado para o TELA_LARGA
+   corrente. Dois ramos, cada um só dispara quando o continente está
+   errado; nos dois estados já-corretos devolve false sem tocar nada —
+   T-92t-04 (DoS auto-infligido): não há como este laço se realimentar,
+   porque o opener sempre corrige o continente antes de qualquer novo
+   evento de resize. */
+function reAlojarFicha(){
+  var pf = el('page-ficha');
+  var fichaAtivaNaPagina = !!(pf && pf.classList.contains('active'));
+
+  if(fichaAtivaNaPagina && !TELA_LARGA){
+    // Guarda ANTES de voltarDaFicha() zerar. Sem id (formulário aberto por
+    // cima da ficha-página) o voltarDaFicha() sozinho já cumpre a
+    // invariante — NÃO chama abrirFichaGaveta, que sobrescreveria o
+    // formulário que está na gaveta.
+    var idGuardado = FICHA_ABERTA;
+    voltarDaFicha();
+    if(idGuardado != null) abrirFichaGaveta(idGuardado);
+    return true;
+  }
+
+  var drawer = el('drawer');
+  var gavetaAberta = !!(drawer && drawer.classList.contains('open'));
+  if(gavetaAberta && TELA_LARGA && FICHA_ABERTA != null){
+    abrirFichaPagina(FICHA_ABERTA); // fecha a gaveta lá dentro
+    return true;
+  }
+
+  return false; // gaveta com FICHA_ABERTA nulo é formulário — sobrevive ao alargamento
+}
+
 function abrirFichaGaveta(id){
   var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
   var logs = getEquipLog(id);
@@ -2141,6 +2175,12 @@ function abrirFichaGaveta(id){
   el('drawer-footer').innerHTML = fichaAcoes(id, 'gaveta');
 
   openDrawer();
+  // D-92t (Task 3): FICHA_ABERTA marca QUAL equipamento a ficha mostra,
+  // em qualquer continente — é o que permite reAlojarFicha() reabrir como
+  // página ao alargar de volta. Os formulários (openLogForm/openEquipForm/
+  // openNewOS) e closeDrawer() zeram — é o que distingue "a gaveta mostra
+  // a ficha" de "a gaveta mostra um formulário".
+  FICHA_ABERTA = id;
 }
 
 function openDetail(id){
@@ -2153,6 +2193,7 @@ function openDetail(id){
 ═══════════════════════════════════════════════════════════ */
 function openLogForm(equipId){
   var e = DATA.find(function(r){ return r.id===equipId; }); if(!e) return;
+  FICHA_ABERTA = null; // D-92t: cruzar o limiar com um formulário não o descarta
   var clist = checklistDaOS(null, e.tipo); // D-uyz-16: ponto único — manutenção cai na tabela CHECKLIST de sempre
   var tipoOpts = MAINT_TIPOS.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('');
   var chkHtml = clist.map(function(item,i){
@@ -2274,6 +2315,7 @@ function campoEquipForm(chave, e){
 function openEquipForm(id){
   var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
   if (!podeEditarCadastro()) { showToast('Sem permissão para editar cadastro','error'); return; }
+  FICHA_ABERTA = null; // D-92t: cruzar o limiar com um formulário não o descarta
   el('dh-id').textContent = 'Editar cadastro · #'+id;
   el('dh-local').textContent = e.local;
   el('dh-predio').textContent = e.predio;
@@ -6548,6 +6590,7 @@ function aplicarModoDeTela(largura){
    manutenção/contratações/movimentação via ctMode — chamar renderOS() é
    suficiente e não duplica aquela regra. */
 function renderPaginaAtiva(){
+  if(reAlojarFicha()) return; // D-92t (Task 3): corrige o continente da ficha antes de redesenhar
   var ativa = document.querySelector('.page.active');
   if(!ativa) return;
   var id = ativa.id || '';
