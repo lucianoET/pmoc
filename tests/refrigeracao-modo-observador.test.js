@@ -150,6 +150,8 @@ function carregarSandbox() {
     osInjectChipsExecutor() {},
     carregarItensOS() { return Promise.resolve(); },
     carregarComentarios() { return Promise.resolve(); },
+    carregarArp() { return Promise.resolve(); },
+    carregarComposicaoArp() { return Promise.resolve(); },
     renderDash() {},
     renderInv() {},
     aplicarAlvoFicha() {},

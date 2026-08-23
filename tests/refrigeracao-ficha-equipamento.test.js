@@ -238,9 +238,11 @@ test('fiação: os quatro títulos vivem em fichaBlocoLocal/Dados/Estado/Histori
   assert.doesNotMatch(blocoEstadoDb.slice(0, blocoEstadoDb.indexOf('}')), />Estado</);
 });
 
-test('imprimirDocumento tem dois consumidores (ctPrintOS e printFicha) e nenhum dos dois declara window.open próprio nem repete o CSS de A4', () => {
-  const iniCtPrint = HTML.indexOf('function ctPrintOS(osId){');
-  const fimCtPrint = HTML.indexOf('\n}', HTML.indexOf('function ctPrintOS(osId){'));
+// 260823-cf8 (D-cf8-22): ctPrintOS virou imprimirOS(logId) — mesmo
+// consumidor, lendo a OS unificada em vez de ctOS/ctOrc/ctExec/ctEvt.
+test('imprimirDocumento tem dois consumidores (imprimirOS e printFicha) e nenhum dos dois declara window.open próprio nem repete o CSS de A4', () => {
+  const iniCtPrint = HTML.indexOf('function imprimirOS(logId){');
+  const fimCtPrint = HTML.indexOf('\n}', HTML.indexOf('function imprimirOS(logId){'));
   const corpoCtPrint = HTML.slice(iniCtPrint, fimCtPrint);
   assert.match(corpoCtPrint, /imprimirDocumento\(/);
   assert.doesNotMatch(corpoCtPrint, /window\.open\(/);

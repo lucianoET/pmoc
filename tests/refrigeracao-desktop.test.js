@@ -276,11 +276,13 @@ test('COLS_INV.prox: equipamento sem histórico vai para o fim nas duas direçõ
 
 // ═══════════════════ 9. TAB_ESTADO ════════════════════════════════════════
 
+// 260823-cf8 (D-cf8-22): 'contrat' saiu de TAB_ESTADO — a OS de contrato
+// é a mesma tabela 'os' agora, não uma sexta tabela separada.
 test('TAB_ESTADO isola as tabelas: gravar ordem em inv deixa os intacto', () => {
   const ctx = carregarSandbox();
   ctx.TAB_ESTADO.inv.ord = { coluna: 'predio', dir: 'asc' };
   assert.equal(ctx.TAB_ESTADO.os.ord.coluna, null);
-  assert.deepStrictEqual(Object.keys(ctx.TAB_ESTADO), ['inv', 'os', 'movim', 'pmoc', 'alert', 'contrat']);
+  assert.deepStrictEqual(Object.keys(ctx.TAB_ESTADO), ['inv', 'os', 'movim', 'pmoc', 'alert']);
 });
 
 // ═══════════════════ 10. filtrarInventario (D-8rz-09) ════════════════════
@@ -491,19 +493,20 @@ test('tabAlternarFiltros: fechar limpa os filtros — um filtro invisível é pi
   eq(ctx.TAB_ESTADO.inv.filtros, {});
 });
 
-test('as seis tabelas têm sua própria chamada tabDesenhar — um desenhista, seis adaptadores', () => {
-  for (const tid of ['inv', 'os', 'movim', 'pmoc', 'alert', 'contrat']) {
+// 260823-cf8 (D-cf8-22): cinco tabelas agora — a OS de contrato lê
+// tabDesenhar('os', COLS_OS, …), a mesma tabela de qualquer outra OS.
+test('as cinco tabelas têm sua própria chamada tabDesenhar — um desenhista, cinco adaptadores', () => {
+  for (const tid of ['inv', 'os', 'movim', 'pmoc', 'alert']) {
     assert.match(HTML, new RegExp(`tabDesenhar\\('${tid}'`), `tabDesenhar('${tid}' não encontrado`);
   }
 });
 
-test('estrutural: as guardas de TELA_LARGA em renderInv/renderOS/renderMovim/renderPmoc/ctRenderList vêm depois do primeiro "return;" do corpo (o ramo de lista vazia)', () => {
+test('estrutural: as guardas de TELA_LARGA em renderInv/renderOS/renderMovim/renderPmoc vêm depois do primeiro "return;" do corpo (o ramo de lista vazia)', () => {
   const casos = [
     ['renderInv', "tabDesenhar('inv'"],
     ['renderOS', "tabDesenhar('os'"],
     ['renderMovim', "tabDesenhar('movim'"],
     ['renderPmoc', "tabDesenhar('pmoc'"],
-    ['ctRenderList', "tabDesenhar('contrat'"],
   ];
   casos.forEach(([fn, guarda]) => {
     const iniFn = HTML.indexOf(`function ${fn}(){`);

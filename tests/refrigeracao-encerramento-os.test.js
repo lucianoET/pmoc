@@ -1,13 +1,15 @@
-// Gate do encerramento de OS gravando equipamentos.ultima_manutencao (D-jpd-03) e do
-// histórico de manutenção da contratação, idempotente pelo prefixo da descrição
-// (D-jpd-04) — quick 260821-jpd, Task 2.
+// Gate do encerramento de OS gravando equipamentos.ultima_manutencao (D-jpd-03)
+// — quick 260821-jpd, Task 2.
 //
-// Dois recortes do HTML — o bloco de encerramento (atualizarUltimaManutencao) e o bloco
-// de histórico da contratação (ctMarcadorHistorico/ctDescricaoHistorico/ctJaTemHistorico/
-// ctEncerrarHistorico) — avaliados juntos num único sandbox node:vm, com supa, DATA,
-// showToast, today, console e addLogEntryAsync todos substituídos por versões
-// controladas. addLogEntryAsync falso grava numa tabela em memória, o que permite provar
-// a idempotência de ponta a ponta sem tocar o Supabase de verdade.
+// 260823-cf8 (Task 3, D-cf8-16/22): o bloco de histórico da contratação
+// (ctMarcadorHistorico/ctDescricaoHistorico/ctJaTemHistorico/
+// ctEncerrarHistorico) NÃO EXISTE MAIS neste arquivo — desaparece por
+// construção, não por limpeza: a OS de contrato já nasce sendo a linha de
+// logs_manutencao que ela antes espelhava, então não há mais o que
+// espelhar de volta. manCertificar (o antigo ctCertificar) chama
+// atualizarUltimaManutencao DIRETO, com a data da NF — os casos que
+// provavam a idempotência do espelho e a leitura do prefixo da descrição
+// aprendem o fato novo abaixo, em vez de desaparecer (D-cf8-28).
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -79,7 +81,6 @@ function carregarSandbox(opts) {
   };
   vm.createContext(ctx);
   vm.runInContext(recorte('/* ── encerramento de OS: última manutenção ── */', 'async function saveLogEntry('), ctx);
-  vm.runInContext(recorte('/* ── histórico da contratação ── */', 'async function ctCertificar('), ctx);
   ctx._updates = updates;
   ctx._insercoes = insercoes;
   return ctx;
@@ -114,52 +115,17 @@ test('atualizarUltimaManutencao não grava quando a data é igual à registrada'
   assert.strictEqual(ctx._updates.length, 0);
 });
 
-test('ctMarcadorHistorico usa numero quando existe e cai no id quando não existe', () => {
-  const ctx = carregarSandbox({});
-  assert.strictEqual(ctx.ctMarcadorHistorico({ numero: 'OS-42', id: 'uuid-1' }), 'Contratação OS-42');
-  assert.strictEqual(ctx.ctMarcadorHistorico({ numero: '', id: 'uuid-1' }), 'Contratação uuid-1');
-});
-
-test('ctJaTemHistorico reconhece o prefixo numa linha do banco (descricao) e numa do cache (desc), sem confundir OS de número diferente', () => {
-  const ctx = carregarSandbox({});
-  const marcador = ctx.ctMarcadorHistorico({ numero: 'OS-42', id: 'x' });
-  assert.strictEqual(ctx.ctJaTemHistorico([{ descricao: 'Contratação OS-42 — serviço x' }], marcador), true);
-  assert.strictEqual(ctx.ctJaTemHistorico([{ desc: 'Contratação OS-42 — serviço x' }], marcador), true);
-  assert.strictEqual(ctx.ctJaTemHistorico([{ descricao: 'Contratação OS-99 — outra coisa' }], marcador), false);
-  assert.strictEqual(ctx.ctJaTemHistorico([], marcador), false);
-});
-
-test('idempotência de ponta a ponta: ctEncerrarHistorico duas vezes sobre a mesma OS deixa uma linha só', async () => {
-  const equip = { id: 20, ultimaManutencao: '' };
-  const ctx = carregarSandbox({ data: [equip] });
-  const os = { id: 'os-1', numero: 'OS-100', equip_id: 20, problema: 'Vazamento de gás', empresa: 'Ar Frio Ltda', nf: '555', data_nf: '2026-08-20' };
-
-  const r1 = await ctx.ctEncerrarHistorico(os);
-  const r2 = await ctx.ctEncerrarHistorico(os);
-
-  assert.strictEqual(r1, true);
-  assert.strictEqual(r2, false);
-  assert.strictEqual(ctx._insercoes.length, 1);
-  const linha = ctx._insercoes[0];
-  assert.strictEqual(linha.tipo, 'CORRETIVA');
-  assert.strictEqual(linha.status, 'CONCLUÍDA');
-  assert.strictEqual(linha.tecnico, 'Ar Frio Ltda');
-  assert.strictEqual(linha.descricao.indexOf('Contratação OS-100'), 0);
-});
-
-test('OS sem equip_id não insere nada', async () => {
-  const ctx = carregarSandbox({});
-  const ok = await ctx.ctEncerrarHistorico({ id: 'os-2', numero: 'OS-200' });
-  assert.strictEqual(ok, false);
-  assert.strictEqual(ctx._insercoes.length, 0);
-});
-
-test('erro na consulta de logs_manutencao devolve false sem lançar exceção', async () => {
-  const ctx = carregarSandbox({ erroSelectLogs: true });
-  const ok = await ctx.ctEncerrarHistorico({ id: 'os-3', numero: 'OS-300', equip_id: 30 });
-  assert.strictEqual(ok, false);
-  assert.strictEqual(ctx._insercoes.length, 0);
-  assert.strictEqual(ctx._warns.length, 1);
+// 260823-cf8 (D-cf8-16/22, Task 3): os quatro casos acima testavam o
+// espelho (ctMarcadorHistorico/ctJaTemHistorico/ctEncerrarHistorico) —
+// nenhum dos três sobrevive. O fato novo é estrutural: nenhuma das quatro
+// funções aparece mais no arquivo, e é a OS de contrato encerrada (via
+// manCertificar) que passa a chamar atualizarUltimaManutencao DIRETO, sem
+// inserir linha nenhuma — comportamento coberto por
+// tests/refrigeracao-os-unificada.test.js (manCertificar).
+test('ctMarcadorHistorico/ctDescricaoHistorico/ctJaTemHistorico/ctEncerrarHistorico não existem mais no arquivo (D-cf8-16/22)', () => {
+  ['function ctMarcadorHistorico(', 'function ctDescricaoHistorico(', 'function ctJaTemHistorico(', 'async function ctEncerrarHistorico('].forEach((assinatura) => {
+    assert.strictEqual(HTML.indexOf(assinatura), -1, `"${assinatura}" ainda está no arquivo — o espelho deveria ter desaparecido por construção`);
+  });
 });
 
 // 260821-l7n (Task 2): a asserção solta de "saveLogEntry chama atualizarUltimaManutencao"
@@ -284,9 +250,83 @@ test('saveLogEntry com o fluxo ligado recusa sem permissão para abrir', async (
   assert.strictEqual(ctx._toasts.some((t) => t.tipo === 'error'), true);
 });
 
-test('ctCertificar chama ctEncerrarHistorico', () => {
-  const corpo = recorte('async function ctCertificar(osId){', 'async function ctCancelar(');
-  assert.match(corpo, /await ctEncerrarHistorico\(/);
+// 260823-cf8 (Task 3, D-cf8-16/22): manCertificar substitui ctCertificar —
+// nenhuma linha nova em logs_manutencao ao encerrar (a OS já É a linha),
+// e atualizarUltimaManutencao é chamada DIRETO com a data da NF.
+function carregarSandboxCertificar(opts) {
+  opts = opts || {};
+  const updatesLog = [];
+  const updatesEquip = [];
+  const insertsComentarios = [];
+  const toasts = [];
+
+  const linhaBase = { id: 'log-1', equip_id: opts.equipId !== undefined ? opts.equipId : 20, status: opts.status || 'FISCALIZADA' };
+
+  const ctx = {
+    esc(s) { if (!s) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+    el(id) { return (ctx._campos && ctx._campos[id]) || { querySelectorAll() { return []; } }; },
+    val(id) { return (ctx._valores && ctx._valores[id] !== undefined) ? ctx._valores[id] : ''; },
+    _valores: opts.valores || { 'cf-nf': '555', 'cf-datanf': '2026-08-23' },
+    somenteLeitura() { return !!opts.observador; },
+    ctUser: opts.ctUser !== undefined ? opts.ctUser : { nome: 'Certificador', role: 'gestor' },
+    DATA: opts.data || [{ id: opts.equipId !== undefined ? opts.equipId : 20, ultimaManutencao: '' }],
+    showToast(msg, tipo) { toasts.push({ msg, tipo }); },
+    console: { warn() {}, error() {} },
+    today() { return '2026-08-23'; },
+    fmtDate(iso) { return iso || ''; },
+    confirm() { return true; },
+    openDrawer() {}, closeDrawer() {},
+    osEhMovimentacao() { return false; },
+    ctComp: opts.ctComp !== undefined ? opts.ctComp : { 'log-1': [{ id: 'c1', os_id: 'log-1', item_arp: 266, qtd: 2 }] },
+    supa: {
+      from(tabela) {
+        if (tabela === 'logs_manutencao') {
+          return { update(patch) { return { eq(col, val) { return { select() { return { single() { updatesLog.push({ id: val, patch }); return Promise.resolve({ error: null, data: Object.assign({}, linhaBase, patch) }); } }; } }; } }; } };
+        }
+        if (tabela === 'equipamentos') {
+          return { update(patch) { return { eq(col, val) { updatesEquip.push({ patch, col, val }); return Promise.resolve({ error: null }); } }; } };
+        }
+        if (tabela === 'os_comentarios') {
+          return { insert(payload) { return { select() { return { single() { const linha = Object.assign({ id: 'com-' + (insertsComentarios.length + 1), criado_em: '2026-08-23T12:00:00Z' }, payload); insertsComentarios.push(linha); return Promise.resolve({ error: null, data: linha }); } }; } }; } };
+        }
+        throw new Error('tabela inesperada: ' + tabela);
+      },
+    },
+  };
+  ctx._logCache = {};
+  ctx._logCache[linhaBase.equip_id] = [Object.assign({ id: linhaBase.id, status: linhaBase.status, tipoExecutor: 'contrato' }, opts.entryExtra || {})];
+  vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
+  vm.runInContext(recorte('/* ── encerramento de OS: última manutenção ── */', 'async function saveLogEntry('), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: tela e ações ── */', 'function showSearch(){'), ctx);
+  // 260823-cf8: UNI_OK é "var" dentro da porta de escrita — setado DEPOIS
+  // dos runInContext, senão a própria declaração sobrescreve para false.
+  ctx.UNI_OK = true;
+  ctx.manAbrirOS = function () {};
+  ctx.renderOS = function () {};
+  ctx._updatesLog = updatesLog;
+  ctx._updatesEquip = updatesEquip;
+  ctx._insertsComentarios = insertsComentarios;
+  ctx._toasts = toasts;
+  return ctx;
+}
+
+test('manCertificar exige NF e composição não vazia, grava ENCERRADA, e chama atualizarUltimaManutencao com a data da NF — sem inserir linha nova (D-cf8-16)', async () => {
+  const semComp = carregarSandboxCertificar({ ctComp: {} });
+  await semComp.manCertificar('log-1');
+  assert.strictEqual(semComp._updatesLog.length, 0);
+  assert.ok(semComp._toasts.some((t) => t.tipo === 'error'));
+
+  const ctx = carregarSandboxCertificar({});
+  const ok = await ctx.manCertificar('log-1');
+  assert.strictEqual(ok !== false, true);
+  assert.strictEqual(ctx._updatesLog.length, 1);
+  assert.strictEqual(ctx._updatesLog[0].patch.status, 'ENCERRADA');
+  assert.strictEqual(ctx._updatesLog[0].patch.nf, '555');
+  assert.strictEqual(ctx._updatesEquip.length, 1);
+  assert.strictEqual(ctx._updatesEquip[0].patch.ultima_manutencao, '2026-08-23'); // a data da NF, D-l7n-11
 });
 
 test('os quatro grep do PLAT-15 continuam em 0', () => {

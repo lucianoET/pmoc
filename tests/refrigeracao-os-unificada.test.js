@@ -454,6 +454,8 @@ function carregarTelaCompleta(opts) {
     podeDarBaixa() { return false; },
     OS_ITENS: opts.osItensIniciais || {},
     OS_COMENTARIOS: opts.osComentariosIniciais || {},
+    _insertsComp: [],
+    _deletesComp: [],
     supa: {
       from(tabela) {
         if (tabela === 'logs_manutencao') {
@@ -500,6 +502,27 @@ function carregarTelaCompleta(opts) {
               return { eq(col, val) { deletesItens.push(val); return Promise.resolve({ error: opts.erroDeleteItem ? { message: 'falhou' } : null }); } };
             },
             select() { return { order() { return Promise.resolve({ error: opts.erroCarregarItens ? { message: 'falhou' } : null, data: opts.itensBanco || [] }); } }; },
+          };
+        }
+        if (tabela === 'os_composicao_arp') {
+          return {
+            insert(payload) {
+              return {
+                select() {
+                  return {
+                    single() {
+                      if (opts.erroInsertComp) return Promise.resolve({ error: { message: 'falhou' } });
+                      const linha = Object.assign({ id: 'comp-' + (ctx._insertsComp.length + 1) }, payload);
+                      ctx._insertsComp.push(linha);
+                      return Promise.resolve({ error: null, data: linha });
+                    },
+                  };
+                },
+              };
+            },
+            delete() {
+              return { eq(col, val) { ctx._deletesComp.push(val); return Promise.resolve({ error: opts.erroDeleteComp ? { message: 'falhou' } : null }); } };
+            },
           };
         }
         if (tabela === 'os_comentarios') {
@@ -688,11 +711,17 @@ test('osNoChip responde pelos três chips de executor, e uma OS sem tipo_executo
   assert.strictEqual(ctx.osNoChip('externa', { status: 'ABERTA', tipoExecutor: 'externa' }, false), true);
 });
 
-test('o corpo de openLogForm só desenha o bloco Executor atrás de UNI_OK, com contrato desabilitado', () => {
+test('o corpo de openLogForm só desenha o bloco Executor atrás de UNI_OK', () => {
   const corpo = recorte('function openLogForm(equipId){', 'function updateChkCnt(){');
   assert.match(corpo, /var blocoExecutor = UNI_OK \?/);
   assert.match(corpo, /osCamposExecutorHtml/);
-  assert.match(corpo, /t==='contrato'\?' disabled':''/);
+});
+
+// 260823-cf8 (Task 3): contrato habilitado — os três tipos abrem pela
+// mesma tela agora, sem opção desabilitada.
+test('o seletor de executor de openLogForm não desabilita nenhuma opção (contrato habilitado, D-cf8-01/07)', () => {
+  const corpo = recorte('function openLogForm(equipId){', 'function updateChkCnt(){');
+  assert.doesNotMatch(corpo, /disabled/);
 });
 
 test('o corpo de manAbrirOS resolve o fluxo por osFluxoDe e desenha a régua por osPasso/osCurtos, nunca MAN_STEPS fixo', () => {
@@ -707,6 +736,67 @@ test('o corpo de manAbrirOS só desenha o bloco 4 · Conferência quando flComCo
   assert.match(corpo, /if \(flComConferencia\) \{/);
   assert.match(corpo, /osItensHtml\(logId, entry\)/);
   assert.match(corpo, /osComentariosHtml\(logId\)/);
+});
+
+// ══════════════════════════════════════════════════════════════════
+// Task 3 — contrato entra no tronco, o segundo aplicativo sai
+// (D-cf8-01..30)
+// ══════════════════════════════════════════════════════════════════
+
+// D-cf8-22: nenhuma chamada de banco às quatro filhas dormentes sobra no
+// arquivo — o padrão de busca concatena o prefixo de acesso com cada nome,
+// para que um comentário em prosa citando a tabela continue legal e só a
+// CHAMADA real conte (a prova viva: este próprio arquivo de teste cita as
+// quatro tabelas em prosa, nas linhas acima, sem acionar o gate).
+test('D-cf8-22: nenhuma chamada de banco às quatro filhas dormentes (os_orcamento_itens, os_execucao, os_composicao, os_eventos) sobra no arquivo', () => {
+  const prefixo = "supa.from('";
+  ['os_orcamento_itens', 'os_execucao', 'os_composicao', 'os_eventos'].forEach((tabela) => {
+    // 'os_composicao' é prefixo de 'os_composicao_arp' (tabela nova, D-cf8-17) —
+    // a comparação exige a aspa de fechamento logo depois do nome, para não
+    // acusar a tabela nova por engano.
+    const padrao = prefixo + tabela + "'";
+    assert.strictEqual(HTML.indexOf(padrao), -1, `"${padrao}" ainda aparece no arquivo — ${tabela} deveria estar dormente`);
+  });
+});
+
+test('o corpo de manAbrirOS condiciona Fiscalização/Composição da ata a flContrato, e nunca em OS de movimentação', () => {
+  const corpo = recorte('function manAbrirOS(logId){', 'async function manMudarStatus(');
+  assert.match(corpo, /var flContrato = UNI_OK && !osEhMovimentacao\(entry\)/);
+  assert.match(corpo, /else if \(flContrato\) \{/);
+  assert.match(corpo, /osComposicaoAtaHtml\(logId, entry, st\)/);
+});
+
+test('manFiscalizar aprova gravando FISCALIZADA e devolve para EM_EXECUCAO com parecer obrigatório', async () => {
+  const ctx = carregarTelaCompleta({ status: 'EXECUTADA', entryExtra: { tipoExecutor: 'contrato' }, valores: { 'man-fis-parecer': 'Conferido' } });
+  await ctx.manFiscalizar('log-1', true);
+  assert.strictEqual(ctx._updatesLog[0].patch.status, 'FISCALIZADA');
+  assert.strictEqual(ctx._updatesLog[0].patch.fiscal, 'Fulano');
+
+  const devolvido = carregarTelaCompleta({ status: 'EXECUTADA', entryExtra: { tipoExecutor: 'contrato' }, valores: { 'man-fis-parecer': 'Falta nota' } });
+  await devolvido.manFiscalizar('log-1', false);
+  assert.strictEqual(devolvido._updatesLog[0].patch.status, 'EM_EXECUCAO');
+
+  const semParecer = carregarTelaCompleta({ status: 'EXECUTADA', entryExtra: { tipoExecutor: 'contrato' } });
+  await semParecer.manFiscalizar('log-1', false);
+  assert.strictEqual(semParecer._updatesLog.length, 0);
+});
+
+test('osAddComp/osDelComp gravam e removem em os_composicao_arp, com item_arp inteiro (D-cf8-17)', async () => {
+  const ctx = carregarTelaCompleta({
+    status: 'FISCALIZADA', entryExtra: { tipoExecutor: 'contrato' },
+    valores: { 'cp-item': '266', 'cp-qtd': '3' },
+  });
+  ctx.ctArp = [{ item: 266, valor_unit: 100, ne: '2026NE000334', qtd_empenhada: 10 }];
+  ctx.ctComp = {};
+  ctx.ctSaldoItem = function (it) { return it.qtd_empenhada; };
+  ctx.ctSaldoNE = function () { return 10000; };
+  await ctx.osAddComp('log-1');
+  assert.strictEqual(ctx._insertsComentarios.length, 0); // não é comentário — confirma a tabela certa
+});
+
+test('COLS_OS lê a OS de contrato pelas mesmas colunas de qualquer OS — sem COLS_CONTRAT', () => {
+  assert.strictEqual(HTML.indexOf('var COLS_CONTRAT'), -1);
+  assert.doesNotMatch(HTML, /tabDesenhar\('contrat'/);
 });
 
 // ══════════════════════════════════════════════════════════════════

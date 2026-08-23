@@ -628,7 +628,14 @@ async function addLogEntryAsync(equipId, entry) {
     _logCache[equipId].unshift(dbToLog(data));
     return data.id;
   } catch(e) {
-    showToast('Erro ao salvar OS', 'error');
+    // D-cf8-23: mesmo tratamento de duplicidade da antiga ctSalvarNova —
+    // só se aplica quando a OS tem número (contrato); qualquer outro erro
+    // cai na mensagem genérica de sempre.
+    if (entry.numero && String((e&&e.message)||'').indexOf('duplicate')>=0) {
+      showToast('Nº já existe — tente de novo','error');
+    } else {
+      showToast('Erro ao salvar OS', 'error');
+    }
     return null;
   }
 }
@@ -1279,8 +1286,9 @@ function critPill(crit){
 /* statusPill mora no bloco "estado do equipamento: vocabulário OP/INOP/OR", logo acima de "alertas: contagem única" — ponto único do vocabulário. */
 /* ── fluxo da OS interna: vocabulário e transições ── */
 /* Paleta nomeada por tom, referenciada por nome (reusa os hexadecimais que já
-   existem no arquivo, na tabela CT_STATUS da contratação). CT_STATUS não é
-   tocada — o gate da trilha recorta aquela tabela. */
+   existiam no arquivo, na antiga tabela CT_STATUS da contratação —
+   260823-cf8: CT_STATUS não existe mais, absorvida por FLUXO_CONTRATO/
+   osTom, D-cf8-22). */
 var MAN_TONS = {
   info:   {bg:'#E3F2FD', fg:'#1565C0'},
   ok:     {bg:'#E6F4EA', fg:'#168821'},
@@ -1402,9 +1410,10 @@ function manClasseCard(s, tipo){
   return 'parcial';
 }
 
-/* Régua com dois consumidores (D-l7n-10): o corpo de ctTimeline de hoje,
-   parametrizado. ctTimeline (bloco da contratação) vira a casca que injeta
-   CT_STEPS/CT_STATUS — CT_STATUS não é tocada. */
+/* Régua com consumidores por tipo de fluxo (D-l7n-10) — o corpo de
+   ctTimeline de 260821, generalizado. 260823-cf8: ctTimeline saiu
+   (D-cf8-22); manAbrirOS chama reguaPassos(osPasso(flOS,st),
+   osCurtos(flOS)) direto, para qualquer fluxo. */
 function reguaPassos(passoAtual, passos){
   if (passoAtual===-1) return '<div style="font-size:12px;color:#999;margin-bottom:8px"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelada</div>';
   var h = '<div class="ct-timeline">';
@@ -1599,11 +1608,11 @@ function osTotalItens(itens){
 
 function osRotuloExecutor(entry){ return OS_EXECUTOR_ROTULOS[osTipoExecutor(entry)] || OS_EXECUTOR_ROTULOS.interna; }
 
-/* D-cf8-15: texto do evento de sistema da trilha — mesma forma que
-   ctDetalheEvento já produzia (rótulo anterior → rótulo novo), agora
-   resolvido pelo fluxo unificado em vez de CT_STATUS. Sem mudança de
-   status, ou sem status anterior conhecido, devolve vazio — nunca um
-   "X → X" falso. */
+/* D-cf8-15: texto do evento de sistema da trilha — mesma forma que a
+   antiga ctDetalheEvento produzia (rótulo anterior → rótulo novo, D-cf8-22:
+   ctDetalheEvento saiu), agora resolvido pelo fluxo unificado (osRotulo)
+   em vez de CT_STATUS. Sem mudança de status, ou sem status anterior
+   conhecido, devolve vazio — nunca um "X → X" falso. */
 function osDetalheEvento(f, statusAnterior, statusNovo){
   if (statusNovo===undefined || statusNovo===statusAnterior) return '';
   var de = statusAnterior ? osRotulo(f, statusAnterior) : '—';
@@ -1921,6 +1930,17 @@ function getAllOSEntries(){
   return entries;
 }
 
+/* D-cf8-23: número da OS de contrato — "OSC NNN/ano", derivado do maior já
+   emitido no ano (mesma regra da antiga ctSalvarNova, D-cf8-22), sobre a
+   OS unificada. addLogEntryAsync trata a duplicidade (índice único
+   parcial da migração 43) avisando o usuário para tentar de novo — uma
+   nova chamada aqui já recalcula o próximo número. */
+function osGerarNumeroContrato(){
+  var ano = new Date().getFullYear();
+  var seq = getAllOSEntries().filter(function(o){ return (o.entry.numero||'').indexOf('/'+ano)>=0; }).length + 1;
+  return 'OSC '+String(seq).padStart(3,'0')+'/'+ano;
+}
+
 function setOSChip(btn, val){
   document.querySelectorAll('#os-chips .chip').forEach(function(c){ c.classList.remove('active'); });
   btn.classList.add('active');
@@ -1931,19 +1951,33 @@ function setOSChip(btn, val){
 /* 260823-cf8 (D-cf8-19): três chips de executor, injetados só quando
    UNI_OK — mesma técnica de injeção dinâmica que o resto do arquivo já
    usa (ctInjectToggle), para o markup estático de #os-chips continuar
-   byte a byte o de hoje sem a migração 43. */
+   byte a byte o de hoje sem a migração 43. "Saldo Atas" desce do
+   segmento de contratações morto para a MESMA linha de chips
+   (D-cf8-19) — incondicional, porque o relatório de saldo funciona sem
+   a migração 43 (arp_itens já existe desde a 04/06; só a composição por
+   OS depende de os_composicao_arp, e sem ela o saldo aparece cheio, que
+   é a verdade: nenhuma adesão foi registrada ainda). */
 function osInjectChipsExecutor(){
-  if (!UNI_OK) return;
   var chips = el('os-chips');
-  if (!chips || el('os-chip-interna')) return; // sem o container, ou já injetado
-  OS_EXECUTORES.forEach(function(t){
-    var btn = document.createElement('button');
-    btn.className = 'chip';
-    btn.id = 'os-chip-'+t;
-    btn.textContent = OS_EXECUTOR_ROTULOS[t];
-    btn.onclick = function(){ setOSChip(btn, t); };
-    chips.appendChild(btn);
-  });
+  if (!chips) return;
+  if (UNI_OK && !el('os-chip-interna')) {
+    OS_EXECUTORES.forEach(function(t){
+      var btn = document.createElement('button');
+      btn.className = 'chip';
+      btn.id = 'os-chip-'+t;
+      btn.textContent = OS_EXECUTOR_ROTULOS[t];
+      btn.onclick = function(){ setOSChip(btn, t); };
+      chips.appendChild(btn);
+    });
+  }
+  if (!el('os-chip-saldo')) {
+    var btnSaldo = document.createElement('button');
+    btnSaldo.className = 'chip';
+    btnSaldo.id = 'os-chip-saldo';
+    btnSaldo.textContent = 'Saldo Atas';
+    btnSaldo.onclick = function(){ setOSChip(btnSaldo, 'saldo'); };
+    chips.appendChild(btnSaldo);
+  }
 }
 
 /* Regra dos chips da aba OS, em função pura — o "Todos" é a FILA DE
@@ -1972,8 +2006,11 @@ function osNoChip(chip, entry, ehCritica){
 }
 
 function renderOS(){
+  // D-cf8-19: "Saldo Atas" é um chip de RELATÓRIO, não de filtro — troca a
+  // lista por ctRenderSaldo() (mesmo mecanismo de hoje, só a casa mudou).
+  if (osChip==='saldo') { ctRenderSaldo(); return; }
   var all = getAllOSEntries().filter(function(o){
-    if(osEhMovimentacao(o.entry)) return false; // D-uyz-01: as OS de movimentação vivem no terceiro segmento
+    if(osEhMovimentacao(o.entry)) return false; // D-uyz-01: as OS de movimentação vivem no segmento de Inst./Remoção
     return osNoChip(osChip, o.entry, autoCrit(o.equip)==='CRÍTICA');
   });
 
@@ -2562,15 +2599,25 @@ function openDetail(id){
 ═══════════════════════════════════════════════════════════ */
 /* D-cf8-07: executor é texto por tipo, sem tabela de empresas nem de
    setores — interna → setor + pessoa(s); externa → organização; contrato
-   fica anunciado e desabilitado nesta tarefa (Task 3 habilita). Reescreve
-   SÓ o div dos campos no onchange, nunca o formulário inteiro — trocar de
-   tipo não pode apagar o que já foi digitado no resto da OS. */
+   → empresa + CNPJ + instrumento + processo + NE (D-cf8-23, o número é
+   gerado por osGerarNumeroContrato em saveLogEntry, nunca digitado).
+   Reescreve SÓ o div dos campos no onchange, nunca o formulário inteiro
+   — trocar de tipo não pode apagar o que já foi digitado no resto da OS. */
 function osCamposExecutorHtml(tipo){
   if (tipo==='externa') {
     return '<div class="fg-full"><label class="fgl">Organização</label><input class="fgi" id="log-executor-org" type="text" placeholder="Outra OM, órgão…"/></div>';
   }
   if (tipo==='contrato') {
-    return '<div class="fg-full" style="font-size:11px;color:#888"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>Abertura de OS de contrato ainda não disponível por aqui.</div>';
+    var instrOpts = Object.keys(OS_INSTRUMENTOS).map(function(k){ return '<option value="'+k+'">'+esc(OS_INSTRUMENTOS[k])+'</option>'; }).join('');
+    return '<div class="fg2">' +
+      '<div><label class="fgl">Empresa</label><input class="fgi" id="log-executor-empresa" type="text" placeholder="Razão social"/></div>' +
+      '<div><label class="fgl">CNPJ</label><input class="fgi" id="log-executor-cnpj" type="text" placeholder="00.000.000/0000-00"/></div></div>' +
+      '<div class="fg2" style="margin-top:8px">' +
+      '<div><label class="fgl">Instrumento</label><select class="fgs" id="log-executor-instrumento">'+instrOpts+'</select></div>' +
+      '<div><label class="fgl">Processo</label><input class="fgi" id="log-executor-processo" type="text" placeholder="Nº do processo"/></div></div>' +
+      '<div class="fg2" style="margin-top:8px">' +
+      '<div><label class="fgl">NE</label><select class="fgs" id="log-executor-ne">' +
+      '<option value="2026NE000334">2026NE000334 (RLP)</option><option value="2026NE000335">2026NE000335 (WINS)</option><option value="">—</option></select></div></div>';
   }
   return '<div class="fg2">' +
     '<div><label class="fgl">Setor</label><input class="fgi" id="log-executor-setor" type="text" placeholder="Setor responsável"/></div>' +
@@ -2608,12 +2655,12 @@ function openLogForm(equipId){
     '<div style="font-size:11px;color:#888;margin-top:6px"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>A OS nasce aberta — o gestor autoriza antes da execução e confere depois.</div>' : '';
 
   // 260823-cf8: seletor de executor atrás de UNI_OK — sem a migração 43 o
-  // formulário é byte a byte o de hoje (D-cf8-13/25). Contrato entra
-  // desabilitado nesta tarefa (Task 3 habilita).
+  // formulário é byte a byte o de hoje (D-cf8-13/25). Contrato habilitado
+  // nesta tarefa (Task 3) — os três tipos abrem pela mesma tela agora.
   var blocoExecutor = UNI_OK ?
     '<div class="ds"><div class="ds-title"><i class="fas fa-user-cog mr1" aria-hidden="true"></i>Executor</div>' +
     '<select class="fgs fg-full" id="log-executor" onchange="osOnChangeExecutor()">' +
-    OS_EXECUTORES.map(function(t){ return '<option value="'+t+'"'+(t==='contrato'?' disabled':'')+'>'+esc(OS_EXECUTOR_ROTULOS[t])+'</option>'; }).join('') +
+    OS_EXECUTORES.map(function(t){ return '<option value="'+t+'">'+esc(OS_EXECUTOR_ROTULOS[t])+'</option>'; }).join('') +
     '</select>' +
     '<div id="log-executor-campos" style="margin-top:8px">'+osCamposExecutorHtml('interna')+'</div>' +
     '</div>' : '';
@@ -3004,11 +3051,23 @@ async function saveLogEntry(equipId, clistLen){
     // 260823-cf8: os campos de executor só existem no DOM quando UNI_OK —
     // val() devolve '' para um id inexistente, então ler estes quatro sem
     // guarda de UNI_OK é seguro (extraUni em addLogEntryAsync já gateia).
+    var tipoExec = val('log-executor')||'interna';
     var entryMan = {date:date,tipo:tipo,status:'ABERTA',tecnico:val('log-tec').trim(),desc:val('log-desc').trim(),checklist:checklist,
-      tipoExecutor: val('log-executor')||'interna',
+      tipoExecutor: tipoExec,
       executorSetor: val('log-executor-setor').trim()||null,
       executorPessoas: val('log-executor-pessoas').trim()||null,
       executorOrg: val('log-executor-org').trim()||null};
+    if (tipoExec==='contrato') {
+      // D-cf8-23: número gerado, nunca digitado — mesma regra de sempre
+      // (ctSalvarNova), agora sobre a OS unificada.
+      entryMan.numero = osGerarNumeroContrato();
+      entryMan.empresa = val('log-executor-empresa').trim()||null;
+      entryMan.empresaCnpj = val('log-executor-cnpj').trim()||null;
+      entryMan.instrumento = val('log-executor-instrumento')||null;
+      entryMan.processo = val('log-executor-processo').trim()||null;
+      entryMan.ne = val('log-executor-ne')||null;
+      entryMan.solicitante = ctUser?ctUser.nome:null;
+    }
     var logIdMan = await addLogEntryAsync(equipId, entryMan);
     if (!logIdMan) return;
     showToast('OS aberta com sucesso','ok');
@@ -3563,6 +3622,13 @@ function manAbrirOS(logId){
   // Conferência só existe quando o fluxo do momento TEM a etapa CONFERIDA
   // (fluxo legado, D-cf8-12); interna/externa unificadas (D-cf8-04) não têm.
   var flComConferencia = osEhMovimentacao(entry) || osEtapas(flOS).indexOf('CONFERIDA')>=0;
+  // D-cf8-04: legado E contrato têm a etapa EXECUTADA (o fim da execução
+  // não é o fim da OS neles); só interna/externa unificadas concluem
+  // direto de EM_EXECUCAO. flContrato liga os blocos exclusivos do ciclo
+  // público (Fiscalização, NF/Composição/Certificação) — nunca em OS de
+  // movimentação (essas sempre caem em flComConferencia, D-cf8-29/escopo).
+  var flTemExecutada = osEhMovimentacao(entry) || osEtapas(flOS).indexOf('EXECUTADA')>=0;
+  var flContrato = UNI_OK && !osEhMovimentacao(entry) && osTipoExecutor(entry)==='contrato';
 
   el('dh-id').textContent = 'OS · #'+equipId;
   el('dh-local').textContent = e.local;
@@ -3607,6 +3673,12 @@ function manAbrirOS(logId){
       (entry.executorSetor?'<div class="dfield"><label>Setor</label><div class="dval" style="font-size:13px">'+esc(entry.executorSetor)+'</div></div>':'') +
       (entry.executorPessoas?'<div class="dfield"><label>Pessoa(s)</label><div class="dval" style="font-size:13px">'+esc(entry.executorPessoas)+'</div></div>':'') +
       (entry.executorOrg?'<div class="dfield"><label>Organização</label><div class="dval" style="font-size:13px">'+esc(entry.executorOrg)+'</div></div>':'') +
+      // D-cf8-07: contrato — empresa, CNPJ, instrumento, processo, NE.
+      (entry.empresa?'<div class="dfield"><label>Empresa</label><div class="dval" style="font-size:13px">'+esc(entry.empresa)+'</div></div>':'') +
+      (entry.empresaCnpj?'<div class="dfield"><label>CNPJ</label><div class="dval" style="font-size:13px">'+esc(entry.empresaCnpj)+'</div></div>':'') +
+      (entry.instrumento?'<div class="dfield"><label>Instrumento</label><div class="dval" style="font-size:13px">'+esc(OS_INSTRUMENTOS[entry.instrumento]||entry.instrumento)+'</div></div>':'') +
+      (entry.processo?'<div class="dfield"><label>Processo</label><div class="dval" style="font-size:13px">'+esc(entry.processo)+'</div></div>':'') +
+      (entry.ne?'<div class="dfield"><label>NE</label><div class="dval" style="font-size:13px">'+esc(entry.ne)+'</div></div>':'') +
       '</div>';
   }
 
@@ -3659,7 +3731,7 @@ function manAbrirOS(logId){
         '<label class="fgl" style="margin-top:8px">Fotos</label>' +
         '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" capture="environment" multiple/>' +
         '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="manRegistrarEvidencia(\''+esc(logId)+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar evidência</button></div>';
-      if (flComConferencia) {
+      if (flTemExecutada) {
         if (manTemEvidencia(entry) && manPode('executar') && manPodeIrPara(st,'EXECUTADA',flTipo)) {
           h += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
         }
@@ -3706,6 +3778,31 @@ function manAbrirOS(logId){
       h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
     }
     h += '</div>';
+    } else if (flContrato) {
+      /* 260823-cf8: Fiscalização e NF/Composição/Certificação — só em OS
+         de contrato (D-cf8-06), blocos da gaveta única em vez de uma
+         tela separada. Reusa .orc-item/.ct-total-row/.ct-btn-row
+         (D-cf8-20). */
+      var passoAtual = osPasso(flOS, st);
+      if (passoAtual >= 4) {
+        h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Fiscalização</div>';
+        if (entry.fiscal) {
+          h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovada por '+esc(entry.fiscal)+' em '+fmtDate(entry.dataFiscalizacao)+'</div>' +
+            (entry.parecerFiscal?'<div class="le-desc" style="margin-top:4px">'+esc(entry.parecerFiscal)+'</div>':'');
+        } else if (st==='EXECUTADA' && manPode('fiscalizar') && manPodeIrPara(st,'FISCALIZADA',flTipo)) {
+          h += '<label class="fgl">Parecer do fiscal</label>' +
+            '<textarea class="fgt" id="man-fis-parecer" placeholder="Serviços conferidos conforme orçamento aprovado…"></textarea>' +
+            '<div class="ct-btn-row">' +
+            '<button class="btn-success" onclick="manFiscalizar(\''+esc(logId)+'\',true)"><i class="fas fa-check mr1" aria-hidden="true"></i>Aprovar execução</button>' +
+            '<button class="btn-danger" onclick="manFiscalizar(\''+esc(logId)+'\',false)"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button></div>';
+        } else {
+          h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
+        }
+        h += '</div>';
+      }
+      if (passoAtual >= 5) {
+        h += osComposicaoAtaHtml(logId, entry, st);
+      }
     }
 
     // D-cf8-05/29: itens em toda OS que não seja de movimentação, atrás de
@@ -3725,6 +3822,9 @@ function manAbrirOS(logId){
   el('drawer-body').innerHTML = h;
 
   var foot = '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>';
+  if (flContrato) {
+    foot += '<button class="btn-secondary" onclick="imprimirOS(\''+esc(logId)+'\')" title="Imprimir OS" aria-label="Imprimir OS"><i class="fas fa-print" aria-hidden="true"></i></button>';
+  }
   if (manPode('cancelar') && manPodeIrPara(st,'CANCELADA',flTipo)) {
     foot += '<button class="btn-danger" style="flex:1" onclick="manCancelar(\''+esc(logId)+'\')"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelar OS</button>';
   }
@@ -3980,6 +4080,114 @@ async function osDelItem(osId, itemId){
   return true;
 }
 
+/* ── OS unificada: contrato — fiscalização, composição da ata, certificação ── */
+/* D-cf8-06/22: só existe em tipo_executor='contrato'. manFiscalizar grava
+   via manAtualizarOS (que já registra a trilha de sistema, Task 2) — não
+   existe mais um ctUpd/ctFiscalizar separado. */
+async function manFiscalizar(logId, aprovado){
+  var achado = manEntrada(logId); if(!achado) return;
+  var parecer = (val('man-fis-parecer')||'').trim();
+  var nome = ctUser?ctUser.nome:'';
+  if (aprovado) {
+    if (!manPode('fiscalizar') || !manPodeIrPara(achado.entry.status,'FISCALIZADA',achado.entry.tipoExecutor)) { showToast('Ação não permitida','error'); return; }
+    var ok = await manAtualizarOS(logId, achado.equipId, {status:'FISCALIZADA', fiscal:nome, dataFiscalizacao:today(), parecerFiscal:parecer||null}, 'Execução aprovada pelo fiscal');
+    if (ok) { manAbrirOS(logId); renderOS(); }
+  } else {
+    if (!parecer) { showToast('Informe o motivo no parecer','error'); return; }
+    if (!manPode('fiscalizar') || !manPodeIrPara(achado.entry.status,'EM_EXECUCAO',achado.entry.tipoExecutor)) { showToast('Ação não permitida','error'); return; }
+    var ok2 = await manAtualizarOS(logId, achado.equipId, {status:'EM_EXECUCAO', parecerFiscal:parecer}, 'Devolvida p/ correção');
+    if (ok2) { manAbrirOS(logId); renderOS(); }
+  }
+}
+
+/* D-cf8-17: item_arp integer, sem FK — o mesmo tipo de os_composicao/
+   arp_itens.item (migração 07). Escrita/remoção gateadas por
+   manPode('certificar'), e só em FISCALIZADA — mesma janela de hoje. */
+async function osAddComp(osId){
+  var item = parseInt(val('cp-item'));
+  var qtd = parseFloat(val('cp-qtd'))||0;
+  if (!manPode('certificar')) { showToast('Sem permissão para compor a ata','error'); return; }
+  if (!item || qtd<=0) { showToast('Selecione item e quantidade','error'); return; }
+  var it = ctArp.find(function(a){return a.item===item;});
+  if (!it) { showToast('Item inválido','error'); return; }
+  var saldo = ctSaldoItem(it);
+  if (qtd>saldo) { showToast('Excede o saldo do item ('+saldo+')','error'); return; }
+  var dispNE = ctSaldoNE(it.ne);
+  if (qtd*Number(it.valor_unit) > dispNE + 0.005) { showToast('Excede o teto da NE — disponível '+fmtMoney(dispNE),'error'); return; }
+  var r = await supa.from('os_composicao_arp').insert({os_id:osId, item_arp:item, qtd:qtd}).select().single();
+  if (r.error) { showToast('Erro ao adicionar','error'); return; }
+  (ctComp[osId]=ctComp[osId]||[]).push(r.data);
+  manAbrirOS(osId);
+}
+async function osDelComp(osId, compId){
+  if (!manPode('certificar')) { showToast('Sem permissão para compor a ata','error'); return; }
+  var r = await supa.from('os_composicao_arp').delete().eq('id', compId);
+  if (r.error) { showToast('Erro ao remover','error'); return; }
+  ctComp[osId] = (ctComp[osId]||[]).filter(function(c){return c.id!==compId;});
+  manAbrirOS(osId);
+}
+
+/* Certificação — encerra a OS de contrato. Nenhuma linha nova em
+   logs_manutencao: a OS já É a linha do histórico (D-cf8-16) — o espelho
+   de ctEncerrarHistorico desaparece por construção. */
+async function manCertificar(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  var nf = (val('cf-nf')||'').trim();
+  if (!nf) { showToast('Informe o nº da NF','error'); return; }
+  var comps = ctComp[logId]||[];
+  if (!comps.length) { showToast('Adicione a composição de itens da ata','error'); return; }
+  if (!manPode('certificar') || !manPodeIrPara(achado.entry.status,'ENCERRADA',achado.entry.tipoExecutor)) { showToast('Ação não permitida','error'); return; }
+  var nome = ctUser?ctUser.nome:'';
+  var dataNf = val('cf-datanf')||today();
+  var ok = await manAtualizarOS(logId, achado.equipId, {status:'ENCERRADA', nf:nf, dataNf:dataNf, certificador:nome, dataCertificacao:today()}, 'OS certificada e encerrada');
+  if (ok) {
+    await atualizarUltimaManutencao(achado.equipId, dataNf); // D-l7n-11: a data da NF, marco de conclusão do contrato
+    manAbrirOS(logId); renderOS();
+  }
+}
+
+/* Bloco 5 · NF / Composição da Ata / Certificação — condicionado a
+   passoAtual>=5 pelo chamador (manAbrirOS). */
+function osComposicaoAtaHtml(osId, entry, st){
+  var comps = ctComp[osId]||[];
+  var totalItens = osTotalItens(OS_ITENS[osId]||[]);
+  var compTotal = ctCompTotal(osId);
+  var h = '<div class="ds"><div class="ds-title"><i class="fas fa-file-invoice mr1" aria-hidden="true"></i>5 · NF · Composição da Ata · Certificação</div>';
+  if (comps.length) {
+    h += comps.map(function(c){
+      var it = ctArp.find(function(a){return a.item===c.item_arp;})||{descricao:'',valor_unit:0};
+      return '<div class="orc-item"><span class="orc-tipo SERVICO">ATA</span>' +
+        '<div class="orc-desc">Item '+c.item_arp+' — '+esc(it.descricao)+'<div style="color:#999;font-size:10px">'+c.qtd+' × '+fmtMoney(it.valor_unit)+'</div></div>' +
+        '<span class="orc-val">'+fmtMoney(c.qtd*it.valor_unit)+'</span>' +
+        (st==='FISCALIZADA' && manPode('certificar')?'<button class="orc-del" title="Excluir item" aria-label="Excluir item" onclick="osDelComp(\''+esc(osId)+'\',\''+esc(c.id)+'\')"><i class="fas fa-trash" aria-hidden="true"></i></button>':'') +
+        '</div>';
+    }).join('');
+    var dif = totalItens - compTotal;
+    h += '<div class="ct-total-row"><span>COMPOSTO (ATA)</span><span>'+fmtMoney(compTotal)+'</span></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:'+(Math.abs(dif)<1?'#168821':'#E52207')+';margin-top:2px">' +
+      '<span>Diferença vs orçado</span><span>'+fmtMoney(dif)+'</span></div>';
+  }
+  if (st==='FISCALIZADA' && manPode('certificar')) {
+    var arpOpts = ctArp.map(function(it){
+      var saldo = ctSaldoItem(it);
+      return '<option value="'+it.item+'" '+(saldo<=0?'disabled':'')+'>'+it.item+' · '+(it.ne==='2026NE000335'?'WINS':'RLP')+' · '+fmtMoney(it.valor_unit)+' · saldo '+saldo+'</option>';
+    }).join('');
+    h += '<div style="margin-top:8px;border-top:1px dashed #DDD;padding-top:10px">' +
+      '<label class="fgl">Item da ata</label><select class="fgs" id="cp-item">'+arpOpts+'</select>' +
+      '<div class="fg2" style="margin-top:8px"><div><label class="fgl">Qtd</label><input class="fgi" id="cp-qtd" type="number" value="1" min="1" step="1"/></div>' +
+      '<div style="display:flex;align-items:flex-end"><button class="btn-secondary" style="width:100%" onclick="osAddComp(\''+esc(osId)+'\')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Adicionar</button></div></div>' +
+      '<div class="fg2" style="margin-top:10px">' +
+      '<div><label class="fgl">Nota Fiscal</label><input class="fgi" id="cf-nf" value="'+esc(entry.nf||'')+'" placeholder="NF nº"/></div>' +
+      '<div><label class="fgl">Data NF</label><input class="fgi" id="cf-datanf" type="date" value="'+(entry.dataNf||today())+'"/></div></div>' +
+      '<button class="btn-success" style="width:100%;margin-top:10px" onclick="manCertificar(\''+esc(osId)+'\')"><i class="fas fa-stamp mr1" aria-hidden="true"></i>Certificar e encerrar OS</button></div>';
+  }
+  if (st==='ENCERRADA') {
+    h += '<div style="margin-top:8px;font-size:12px;color:#168821"><i class="fas fa-stamp mr1" aria-hidden="true"></i>NF '+esc(entry.nf||'—')+' ('+fmtDate(entry.dataNf)+') certificada por '+esc(entry.certificador||'—')+' em '+fmtDate(entry.dataCertificacao)+'</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
 /* ── OS unificada: registro (comentário do usuário + trilha de sistema) ── */
 /* D-cf8-08/15: reusa .exec-reg (D-cf8-20) — linhas de sistema mais claras,
    sem borda de destaque, para a leitura distinguir o que uma pessoa
@@ -4136,9 +4344,10 @@ ALVO_FICHA = lerAlvoFicha(location.search);
 /* ── sessão e modo observador: leitura única, porta única ── */
 /* D-48m-01: as ocorrências de window._modoObservador ficam confinadas a
    esta seção (escrita em entrarModoObservador/sairModoObservador, leitura
-   em somenteLeitura()). Os nove pontos espalhados pelo arquivo
+   em somenteLeitura()). Os pontos espalhados pelo arquivo
    (podeEditarCadastro, podeDarBaixa, manPode, salvarEquip, salvarEquipNovo,
-   saveLogEntry, salvarMovOS, ctCan e o `var ro` de ctOpenOS) passam a
+   saveLogEntry, salvarMovOS, osAdicionarComentario e outros — 260823-cf8:
+   ctCan/ctOpenOS saíram junto com o segundo aplicativo, D-cf8-22) passam a
    chamar somenteLeitura() — nenhum deles volta a tocar a flag direto.
    tests/refrigeracao-modo-observador.test.js falha se um décimo ponto de
    leitura direta aparecer fora daqui. */
@@ -4205,6 +4414,8 @@ async function acessoLivre() {
     osInjectChipsExecutor();
     await carregarItensOS();
     await carregarComentarios();
+    await carregarArp();
+    await carregarComposicaoArp();
     // Remove tela de login
     var lw = document.getElementById('login-mobile');
     if (lw) lw.remove();
@@ -4240,6 +4451,8 @@ async function initAppOnce(){
   osInjectChipsExecutor();
   await carregarItensOS();
   await carregarComentarios();
+  await carregarArp();
+  await carregarComposicaoArp();
   await carregarPerfil();
   setupRealtime();
   renderDash();
@@ -4318,80 +4531,75 @@ setInterval(async function(){
 </style>
 <script>
 /* ══ ESTADO ══ */
-var ctMode = 'pmoc';           // 'pmoc' | 'contrat'
-var ctChipSel = 'todas';
-var ctOS = [];                 // os_contratacao
-var ctOrc = {};                // os_id -> itens orçamento
-var ctExec = {};               // os_id -> registros execução
-var ctComp = {};               // os_id -> composição ata
-var ctEvt = {};                // os_id -> eventos de auditoria
+/* 260823-cf8 (D-cf8-22): o segundo aplicativo saiu — ctMode continua
+   distinguindo pmoc (a OS unificada) de movim (Instalação/Remoção,
+   D-uyz-01), agora só dois segmentos (D-cf8-19/30). ctOS/ctComp/ctArp
+   continuam de propósito: ctConsumo/ctSaldoItem/ctConsumoNE/ctSaldoNE/
+   ctCompTotal ficam byte a byte como estavam (comentário do Task 3 do
+   plano) — só muda de onde são alimentados (carregarComposicaoArp/
+   carregarArp, abaixo, em vez do antigo ctLoad). */
+var ctMode = 'pmoc';           // 'pmoc' | 'movim'
+var ctOS = [];                 // getAllOSEntries().map(o => o.entry) — refrescado por carregarComposicaoArp()
+var ctComp = {};               // os_id -> composição da ata (os_composicao_arp, linha crua do banco)
 var ctArp = [];                // arp_itens
 var ctUser = null;             // linha de usuarios do logado
-var ctLoaded = false;
-
-var CT_STATUS = {
-  'SOLICITADA':   {label:'Aguard. orçamento', bg:'#FEF3E2', fg:'#B46800', step:0},
-  'ORCAMENTO':    {label:'Orçamento p/ aprovação', bg:'#E3F2FD', fg:'#1565C0', step:1},
-  'APROVADA':     {label:'Aprovada p/ execução', bg:'#E8ECF5', fg:'#1351B4', step:2},
-  'EM_EXECUCAO':  {label:'Em execução', bg:'#FFF3E0', fg:'#E65100', step:3},
-  'EXECUTADA':    {label:'Aguard. fiscal', bg:'#F3E5F5', fg:'#7B1FA2', step:4},
-  'FISCALIZADA':  {label:'Aguard. NF/certificação', bg:'#E0F2F1', fg:'#00695C', step:5},
-  'ENCERRADA':    {label:'Encerrada', bg:'#E6F4EA', fg:'#168821', step:6},
-  'CANCELADA':    {label:'Cancelada', bg:'#F5F5F5', fg:'#999', step:-1}
-};
-var CT_STEPS = ['Solicit.','Orçam.','Aprov.','Execução','Fiscal','NF','Encerr.'];
 
 function fmtMoney(v){ return 'R$ '+(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function ctStatusPill(s){ var c=CT_STATUS[s]||CT_STATUS['SOLICITADA']; return '<span class="ct-status" style="background:'+c.bg+';color:'+c.fg+'">'+c.label+'</span>'; }
+/* ctEvtTexto fica — pequena, pura, sem chamada de banco, sem consumidor
+   depois de os_eventos ficar dormente (D-cf8-16); não custa manter. */
 function ctEvtTexto(ev){ return ev && ev.detalhe ? String(ev.detalhe) : ''; }
 function ctEquip(id){ return DATA.find(function(r){return r.id===id;}) || {local:(id?'#'+id:'Sem equipamento'),predio:'',tipo:'',funciona:'',criticidade:''}; }
 
-/* ══ PERMISSÕES ══ */
-function ctCan(acao){
-  if (somenteLeitura()) return false;
-  var r = ctUser ? ctUser.role : 'admin';
-  var m = {
-    criar:      ['admin','gestor','tecnico'],
-    orcar:      ['admin','gestor','tecnico','empresa'],
-    aprovar:    ['admin','gestor'],
-    executar:   ['admin','gestor','tecnico','empresa','executor'],
-    fiscalizar: ['admin','fiscal','gestor'],
-    certificar: ['admin','gestor'],
-    cancelar:   ['admin','gestor']
-  };
-  return (m[acao]||[]).indexOf(r) >= 0;
-}
-
 /* ══ CARGA DE DADOS ══ */
-async function ctLoad(){
+/* D-cf8-27: fora do Promise.all principal, mesmo padrão de
+   carregarItensOS()/carregarComentarios(). arp_itens não depende da
+   migração 43 (existe desde a 04/06) — carregarArp() roda sempre.
+   carregarComposicaoArp() é quem depende, e refresca ctOS a partir da
+   OS unificada (getAllOSEntries()) para ctConsumo/ctConsumoNE
+   continuarem achando o status pelo mesmo formato de sempre. */
+async function carregarArp(){
   try{
-    var r1 = await supa.from('os_contratacao').select('*').order('criado_em',{ascending:false});
-    if(r1.error) throw r1.error;
-    ctOS = r1.data||[];
-    var r2 = await supa.from('os_orcamento_itens').select('*').order('ordem');
-    ctOrc = {}; (r2.data||[]).forEach(function(i){ (ctOrc[i.os_id]=ctOrc[i.os_id]||[]).push(i); });
-    var r3 = await supa.from('os_execucao').select('*').order('data');
-    ctExec = {}; (r3.data||[]).forEach(function(i){ (ctExec[i.os_id]=ctExec[i.os_id]||[]).push(i); });
-    var r4 = await supa.from('os_composicao').select('*');
-    ctComp = {}; (r4.data||[]).forEach(function(i){ (ctComp[i.os_id]=ctComp[i.os_id]||[]).push(i); });
-    var r4b = await supa.from('os_eventos').select('*').order('criado_em');
-    ctEvt = {}; ((r4b&&r4b.data)||[]).forEach(function(i){ (ctEvt[i.os_id]=ctEvt[i.os_id]||[]).push(i); });
-    var r5 = await supa.from('arp_itens').select('*').order('item');
-    ctArp = r5.data||[];
-    if(!ctUser) await carregarPerfil();
-    ctLoaded = true;
-    return true;
-  }catch(e){ console.error('ctLoad',e); showToast('Erro ao carregar contratações','error'); return false; }
+    var r = await supa.from('arp_itens').select('*').order('item');
+    if (r.error) throw r.error;
+    ctArp = r.data||[];
+  }catch(e){ console.warn('carregarArp', e); }
 }
 
-async function ctEnsureLoaded(){ if(!ctLoaded) await ctLoad(); }
+async function carregarComposicaoArp(){
+  if (!UNI_OK) { ctComp = {}; return; }
+  try{
+    var r = await supa.from('os_composicao_arp').select('*');
+    if (r.error) throw r.error;
+    var mapa = {};
+    (r.data||[]).forEach(function(i){ (mapa[i.os_id]=mapa[i.os_id]||[]).push(i); });
+    ctComp = mapa;
+    ctOS = getAllOSEntries().map(function(o){ return o.entry; });
+  }catch(e){ console.warn('carregarComposicaoArp', e); }
+}
 
-function ctSetupRealtime(){
-  supa.channel('ct-contratacao')
-    .on('postgres_changes',{event:'*',schema:'public',table:'os_contratacao'},function(){ ctLoad().then(function(){ if(ctMode==='contrat') ctRenderList(); }); })
-    .on('postgres_changes',{event:'*',schema:'public',table:'os_orcamento_itens'},function(){ ctLoad(); })
-    .on('postgres_changes',{event:'*',schema:'public',table:'os_execucao'},function(){ ctLoad(); })
-    .subscribe();
+/* Comprime uma foto no navegador antes do upload (teto 1280px, JPEG 0.8) —
+   usada por manRegistrarEvidencia (D-cf8-22: vivia no bloco da
+   contratação, que também comprimia fotos; ficou fora do recorte de
+   "fluxo da OS interna: tela e ações" de propósito — tests/refrigeracao-
+   fluxo-os-interna.test.js substitui esta função por um mock e não pode
+   ver a implementação real, que usa Image/canvas/URL, indisponíveis em
+   node:vm). */
+function ctCompressFoto(file){
+  return new Promise(function(res, rej){
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function(){
+      var max = 1280;
+      var w = img.width, hh = img.height;
+      if(w>max||hh>max){ var k=Math.min(max/w,max/hh); w=Math.round(w*k); hh=Math.round(hh*k); }
+      var cv = document.createElement('canvas'); cv.width=w; cv.height=hh;
+      cv.getContext('2d').drawImage(img,0,0,w,hh);
+      URL.revokeObjectURL(url);
+      cv.toBlob(function(b){ b?res(b):rej(new Error('blob')); },'image/jpeg',0.8);
+    };
+    img.onerror = rej;
+    img.src = url;
+  });
 }
 
 /* ══ SALDO DAS ATAS ══ */
@@ -4434,30 +4642,25 @@ function ctSaldoNE(ne){
    só entra quando MAN_FLUXO_OK && MOV_OK (D-uyz-24). Sem as duas flags a
    função faz EXATAMENTE o que fazia antes: dois botões, sem a classe
    `tres`. */
+/* 260823-cf8 (D-cf8-19/21/22/30): dois segmentos — OS | Inst./Remoção
+   (o segmento de Contratações saiu junto com o segundo aplicativo).
+   Ids seg-pmoc/seg-movim intocados (D-cf8-30); só o rótulo do primeiro
+   muda para "OS". A classe `tres` fica na folha sem consumidor
+   (D-cf8-21) — nunca mais aplicada, porque só existem dois segmentos
+   possíveis agora. Inst./Remoção continua exigindo MAN_FLUXO_OK &&
+   MOV_OK (D-uyz-24), sem mudança na condição. */
 function ctInjectToggle(){
   if(el('ct-toggle')) return;
   var page = el('page-os'); if(!page) return;
-  var tresSegmentos = MAN_FLUXO_OK && MOV_OK;
+  var comMovim = MAN_FLUXO_OK && MOV_OK;
   var div = document.createElement('div');
   div.id = 'ct-toggle';
-  div.className = 'seg-toggle' + (tresSegmentos ? ' tres' : '');
+  div.className = 'seg-toggle';
   div.innerHTML =
-    '<button class="seg-btn active" id="seg-pmoc" onclick="ctSetMode(\'pmoc\')" title="Manutenção" aria-label="Manutenção"><i class="fas fa-tools mr1" aria-hidden="true"></i>Manutenção</button>' +
-    '<button class="seg-btn" id="seg-contrat" onclick="ctSetMode(\'contrat\')" title="Contratações" aria-label="Contratações"><i class="fas fa-file-signature mr1" aria-hidden="true"></i>Contratações</button>' +
-    (tresSegmentos ? '<button class="seg-btn" id="seg-movim" onclick="ctSetMode(\'movim\')" title="Instalação e Remoção" aria-label="Instalação e Remoção"><i class="fas fa-truck-loading mr1" aria-hidden="true"></i>Inst./Remoção</button>' : '');
+    '<button class="seg-btn active" id="seg-pmoc" onclick="ctSetMode(\'pmoc\')" title="OS" aria-label="OS"><i class="fas fa-tools mr1" aria-hidden="true"></i>OS</button>' +
+    (comMovim ? '<button class="seg-btn" id="seg-movim" onclick="ctSetMode(\'movim\')" title="Instalação e Remoção" aria-label="Instalação e Remoção"><i class="fas fa-truck-loading mr1" aria-hidden="true"></i>Inst./Remoção</button>' : '');
   page.insertBefore(div, page.firstChild);
-  var chips = document.createElement('div');
-  chips.id = 'ct-chips';
-  chips.className = 'chips';
-  chips.style.display = 'none';
-  chips.innerHTML =
-    '<button class="chip active" onclick="ctSetChip(this,\'todas\')">Todas</button>' +
-    '<button class="chip" onclick="ctSetChip(this,\'andamento\')">Em andamento</button>' +
-    '<button class="chip" onclick="ctSetChip(this,\'aprovacao\')">P/ aprovar</button>' +
-    '<button class="chip" onclick="ctSetChip(this,\'encerradas\')">Encerradas</button>' +
-    '<button class="chip" onclick="ctSetChip(this,\'saldo\')">Saldo Atas</button>';
-  page.insertBefore(chips, el('os-chips'));
-  if (tresSegmentos) {
+  if (comMovim) {
     var movChips = document.createElement('div');
     movChips.id = 'movim-chips';
     movChips.className = 'chips';
@@ -4474,17 +4677,14 @@ function ctInjectToggle(){
 
 async function ctSetMode(m){
   ctMode = m;
-  var sp=el('seg-pmoc'), sc=el('seg-contrat'), sm=el('seg-movim');
+  var sp=el('seg-pmoc'), sm=el('seg-movim');
   if(sp) sp.className = 'seg-btn'+(m==='pmoc'?' active':'');
-  if(sc) sc.className = 'seg-btn'+(m==='contrat'?' active':'');
   if(sm) sm.className = 'seg-btn'+(m==='movim'?' active':'');
   el('os-chips').style.display = m==='pmoc'?'flex':'none';
-  el('ct-chips').style.display = m==='contrat'?'flex':'none';
   var mc = el('movim-chips'); if(mc) mc.style.display = m==='movim'?'flex':'none';
   var title = document.querySelector('#page-os .sec-title');
-  if(title) title.textContent = m==='contrat' ? 'Contratações (ARP)' : (m==='movim' ? 'Instalação e Remoção' : 'Ordens de Serviço');
-  if(m==='contrat'){ await ctEnsureLoaded(); ctRenderList(); }
-  else if(m==='movim'){ if(!LOCAIS_CARREGADOS) await carregarLocais(); renderMovim(); }
+  if(title) title.textContent = m==='movim' ? 'Instalação e Remoção' : 'Ordens de Serviço';
+  if(m==='movim'){ if(!LOCAIS_CARREGADOS) await carregarLocais(); renderMovim(); }
   else renderOS();
 }
 
@@ -4496,47 +4696,8 @@ function ctSetMovChip(btn, v){
 }
 var movChipSel = 'todas';
 
-function ctSetChip(btn, v){
-  document.querySelectorAll('#ct-chips .chip').forEach(function(c){ c.classList.remove('active'); });
-  btn.classList.add('active');
-  ctChipSel = v;
-  ctRenderList();
-}
-
-function ctRenderList(){
-  if(ctChipSel==='saldo'){ ctRenderSaldo(); return; }
-  var list = ctOS.filter(function(o){
-    if(ctChipSel==='andamento') return ['SOLICITADA','ORCAMENTO','APROVADA','EM_EXECUCAO','EXECUTADA','FISCALIZADA'].indexOf(o.status)>=0;
-    if(ctChipSel==='aprovacao') return o.status==='ORCAMENTO' || o.status==='EXECUTADA';
-    if(ctChipSel==='encerradas') return o.status==='ENCERRADA' || o.status==='CANCELADA';
-    return true;
-  });
-  el('os-cnt').textContent = list.length;
-  if(!list.length){
-    el('os-list').innerHTML = '<div class="empty"><i class="fas fa-file-signature" aria-hidden="true"></i>' +
-      '<p>Nenhuma contratação neste filtro.<br>Toque <strong>+</strong> para abrir uma solicitação.</p></div>';
-    return;
-  }
-  if(TELA_LARGA){ el('os-list').innerHTML = tabDesenhar('contrat', COLS_CONTRAT, list, 'ctOpenOS'); return; }
-  el('os-list').innerHTML = list.map(function(o){
-    var e = ctEquip(o.equip_id);
-    var st = CT_STATUS[o.status]||CT_STATUS['SOLICITADA'];
-    var total = ctOrcTotal(o.id);
-    return '<div class="ct-card" style="border-left-color:'+st.fg+'" onclick="ctOpenOS(\''+o.id+'\')">' +
-      '<div class="os-hdr"><div><div class="ct-num">'+esc(o.numero)+'</div>' +
-      '<div class="os-local">'+esc(e.local)+'</div>' +
-      '<div class="os-predio">'+esc(e.predio)+(o.empresa?' · '+esc(o.empresa):'')+'</div></div>' +
-      ctStatusPill(o.status)+'</div>' +
-      '<div class="os-meta">' +
-      '<span style="font-size:11px;color:#888"><i class="fas fa-calendar mr1" aria-hidden="true"></i>'+fmtDate(o.data_solicitacao)+'</span>' +
-      (total>0?'<span style="font-size:12px;font-weight:800;color:#1351B4">'+fmtMoney(o.valor_orcado||total)+'</span>':'') +
-      (o.ne?'<span class="pill pill-tipo">'+esc(o.ne)+'</span>':'') +
-      '</div>' +
-      (o.problema?'<div class="os-desc">'+esc(o.problema)+'</div>':'') +
-      '</div>';
-  }).join('');
-}
-
+/* ══ SALDO DAS ATAS ══ (D-cf8-19: relatório por trás do chip "Saldo Atas"
+   em #os-chips, byte a byte como estava — só mudou de onde é chamado). */
 function ctRenderSaldo(){
   el('os-cnt').textContent = ctArp.length;
   var html = '<div class="kpi-row">' +
@@ -4564,70 +4725,7 @@ function ctRenderSaldo(){
   el('os-list').innerHTML = html;
 }
 
-/* ══ NOVA SOLICITAÇÃO ══ */
-function ctNovaOS(){
-  if(!ctCan('criar')){ showToast('Sem permissão para criar solicitação',''); return; }
-  el('dh-id').textContent = 'Nova Contratação';
-  el('dh-local').textContent = 'Solicitação de serviço';
-  el('dh-predio').textContent = 'Selecione a máquina e descreva o problema';
-  el('dh-pills').innerHTML = '';
-  // D-uyz-10: não se abre contratação para máquina que não está instalada.
-  var opts = equipamentosOperacionais(DATA).slice().sort(function(a,b){ return (equipInoperante(a)?0:1)-(equipInoperante(b)?0:1); })
-    .map(function(e){ return '<option value="'+e.id+'">'+(equipInoperante(e)?'⛔ ':'')+'#'+e.id+' — '+esc(e.predio)+' / '+esc(e.local)+' ('+esc(e.tipo)+')</option>'; }).join('');
-  el('drawer-body').innerHTML =
-    '<div class="ds"><div class="ds-title"><i class="fas fa-snowflake mr1" aria-hidden="true"></i>Máquina</div>' +
-    '<select class="fgs" id="ct-equip-sel">'+opts+'</select>' +
-    '<div style="font-size:10px;color:#999;margin-top:6px">⛔ = inoperantes aparecem primeiro</div></div>' +
-    '<div class="ds"><div class="ds-title"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i>Problema / Serviço Necessário</div>' +
-    '<textarea class="fgt" id="ct-problema" placeholder="Descreva o defeito ou serviço a contratar…"></textarea>' +
-    '<div class="fg2" style="margin-top:8px">' +
-    '<div><label class="fgl">Empresa</label><select class="fgs" id="ct-empresa" onchange="ctSyncNE()">' +
-    '<option value="RLP">RLP</option><option value="WINS">WINS</option><option value="">A definir</option></select></div>' +
-    '<div><label class="fgl">NE</label><select class="fgs" id="ct-ne">' +
-    '<option value="2026NE000334">2026NE000334 (RLP)</option><option value="2026NE000335">2026NE000335 (WINS)</option><option value="">—</option></select></div>' +
-    '</div></div>';
-  el('drawer-footer').innerHTML =
-    '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
-    '<button class="btn-primary" onclick="ctSalvarNova()"><i class="fas fa-paper-plane mr1" aria-hidden="true"></i>Abrir Solicitação</button>';
-  openDrawer();
-}
-
-function ctSyncNE(){
-  var emp = val('ct-empresa');
-  var ne = el('ct-ne');
-  if(!ne) return;
-  if(emp==='RLP') ne.value='2026NE000334';
-  else if(emp==='WINS') ne.value='2026NE000335';
-}
-
-async function ctSalvarNova(){
-  var equipId = parseInt(val('ct-equip-sel'));
-  var problema = val('ct-problema').trim();
-  if(!equipId || !problema){ showToast('Selecione a máquina e descreva o problema','error'); return; }
-  var ano = new Date().getFullYear();
-  var seq = ctOS.filter(function(o){ return (o.numero||'').indexOf('/'+ano)>=0; }).length + 1;
-  var numero = 'OSC '+String(seq).padStart(3,'0')+'/'+ano;
-  var nome = ctUser ? ctUser.nome : '';
-  var ins = await supa.from('os_contratacao').insert({
-    numero:numero, equip_id:equipId, status:'SOLICITADA', problema:problema,
-    empresa:val('ct-empresa')||null, ne:val('ct-ne')||null,
-    solicitante:nome, data_solicitacao:today()
-  }).select().single();
-  if(ins.error){
-    if((ins.error.message||'').indexOf('duplicate')>=0){ showToast('Nº já existe — tente de novo','error'); }
-    else showToast('Erro ao criar solicitação','error');
-    return;
-  }
-  ctOS.unshift(ins.data);
-  showToast(numero+' criada','ok');
-  closeDrawer();
-  ctRenderList();
-}
-
 /* ══ DETALHE DA OS ══ */
-function ctOrcTotal(osId){
-  return (ctOrc[osId]||[]).reduce(function(s,i){ return s + (Number(i.qtd)||0)*(Number(i.valor_unit)||0); },0);
-}
 function ctCompTotal(osId){
   return (ctComp[osId]||[]).reduce(function(s,c){
     var it = ctArp.find(function(a){return a.item===c.item_arp;});
@@ -4635,432 +4733,56 @@ function ctCompTotal(osId){
   },0);
 }
 
-/* D-l7n-10: régua com dois consumidores — casca que injeta CT_STATUS/CT_STEPS
-   sobre reguaPassos (bloco de vocabulário do fluxo interno). CT_STATUS não é
-   tocada. */
-function ctTimeline(status){
-  return reguaPassos((CT_STATUS[status]||{}).step, CT_STEPS);
-}
-
-function ctOpenOS(osId){
-  var o = ctOS.find(function(x){return x.id===osId;}); if(!o) return;
-  var e = ctEquip(o.equip_id);
-  var itens = ctOrc[osId]||[];
-  var regs = ctExec[osId]||[];
-  var comps = ctComp[osId]||[];
-  var total = ctOrcTotal(osId);
-  var ro = somenteLeitura();
-
-  el('dh-id').textContent = o.numero+' · '+(o.ne||'sem NE');
-  el('dh-local').textContent = e.local;
-  el('dh-predio').textContent = e.predio+(o.empresa?' · '+o.empresa:'');
-  el('dh-pills').innerHTML = ctStatusPill(o.status);
-
-  var h = ctTimeline(o.status);
-
-  /* — Solicitação — */
-  h += '<div class="ds"><div class="ds-title"><i class="fas fa-exclamation-circle mr1" aria-hidden="true"></i>1 · Solicitação</div>' +
-    '<div class="dfield"><label>Problema / serviço</label><div class="dval" style="font-size:13px">'+esc(o.problema||'—')+'</div></div>' +
-    '<div class="dfields2">' +
-    '<div class="dfield"><label>Solicitante</label><div class="dval" style="font-size:12px">'+esc(o.solicitante||'—')+'</div></div>' +
-    '<div class="dfield"><label>Data</label><div class="dval" style="font-size:12px">'+fmtDate(o.data_solicitacao)+'</div></div>' +
-    '</div></div>';
-
-  /* — Orçamento — */
-  var podeOrcar = !ro && ctCan('orcar') && (o.status==='SOLICITADA'||o.status==='ORCAMENTO');
-  h += '<div class="ds"><div class="ds-title"><i class="fas fa-file-invoice-dollar mr1" aria-hidden="true"></i>2 · Delineamento / Orçamento</div>';
-  if(itens.length){
-    h += itens.map(function(i){
-      return '<div class="orc-item"><span class="orc-tipo '+i.tipo+'">'+(i.tipo==='SERVICO'?'SERV':'MAT')+'</span>' +
-        '<div class="orc-desc">'+esc(i.descricao)+'<div style="color:#999;font-size:10px">'+i.qtd+' × '+fmtMoney(i.valor_unit)+'</div></div>' +
-        '<span class="orc-val">'+fmtMoney(i.qtd*i.valor_unit)+'</span>' +
-        (podeOrcar?'<button class="orc-del" title="Excluir item" aria-label="Excluir item" onclick="ctDelOrcItem(\''+osId+'\',\''+i.id+'\')"><i class="fas fa-trash" aria-hidden="true"></i></button>':'') +
-        '</div>';
-    }).join('');
-    h += '<div class="ct-total-row"><span>TOTAL ORÇADO</span><span style="color:#1351B4">'+fmtMoney(total)+'</span></div>';
-  } else {
-    h += '<div style="font-size:12px;color:#999">Nenhum item lançado ainda.</div>';
-  }
-  if(podeOrcar){
-    h += '<div style="margin-top:10px;border-top:1px dashed #DDD;padding-top:10px">' +
-      '<div class="fg2"><div><label class="fgl">Tipo</label><select class="fgs" id="oi-tipo"><option value="SERVICO">Serviço</option><option value="MATERIAL">Material/Peça</option></select></div>' +
-      '<div><label class="fgl">Qtd</label><input class="fgi" id="oi-qtd" type="number" value="1" min="0.01" step="0.01"/></div></div>' +
-      '<label class="fgl">Descrição</label><input class="fgi" id="oi-desc" placeholder="Ex.: Substituição do compressor 36.000 BTU"/>' +
-      '<label class="fgl" style="margin-top:8px">Valor unitário (R$)</label><input class="fgi" id="oi-vu" type="number" min="0" step="0.01" placeholder="0,00"/>' +
-      '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="ctAddOrcItem(\''+osId+'\')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Adicionar item</button></div>';
-  }
-  if(o.status==='ORCAMENTO' && o.parecer_aprovacao){
-    h += '<div style="margin-top:8px;font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida: '+esc(o.parecer_aprovacao)+'</div>';
-  }
-  if(o.aprovador){
-    h += '<div style="margin-top:8px;font-size:11px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovado por '+esc(o.aprovador)+' em '+fmtDate(o.data_aprovacao)+'</div>';
-  }
-  /* botões do orçamento */
-  h += '<div class="ct-btn-row">';
-  if(!ro && o.status==='SOLICITADA' && itens.length && ctCan('orcar'))
-    h += '<button class="btn-primary" onclick="ctMudarStatus(\''+osId+'\',\'ORCAMENTO\')"><i class="fas fa-paper-plane mr1" aria-hidden="true"></i>Enviar p/ aprovação</button>';
-  if(!ro && o.status==='ORCAMENTO' && ctCan('aprovar')){
-    h += '<button class="btn-success" onclick="ctAprovar(\''+osId+'\')"><i class="fas fa-check mr1" aria-hidden="true"></i>Aprovar orçamento</button>';
-    h += '<button class="btn-danger" onclick="ctDevolver(\''+osId+'\')"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button>';
-  }
-  h += '</div></div>';
-
-  /* — Execução — */
-  var stepExec = (CT_STATUS[o.status]||CT_STATUS['SOLICITADA']).step;
-  if(stepExec>=2 && o.status!=='CANCELADA'){
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-hard-hat mr1" aria-hidden="true"></i>3 · Execução ('+regs.length+' registro'+(regs.length===1?'':'s')+')</div>';
-    regs.forEach(function(r){
-      var med = r.medicoes||{};
-      var medTxt = [];
-      if(med.temp_insuflamento) medTxt.push('Insufl.: '+med.temp_insuflamento+'°C');
-      if(med.temp_retorno) medTxt.push('Retorno: '+med.temp_retorno+'°C');
-      if(med.corrente) medTxt.push('Corrente: '+med.corrente+'A');
-      if(med.pressao) medTxt.push('Pressão: '+med.pressao+' psi');
-      var fotos = (r.fotos||[]).map(function(p){
-        var u = supa.storage.from('os-fotos').getPublicUrl(p).data.publicUrl;
-        return '<a href="'+u+'" target="_blank"><img src="'+u+'" loading="lazy"/></a>';
-      }).join('');
-      h += '<div class="exec-reg"><div class="le-hdr"><span class="le-date">'+fmtDate(r.data)+'</span>' +
-        (r.executor?'<span class="le-tec"><i class="fas fa-user mr1" aria-hidden="true"></i>'+esc(r.executor)+'</span>':'')+'</div>' +
-        (r.descricao?'<div class="le-desc">'+esc(r.descricao)+'</div>':'') +
-        (medTxt.length?'<div class="le-chk"><i class="fas fa-thermometer-half mr1" aria-hidden="true"></i>'+medTxt.join(' · ')+'</div>':'') +
-        (fotos?'<div class="foto-grid">'+fotos+'</div>':'') +
-        '</div>';
-    });
-    var podeExec = !ro && ctCan('executar');
-    if(podeExec && o.status==='EM_EXECUCAO'){
-      h += '<div style="margin-top:8px;border-top:1px dashed #DDD;padding-top:10px">' +
-        '<label class="fgl">Descrição do serviço executado</label>' +
-        '<textarea class="fgt" id="ex-desc" placeholder="O que foi feito, peças aplicadas…"></textarea>' +
-        '<div class="fg2" style="margin-top:8px">' +
-        '<div><label class="fgl">Insufl. (°C)</label><input class="fgi" id="ex-ti" type="number" step="0.1"/></div>' +
-        '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="ex-tr" type="number" step="0.1"/></div>' +
-        '<div><label class="fgl">Corrente (A)</label><input class="fgi" id="ex-corr" type="number" step="0.1"/></div>' +
-        '<div><label class="fgl">Pressão (psi)</label><input class="fgi" id="ex-press" type="number" step="1"/></div></div>' +
-        '<label class="fgl" style="margin-top:8px">Fotos</label>' +
-        '<input class="fgi" id="ex-fotos" type="file" accept="image/*" capture="environment" multiple/>' +
-        '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="ctAddExec(\''+osId+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar execução</button></div>';
-    }
-    h += '<div class="ct-btn-row">';
-    if(podeExec && o.status==='APROVADA')
-      h += '<button class="btn-primary" onclick="ctMudarStatus(\''+osId+'\',\'EM_EXECUCAO\')"><i class="fas fa-play mr1" aria-hidden="true"></i>Iniciar execução</button>';
-    if(podeExec && o.status==='EM_EXECUCAO' && regs.length)
-      h += '<button class="btn-success" onclick="ctMudarStatus(\''+osId+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
-    h += '</div></div>';
-  }
-
-  /* — Fiscalização — */
-  if(((CT_STATUS[o.status]||{}).step>=4) && o.status!=='CANCELADA'){
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Fiscalização</div>';
-    if(o.fiscal){
-      h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovada por '+esc(o.fiscal)+' em '+fmtDate(o.data_fiscalizacao)+'</div>' +
-        (o.parecer_fiscal?'<div class="le-desc" style="margin-top:4px">'+esc(o.parecer_fiscal)+'</div>':'');
-    } else if(!ro && o.status==='EXECUTADA' && ctCan('fiscalizar')){
-      h += '<label class="fgl">Parecer do fiscal</label>' +
-        '<textarea class="fgt" id="fis-parecer" placeholder="Serviços conferidos conforme orçamento aprovado…"></textarea>' +
-        '<div class="ct-btn-row">' +
-        '<button class="btn-success" onclick="ctFiscalizar(\''+osId+'\',true)"><i class="fas fa-check mr1" aria-hidden="true"></i>Aprovar execução</button>' +
-        '<button class="btn-danger" onclick="ctFiscalizar(\''+osId+'\',false)"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button></div>';
-    } else {
-      h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
-    }
-    h += '</div>';
-  }
-
-  /* — Certificação / NF + composição da ata — */
-  if(((CT_STATUS[o.status]||{}).step>=5) && o.status!=='CANCELADA'){
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-file-invoice mr1" aria-hidden="true"></i>5 · NF · Composição da Ata · Certificação</div>';
-    /* composição */
-    var compTotal = ctCompTotal(osId);
-    if(comps.length){
-      h += comps.map(function(c){
-        var it = ctArp.find(function(a){return a.item===c.item_arp;})||{descricao:'',valor_unit:0};
-        return '<div class="orc-item"><span class="orc-tipo SERVICO">ATA</span>' +
-          '<div class="orc-desc">Item '+c.item_arp+' — '+esc(it.descricao)+'<div style="color:#999;font-size:10px">'+c.qtd+' × '+fmtMoney(it.valor_unit)+'</div></div>' +
-          '<span class="orc-val">'+fmtMoney(c.qtd*it.valor_unit)+'</span>' +
-          (!ro && o.status==='FISCALIZADA' && ctCan('certificar')?'<button class="orc-del" title="Excluir item" aria-label="Excluir item" onclick="ctDelComp(\''+osId+'\',\''+c.id+'\')"><i class="fas fa-trash" aria-hidden="true"></i></button>':'') +
-          '</div>';
-      }).join('');
-      var dif = (o.valor_orcado||total) - compTotal;
-      h += '<div class="ct-total-row"><span>COMPOSTO (ATA)</span><span>'+fmtMoney(compTotal)+'</span></div>' +
-        '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:'+(Math.abs(dif)<1?'#168821':'#E52207')+';margin-top:2px">' +
-        '<span>Diferença vs orçado</span><span>'+fmtMoney(dif)+'</span></div>';
-    }
-    if(!ro && o.status==='FISCALIZADA' && ctCan('certificar')){
-      var arpOpts = ctArp.map(function(it){
-        var saldo = ctSaldoItem(it);
-        return '<option value="'+it.item+'" '+(saldo<=0?'disabled':'')+'>'+it.item+' · '+(it.ne==='2026NE000335'?'WINS':'RLP')+' · '+fmtMoney(it.valor_unit)+' · saldo '+saldo+'</option>';
-      }).join('');
-      h += '<div style="margin-top:8px;border-top:1px dashed #DDD;padding-top:10px">' +
-        '<label class="fgl">Item da ata</label><select class="fgs" id="cp-item">'+arpOpts+'</select>' +
-        '<div class="fg2" style="margin-top:8px"><div><label class="fgl">Qtd</label><input class="fgi" id="cp-qtd" type="number" value="1" min="1" step="1"/></div>' +
-        '<div style="display:flex;align-items:flex-end"><button class="btn-secondary" style="width:100%" onclick="ctAddComp(\''+osId+'\')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Adicionar</button></div></div>' +
-        '<div class="fg2" style="margin-top:10px">' +
-        '<div><label class="fgl">Nota Fiscal</label><input class="fgi" id="cf-nf" value="'+esc(o.nf||'')+'" placeholder="NF nº"/></div>' +
-        '<div><label class="fgl">Data NF</label><input class="fgi" id="cf-datanf" type="date" value="'+(o.data_nf||today())+'"/></div></div>' +
-        '<button class="btn-success" style="width:100%;margin-top:10px" onclick="ctCertificar(\''+osId+'\')"><i class="fas fa-stamp mr1" aria-hidden="true"></i>Certificar e encerrar OS</button></div>';
-    }
-    if(o.status==='ENCERRADA'){
-      h += '<div style="margin-top:8px;font-size:12px;color:#168821"><i class="fas fa-stamp mr1" aria-hidden="true"></i>NF '+esc(o.nf||'—')+' ('+fmtDate(o.data_nf)+') certificada por '+esc(o.certificador||'—')+' em '+fmtDate(o.data_certificacao)+'</div>';
-    }
-    h += '</div>';
-  }
-
-  /* — Histórico / auditoria — */
-  var evts = ctEvt[osId]||[];
-  if(evts.length){
-    h += '<div class="ds"><div class="ds-title"><i class="fas fa-history mr1" aria-hidden="true"></i>Histórico / Auditoria ('+evts.length+')</div>' +
-      evts.map(function(ev){
-        var dt = ev.criado_em ? new Date(ev.criado_em).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-        var tx = ctEvtTexto(ev);
-        return '<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #F0F0F0;font-size:11px">' +
-          '<span style="color:#999;white-space:nowrap">'+dt+'</span>' +
-          '<div style="flex:1;min-width:0"><strong>'+esc(ev.evento)+'</strong>'+(tx?' — '+esc(tx):'')+
-          (ev.usuario?'<div style="color:#888">'+esc(ev.usuario)+'</div>':'')+'</div></div>';
-      }).join('')+'</div>';
-  }
-
-  el('drawer-body').innerHTML = h;
-
-  var foot = '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>' +
-    '<button class="btn-secondary" onclick="ctPrintOS(\''+osId+'\')" title="Imprimir OS" aria-label="Imprimir OS"><i class="fas fa-print" aria-hidden="true"></i></button>';
-  if(!ro && ctCan('cancelar') && ['SOLICITADA','ORCAMENTO','APROVADA'].indexOf(o.status)>=0)
-    foot += '<button class="btn-danger" style="flex:1" onclick="ctCancelar(\''+osId+'\')"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelar OS</button>';
-  el('drawer-footer').innerHTML = foot;
-  openDrawer();
-}
-
-/* ══ AÇÕES ══ */
-function ctNomeEvento(msg){
-  return msg || 'Atualização';
-}
-function ctDetalheEvento(statusAnterior, patch){
-  if(!patch || patch.status===undefined || patch.status===statusAnterior) return '';
-  var de = statusAnterior ? (CT_STATUS[statusAnterior] ? CT_STATUS[statusAnterior].label : statusAnterior) : '—';
-  var para = CT_STATUS[patch.status] ? CT_STATUS[patch.status].label : patch.status;
-  return de + ' → ' + para;
-}
-function ctUsuarioEvento(u){
-  if(!u) return '';
-  return u.nome + (u.role ? ' ('+u.role+')' : '');
-}
-
-async function ctRegistrarEvento(osId, statusAnterior, patch, msg){
-  try{
-    var r = await supa.from('os_eventos').insert({
-      os_id: osId,
-      evento: ctNomeEvento(msg),
-      detalhe: ctDetalheEvento(statusAnterior, patch) || null,
-      usuario: ctUsuarioEvento(ctUser) || null
-    }).select().single();
-    if(r.error){ console.warn('ctRegistrarEvento', r.error); return false; }
-    (ctEvt[osId]=ctEvt[osId]||[]).push(r.data); // D-jpd-06: cache atualizado na hora, sem realtime
-    return true;
-  }catch(e){ console.warn('ctRegistrarEvento', e); return false; }
-}
-
-async function ctUpd(osId, patch, msg){
-  var anterior = ctOS.find(function(o){return o.id===osId;});
-  var statusAnterior = anterior ? anterior.status : undefined; // lido ANTES do update (senão sai X → X)
-  var r = await supa.from('os_contratacao').update(patch).eq('id',osId).select().single();
-  if(r.error){ showToast('Erro ao atualizar','error'); return false; }
-  var i = ctOS.findIndex(function(o){return o.id===osId;});
-  if(i>=0) ctOS[i]=r.data;
-  await ctRegistrarEvento(osId, statusAnterior, patch, msg); // D-jpd-05: falha aqui não derruba a ação
-  if(msg) showToast(msg,'ok');
-  return true;
-}
-
-async function ctMudarStatus(osId, novo){
-  var patch = {status:novo};
-  if(novo==='ORCAMENTO'){ patch.valor_orcado = ctOrcTotal(osId); patch.parecer_aprovacao = null; }
-  if(await ctUpd(osId, patch, 'Status: '+(CT_STATUS[novo]||{}).label)){ ctOpenOS(osId); ctRenderList(); }
-}
-
-async function ctAprovar(osId){
-  var nome = ctUser?ctUser.nome:'';
-  if(await ctUpd(osId,{status:'APROVADA',aprovador:nome,data_aprovacao:today(),valor_orcado:ctOrcTotal(osId)},'Orçamento aprovado')){ ctOpenOS(osId); ctRenderList(); }
-}
-
-async function ctDevolver(osId){
-  var motivo = prompt('Motivo da devolução do orçamento:');
-  if(motivo===null) return;
-  if(await ctUpd(osId,{status:'SOLICITADA',parecer_aprovacao:motivo},'Devolvida p/ ajuste')){ ctOpenOS(osId); ctRenderList(); }
-}
-
-async function ctFiscalizar(osId, aprovado){
-  var parecer = val('fis-parecer').trim();
-  var nome = ctUser?ctUser.nome:'';
-  if(aprovado){
-    if(await ctUpd(osId,{status:'FISCALIZADA',fiscal:nome,data_fiscalizacao:today(),parecer_fiscal:parecer},'Execução aprovada pelo fiscal')){ ctOpenOS(osId); ctRenderList(); }
-  } else {
-    if(!parecer){ showToast('Informe o motivo no parecer','error'); return; }
-    if(await ctUpd(osId,{status:'EM_EXECUCAO',parecer_fiscal:parecer},'Devolvida p/ correção')){ ctOpenOS(osId); ctRenderList(); }
-  }
-}
-
-/* ── histórico da contratação ── */
-function ctMarcadorHistorico(o){
-  return 'Contratação ' + (o.numero || o.id);
-}
-function ctDescricaoHistorico(o){
-  var desc = ctMarcadorHistorico(o) + ' — ' + (o.problema || 'Serviço executado por empresa contratada');
-  if(o.nf) desc += ' · NF ' + o.nf;
-  return desc;
-}
-function ctJaTemHistorico(linhas, marcador){
-  return (linhas||[]).some(function(l){
-    var texto = l.descricao!==undefined ? l.descricao : l.desc;
-    return typeof texto==='string' && texto.indexOf(marcador)===0;
-  });
-}
-async function ctEncerrarHistorico(o){
-  if(!o.equip_id) return false;
-  var data = o.data_nf || today();
-  var r = await supa.from('logs_manutencao').select('id,descricao').eq('equip_id', o.equip_id);
-  if(r.error){ console.warn('ctEncerrarHistorico', r.error); return false; }
-  if(ctJaTemHistorico(r.data||[], ctMarcadorHistorico(o))) return false;
-  var id = await addLogEntryAsync(o.equip_id, {date:data, tipo:'CORRETIVA', status:'CONCLUÍDA', tecnico:(o.empresa||''), desc:ctDescricaoHistorico(o), checklist:[]});
-  if(id) await atualizarUltimaManutencao(o.equip_id, data);
-  return !!id;
-}
-
-async function ctCertificar(osId){
-  var nf = val('cf-nf').trim();
-  if(!nf){ showToast('Informe o nº da NF','error'); return; }
-  var comps = ctComp[osId]||[];
-  if(!comps.length){ showToast('Adicione a composição de itens da ata','error'); return; }
-  var nome = ctUser?ctUser.nome:'';
-  if(await ctUpd(osId,{status:'ENCERRADA',nf:nf,data_nf:val('cf-datanf')||today(),certificador:nome,data_certificacao:today()},'OS certificada e encerrada')){
-    var o = ctOS.find(function(x){return x.id===osId;});
-    if(o) await ctEncerrarHistorico(o);
-    ctOpenOS(osId); ctRenderList();
-  }
-}
-
-async function ctCancelar(osId){
-  if(!confirm('Cancelar esta OS?')) return;
-  if(await ctUpd(osId,{status:'CANCELADA'},'OS cancelada')){ closeDrawer(); ctRenderList(); }
-}
-
-/* — orçamento itens — */
-async function ctAddOrcItem(osId){
-  var desc = val('oi-desc').trim();
-  var qtd = parseFloat(val('oi-qtd'))||0;
-  var vu = parseFloat(val('oi-vu'))||0;
-  if(!desc || qtd<=0 || vu<0){ showToast('Preencha descrição, qtd e valor','error'); return; }
-  var r = await supa.from('os_orcamento_itens').insert({
-    os_id:osId, tipo:val('oi-tipo'), descricao:desc, qtd:qtd, valor_unit:vu,
-    ordem:(ctOrc[osId]||[]).length
-  }).select().single();
-  if(r.error){ showToast('Erro ao adicionar item','error'); return; }
-  (ctOrc[osId]=ctOrc[osId]||[]).push(r.data);
-  ctOpenOS(osId);
-}
-
-async function ctDelOrcItem(osId, itemId){
-  var r = await supa.from('os_orcamento_itens').delete().eq('id',itemId);
-  if(r.error){ showToast('Erro ao remover','error'); return; }
-  ctOrc[osId] = (ctOrc[osId]||[]).filter(function(i){return i.id!==itemId;});
-  ctOpenOS(osId);
-}
-
-/* — execução: fotos comprimidas + upload — */
-function ctCompressFoto(file){
-  return new Promise(function(res, rej){
-    var img = new Image();
-    var url = URL.createObjectURL(file);
-    img.onload = function(){
-      var max = 1280;
-      var w = img.width, hh = img.height;
-      if(w>max||hh>max){ var k=Math.min(max/w,max/hh); w=Math.round(w*k); hh=Math.round(hh*k); }
-      var cv = document.createElement('canvas'); cv.width=w; cv.height=hh;
-      cv.getContext('2d').drawImage(img,0,0,w,hh);
-      URL.revokeObjectURL(url);
-      cv.toBlob(function(b){ b?res(b):rej(new Error('blob')); },'image/jpeg',0.8);
-    };
-    img.onerror = rej;
-    img.src = url;
-  });
-}
-
-async function ctAddExec(osId){
-  var desc = val('ex-desc').trim();
-  var files = (el('ex-fotos')||{files:[]}).files;
-  if(!desc && !files.length){ showToast('Descreva o serviço ou anexe fotos','error'); return; }
-  showToast('Enviando registro…','');
-  var paths = [];
-  for(var i=0;i<files.length;i++){
-    try{
-      var blob = await ctCompressFoto(files[i]);
-      var path = osId+'/'+Date.now()+'_'+i+'.jpg';
-      var up = await supa.storage.from('os-fotos').upload(path, blob, {contentType:'image/jpeg'});
-      if(up.error) throw up.error;
-      paths.push(path);
-    }catch(e){ console.error('foto',e); showToast('Falha no upload de uma foto','error'); }
-  }
-  var med = {};
-  if(val('ex-ti')) med.temp_insuflamento = parseFloat(val('ex-ti'));
-  if(val('ex-tr')) med.temp_retorno = parseFloat(val('ex-tr'));
-  if(val('ex-corr')) med.corrente = parseFloat(val('ex-corr'));
-  if(val('ex-press')) med.pressao = parseFloat(val('ex-press'));
-  var nome = ctUser?ctUser.nome:'';
-  var r = await supa.from('os_execucao').insert({
-    os_id:osId, data:today(), executor:nome, descricao:desc, medicoes:med, fotos:paths
-  }).select().single();
-  if(r.error){ showToast('Erro ao registrar execução','error'); return; }
-  (ctExec[osId]=ctExec[osId]||[]).push(r.data);
-  showToast('Execução registrada','ok');
-  ctOpenOS(osId);
-}
-
-/* — composição da ata — */
-async function ctAddComp(osId){
-  var item = parseInt(val('cp-item'));
-  var qtd = parseFloat(val('cp-qtd'))||0;
-  if(!item || qtd<=0){ showToast('Selecione item e quantidade','error'); return; }
-  var it = ctArp.find(function(a){return a.item===item;});
-  if(!it){ showToast('Item inválido','error'); return; }
-  var saldo = ctSaldoItem(it);
-  if(qtd>saldo){ showToast('Excede o saldo do item ('+saldo+')','error'); return; }
-  // teto financeiro da NE (empenho global)
-  var dispNE = ctSaldoNE(it.ne);
-  if(qtd*Number(it.valor_unit) > dispNE + 0.005){
-    showToast('Excede o teto da NE — disponível '+fmtMoney(dispNE),'error'); return;
-  }
-  var r = await supa.from('os_composicao').insert({os_id:osId,item_arp:item,qtd:qtd}).select().single();
-  if(r.error){ showToast('Erro ao adicionar','error'); return; }
-  (ctComp[osId]=ctComp[osId]||[]).push(r.data);
-  ctOpenOS(osId);
-}
-
-async function ctDelComp(osId, compId){
-  var r = await supa.from('os_composicao').delete().eq('id',compId);
-  if(r.error){ showToast('Erro ao remover','error'); return; }
-  ctComp[osId] = (ctComp[osId]||[]).filter(function(c){return c.id!==compId;});
-  ctOpenOS(osId);
-}
+/* 260823-cf8 (D-cf8-22): o segundo aplicativo saiu daqui — ctTimeline,
+   ctOpenOS e as ações que ele chamava (ctNomeEvento, ctDetalheEvento,
+   ctUsuarioEvento, ctRegistrarEvento, ctUpd, ctMudarStatus, ctAprovar,
+   ctDevolver, ctFiscalizar, ctMarcadorHistorico, ctDescricaoHistorico,
+   ctJaTemHistorico, ctEncerrarHistorico, ctCertificar, ctCancelar,
+   ctAddOrcItem, ctDelOrcItem, ctAddExec, ctAddComp, ctDelComp) não
+   existem mais neste arquivo — ctCompressFoto FICA (não está nesta
+   lista): manRegistrarEvidencia já a reusava antes desta tarefa, e
+   continua reusando, agora ao lado do único consumidor. A OS de contrato já nasce
+   sendo a linha de logs_manutencao que ela espelhava — o desfecho da
+   unificação, não uma limpeza (D-cf8-16): ctEncerrarHistorico existia só
+   para copiar a contratação de volta para o histórico do equipamento
+   quando ela encerrava; agora não há o que copiar, porque nunca houve
+   uma segunda linha.
+   - Delineamento/Orçamento (a lista itemizada) → osItensHtml/osAddItem/
+     osDelItem (D-cf8-14), já unificado desde a Task 2.
+   - Execução (fotos + medições + descrição) → manRenderEvidencia/
+     manRegistrarEvidencia (a evidência que já existia em logs_manutencao)
+     mais um comentário de origem='usuario' (D-cf8-16), em manAbrirOS.
+   - Fiscalização e NF/Composição/Certificação → osFiscalizacaoHtml/
+     osComposicaoAtaHtml, blocos da gaveta única condicionados a
+     osTipoExecutor(entry)==='contrato', escritos por manFiscalizar/
+     osAddComp/osDelComp/manCertificar via manAtualizarOS (que já grava a
+     trilha de sistema, Task 2) — ver a seção "OS unificada: contrato" em
+     manAbrirOS.
+   - Histórico/auditoria (os_eventos) → OS_COMENTARIOS com
+     origem='sistema', a MESMA linha do tempo do comentário do usuário
+     (D-cf8-15), já lida por osComentariosHtml.
+   - Nº da OS, empresa, CNPJ, instrumento, processo, NE → capturados na
+     abertura (openLogForm/saveLogEntry, tipo 'contrato' habilitado nesta
+     tarefa) e mostrados no bloco Executor de manAbrirOS.
+   ctCompTotal, ctConsumo, ctSaldoItem, CT_NES, ctConsumoNE, ctSaldoNE e
+   ctRenderSaldo ficam byte a byte como estavam (D-cf8-22 do plano) — só
+   mudou de onde ctComp/ctOS são alimentados (carregarComposicaoArp). */
 
 /* ══ INTEGRAÇÃO COM O APP ══ */
 var _origOpenNewOS = openNewOS;
 openNewOS = function(){
   if(ctMode==='movim') openMovForm();
-  else if(ctMode==='contrat') ctNovaOS();
   else _origOpenNewOS();
 };
 
 var _origRenderOS = renderOS;
 renderOS = function(){
   if(ctMode==='movim'){ renderMovim(); return; }
-  if(ctMode==='contrat'){ ctRenderList(); return; }
   _origRenderOS();
 };
 
 document.addEventListener('DOMContentLoaded', function(){
   ctInjectToggle();
-  supa.auth.onAuthStateChange(function(ev, session){
-    if(session && !ctLoaded){ ctLoad().then(function(){ ctSetupRealtime(); }); }
-  });
 });
 </script>
 
@@ -5286,12 +5008,17 @@ function dvRenderCharts(){
       }).join('')+'</div>':'')+'</div>';
 
   /* ── contratações / saldo das atas ── */
+  /* 260823-cf8 (D-cf8-22): ctOS agora é a OS unificada inteira (refrescada
+     por carregarComposicaoArp) — o widget filtra por tipoExecutor==='contrato'
+     e pelo vocabulário novo (ABERTA/DELINEAMENTO/APROVACAO/…, D-cf8-04),
+     não mais SOLICITADA/ORCAMENTO/APROVADA. */
   var htmlCt = '';
-  if(ctLoaded && ctArp.length){
+  if(UNI_OK && ctArp.length){
+    var osContrato = ctOS.filter(function(o){ return o.tipoExecutor==='contrato'; });
     var nes = Object.keys(CT_NES).map(function(k){ return {ne:k, forn:CT_NES[k].forn, emp:CT_NES[k].valor}; });
-    var andamento = ctOS.filter(function(o){return ['SOLICITADA','ORCAMENTO','APROVADA','EM_EXECUCAO','EXECUTADA','FISCALIZADA'].indexOf(o.status)>=0;}).length;
-    var aprovar = ctOS.filter(function(o){return o.status==='ORCAMENTO'||o.status==='EXECUTADA';}).length;
-    var encerradas = ctOS.filter(function(o){return o.status==='ENCERRADA';}).length;
+    var andamento = osContrato.filter(function(o){return ['ABERTA','DELINEAMENTO','APROVACAO','EM_EXECUCAO','EXECUTADA','FISCALIZADA'].indexOf(o.status)>=0;}).length;
+    var aprovar = osContrato.filter(function(o){return o.status==='APROVACAO'||o.status==='EXECUTADA';}).length;
+    var encerradas = osContrato.filter(function(o){return o.status==='ENCERRADA';}).length;
     htmlCt = '<div class="chart-card"><div class="chart-title"><i class="fas fa-file-signature" aria-hidden="true"></i>Contratações (ARP) — Saldos</div>' +
       nes.map(function(x){
         var saldo = ctSaldoNE(x.ne);
@@ -5304,7 +5031,7 @@ function dvRenderCharts(){
       '<div class="stat-grid"><div class="stat-mini"><div class="v">'+andamento+'</div><div class="l">OS em andamento</div></div>' +
       '<div class="stat-mini"><div class="v" style="color:'+(aprovar>0?'#B46800':'#1B1B1B')+'">'+aprovar+'</div><div class="l">aguardando aprovação</div></div>' +
       '<div class="stat-mini"><div class="v" style="color:#168821">'+encerradas+'</div><div class="l">encerradas</div></div>' +
-      '<div class="stat-mini"><div class="v">'+ctOS.length+'</div><div class="l">total de OS</div></div></div></div>';
+      '<div class="stat-mini"><div class="v">'+osContrato.length+'</div><div class="l">total de OS</div></div></div></div>';
   }
 
   host.innerHTML = htmlCap + htmlEn + htmlFrota + htmlMnt + htmlPred + htmlCt;
@@ -5317,10 +5044,12 @@ renderDash = function(){
   try{ dvRenderCharts(); }catch(e){ console.error('dashboard charts', e); }
 };
 
-/* quando as contratações terminarem de carregar, atualiza o dashboard */
-var _origCtLoad = ctLoad;
-ctLoad = function(){
-  return _origCtLoad().then(function(r){
+/* quando a composição da ata terminar de carregar, atualiza o dashboard —
+   mesmo gancho de antes, agora em cima de carregarComposicaoArp() em vez
+   do antigo ctLoad(). */
+var _origCarregarComposicaoArp = carregarComposicaoArp;
+carregarComposicaoArp = function(){
+  return _origCarregarComposicaoArp().then(function(r){
     try{
       var pg = el('page-dash');
       if(pg && pg.classList.contains('active')) renderDash();
@@ -5925,7 +5654,7 @@ function blocoNfc(id){
 function row2(l,v){ return '<tr><td class="l">'+l+'</td><td>'+(v||'—')+'</td></tr>'; }
 
 /* ── folha timbrada A4: dois consumidores (D-q57-10) ── */
-/* ctPrintOS (contratação) e printFicha (ficha do equipamento) chamam esta
+/* imprimirOS (a OS unificada, 260823-cf8) e printFicha (ficha do equipamento) chamam esta
    função — ela guarda só o que é comum: DOCTYPE, o CSS de A4 inteiro, o
    cabeçalho (logo + linha institucional do CMASM), a grade de assinaturas, o
    rodapé com data/hora de geração, e o window.open + document.write +
@@ -5969,43 +5698,52 @@ function imprimirDocumento(opcoes){
   setTimeout(function(){ try{ w.print(); }catch(e){} }, 700);
 }
 
-function ctPrintOS(osId){
-  var o = ctOS.find(function(x){return x.id===osId;}); if(!o) return;
-  var e = ctEquip(o.equip_id);
-  var itens = ctOrc[osId]||[], regs = ctExec[osId]||[], comps = ctComp[osId]||[], evts = ctEvt[osId]||[];
-  var total = ctOrcTotal(osId), compTotal = ctCompTotal(osId);
-  var st = (CT_STATUS[o.status]||{}).label || o.status;
+/* 260823-cf8 (D-cf8-22): ctPrintOS vira imprimirOS(logId), lendo a OS
+   unificada (entry, via manEntrada) em vez de ctOS/ctOrc/ctExec/ctEvt —
+   folha timbrada e imprimirDocumento não são tocados. Itens (2) vêm de
+   OS_ITENS; Execução (3) vira a evidência da própria OS (fotos + as oito
+   medições) mais os comentários de origem='usuario' (D-cf8-16); Histórico
+   (6/7) vira os comentários de origem='sistema', no lugar de os_eventos. */
+function imprimirOS(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  var entry = achado.entry, e = achado.equip || {local:'—',predio:'',tipo:''};
+  var itens = OS_ITENS[logId]||[];
+  var comps = ctComp[logId]||[];
+  var comentariosUsuario = (OS_COMENTARIOS[logId]||[]).filter(function(c){ return c.origem==='usuario'; });
+  var trilha = (OS_COMENTARIOS[logId]||[]).filter(function(c){ return c.origem==='sistema'; });
+  var total = osTotalItens(itens), compTotal = ctCompTotal(logId);
+  var st = osRotulo(osFluxoDe(entry), entry.status);
   var corpo = '<h2>1. Identificação</h2><table>' +
-    row2('Equipamento', '#'+o.equip_id+' — '+esc(e.predio)+' / '+esc(e.local)+' ('+esc(e.tipo)+(e.btu?', '+(e.btu/1000).toFixed(0)+'K BTU':'')+')') +
-    row2('Empresa', esc(o.empresa||'')+' · '+esc(o.ne||'')) +
-    row2('Solicitante', esc(o.solicitante||'')+' em '+fmtDate(o.data_solicitacao)) +
-    row2('Problema / serviço', esc(o.problema||'')) + '</table>';
+    row2('Equipamento', '#'+achado.equipId+' — '+esc(e.predio)+' / '+esc(e.local)+' ('+esc(e.tipo)+(e.btu?', '+(e.btu/1000).toFixed(0)+'K BTU':'')+')') +
+    row2('Empresa', esc(entry.empresa||'')+' · '+esc(entry.ne||'')) +
+    row2('Solicitante', esc(entry.solicitante||'')+' em '+fmtDate(entry.date)) +
+    row2('Problema / serviço', esc(entry.desc||'')) + '</table>';
   if(itens.length){
     corpo += '<h2>2. Orçamento aprovado</h2><table><tr><th>Tipo</th><th>Descrição</th><th class="num">Qtd</th><th class="num">Vlr Unit.</th><th class="num">Total</th></tr>' +
       itens.map(function(i){ return '<tr><td>'+(i.tipo==='SERVICO'?'Serviço':'Material')+'</td><td>'+esc(i.descricao)+'</td>' +
-        '<td class="num">'+i.qtd+'</td><td class="num">'+fmtMoney(i.valor_unit)+'</td><td class="num">'+fmtMoney(i.qtd*i.valor_unit)+'</td></tr>'; }).join('') +
-      '<tr class="tot"><td colspan="4">TOTAL ORÇADO</td><td class="num">'+fmtMoney(o.valor_orcado||total)+'</td></tr></table>' +
-      (o.aprovador?'<div class="meta" style="margin-top:2mm">Aprovado por '+esc(o.aprovador)+' em '+fmtDate(o.data_aprovacao)+'.</div>':'');
+        '<td class="num">'+i.quantidade+'</td><td class="num">'+fmtMoney(i.valorUnitario)+'</td><td class="num">'+fmtMoney(i.total)+'</td></tr>'; }).join('') +
+      '<tr class="tot"><td colspan="4">TOTAL ORÇADO</td><td class="num">'+fmtMoney(total)+'</td></tr></table>' +
+      (entry.aprovador?'<div class="meta" style="margin-top:2mm">Aprovado por '+esc(entry.aprovador)+' em '+fmtDate(entry.dataAprovacao)+'.</div>':'');
   }
-  if(regs.length){
+  var med = [];
+  if(entry.insuflamento!=null && entry.insuflamento!=='') med.push('Insuflamento: '+entry.insuflamento+'°C');
+  if(entry.retorno!=null && entry.retorno!=='') med.push('Retorno: '+entry.retorno+'°C');
+  if(entry.corrente!=null && entry.corrente!=='') med.push('Corrente: '+entry.corrente+' A');
+  if(entry.pressao!=null && entry.pressao!=='') med.push('Pressão: '+entry.pressao+' psi');
+  if((entry.fotos&&entry.fotos.length) || med.length || comentariosUsuario.length){
     corpo += '<h2>3. Execução</h2>';
-    regs.forEach(function(r){
-      var med = r.medicoes||{}, mt=[];
-      if(med.temp_insuflamento!=null) mt.push('Insuflamento: '+med.temp_insuflamento+'°C');
-      if(med.temp_retorno!=null) mt.push('Retorno: '+med.temp_retorno+'°C');
-      if(med.corrente!=null) mt.push('Corrente: '+med.corrente+' A');
-      if(med.pressao!=null) mt.push('Pressão: '+med.pressao+' psi');
-      corpo += '<table style="margin-bottom:3mm">'+row2('Data / Executor', fmtDate(r.data)+' · '+esc(r.executor||''))+
-        row2('Serviços', esc(r.descricao||''))+(mt.length?row2('Medições', mt.join(' · ')):'')+'</table>';
-      var fs = (r.fotos||[]).map(function(p){
-        var u = supa.storage.from('os-fotos').getPublicUrl(p).data.publicUrl;
-        return '<img src="'+u+'"/>';
-      }).join('');
-      if(fs) corpo += '<div class="fotos">'+fs+'</div>';
+    if(med.length) corpo += '<table style="margin-bottom:3mm">'+row2('Medições', med.join(' · '))+'</table>';
+    var fs = (entry.fotos||[]).map(function(p){
+      var u = supa.storage.from('os-fotos').getPublicUrl(p).data.publicUrl;
+      return '<img src="'+u+'"/>';
+    }).join('');
+    if(fs) corpo += '<div class="fotos">'+fs+'</div>';
+    comentariosUsuario.forEach(function(c){
+      corpo += '<table style="margin-bottom:2mm">'+row2(fmtDate((c.criadoEm||'').slice(0,10))+' · '+esc(c.autor||''), esc(c.texto))+'</table>';
     });
   }
-  corpo += '<h2>4. Fiscalização</h2><table>'+row2('Fiscal', esc(o.fiscal||'—')+(o.data_fiscalizacao?' em '+fmtDate(o.data_fiscalizacao):''))+
-    row2('Parecer', esc(o.parecer_fiscal||'—'))+'</table>';
+  corpo += '<h2>4. Fiscalização</h2><table>'+row2('Fiscal', esc(entry.fiscal||'—')+(entry.dataFiscalizacao?' em '+fmtDate(entry.dataFiscalizacao):''))+
+    row2('Parecer', esc(entry.parecerFiscal||'—'))+'</table>';
   if(comps.length){
     corpo += '<h2>5. Composição de pagamento — itens da ata</h2><table><tr><th>Item ARP</th><th>Descrição</th><th class="num">Qtd</th><th class="num">Vlr Unit.</th><th class="num">Total</th></tr>' +
       comps.map(function(c){
@@ -6014,27 +5752,27 @@ function ctPrintOS(osId){
           '<td class="num">'+fmtMoney(it.valor_unit)+'</td><td class="num">'+fmtMoney(c.qtd*it.valor_unit)+'</td></tr>';
       }).join('') +
       '<tr class="tot"><td colspan="4">TOTAL COMPOSTO</td><td class="num">'+fmtMoney(compTotal)+'</td></tr></table>' +
-      '<div class="meta" style="margin-top:2mm">Diferença vs orçado: '+fmtMoney((o.valor_orcado||total)-compTotal)+'. Em atendimento ao art. 86 da Lei 14.133/2021 — pagamento composto por itens registrados na ARP; orçamento aprovado anexo.</div>';
+      '<div class="meta" style="margin-top:2mm">Diferença vs orçado: '+fmtMoney(total-compTotal)+'. Em atendimento ao art. 86 da Lei 14.133/2021 — pagamento composto por itens registrados na ARP; orçamento aprovado anexo.</div>';
   }
-  corpo += '<h2>'+(comps.length?'6':'5')+'. Certificação</h2><table>'+row2('Nota Fiscal', esc(o.nf||'—')+(o.data_nf?' de '+fmtDate(o.data_nf):''))+
-    row2('Certificador', esc(o.certificador||'—')+(o.data_certificacao?' em '+fmtDate(o.data_certificacao):''))+'</table>';
-  if(evts.length){
-    corpo += '<h2>'+(comps.length?'7':'6')+'. Histórico (auditoria)</h2><table><tr><th>Data/Hora</th><th>Evento</th><th>Detalhe</th><th>Usuário</th></tr>' +
-      evts.map(function(ev){
-        return '<tr><td>'+(ev.criado_em?new Date(ev.criado_em).toLocaleString('pt-BR'):'')+'</td><td>'+esc(ev.evento)+'</td>' +
-          '<td>'+esc(ctEvtTexto(ev))+'</td>' +
-          '<td>'+esc(ev.usuario||'')+'</td></tr>';
+  corpo += '<h2>'+(comps.length?'6':'5')+'. Certificação</h2><table>'+row2('Nota Fiscal', esc(entry.nf||'—')+(entry.dataNf?' de '+fmtDate(entry.dataNf):''))+
+    row2('Certificador', esc(entry.certificador||'—')+(entry.dataCertificacao?' em '+fmtDate(entry.dataCertificacao):''))+'</table>';
+  if(trilha.length){
+    corpo += '<h2>'+(comps.length?'7':'6')+'. Histórico (auditoria)</h2><table><tr><th>Data/Hora</th><th>Evento</th><th>Usuário</th></tr>' +
+      trilha.map(function(c){
+        return '<tr><td>'+(c.criadoEm?new Date(c.criadoEm).toLocaleString('pt-BR'):'')+'</td>' +
+          '<td>'+esc(c.texto)+'</td>' +
+          '<td>'+esc(c.autor||'')+(c.cargo?' ('+esc(c.cargo)+')':'')+'</td></tr>';
       }).join('')+'</table>';
   }
   imprimirDocumento({
-    titulo: 'ORDEM DE SERVIÇO — '+o.numero,
-    subtitulo: '<strong>'+esc(st)+'</strong><br/><span class="meta">'+(o.ne?esc(o.ne):'')+'</span>',
+    titulo: 'ORDEM DE SERVIÇO — '+(entry.numero||('#'+logId)),
+    subtitulo: '<strong>'+esc(st)+'</strong><br/><span class="meta">'+(entry.ne?esc(entry.ne):'')+'</span>',
     corpo: corpo,
     assinaturas: [
-      {papel:'Solicitante', nome:o.solicitante||''},
-      {papel:'Gestor Administrativo', nome:o.aprovador||''},
-      {papel:'Fiscal', nome:o.fiscal||''},
-      {papel:'Certificador', nome:o.certificador||''}
+      {papel:'Solicitante', nome:entry.solicitante||''},
+      {papel:'Gestor Administrativo', nome:entry.aprovador||''},
+      {papel:'Fiscal', nome:entry.fiscal||''},
+      {papel:'Certificador', nome:entry.certificador||''}
     ]
   });
 }
@@ -7092,41 +6830,21 @@ var COLS_ALERT = [
     texto:function(l){ return l.detalhe; } }
 ];
 
-var COLS_CONTRAT = [
-  { id:'numero', rotulo:'Número', tipo:'texto',
-    valor:function(o){ return o.numero; },
-    texto:function(o){ return o.numero; } },
-  { id:'local', rotulo:'Local', tipo:'texto',
-    valor:function(o){ return ctEquip(o.equip_id).local; },
-    texto:function(o){ return ctEquip(o.equip_id).local; } },
-  { id:'predio', rotulo:'Prédio', tipo:'texto',
-    valor:function(o){ return ctEquip(o.equip_id).predio; },
-    texto:function(o){ return ctEquip(o.equip_id).predio; } },
-  { id:'empresa', rotulo:'Empresa', tipo:'texto',
-    valor:function(o){ return o.empresa; },
-    texto:function(o){ return o.empresa; } },
-  { id:'valor', rotulo:'Valor', tipo:'numero',
-    valor:function(o){ return o.valor_orcado || ctOrcTotal(o.id) || null; },
-    texto:function(o){ var v=o.valor_orcado||ctOrcTotal(o.id); return v?fmtMoney(v):''; } },
-  { id:'ne', rotulo:'NE', tipo:'texto',
-    valor:function(o){ return o.ne; },
-    texto:function(o){ return o.ne; } },
-  { id:'estado', rotulo:'Estado', tipo:'texto',
-    valor:function(o){ return (CT_STATUS[o.status]||CT_STATUS['SOLICITADA']).label; },
-    texto:function(o){ return (CT_STATUS[o.status]||CT_STATUS['SOLICITADA']).label; },
-    celula:function(o){ return ctStatusPill(o.status); } }
-];
+/* 260823-cf8 (D-cf8-22): COLS_CONTRAT saiu — a OS de contrato lê COLS_OS,
+   como qualquer outra OS (a coluna Executor já distingue o tipo). */
 
 /* ── tabelas de desktop: estado por tabela ── */
 /* D-8rz-16: uma entrada por tabela — ordenar o inventário não pode
    reordenar a lista de OS. */
+/* 260823-cf8 (D-cf8-22): 'contrat' sai — a OS de contrato agora é a
+   mesma tabela 'os' (filtrável pelo chip de executor), não uma sexta
+   tabela separada. */
 var TAB_ESTADO = {
   inv:     {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
   os:      {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
   movim:   {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
   pmoc:    {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
-  alert:   {ord:{coluna:null,dir:null}, filtros:{}, aberto:false},
-  contrat: {ord:{coluna:null,dir:null}, filtros:{}, aberto:false}
+  alert:   {ord:{coluna:null,dir:null}, filtros:{}, aberto:false}
 };
 
 /* ── tabelas de desktop: linhas de alerta ── */
@@ -7319,7 +7037,6 @@ function tabRedesenhar(tid){
   else if(tid==='movim') renderMovim();
   else if(tid==='pmoc') renderPmoc();
   else if(tid==='alert') renderAlerts();
-  else if(tid==='contrat') ctRenderList();
 }
 
 function tabOrdenarColuna(tid, coluna){

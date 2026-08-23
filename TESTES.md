@@ -1912,3 +1912,59 @@ PLAT-15/16, 260822-8rz e 260823-3a6 (sem Playwright nem navegador neste ambiente
 - [ ] **375px (celular), com a ficha aberta:** deve ser **idêntica à de hoje** — gaveta subindo
       de baixo, mesmo conteúdo, mesmos botões (Fechar/Imprimir/Editar cadastro/Registrar
       OS/Manutenção).
+
+## Refrigeração — OS unificada por tipo de executor (23/08/2026)
+
+Quick task 260823-cf8 (D-cf8-01..30). `logs_manutencao` passa a ser o tronco único de OS,
+com `tipo_executor` (`interna` | `externa` | `contrato`), itens de serviço/material e
+comentários datados e assinados em toda OS. A OS de contratação deixa de ser um segundo
+aplicativo dentro do módulo. **`supabase/43_refrigeracao_os_unificada.sql` é escrita, aditiva
+e ainda NÃO aplicada** — o roteiro abaixo tem duas partes: a primeira, sem a migração 43
+(o estado publicado hoje), e a segunda, depois que o usuário aplicar a migração no SQL editor
+do Supabase.
+
+### Parte 1 — sem a migração 43 (compatibilidade, o estado publicado)
+
+- [ ] **Dois segmentos na aba OS:** abrir `/refrigeracao`, aba OS — o topo mostra **dois**
+      segmentos, "OS" e "Inst./Remoção" (o segmento "Contratações" não existe mais). O
+      segmento "Inst./Remoção" só aparece se a instalação já tiver as migrações 40 e 42
+      aplicadas (já aplicadas em produção desde 21/08/2026).
+- [ ] **Fluxo legado intacto:** abrir uma OS qualquer — a régua mostra os seis passos de
+      sempre (Abertura, Delineamento, Aprovação, Execução, Executada, Conclusão), **sem**
+      seletor de executor, **sem** bloco de itens, **sem** bloco de registro/comentários. O
+      formulário de abertura é idêntico ao de hoje.
+- [ ] **Sem erro no console:** navegar pelas abas OS, Painel e Parque sem nenhum erro no
+      console do navegador — o app deve se comportar exatamente como antes desta tarefa.
+- [ ] **Chip "Saldo Atas":** na aba OS, o chip "Saldo Atas" (agora na mesma linha dos outros
+      chips) continua abrindo o relatório de saldo das duas NEs (WINS/RLP) normalmente — ele
+      não depende da migração 43.
+
+### Parte 2 — depois de aplicar a migração 43 (frontend já publicado primeiro, D-cf8-25)
+
+- [ ] **Seletor de executor aparece:** abrir uma OS nova — o formulário mostra o bloco
+      "Executor" com três opções (Interna, Externa, Contrato). Escolher cada uma troca os
+      campos abaixo (Setor+Pessoa(s) / Organização / Empresa+CNPJ+Instrumento+Processo+NE)
+      sem apagar o que já foi digitado no resto do formulário.
+- [ ] **OS interna do abrir ao concluir:** abrir uma OS interna, percorrer Delineamento →
+      Aprovação → Execução (registrar ao menos uma evidência) → **Concluir OS** — a régua tem
+      cinco passos, termina em "Conclusão", e **não existe** bloco de Conferência. Conferir
+      que `equipamentos.ultima_manutencao` e o estado do equipamento foram gravados.
+- [ ] **OS de contrato do abrir ao encerrar:** abrir uma OS de contrato (empresa, CNPJ,
+      instrumento, processo, NE) — a régua tem sete passos. Percorrer Delineamento →
+      Aprovação → Execução → Fiscalização → NF/Composição da ata → Certificar. Conferir que o
+      número (`OSC NNN/ano`) foi gerado sozinho, nunca digitado, e que abrir duas OS de
+      contrato no mesmo ano gera números sequenciais.
+- [ ] **Itens em toda OS:** em qualquer OS (interna, externa ou contrato), adicionar um item de
+      serviço e um de material — o total deve somar automaticamente (nunca digitado). Remover
+      um item antes do encerramento funciona; depois do encerramento, o botão de remover some.
+- [ ] **Registro (comentários):** escrever um comentário em qualquer OS — ele aparece na lista
+      junto com os eventos de sistema (mudança de estado), em ordem cronológica, cada um com
+      autor/cargo/data. Tentar enviar um comentário em branco deve ser recusado.
+- [ ] **Histórico do equipamento, uma vez só:** encerrar uma OS de contrato e abrir a ficha do
+      equipamento — a OS de contrato encerrada aparece **uma única vez** no histórico (ela já
+      É a linha, não existe mais espelho).
+- [ ] **Chips de executor:** na aba OS, os três chips de executor (Interna/Externa/Contrato)
+      filtram a lista corretamente; uma OS sem `tipo_executor` (linha antiga, se houver) cai no
+      chip "Interna".
+- [ ] **Coluna Executor na tabela de computador:** em `>=1024px`, a tabela de OS ganha a coluna
+      "Executor", ordenável e filtrável como as demais.

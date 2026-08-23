@@ -313,10 +313,16 @@ test('o corpo de acessoLivre chama manSondarEsquema (perfil não, é o caso do o
   assert.match(corpo, /await manSondarEsquema\(\)/);
 });
 
-test('o corpo de ctLoad só chama carregarPerfil quando ctUser ainda não existe, e não consulta a sessão/usuário direto', () => {
-  const corpo = recorte('async function ctLoad(){', 'async function ctEnsureLoaded(){');
-  assert.match(corpo, /if\(!ctUser\)\s*await carregarPerfil\(\);/);
-  assert.doesNotMatch(corpo, /supa\.from\('usuarios'\)/);
+// 260823-cf8 (D-cf8-22): ctLoad saiu — carregarArp/carregarComposicaoArp
+// (fora do Promise.all principal, D-cf8-27) tomam o lugar dela, chamadas
+// nos dois mesmos pontos de entrada de sempre.
+test('o corpo de initAppOnce e o de acessoLivre chamam carregarArp e carregarComposicaoArp', () => {
+  const corpoInit = recorte('async function initAppOnce(){', 'window.initAppOnce = initAppOnce;');
+  assert.match(corpoInit, /await carregarArp\(\)/);
+  assert.match(corpoInit, /await carregarComposicaoArp\(\)/);
+  const corpoLivre = recorte('async function acessoLivre() {', 'async function initAppOnce(){');
+  assert.match(corpoLivre, /await carregarArp\(\)/);
+  assert.match(corpoLivre, /await carregarComposicaoArp\(\)/);
 });
 
 test('o ramo de UPDATE existe no handler de realtime de logs_manutencao e substitui a entrada pelo resultado de dbToLog', () => {
