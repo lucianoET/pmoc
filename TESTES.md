@@ -1838,3 +1838,33 @@ para o usuário, como já registrado no PLAT-15/16 da Fase 5.
       1024px (D-8rz-24).
 - [ ] Reduzir para **375px** (celular): a tela deve ficar **idêntica à de hoje** — cartões, barra
       inferior de 5 ícones, gaveta subindo de baixo. Nenhuma tabela deve aparecer.
+
+## Refrigeração — barra do topo limpa, navegação dentro dela, Painel/Parque, doze colunas (23/08/2026)
+
+Quick task 260823-3a6. Quatro ajustes de apresentação, todos pedidos textualmente pelo usuário —
+nenhum dado, fluxo ou regra de negócio muda. `node --test` prova por comparação byte-a-byte que o
+fixture de CSS de celular não mudou; a conferência visual abaixo fica pendente para o usuário,
+mesma pendência de PLAT-15/16 e de 260822-8rz (sem Playwright nem navegador neste ambiente).
+
+- [ ] **1440px:** a barra do topo mostra ícone, `PMOC.Refrigeração` (sem a segunda linha da
+      inscrição institucional), as cinco abas **Painel/Parque/OS/PMOC/Alertas** e, à direita,
+      Buscar e Sair; a aba ativa se distingue por sublinhado + fundo + negrito + cor clara; os
+      distintivos de OS/PMOC/Alertas ficam colados aos rótulos; não há coluna lateral; a área de
+      conteúdo é clara e a faixa do topo escura; a tabela do Parque mostra as **doze colunas** na
+      ordem `#, Área, Prédio, Local, Tipo, BTU, Marca, Modelo, Estado, Criticidade, Próx.
+      manutenção, Última inspeção`; ordenar e filtrar por Área e por Marca funciona; a coluna
+      Modelo aparece vazia (0 de 171 preenchidos — é o esperado, D-3a6-21); a gaveta da planilha
+      abre com o título "Planilha do parque" e ainda entra pela direita.
+- [ ] **1024px exatos (a faixa apertada):** a tabela do Parque rola na horizontal **dentro da
+      própria caixa**; a página **não** rola na horizontal e nenhuma coluna fica cortada; rolando
+      as 171 linhas, o cabeçalho continua grudado no topo da tabela. As cinco abas cabem entre a
+      marca e as ações; se não couberem, rolam na horizontal — nunca se amassam nem empurram Sair
+      para fora.
+- [ ] **Coluna "Última inspeção", em qualquer largura:** num equipamento com inspeção registrada,
+      a data mostrada é a da inspeção mais recente — mesmo havendo uma corretiva posterior; num
+      equipamento sem inspeção nenhuma, "Sem hist.", ainda que "Próx. manutenção" traga data ao
+      lado (é a discordância esperada de D-3a6-22b — as duas colunas não fecham conta uma com a
+      outra por construção; não conferir subtração entre elas).
+- [ ] **375px (celular):** idêntico a hoje, com a barra inferior de cinco botões; a única
+      diferença visível é a marca sem a segunda linha (a inscrição institucional) e os dois
+      rótulos renomeados (Painel, Parque).

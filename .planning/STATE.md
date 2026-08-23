@@ -5,10 +5,10 @@ milestone_name: Consolidação da plataforma
 current_phase: 7
 current_phase_name: ui-ux-mobile
 status: verifying
-stopped_at: Completed quick task 260822-8rz-refrigeracao-layout-de-desktop-com-tabel -- versao de computador de /refrigeracao (>=1024px): navegacao lateral, gaveta como painel lateral, seis listas em tabela ordenavel/filtravel por coluna, tudo dentro de um unico @media; celular intocado por construcao (fixture byte-a-byte); node --test 812/812
-last_updated: "2026-08-22T08:45:00.000Z"
+stopped_at: "Completed quick task 260823-3a6-refrigeracao-topbar-limpa-com-navegacao-: barra do topo sem a inscricao institucional, navegacao dentro dela em >=1024px, Dashboard->Painel/Inventario->Parque por rotulo, COLS_INV com as doze colunas do usuario (Prédio·Área separada, Marca, Modelo, Ultima inspecao); node --test 836/836"
+last_updated: "2026-08-23T05:59:46.398Z"
 last_activity: 2026-08-22
-last_activity_desc: "Quick task 260822-8rz: versão de computador de /refrigeracao — núcleo puro de tabela, layout de computador (navegação lateral, gaveta como painel lateral), seis listas viram tabela ordenável/filtrável por coluna, camada de apresentação pura"
+last_activity_desc: "Quick task 260822-8rz: versão de computador de /refrigeracao (>=1024px) — navegação lateral, gaveta como painel lateral, seis listas em tabela ordenável/filtrável por coluna; celular intocado por construção"
 progress:
   total_phases: 8
   completed_phases: 4
@@ -88,6 +88,7 @@ Progress: [██████████] 100% (v2.0)
 | Phase quick-260821-tyx P01 | 20min | 2 tasks | 3 files |
 | Phase quick P260821-uyz | 29min | 3 tasks | 11 files |
 | Phase quick P260822-5hy | ~38min | 3 tasks | 4 files |
+| Phase quick P260823-3a6 | ~15min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -181,6 +182,7 @@ Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 - [Phase ?]: 260822-48m: somenteLeitura()/sincronizarSessao() como leitura-unica/porta-unica para o modo observador de /refrigeracao, com sessao ativa vencendo flag esquecida por construcao (D-48m-01..09)
 - [Phase ?]: D-5hy-01..25: planilha de inventario em CSV com arquivamento por ausencia (modo perigoso escolhido pelo usuario contra recomendacao), tornado sobrevivivel por escopo derivado do conteudo e guarda de escala
 - [Phase ?]: 260822-8rz: D-8rz-01..25 — versao de computador de /refrigeracao (>=1024px) sem mudar dado/fluxo/regra; nucleo puro de tabela replicado dentro do arquivo (nunca importado de shared/, D-04); TAB_ESTADO isola ordenacao/filtro por tabela; filtrarInventario ganha 4o parametro opcional (filtrosColuna) sem mudar o comportamento de 3 argumentos; celular intocado provado por fixture byte-a-byte (D-8rz-04). Deviacao: o @media novo foi mesclado no ultimo <style> ja existente (antes do qrcode.js) em vez de criado como bloco separado — a folha de impressao embutida como string de JavaScript e casada pela regex ingenua de extracao de <style>, e um bloco a mais depois dela desloca a impressao digital do CSS de celular por uma quebra de linha (Array.join), mesmo sem mudar nada visualmente
+- [Phase ?]: 260823-3a6: D-3a6-01..24 -- barra do topo sem a inscricao institucional (fica so no login e no papel), navegacao de cinco abas dentro da barra do topo em >=1024px substituindo a coluna lateral de 220px, Dashboard->Painel/Inventario->Parque por rotulo sem tocar identificador, COLS_INV com as doze colunas fechadas pelo usuario (Predio.Area separada em duas, Marca=e.fabricante, Modelo=e.modelo tolerando nulo, Ultima inspecao varrendo getEquipLog sem ordenar o array no lugar); registrado que nextPmoc NAO parte da data de Ultima inspecao (D-3a6-22b)
 
 ### Pending Todos
 
@@ -253,6 +255,6 @@ painel) segue pendente.
 
 ## Session Continuity
 
-Last session: 2026-08-22T08:45:00.000Z
-Stopped at: Completed quick task 260822-8rz-refrigeracao-layout-de-desktop-com-tabel -- versao de computador de /refrigeracao (>=1024px): navegacao lateral, gaveta como painel lateral, seis listas em tabela ordenavel/filtravel por coluna, dentro de um unico @media; celular intocado por construcao (fixture byte-a-byte); node --test 812/812
+Last session: 2026-08-23T05:59:38.508Z
+Stopped at: Completed quick task 260823-3a6-refrigeracao-topbar-limpa-com-navegacao-: barra do topo sem a inscricao institucional, navegacao dentro dela em >=1024px, Dashboard->Painel/Inventario->Parque por rotulo, COLS_INV com as doze colunas do usuario (Prédio·Área separada, Marca, Modelo, Ultima inspecao); node --test 836/836
 Resume file: None
