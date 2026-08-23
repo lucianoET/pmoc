@@ -392,7 +392,11 @@ function carregarAplicacao(opts) {
 
   // Overrides pós-carga — os `var` de nível superior já rodaram, então isto
   // sobrescreve o estado inicial (LOCAIS_POR_ID vazio, LOCAIS_CARREGADOS
-  // falso) com a fixture do teste.
+  // falso, UNI_OK falso) com a fixture do teste. UNI_OK é "var" dentro da
+  // porta de escrita — setado DEPOIS dos runInContext, senão a própria
+  // declaração ("var UNI_OK = false") sobrescreveria de volta (mesmo
+  // cuidado já registrado em tests/refrigeracao-os-unificada.test.js).
+  ctx.UNI_OK = opts.uniOk !== undefined ? opts.uniOk : false;
   ctx.LOCAIS_POR_ID = opts.locaisPorId || {};
   ctx.LOCAIS_CARREGADOS = opts.locaisCarregados !== undefined ? opts.locaisCarregados : true;
   ctx.carregarLocais = async function () { ctx.LOCAIS_CARREGADOS = true; };
@@ -583,6 +587,47 @@ test('manConferir de uma remoção com destinoRemocao "baixa" e cargo admin apli
   assert.strictEqual(ctx._updatesLog[0].patch.status, 'CONFERIDA');
 });
 
+// ── correção pós-dispatch: o terminal da conferência de movimentação é
+// derivado do fluxo da OS, nunca o literal fixo CONFERIDA (D-uyz-15 +
+// D-cf8-29). Uma OS de movimentação nasce tipo_executor='interna'
+// (default) — sem a migração 43 (UNI_OK falso) ela resolve para o fluxo
+// legado e confere para CONFERIDA, exatamente como hoje; COM a migração
+// (UNI_OK verdadeiro) ela resolve para FLUXO_PROPRIO e confere para
+// CONCLUIDA. Os dois lados no mesmo teste — é a diferença entre eles que
+// é a regra: sem isso, a conferência (o ÚNICO momento em que a
+// instalação/remoção aplica local/data_instalacao/situacao) pararia de
+// existir no minuto em que a migração 43 fosse aplicada.
+test('a conferência de uma OS de instalação aplica o cadastro e avança para o terminal certo — CONFERIDA sem UNI_OK, CONCLUIDA com UNI_OK', async () => {
+  const semMigracao = carregarAplicacao({
+    uniOk: false,
+    tipoOS: 'INSTALAÇÃO', status: 'EXECUTADA', equipId: 10,
+    data: [{ id: 10, situacao: 'removido' }],
+    locaisPorId: { 5: { id: 5, nome: 'Sala 3', parent_id: null } },
+    entryExtra: { localDestinoId: 5, checklist: [{ i: 0, label: 'x', done: true }], tipoExecutor: 'interna' },
+  });
+  await semMigracao.manConferir('log-1', true);
+  assert.strictEqual(semMigracao._patchesEquip.length, 1, 'o cadastro (local/data_instalacao/situacao) deveria ter sido aplicado');
+  assert.strictEqual(semMigracao._updatesLog.length, 1);
+  assert.strictEqual(semMigracao._updatesLog[0].patch.status, 'CONFERIDA');
+
+  const comMigracao = carregarAplicacao({
+    uniOk: true,
+    // Com UNI_OK verdadeiro a OS de movimentação resolve para FLUXO_PROPRIO
+    // (osFluxoDe é genérico, sem caso especial para movimentação) — esse
+    // fluxo não tem a etapa EXECUTADA, então a transição válida antes do
+    // terminal é EM_EXECUCAO, não EXECUTADA (essa é a diferença de fluxo
+    // que o teste existe para provar).
+    tipoOS: 'INSTALAÇÃO', status: 'EM_EXECUCAO', equipId: 10,
+    data: [{ id: 10, situacao: 'removido' }],
+    locaisPorId: { 5: { id: 5, nome: 'Sala 3', parent_id: null } },
+    entryExtra: { localDestinoId: 5, checklist: [{ i: 0, label: 'x', done: true }], tipoExecutor: 'interna' },
+  });
+  await comMigracao.manConferir('log-1', true);
+  assert.strictEqual(comMigracao._patchesEquip.length, 1, 'o cadastro deveria continuar sendo aplicado com a migração 43 (D-uyz-15 intacto)');
+  assert.strictEqual(comMigracao._updatesLog.length, 1, 'a conferência não pode morrer com "Ação não permitida" só porque UNI_OK é verdadeiro');
+  assert.strictEqual(comMigracao._updatesLog[0].patch.status, 'CONCLUIDA');
+});
+
 // ── manTemEvidencia de movimentação (D-uyz-17) ────────────────────────────
 test('manTemEvidencia de uma OS de remoção aceita checklist de partes completo sem foto, e recusa checklist parcial sem foto', () => {
   const ctx = carregarAplicacao({});
@@ -605,22 +650,29 @@ test('manTemEvidencia de uma OS de manutenção continua aceitando medição iso
 });
 
 // ── fiação: a ordem certa em cada ramo ────────────────────────────────────
-test('o corpo de manConferir chama aplicarInstalacao/aplicarRemocao ANTES do update de status CONFERIDA', () => {
+// 260823-cf8 (correção pós-dispatch): manConferir parou de gravar o
+// literal fixo 'CONFERIDA' — o alvo agora é flTerminal, derivado do
+// fluxo da própria OS (osTerminalSucesso(osFluxoDe(...))), para uma OS
+// de movimentação continuar aplicando cadastro mesmo depois da migração
+// 43 (quando ela resolve para FLUXO_PROPRIO, que não tem CONFERIDA).
+test('o corpo de manConferir chama aplicarInstalacao/aplicarRemocao ANTES do update de status (o terminal derivado, nunca um literal fixo)', () => {
   const ini = HTML.indexOf('async function manConferir(logId, aprovado){');
-  const fim = HTML.indexOf('\n}\n\n/* ═══', ini);
+  const fim = HTML.indexOf('\n}\n\n/* 260823-cf8 (D-cf8-04/24)', ini);
   assert.ok(ini > 0 && fim > ini, 'manConferir não encontrada');
   const corpo = HTML.slice(ini, fim);
   const posAplicar = corpo.search(/aplicarInstalacao\(achado\.equipId|aplicarRemocao\(achado\.equipId/);
-  const posStatus = corpo.indexOf("status:'CONFERIDA'");
+  const posStatus = corpo.indexOf('status:flTerminal');
   assert.ok(posAplicar >= 0, 'manConferir não chama aplicarInstalacao/aplicarRemocao');
-  assert.ok(posStatus > posAplicar, 'o update de status CONFERIDA deveria vir DEPOIS de aplicarInstalacao/aplicarRemocao (D-uyz-15)');
+  assert.ok(posStatus >= 0, 'manConferir deveria gravar status:flTerminal (derivado do fluxo), não um literal fixo');
+  assert.ok(posStatus > posAplicar, 'o update de status deveria vir DEPOIS de aplicarInstalacao/aplicarRemocao (D-uyz-15)');
+  assert.doesNotMatch(corpo, /status:\s*'CONFERIDA'/, 'manConferir não pode voltar a gravar o literal fixo CONFERIDA');
 });
 
 test('o corpo de manConferir continua chamando atualizarUltimaManutencao/atualizarEstadoEquip DEPOIS do update de status, só no ramo de manutenção', () => {
   const ini = HTML.indexOf('async function manConferir(logId, aprovado){');
-  const fim = HTML.indexOf('\n}\n\n/* ═══', ini);
+  const fim = HTML.indexOf('\n}\n\n/* 260823-cf8 (D-cf8-04/24)', ini);
   const corpo = HTML.slice(ini, fim);
-  const posStatus = corpo.indexOf("status:'CONFERIDA'");
+  const posStatus = corpo.indexOf('status:flTerminal');
   const posUltima = corpo.indexOf('atualizarUltimaManutencao(achado.equipId');
   assert.ok(posUltima > posStatus, 'atualizarUltimaManutencao deveria continuar DEPOIS do update de status — ordem de hoje intacta');
   assert.match(corpo, /if\s*\(\s*!movimentacao\s*\)/, 'atualizarUltimaManutencao/atualizarEstadoEquip deveriam ficar fora do ramo de movimentação');

@@ -46,7 +46,7 @@ key-decisions:
   - "D-cf8-19/20/21/29/30: dois segmentos (OS | Inst./Remoção); CSS fora de @media intocado, interface nova reusa classes existentes (.orc-item/.exec-reg/.ct-timeline); .seg-toggle.tres fica sem consumidor; OS de movimentação nasce interna, sem bloco de executor/itens; ids seg-pmoc/seg-movim intocados"
   - "D-cf8-22/23/24/27/28: segundo aplicativo sai inteiro (lista de ~25 funções); número de contrato gerado (OSC NNN/ano), nunca digitado; terminal próprio reusa conferente/data_conferencia da migração 40 (mesma lista de cargo de executar); cargas novas fora do Promise.all principal; gates reescritos, nenhum apagado"
   - "Decisão desta implementação (não travada pelo usuário, mas necessária): ctCan sai junto com o segundo aplicativo, mesmo não estando na lista literal de D-cf8-22 — sua tabela de cargos reintroduzia papéis de contratação (empresa/fiscal/executor) que D-l7n-05 já havia rejeitado para o fluxo próprio; manPode/MAN_ACOES_CARGO (unificado desde a Task 1) assume o lugar dela nos blocos novos"
-  - "Escopo deliberadamente NÃO resolvido, registrado como lacuna conhecida: OS de movimentação continua no caminho de conferência de sempre (flComConferencia forçado true), fora do escopo deste plano (D-cf8-29). Quando a migração 43 for aplicada, uma OS de movimentação (tipo_executor='interna' por default) resolve para FLUXO_PROPRIO via osFluxoDe — que NÃO tem a etapa CONFERIDA. manConferir/movPainelDaOS continuam pedindo a transição para CONFERIDA sem ressalva. Isso não quebra nada HOJE (UNI_OK falso), mas é um ponto que uma fase futura precisa fechar antes ou junto da aplicação da migração 43, movendo a movimentação para um fluxo próprio que preserve a etapa de conferência, ou ensinando manConferir a resolver por fora de osFluxoDe"
+  - "Defeito encontrado na revisão e fechado nesta mesma tarefa (correção pós-dispatch, 23/08/2026): manConferir gravava o literal fixo 'CONFERIDA' na guarda de transição E no valor gravado. Com a migração 43 aplicada (UNI_OK verdadeiro), uma OS de movimentação (tipo_executor='interna' por default) resolve para FLUXO_PROPRIO via osFluxoDe — que não tem a etapa CONFERIDA — e a conferência, único momento em que aplicarInstalacao/aplicarRemocao gravam local/data_instalacao/situacao (D-uyz-15), morreria com 'Ação não permitida' assim que a migração fosse aplicada. Corrigido: osTerminalSucesso(f) deriva o terminal de qualquer fluxo pela sua própria lista de etapas (a última); manConferir e manConcluir passaram a gravar/exigir esse terminal derivado em vez do literal; o bloco 4 (Conferência) de manAbrirOS deixou de exigir status==='EXECUTADA' e passou a aceitar qualquer status de onde o fluxo da OS permita a transição para o terminal — condição que já cobria EXECUTADA→CONFERIDA (legado) e passa a cobrir EM_EXECUCAO→CONCLUIDA (fluxo próprio) sem duplicar a regra. Provado por um novo teste comportamental que roda os dois ramos lado a lado: com UNI_OK falso a conferência de uma OS de instalação em EXECUTADA aplica o cadastro e avança para CONFERIDA; com UNI_OK verdadeiro a mesma OS, agora em EM_EXECUCAO (a etapa que antecede o terminal em FLUXO_PROPRIO), aplica o mesmo cadastro e avança para CONCLUIDA — a diferença entre os dois ramos é a regra que o teste prova (tests/refrigeracao-movimentacao-os.test.js)"
 
 patterns-established:
   - "Sandbox node:vm: 'var X = valor' declarado dentro de um recorte carregado por vm.runInContext SEMPRE reatribui X ao rodar — um valor pré-semeado em ctx antes de vm.createContext(ctx) é sobrescrito na hora em que esse recorte específico executa. UNI_OK/OS_ITENS/OS_COMENTARIOS são 'var' dentro da porta de escrita; testes que querem ligá-los devem setar ctx.UNI_OK/ctx.OS_ITENS DEPOIS de todos os vm.runInContext, nunca antes (mesmo padrão que manAbrirOS/renderOS já usavam para os mocks de DOM)."
@@ -201,18 +201,18 @@ Nenhum além das quatro deviações acima, todas resolvidas dentro da mesma tare
 
 ## Next Phase Readiness
 
-- `node --test`: 907/907, 0 falhas
+- `node --test`: 908/908, 0 falhas (907 das três tasks + 1 do teste comportamental da correção pós-dispatch)
 - Os quatro `grep -c` do PLAT-15 em `refrigeracao/index.html`: 0/0/0/0
 - CSS fora de `@media` continua byte a byte idêntico ao fixture; `<style>` count idêntico a antes das três tasks
 - `grep -ciE 'drop table|drop column|delete from' supabase/43_refrigeracao_os_unificada.sql` == 0
 - `git diff --stat` das três tasks toca só `refrigeracao/index.html`, um arquivo novo em `supabase/`, um arquivo novo e nove existentes em `tests/`, `CLAUDE.md` e `TESTES.md` — nada em `shared/`, nada em `/home/luc/DEV_ERP`
-- Lacuna conhecida, registrada e não resolvida (fora do escopo deste plano): OS de movimentação sob `FLUXO_PROPRIO` uma vez a migração 43 estiver aplicada — ver `key-decisions` no frontmatter
+- Sem lacunas conhecidas em aberto: o defeito da conferência de movimentação sob `FLUXO_PROPRIO` (ver `key-decisions` no frontmatter) foi encontrado e fechado dentro desta mesma tarefa, num commit próprio em cima dos três de task, antes da publicação — não ficou para uma fase futura
 
 ## Self-Check: PASSED
 
 - `supabase/43_refrigeracao_os_unificada.sql` e `tests/refrigeracao-os-unificada.test.js` confirmados em disco.
-- Os 3 commits de task (`5097846`, `3a0ae20`, `fdbc2b4`) confirmados em `git log`.
-- `node --test`: 907/907 verde.
+- Os 3 commits de task (`5097846`, `3a0ae20`, `fdbc2b4`) mais o commit de correção pós-dispatch confirmados em `git log`.
+- `node --test`: 908/908 verde.
 - Os quatro `grep -c` do PLAT-15 em `refrigeracao/index.html`: 0/0/0/0.
 - Nenhum `drop table`/`drop column`/`delete from` na migração 43.
 - CSS fora de `@media` idêntico ao fixture; `tests/refrigeracao-ficha-pagina.test.js` verde sem edição.

@@ -1600,6 +1600,22 @@ function osProximos(f, s){
 }
 function osPodeIrPara(f, atual, destino){ return osProximos(f, atual).indexOf(destino) >= 0; }
 
+/* Correção pós-dispatch (23/08/2026): o terminal de sucesso de um fluxo é
+   SEMPRE a última etapa da lista (a mesma forma que _osEstadoResolvido já
+   usa) — CONFERIDA em FLUXO_LEGADO, CONCLUIDA em FLUXO_PROPRIO, ENCERRADA
+   em FLUXO_CONTRATO. manConferir escrevia o literal 'CONFERIDA' fixo (na
+   guarda E no valor gravado); com UNI_OK verdadeiro, uma OS de
+   movimentação (tipo_executor='interna' por padrão) resolve para
+   FLUXO_PROPRIO, que não tem CONFERIDA — a conferência, que é o ÚNICO
+   momento em que a instalação/remoção aplica local/data_instalacao/
+   situacao (D-uyz-15), pararia de existir no minuto em que a migração 43
+   fosse aplicada. osTerminalSucesso(f) é o que manConferir e o bloco 4 de
+   manAbrirOS agora consultam, em vez do literal. */
+function osTerminalSucesso(f){
+  var etapas = osEtapas(f);
+  return etapas.length ? etapas[etapas.length-1] : null;
+}
+
 /* D-cf8-05: soma de itens de serviço/material — valor nulo conta como
    zero, nunca NaN. */
 function osTotalItens(itens){
@@ -3616,11 +3632,17 @@ function manAbrirOS(logId){
   // cai no fluxo legado enquanto UNI_OK for falso (D-cf8-13/25, tela intocada).
   var flOS = osFluxoDe(entry);
   var flTipo = entry.tipoExecutor;
-  // D-cf8-29 + escopo: OS de movimentação continua no caminho de conferência
-  // de sempre (aplicarInstalacao/aplicarRemocao/baixa), independente do
-  // fluxo unificado — não tocado por este plano. Fora dela, a régua com
-  // Conferência só existe quando o fluxo do momento TEM a etapa CONFERIDA
-  // (fluxo legado, D-cf8-12); interna/externa unificadas (D-cf8-04) não têm.
+  // Correção pós-dispatch: o terminal desta OS específica, nunca um
+  // literal fixo — CONFERIDA no fluxo legado, CONCLUIDA em FLUXO_PROPRIO.
+  // Uma OS de movimentação resolve para FLUXO_PROPRIO assim que UNI_OK for
+  // verdadeiro (D-cf8-29: aplicarInstalacao/aplicarRemocao/baixa em si
+  // continuam intocadas — só o literal de estado que os envolvia mudou).
+  var flTerminal = osTerminalSucesso(flOS);
+  // D-cf8-29 + escopo: OS de movimentação continua no caminho de
+  // conferência de sempre (o bloco 4 abaixo), independente do fluxo
+  // unificado. Fora dela, a régua com Conferência só existe quando o
+  // fluxo do momento TEM a etapa CONFERIDA (fluxo legado, D-cf8-12);
+  // interna/externa unificadas (D-cf8-04) não têm.
   var flComConferencia = osEhMovimentacao(entry) || osEtapas(flOS).indexOf('CONFERIDA')>=0;
   // D-cf8-04: legado E contrato têm a etapa EXECUTADA (o fim da execução
   // não é o fim da OS neles); só interna/externa unificadas concluem
@@ -3735,7 +3757,7 @@ function manAbrirOS(logId){
         if (manTemEvidencia(entry) && manPode('executar') && manPodeIrPara(st,'EXECUTADA',flTipo)) {
           h += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
         }
-      } else if (manTemEvidencia(entry) && manPode('concluir') && manPodeIrPara(st,'CONCLUIDA',flTipo)) {
+      } else if (manTemEvidencia(entry) && manPode('concluir') && manPodeIrPara(st,flTerminal,flTipo)) {
         var estadoAtualConcl = equipEstado(e);
         var optsConclEstado = (estadoAtualConcl ? '' : '<option value="" selected disabled>(não cadastrado)</option>') +
           EQUIP_ORDEM.map(function(k){ return '<option value="'+k+'"'+(estadoAtualConcl===k?' selected':'')+'>'+esc(EQUIP_ESTADOS[k].rotulo)+'</option>'; }).join('');
@@ -3753,7 +3775,7 @@ function manAbrirOS(logId){
     if (entry.conferente) {
       h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Conferido por '+esc(entry.conferente)+' em '+fmtDate(entry.dataConferencia)+'</div>' +
         (entry.parecerConferencia?'<div class="le-desc" style="margin-top:4px">'+esc(entry.parecerConferencia)+'</div>':'');
-    } else if (st==='EXECUTADA' && manPode('conferir') && manPodeIrPara(st,'CONFERIDA',flTipo)) {
+    } else if (manPode('conferir') && manPodeIrPara(st,flTerminal,flTipo)) {
       if (entry.parecerConferencia) {
         h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px;margin-bottom:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida anteriormente: '+esc(entry.parecerConferencia)+'</div>';
       }
@@ -3957,6 +3979,23 @@ async function manRegistrarEvidencia(logId){
 async function manConferir(logId, aprovado){
   var achado = manEntrada(logId); if(!achado) return;
   var movimentacao = osEhMovimentacao(achado.entry);
+  // Correção pós-dispatch: o terminal desta OS, nunca o literal fixo
+  // 'CONFERIDA' — CONFERIDA no fluxo legado, CONCLUIDA em FLUXO_PROPRIO.
+  // osFluxoDe(achado.entry) resolve pelo tipoExecutor da própria entrada,
+  // igual a qualquer outra OS interna/externa — uma OS de movimentação não
+  // tem tratamento especial aqui: com UNI_OK verdadeiro ela também passa a
+  // usar FLUXO_PROPRIO (5 etapas, sem EXECUTADA), e a transição válida
+  // antes do terminal passa a ser EM_EXECUCAO→CONCLUIDA direto. A guarda
+  // abaixo continua no wrapper manPodeIrPara(status,destino,tipoExecutor)
+  // — ele reconstrói uma entry sintética só com tipoExecutor, mas
+  // osFluxoDe não olha mais nenhum outro campo da entry, então o
+  // resultado é idêntico ao de osFluxoDe(achado.entry); só o terminal
+  // (flTerminal) precisava deixar de ser um literal. manConferir é o
+  // ÚNICO lugar que aplica local/data_instalacao/situacao (D-uyz-15) —
+  // travar essa resolução travava a instalação/remoção no minuto em que
+  // a migração 43 fosse aplicada.
+  var flOS = osFluxoDe(achado.entry);
+  var flTerminal = osTerminalSucesso(flOS);
   // D-uyz-07: uma remoção com destino baixa exige podeDarBaixa() ALÉM de
   // manPode('conferir') — um gestor confere remoção comum, não confere
   // baixa. Guarda na ação, não só na renderização (D-l7n-03).
@@ -3964,19 +4003,20 @@ async function manConferir(logId, aprovado){
   if (!manPode('conferir') || (exigeBaixa && !podeDarBaixa())) { showToast('Ação não permitida','error'); return; }
   var parecer = (val('man-conf-parecer')||'').trim();
   if (aprovado) {
-    if (!manPodeIrPara(achado.entry.status,'CONFERIDA')) { showToast('Ação não permitida','error'); return; }
+    if (!manPodeIrPara(achado.entry.status,flTerminal,achado.entry.tipoExecutor)) { showToast('Ação não permitida','error'); return; }
     if (movimentacao) {
-      // D-uyz-15: cadastro gravado ANTES do status terminal — CONFERIDA é
-      // terminal (manProximos devolve []), então uma falha DEPOIS deixaria
-      // a OS fechada com o cadastro não aplicado e sem caminho de repetição.
-      // Falha aqui deixa a OS em EXECUTADA para o gestor repetir.
+      // D-uyz-15: cadastro gravado ANTES do status terminal — o terminal
+      // é terminal (manProximos/osProximos devolvem []), então uma falha
+      // DEPOIS deixaria a OS fechada com o cadastro não aplicado e sem
+      // caminho de repetição. Falha aqui deixa a OS em EXECUTADA para o
+      // gestor repetir.
       var aplicado = achado.entry.tipo==='INSTALAÇÃO'
         ? await aplicarInstalacao(achado.equipId, achado.entry)
         : await aplicarRemocao(achado.equipId, achado.entry);
       if (!aplicado) return; // aborta sem mudar o status
     }
     var nome = ctUser?ctUser.nome:'';
-    var ok = await manAtualizarOS(logId, achado.equipId, {status:'CONFERIDA', conferente:nome, dataConferencia:today(), parecerConferencia:parecer||null}, 'OS conferida');
+    var ok = await manAtualizarOS(logId, achado.equipId, {status:flTerminal, conferente:nome, dataConferencia:today(), parecerConferencia:parecer||null}, 'OS conferida');
     if (ok) {
       if (!movimentacao) {
         // O ramo de manutenção NÃO muda: ultima_manutencao/estado são
@@ -3988,7 +4028,7 @@ async function manConferir(logId, aprovado){
       manAbrirOS(logId); renderOS();
     }
   } else {
-    if (!manPodeIrPara(achado.entry.status,'EM_EXECUCAO')) { showToast('Ação não permitida','error'); return; }
+    if (!manPodeIrPara(achado.entry.status,'EM_EXECUCAO',achado.entry.tipoExecutor)) { showToast('Ação não permitida','error'); return; }
     if (!parecer) { showToast('Informe o parecer da devolução','error'); return; }
     var ok2 = await manAtualizarOS(logId, achado.equipId, {status:'EM_EXECUCAO', parecerConferencia:parecer}, 'Devolvida p/ correção');
     if (ok2) { manAbrirOS(logId); renderOS(); }
@@ -4005,10 +4045,16 @@ async function manConferir(logId, aprovado){
 async function manConcluir(logId){
   var achado = manEntrada(logId); if(!achado) return;
   var tipo = achado.entry.tipoExecutor;
-  if (!manPode('concluir') || !manPodeIrPara(achado.entry.status,'CONCLUIDA',tipo)) { showToast('Ação não permitida','error'); return; }
+  // Correção pós-dispatch: mesmo raciocínio de manConferir — o terminal
+  // é derivado do fluxo desta OS, nunca um literal fixo (aqui sempre
+  // resolve para 'CONCLUIDA' na prática, já que este botão só existe
+  // para OS não-movimentação sem a etapa EXECUTADA, D-cf8-24, mas
+  // hardcoded custaria uma segunda fonte de verdade para o mesmo fato).
+  var flTerminal = osTerminalSucesso(osFluxoDe(achado.entry));
+  if (!manPode('concluir') || !manPodeIrPara(achado.entry.status,flTerminal,tipo)) { showToast('Ação não permitida','error'); return; }
   if (!manTemEvidencia(achado.entry)) { showToast('Registre ao menos uma evidência antes de concluir','error'); return; }
   var nome = ctUser?ctUser.nome:'';
-  var ok = await manAtualizarOS(logId, achado.equipId, {status:'CONCLUIDA', conferente:nome, dataConferencia:today()}, 'OS concluída');
+  var ok = await manAtualizarOS(logId, achado.equipId, {status:flTerminal, conferente:nome, dataConferencia:today()}, 'OS concluída');
   if (ok) {
     await atualizarUltimaManutencao(achado.equipId, achado.entry.date); // D-l7n-11: a data da OS
     await atualizarEstadoEquip(achado.equipId, val('man-conf-estado'));
