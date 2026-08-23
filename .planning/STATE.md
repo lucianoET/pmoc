@@ -5,10 +5,10 @@ milestone_name: Consolidação da plataforma
 current_phase: 7
 current_phase_name: ui-ux-mobile
 status: verifying
-stopped_at: "Completed quick task 260823-cf8: OS unificada por tipo de executor em /refrigeracao (D-cf8-01..30) -- tres tasks, node --test 907/907; migracao 43 escrita, aguardando aplicacao do usuario"
-last_updated: "2026-08-23T13:47:05.368Z"
-last_activity: 2026-08-22
-last_activity_desc: "Quick task 260822-8rz: versão de computador de /refrigeracao (>=1024px) — navegação lateral, gaveta como painel lateral, seis listas em tabela ordenável/filtrável por coluna; celular intocado por construção"
+stopped_at: "Completed quick task 260823-jar: a OS de /refrigeracao vira PAGINA inteira em >=1024px (#page-os-detalhe), mesmo mecanismo compartilhado da ficha-pagina de 260823-92t (DETALHE_ABERTO/DETALHE_ORIGEM/reAlojarDetalhe) -- tres tasks, node --test 945/945; gaveta provada byte a byte em cinco cenarios; texto nao salvo sobrevive ao cruzar o limiar nos dois sentidos"
+last_updated: "2026-08-23T17:44:18.000Z"
+last_activity: 2026-08-23
+last_activity_desc: "Quick task 260823-jar: OS como página inteira no computador (>=1024px) — manMontarOS fonte única, camada compartilhada de detalhe com a ficha (260823-92t), OS_CAMPOS_VOLATEIS preserva texto digitado ao cruzar o limiar; gaveta intocada, provada byte a byte em cinco cenários"
 progress:
   total_phases: 8
   completed_phases: 4
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 7 (ui-ux-mobile) — EXECUTED
 Plan: 1 of 1
 Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
-Last activity: 2026-08-22 — Quick task 260822-8rz: versão de computador de /refrigeracao (>=1024px) — navegação lateral, gaveta como painel lateral, seis listas em tabela ordenável/filtrável por coluna; celular intocado por construção
+Last activity: 2026-08-23 — Quick task 260823-jar: a OS de /refrigeracao vira página inteira em >=1024px (#page-os-detalhe), com a mesma camada compartilhada de detalhe da ficha-página (260823-92t) — DETALHE_ABERTO/DETALHE_ORIGEM/reAlojarDetalhe agora servem ficha e OS. manMontarOS extrai o conteúdo em contexto/trabalho (corte de prefixo), OS_CAMPOS_VOLATEIS preserva texto não salvo ao cruzar o limiar nos dois sentidos; gaveta abaixo de 1024px provada byte a byte, não afirmada
 
 Progress: [██████████] 100% (v2.0)
 
