@@ -21,6 +21,11 @@ const SQL_04 = fs.readFileSync(path.join(RAIZ, 'supabase', '04_refrigeracao_sche
 const SQL_40 = fs.readFileSync(path.join(RAIZ, 'supabase', '40_refrigeracao_os_fluxo.sql'), 'utf8');
 const SQL_41 = fs.readFileSync(path.join(RAIZ, 'supabase', '41_refrigeracao_ficha_estado.sql'), 'utf8');
 const SQL_42 = fs.readFileSync(path.join(RAIZ, 'supabase', '42_refrigeracao_movimentacao.sql'), 'utf8');
+// 260823-cf8 (Task 1): a migração 43 acrescenta 18 colunas de OS unificada
+// por tipo de executor em logs_manutencao — sem somá-la aqui este gate
+// voltaria a afirmar que a união das migrações é a verdade, quando não
+// seria mais (mesmo raciocínio já registrado para a 42 em 260821-uyz).
+const SQL_43 = fs.readFileSync(path.join(RAIZ, 'supabase', '43_refrigeracao_os_unificada.sql'), 'utf8');
 
 function recorte(marcadorIni, marcadorFim) {
   const ini = HTML.indexOf(marcadorIni);
@@ -274,12 +279,13 @@ test('toda coluna criada pela migração 42 em logs_manutencao aparece como valo
   novas42.forEach((col) => assert.ok(valores.includes(col), `${col} (migração 42) não está em CAMPOS_LOG`));
 });
 
-test('todo valor de CAMPOS_LOG é coluna real de logs_manutencao (união 04+40+41+42)', () => {
+test('todo valor de CAMPOS_LOG é coluna real de logs_manutencao (união 04+40+41+42+43)', () => {
   const ctx = carregarPonteLog();
   const reais = colunasCreateTable04('logs_manutencao')
     .concat(colunasAddColumn(SQL_40, 'logs_manutencao'))
     .concat(colunasAddColumn(SQL_41, 'logs_manutencao'))
-    .concat(colunasAddColumn(SQL_42, 'logs_manutencao'));
+    .concat(colunasAddColumn(SQL_42, 'logs_manutencao'))
+    .concat(colunasAddColumn(SQL_43, 'logs_manutencao'));
   Object.entries(ctx.CAMPOS_LOG).forEach(([k, col]) => {
     assert.ok(reais.includes(col), `CAMPOS_LOG.${k} = "${col}" não é coluna real de logs_manutencao`);
   });

@@ -22,6 +22,11 @@ const SQL_04 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '04_refrig
 // destino_remocao) — sem somá-la aqui este gate voltaria a afirmar que a
 // união das migrações é a verdade, quando não seria mais.
 const SQL_42 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '42_refrigeracao_movimentacao.sql'), 'utf8');
+// 260823-cf8 (Task 1): a migração 43 acrescenta 18 colunas da OS unificada
+// por tipo de executor em logs_manutencao — mesmo raciocínio já registrado
+// para a 42: sem somá-la aqui este gate voltaria a afirmar que a união das
+// migrações é a verdade, quando não seria mais.
+const SQL_43 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '43_refrigeracao_os_unificada.sql'), 'utf8');
 
 function recorte(marcadorIni, marcadorFim) {
   const ini = HTML.indexOf(marcadorIni);
@@ -84,6 +89,16 @@ function colunasNovasMigracao42() {
   return nomes;
 }
 
+// 260823-cf8 (Task 1): a migração 43 acrescenta 18 colunas da OS unificada
+// por tipo de executor em logs_manutencao.
+function colunasNovasMigracao43() {
+  const re = /alter table logs_manutencao add column if not exists (\w+)/g;
+  const nomes = [];
+  let m;
+  while ((m = re.exec(SQL_43))) nomes.push(m[1]);
+  return nomes;
+}
+
 // ── ponte de campos ── (CAMPOS_LOG / dbToLog / logParaDb)
 function carregarPonte() {
   const ctx = {};
@@ -102,9 +117,9 @@ test('toda coluna criada pela migração 40 aparece como valor em CAMPOS_LOG (D-
   });
 });
 
-test('todo valor de CAMPOS_LOG é uma coluna real (união das colunas da migração 04 com as da 40 e da 41)', () => {
+test('todo valor de CAMPOS_LOG é uma coluna real (união das colunas da migração 04 com as da 40, 41, 42 e 43)', () => {
   const ctx = carregarPonte();
-  const colunasReais = colunasLogsManutencao04().concat(colunasNovasMigracao40(), colunasNovasMigracao41(), colunasNovasMigracao42());
+  const colunasReais = colunasLogsManutencao04().concat(colunasNovasMigracao40(), colunasNovasMigracao41(), colunasNovasMigracao42(), colunasNovasMigracao43());
   Object.keys(ctx.CAMPOS_LOG).forEach((k) => {
     const col = ctx.CAMPOS_LOG[k];
     assert.ok(colunasReais.includes(col), `CAMPOS_LOG.${k} = "${col}" não é coluna real de logs_manutencao`);

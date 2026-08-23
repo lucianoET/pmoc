@@ -495,7 +495,27 @@ var CAMPOS_LOG = {
   localDestinoId: 'local_destino_id',
   localOrigemId: 'local_origem_id',
   equipSubstituidoId: 'equip_substituido_id',
-  destinoRemocao: 'destino_remocao'
+  destinoRemocao: 'destino_remocao',
+  /* 260823-cf8 (migração 43, D-cf8-01..30): 18 colunas da OS unificada por
+     tipo de executor — a mesma ponte única, sem exceção nova. */
+  tipoExecutor: 'tipo_executor',
+  executorSetor: 'executor_setor',
+  executorPessoas: 'executor_pessoas',
+  executorOrg: 'executor_org',
+  numero: 'numero',
+  empresa: 'empresa',
+  empresaCnpj: 'empresa_cnpj',
+  instrumento: 'instrumento',
+  processo: 'processo',
+  solicitante: 'solicitante',
+  ne: 'ne',
+  nf: 'nf',
+  dataNf: 'data_nf',
+  certificador: 'certificador',
+  dataCertificacao: 'data_certificacao',
+  fiscal: 'fiscal',
+  dataFiscalizacao: 'data_fiscalizacao',
+  parecerFiscal: 'parecer_fiscal'
 };
 
 function dbToLog(r) {
@@ -579,11 +599,29 @@ async function addLogEntryAsync(equipId, entry) {
       equipSubstituidoId: entry.equipSubstituidoId,
       destinoRemocao: entry.destinoRemocao
     });
+    /* 260823-cf8 (D-cf8-13): diferente de extraMov (que confia no undefined
+       não serializar), extraUni é gateado EXPLICITAMENTE por UNI_OK — os
+       campos do formulário podem vir preenchidos mesmo antes da migração 43
+       rodar (o formulário não sabe disso), e sem o gate eles vazariam no
+       payload contra um banco que ainda não tem as colunas. */
+    var extraUni = UNI_OK ? logParaDb({
+      tipoExecutor: entry.tipoExecutor,
+      executorSetor: entry.executorSetor,
+      executorPessoas: entry.executorPessoas,
+      executorOrg: entry.executorOrg,
+      numero: entry.numero,
+      empresa: entry.empresa,
+      empresaCnpj: entry.empresaCnpj,
+      instrumento: entry.instrumento,
+      processo: entry.processo,
+      solicitante: entry.solicitante,
+      ne: entry.ne
+    }) : {};
     var payload = Object.assign({
       equip_id: equipId, data_os: entry.date, tipo: entry.tipo,
       status: entry.status, tecnico: entry.tecnico || null,
       descricao: entry.desc || null, checklist: entry.checklist || []
-    }, extraMov);
+    }, extraMov, extraUni);
     var { data, error } = await supa.from('logs_manutencao').insert(payload).select().single();
     if (error) throw error;
     if (!_logCache[equipId]) _logCache[equipId] = [];
@@ -638,6 +676,22 @@ async function movSondarEsquema() {
   var r = await supa.from('logs_manutencao').select('id,local_destino_id,destino_remocao').limit(1);
   MOV_OK = !r.error;
   return MOV_OK;
+}
+
+/* 260823-cf8 (D-cf8-13): sonda PRÓPRIA da OS unificada por tipo de
+   executor, com DUAS leituras e UMA pergunta — diferente de D-uyz-13
+   (duas migrações = duas perguntas), aqui é uma migração só (43) criando
+   dois objetos: logs_manutencao.tipo_executor e a tabela os_itens.
+   UNI_OK só fica verdadeiro quando as duas leituras passam. Estender
+   manSondarEsquema desligaria o fluxo inteiro num banco com 40+41+42 e
+   sem 43 — a regressão que D-uyz-13 já ensinou a evitar. */
+var UNI_OK = false;
+
+async function uniSondarEsquema() {
+  var r1 = await supa.from('logs_manutencao').select('id,tipo_executor').limit(1);
+  var r2 = await supa.from('os_itens').select('id').limit(1);
+  UNI_OK = !r1.error && !r2.error;
+  return UNI_OK;
 }
 
 // carregarPerfil só é CHAMADA em initAppOnce, depois de todos os scripts terem rodado — por isso pode atribuir a ctUser mesmo estando num bloco <script> anterior ao que a declara.
@@ -1268,6 +1322,172 @@ function manPode(acao){
   return manPodeCargo(acao, ctUser && ctUser.role);
 }
 function manCargoAtual(){ return ctUser ? ctUser.role : ''; }
+
+/* ── OS unificada: executor, fluxos e transições ── */
+/* 260823-cf8 (D-cf8-01..30): núcleo puro de fluxo por DEFINIÇÃO de etapas
+   — mesma ideia do núcleo de fluxo compartilhado que outros módulos da
+   plataforma já usam (maquinas/contratacoes.js), replicada aqui e NUNCA
+   importada (D-04: refrigeracao/index.html é congelada e standalone).
+   Uma definição de fluxo é {etapas:[{id,rotulo,curto,tom}], cancelado,
+   rotuloCancelado, tomCancelado} — o terminal de sucesso é a ÚLTIMA
+   etapa da lista (mesma forma que MAN_ORDEM já tinha, com CONFERIDA no
+   fim). tom é um nome semântico resolvido por MAN_TONS, nunca hexadecimal
+   — cor escrita aqui seria a sétima cópia da paleta. */
+
+var OS_EXECUTORES = ['interna', 'externa', 'contrato'];
+var OS_EXECUTOR_ROTULOS = {
+  interna:  'Interna (equipe própria)',
+  externa:  'Externa (outra OM/órgão)',
+  contrato: 'Contrato (empresa)'
+};
+/* Lista fechada do art. 14.133/2021 — só faz sentido em tipo_executor='contrato'. */
+var OS_INSTRUMENTOS = {
+  licitacao:  'Licitação',
+  dispensa:   'Dispensa',
+  adesao_arp: 'Adesão à ARP',
+  contrato:   'Contrato'
+};
+
+/* D-cf8-04: interna/externa — Aberta → Delineamento → Aprovação →
+   Execução → Concluída, mais Cancelada, SEM fiscalização/conferência
+   (o passo que a OS interna ganhou em 21/08 e este plano remove). */
+var FLUXO_PROPRIO = {
+  etapas: [
+    {id:'ABERTA',       rotulo:'Aberta — aguardando delineamento',   curto:'Abertura',  tom:'info'},
+    {id:'DELINEAMENTO', rotulo:'Em delineamento',                    curto:'Delineam.', tom:'info'},
+    {id:'APROVACAO',    rotulo:'Aguardando aprovação do gestor',     curto:'Aprovação', tom:'warn'},
+    {id:'EM_EXECUCAO',  rotulo:'Em execução',                        curto:'Execução',  tom:'info'},
+    {id:'CONCLUIDA',    rotulo:'Concluída',                          curto:'Conclusão', tom:'ok'}
+  ],
+  cancelado:'CANCELADA', rotuloCancelado:'Cancelada', tomCancelado:'neutro'
+};
+
+/* D-cf8-04: contrato — ciclo público inteiro, com fiscalização, NF e
+   certificação. Os quatro primeiros ids são os MESMOS de FLUXO_PROPRIO,
+   na mesma ordem (D-cf8-04/09 — o que difere é quem executa, nunca a
+   forma das quatro primeiras etapas). */
+var FLUXO_CONTRATO = {
+  etapas: [
+    {id:'ABERTA',       rotulo:'Aguardando orçamento',                          curto:'Solicit.', tom:'warn'},
+    {id:'DELINEAMENTO', rotulo:'Orçamento em elaboração',                       curto:'Orçam.',    tom:'info'},
+    {id:'APROVACAO',    rotulo:'Aguardando aprovação do orçamento',             curto:'Aprov.',    tom:'warn'},
+    {id:'EM_EXECUCAO',  rotulo:'Em execução',                                   curto:'Execução',  tom:'info'},
+    {id:'EXECUTADA',    rotulo:'Executada — aguardando fiscalização',           curto:'Fiscal',    tom:'warn'},
+    {id:'FISCALIZADA',  rotulo:'Fiscalizada — aguardando NF/certificação',      curto:'NF',        tom:'info'},
+    {id:'ENCERRADA',    rotulo:'Encerrada',                                     curto:'Encerr.',   tom:'ok'}
+  ],
+  cancelado:'CANCELADA', rotuloCancelado:'Cancelada', tomCancelado:'neutro'
+};
+
+/* D-cf8-12: a FORMA da trava da migração 40 (a que o banco publicado
+   aceita hoje, sem a 43) — não é opinião de projeto, é o que existe.
+   Sai quando a migração 43 estiver aplicada em produção e UNI_OK for
+   permanentemente verdadeiro. Tolerado como a ÚNICA lista quase-
+   duplicada deste núcleo (D-cf8-12) — MAN_STATUS/MAN_ORDEM/MAN_STEPS,
+   acima, continuam existindo por si, para os pontos de chamada que
+   ainda os leem direto. */
+var FLUXO_LEGADO = {
+  etapas: [
+    {id:'ABERTA',       rotulo:'Aberta — aguardando delineamento',   curto:'Abertura',  tom:'info'},
+    {id:'DELINEAMENTO', rotulo:'Em delineamento',                    curto:'Delineam.', tom:'info'},
+    {id:'APROVACAO',    rotulo:'Aguardando aprovação do gestor',     curto:'Aprovação', tom:'warn'},
+    {id:'EM_EXECUCAO',  rotulo:'Em execução',                        curto:'Execução',  tom:'info'},
+    {id:'EXECUTADA',    rotulo:'Executada — aguardando conferência', curto:'Executada', tom:'warn'},
+    {id:'CONFERIDA',    rotulo:'Conferida',                          curto:'Conclusão', tom:'ok'}
+  ],
+  cancelado:'CANCELADA', rotuloCancelado:'Cancelada', tomCancelado:'neutro'
+};
+
+/* D-cf8-09: interna e externa compartilham a MESMA definição de fluxo —
+   o MESMO objeto referenciado duas vezes, não duas listas iguais. Duas
+   cópias divergem sozinhas na primeira correção. */
+var OS_FLUXOS = { interna: FLUXO_PROPRIO, externa: FLUXO_PROPRIO, contrato: FLUXO_CONTRATO };
+
+/* D-cf8-11: CONFERIDA continua na trava do banco e é lido como
+   SINÔNIMO, nunca escrito — separado de MAN_EQUIVALENCIA (que marca
+   "registro direto, legado", o que seria falso para uma CONFERIDA real). */
+var OS_SINONIMOS = {'CONFERIDA':'CONCLUIDA'};
+
+function osTipoExecutor(entry){
+  var t = entry && entry.tipoExecutor;
+  return OS_EXECUTORES.indexOf(t) >= 0 ? t : 'interna';
+}
+
+function osFluxoDe(entry){
+  if (!UNI_OK) return FLUXO_LEGADO; // D-cf8-13/25: sem a migração 43, sempre o fluxo legado
+  return OS_FLUXOS[osTipoExecutor(entry)] || FLUXO_PROPRIO;
+}
+
+function osNormalizar(s){ return OS_SINONIMOS.hasOwnProperty(s) ? OS_SINONIMOS[s] : s; }
+
+function osEtapas(f){ return (f && f.etapas || []).map(function(e){ return e.id; }); }
+function osCurtos(f){ return (f && f.etapas || []).map(function(e){ return e.curto || e.rotulo || e.id; }); }
+
+/* Resolve um status contra um fluxo: tenta o LITERAL primeiro (o que um
+   fluxo conhece pelo próprio nome nunca é desviado por sinônimo — é o
+   que mantém FLUXO_LEGADO enxergando CONFERIDA como a etapa dele mesmo,
+   não como sinônimo de outra coisa); só cai no sinônimo (D-cf8-11)
+   quando o literal não é conhecido — o caso de uma OS própria antiga
+   com o valor velho gravado. */
+function _osEstadoResolvido(f, s){
+  if (!f) return null;
+  if (s === f.cancelado) return {cancelado:true};
+  var etapas = f.etapas || [];
+  for (var i=0;i<etapas.length;i++){ if (etapas[i].id === s) return etapas[i]; }
+  var syn = osNormalizar(s);
+  if (syn !== s){
+    if (syn === f.cancelado) return {cancelado:true};
+    for (var j=0;j<etapas.length;j++){ if (etapas[j].id === syn) return etapas[j]; }
+  }
+  return null;
+}
+
+function osPasso(f, s){
+  var r = _osEstadoResolvido(f, s);
+  if (!r || r.cancelado) return -1;
+  return (f.etapas||[]).indexOf(r);
+}
+function osRotulo(f, s){
+  var r = _osEstadoResolvido(f, s);
+  if (!r) return s; // desconhecido: o próprio id — esc() escapa na tela
+  if (r.cancelado) return (f && f.rotuloCancelado) || (f && f.cancelado) || s;
+  return r.rotulo;
+}
+function osTom(f, s){
+  var r = _osEstadoResolvido(f, s);
+  if (!r) return 'neutro';
+  if (r.cancelado) return (f && f.tomCancelado) || 'neutro';
+  return r.tom || 'neutro';
+}
+function osEhTerminal(f, s){
+  var r = _osEstadoResolvido(f, s);
+  if (!r) return false;
+  if (r.cancelado) return true;
+  var etapas = (f && f.etapas) || [];
+  return etapas.length>0 && etapas[etapas.length-1] === r;
+}
+function osProximos(f, s){
+  if (!f || osEhTerminal(f, s)) return [];
+  var r = _osEstadoResolvido(f, s);
+  if (!r || r.cancelado) return [];
+  var etapas = f.etapas || [];
+  var i = etapas.indexOf(r);
+  if (i<0) return [];
+  var out = [];
+  if (i+1<etapas.length) out.push(etapas[i+1].id); // seguinte
+  if (i>0) out.push(etapas[i-1].id);                // anterior
+  out.push(f.cancelado);
+  return out;
+}
+function osPodeIrPara(f, atual, destino){ return osProximos(f, atual).indexOf(destino) >= 0; }
+
+/* D-cf8-05: soma de itens de serviço/material — valor nulo conta como
+   zero, nunca NaN. */
+function osTotalItens(itens){
+  return (itens||[]).reduce(function(s,i){ return s + (Number(i.quantidade)||0)*(Number(i.valorUnitario)||0); }, 0);
+}
+
+function osRotuloExecutor(entry){ return OS_EXECUTOR_ROTULOS[osTipoExecutor(entry)] || OS_EXECUTOR_ROTULOS.interna; }
 
 function loadData(){ /* no-op: dados carregados via loadDataFromSupabase() */ }
 function saveData(){
