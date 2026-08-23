@@ -216,3 +216,206 @@ test('os quatro grep do PLAT-15 continuam em 0 — refrigeração segue congelad
     );
   }
 });
+
+// ═══════════ TAREFA 2 — #page-ficha: marcação, CSS, abrir e voltar ═══════
+
+const MARCADORES_PAGINA = [
+  'function botaoDaAba(chave){',
+  'function abrirFichaPagina(id){',
+  'function voltarDaFicha(){',
+  'function abrirFichaGaveta(id){',
+  'function openDetail(id){',
+];
+
+// ── DOM de mentira: só o suficiente para abrirFichaPagina/voltarDaFicha —
+// mesmo padrão de objetos com classList de conjunto e querySelector(All)
+// sobre uma lista declarada no teste já usado nos outros gates do módulo. ──
+function criarElemento(id, classesIniciais) {
+  const classes = new Set(classesIniciais || []);
+  return {
+    id: id,
+    textContent: '',
+    innerHTML: '',
+    scrollTop: 0,
+    style: {},
+    classList: {
+      add: function (c) { classes.add(c); },
+      remove: function (c) { classes.delete(c); },
+      contains: function (c) { return classes.has(c); },
+    },
+  };
+}
+
+// navTo tem gate próprio (chamadas registradas, não reexecutadas — o que
+// está sob teste aqui é abrirFichaPagina/voltarDaFicha, não navTo em si).
+function criarSandboxPagina(extras) {
+  const paginasChaves = ['dash', 'inv', 'os', 'pmoc', 'alert', 'ficha'];
+  const nodes = {};
+  paginasChaves.forEach(function (k) {
+    nodes['page-' + k] = criarElemento('page-' + k, k === 'dash' ? ['page', 'active'] : ['page']);
+  });
+  ['fh-id', 'fh-local', 'fh-predio', 'fh-pills', 'fh-acoes', 'fh-voltar-txt',
+    'ficha-col-1', 'ficha-col-2', 'ficha-col-3', 'fab',
+    'dh-id', 'dh-local', 'dh-predio', 'dh-pills', 'drawer-body', 'drawer-footer'].forEach(function (id) {
+    nodes[id] = criarElemento(id);
+  });
+  nodes['drawer'] = criarElemento('drawer');
+
+  const navBtns = ['dash', 'inv', 'os', 'pmoc', 'alert'].map(function (k) {
+    return criarElemento('nav-' + k, k === 'dash' ? ['nav-btn', 'active'] : ['nav-btn']);
+  });
+
+  const chamadasNavTo = [];
+  const ctx = mocksComuns();
+  Object.assign(ctx, {
+    DATA: [EQUIP_FIXO],
+    getEquipLog: function (id) { return id === EQUIP_FIXO.id ? LOGS_FIXOS : []; },
+    TELA_LARGA: true,
+    el: function (id) { return nodes[id] || null; },
+    document: {
+      querySelector: function (sel) {
+        if (sel === '.page.active') {
+          let achou = null;
+          paginasChaves.forEach(function (k) { if (nodes['page-' + k].classList.contains('active')) achou = nodes['page-' + k]; });
+          return achou;
+        }
+        return null;
+      },
+      querySelectorAll: function (sel) {
+        if (sel === '.page') return paginasChaves.map(function (k) { return nodes['page-' + k]; });
+        if (sel === '#bottom-nav .nav-btn') return navBtns;
+        return [];
+      },
+      addEventListener: function () {},
+      body: { style: {} },
+    },
+    closeDrawer: function () { nodes['drawer'].classList.remove('open'); },
+    openDrawer: function () { nodes['drawer'].classList.add('open'); },
+    navTo: function (pagina, btn) { chamadasNavTo.push({ pagina: pagina, btn: btn }); },
+  });
+  Object.assign(ctx, extras || {});
+  vm.createContext(ctx);
+  MARCADORES_REAIS.forEach(function (m) { vm.runInContext(bloco(HTML, m), ctx); });
+  MARCADORES_FICHA.forEach(function (m) { vm.runInContext(bloco(HTML, m), ctx); });
+  MARCADORES_PAGINA.forEach(function (m) { vm.runInContext(bloco(HTML, m), ctx); });
+  vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_COLUNAS = '), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var ABAS_NAV = '), ctx);
+  vm.runInContext(bloco(HTML, 'var ROTULOS_VOLTA = {'), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_ABERTA = '), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_ORIGEM = '), ctx);
+  return { ctx: ctx, nodes: nodes, navBtns: navBtns, chamadasNavTo: chamadasNavTo };
+}
+
+test('openDetail: TELA_LARGA verdadeiro abre a ficha como página; falso abre a gaveta como antes (D-92t-01)', () => {
+  let s = criarSandboxPagina({ TELA_LARGA: true });
+  s.ctx.openDetail(EQUIP_FIXO.id);
+  assert.ok(s.nodes['page-ficha'].classList.contains('active'));
+  assert.ok(s.nodes['ficha-col-1'].innerHTML.length > 0);
+
+  s = criarSandboxPagina({ TELA_LARGA: false });
+  s.ctx.openDetail(EQUIP_FIXO.id);
+  assert.ok(!s.nodes['page-ficha'].classList.contains('active'));
+  assert.ok(s.nodes['drawer'].classList.contains('open'));
+});
+
+test('as três colunas recebem os blocos por FICHA_COLUNAS — os cinco títulos aparecem, cada um exatamente uma vez', () => {
+  const s = criarSandboxPagina();
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  const uniao = s.nodes['ficha-col-1'].innerHTML + s.nodes['ficha-col-2'].innerHTML + s.nodes['ficha-col-3'].innerHTML;
+  const titulos = ['1 · Local', '2 · Dados do equipamento', '3 · Estado e PMOC', '4 · Histórico de OS/manutenções'];
+  titulos.forEach((titulo) => {
+    const qtd = uniao.split(titulo).length - 1;
+    assert.equal(qtd, 1, `título "${titulo}" apareceu ${qtd} vez(es)`);
+  });
+  assert.equal((uniao.match(/qr-mock/g) || []).length, 1, 'bloco 5 (QR, mockado) não apareceu exatamente uma vez');
+});
+
+test('abrirFichaPagina grava FICHA_ORIGEM a partir de .page.active, cai para \'inv\' quando desconhecida/nenhuma/a própria ficha', () => {
+  let s = criarSandboxPagina();
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-alert'].classList.add('active');
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.equal(s.ctx.FICHA_ORIGEM, 'alert');
+
+  s = criarSandboxPagina();
+  s.nodes['page-dash'].classList.remove('active'); // nenhuma página ativa
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.equal(s.ctx.FICHA_ORIGEM, 'inv');
+
+  s = criarSandboxPagina();
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-ficha'].classList.add('active'); // a própria ficha já ativa
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.equal(s.ctx.FICHA_ORIGEM, 'inv');
+});
+
+test('abrirFichaPagina nunca apaga .active de nenhum .nav-btn', () => {
+  const s = criarSandboxPagina();
+  assert.ok(s.navBtns[0].classList.contains('active'));
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.ok(s.navBtns[0].classList.contains('active'), 'abrirFichaPagina apagou o estado ativo do nav-btn');
+});
+
+test('abrirFichaPagina fecha a gaveta se estiver aberta — impede gaveta órfã', () => {
+  const s = criarSandboxPagina();
+  s.nodes['drawer'].classList.add('open');
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.ok(!s.nodes['drawer'].classList.contains('open'));
+});
+
+test('voltarDaFicha chama navTo(FICHA_ORIGEM, botaoDaAba(FICHA_ORIGEM)) e zera FICHA_ABERTA', () => {
+  const s = criarSandboxPagina();
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-pmoc'].classList.add('active');
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.equal(s.ctx.FICHA_ABERTA, EQUIP_FIXO.id);
+  s.ctx.voltarDaFicha();
+  assert.equal(s.ctx.FICHA_ABERTA, null);
+  assert.equal(s.chamadasNavTo.length, 1);
+  assert.equal(s.chamadasNavTo[0].pagina, 'pmoc');
+  assert.strictEqual(s.chamadasNavTo[0].btn, s.navBtns[3]); // pmoc = índice 3 em ABAS_NAV
+});
+
+test('#fh-voltar-txt nomeia o destino e nunca contém undefined', () => {
+  const s = criarSandboxPagina();
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-os'].classList.add('active');
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.equal(s.nodes['fh-voltar-txt'].textContent, 'Voltar às OS');
+  assert.doesNotMatch(s.nodes['fh-voltar-txt'].textContent, /undefined/);
+});
+
+test('#fab fica escondido enquanto a ficha-página está ativa', () => {
+  const s = criarSandboxPagina();
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.equal(s.nodes['fab'].style.display, 'none');
+});
+
+test('as três colunas voltam ao topo a cada abertura', () => {
+  const s = criarSandboxPagina();
+  s.nodes['ficha-col-1'].scrollTop = 400;
+  s.nodes['ficha-col-2'].scrollTop = 250;
+  s.nodes['ficha-col-3'].scrollTop = 900;
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
+  assert.equal(s.nodes['ficha-col-1'].scrollTop, 0);
+  assert.equal(s.nodes['ficha-col-2'].scrollTop, 0);
+  assert.equal(s.nodes['ficha-col-3'].scrollTop, 0);
+});
+
+test('#page-ficha é a sexta .page dentro de #content, com os identificadores de D-92t-04', () => {
+  const iniContent = HTML.indexOf('id="content"');
+  const fimContent = HTML.indexOf('<!-- /content -->');
+  assert.ok(iniContent > 0 && fimContent > iniContent, '#content não encontrado');
+  const trecho = HTML.slice(iniContent, fimContent);
+  assert.match(trecho, /id="page-ficha"/);
+  for (const id of ['fh-voltar', 'fh-voltar-txt', 'fh-id', 'fh-local', 'fh-predio', 'fh-pills', 'fh-acoes', 'ficha-hdr', 'ficha-colunas', 'ficha-col-1', 'ficha-col-2', 'ficha-col-3']) {
+    assert.match(trecho, new RegExp('id="' + id + '"'), `id="${id}" não encontrado em #page-ficha`);
+  }
+});
+
+test('D-92t-04: nenhum id dh-* é duplicado no documento — um só elemento por id', () => {
+  ['dh-id', 'dh-local', 'dh-predio', 'dh-pills'].forEach((id) => {
+    const qtd = (HTML.match(new RegExp('id="' + id + '"', 'g')) || []).length;
+    assert.equal(qtd, 1, `id="${id}" aparece ${qtd} vez(es)`);
+  });
+});
