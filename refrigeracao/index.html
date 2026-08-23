@@ -2625,34 +2625,52 @@ function abrirFichaPagina(id){
   DETALHE_ABERTO = {tipo:'ficha', id:id}; // depois do closeDrawer(), nunca antes
 }
 
-/* D-92t (Task 3)/D-jar-01: o gancho de cruzar o limiar de largura já existe
-   (iniciarModoDeTela chama renderPaginaAtiva a cada mudança) — esta função
-   só corrige o CONTINENTE quando ele está errado para o TELA_LARGA
-   corrente. Dois ramos aqui — os ramos da OS são a Task 3 de 260823-jar —
-   cada um só dispara quando o continente está errado; nos dois estados
-   já-corretos devolve false sem tocar nada — T-92t-04 (DoS
-   auto-infligido): não há como este laço se realimentar, porque o opener
-   sempre corrige o continente antes de qualquer novo evento de resize. */
+/* D-92t (Task 3)/D-jar-01 (Task 3 de 260823-jar): o gancho de cruzar o
+   limiar de largura já existe (iniciarModoDeTela chama renderPaginaAtiva a
+   cada mudança) — esta função só corrige o CONTINENTE quando ele está
+   errado para o TELA_LARGA corrente. Quatro ramos — dois por tipo de
+   detalhe (ficha/OS) — cada um só dispara quando o continente está
+   errado; nos dois estados já-corretos devolve false sem tocar nada —
+   T-92t-04/T-jar-04 (DoS auto-infligido): não há como este laço se
+   realimentar, porque o opener sempre corrige o continente antes de
+   qualquer novo evento de resize. D-jar-02: nenhuma leitura desestrutura
+   DETALHE_ABERTO à mão — sempre por detalheAbertoDe(tipo). D-jar-09: o
+   texto digitado na OS é capturado antes e restaurado depois do abridor
+   — nunca dentro de manAbrirOS, onde o re-render após uma ação DEVE
+   limpar o campo recém-gravado. */
 function reAlojarDetalhe(){
-  var pf = el('page-ficha');
-  var fichaAtivaNaPagina = !!(pf && pf.classList.contains('active'));
+  var paginaAtiva = paginaDetalheAtiva(); // 'page-ficha' | 'page-os-detalhe' | null
 
-  if(fichaAtivaNaPagina && !TELA_LARGA){
-    // Guarda ANTES de voltarDoDetalhe() zerar. Sem id (formulário aberto
-    // por cima da ficha-página) o voltarDoDetalhe() sozinho já cumpre a
-    // invariante — NÃO chama abrirFichaGaveta, que sobrescreveria o
-    // formulário que está na gaveta.
-    var idGuardado = detalheAbertoDe('ficha');
+  if(paginaAtiva && !TELA_LARGA){
+    // Guarda ANTES de voltarDoDetalhe() zerar.
+    var idFichaGuardado = detalheAbertoDe('ficha');
+    var idOSGuardado = detalheAbertoDe('os');
     voltarDoDetalhe();
-    if(idGuardado != null) abrirFichaGaveta(idGuardado);
+    if(idFichaGuardado != null){
+      abrirFichaGaveta(idFichaGuardado);
+    } else if(idOSGuardado != null){
+      var camposCapturados = osCapturarCampos();
+      osAbrirGaveta(idOSGuardado);
+      osRestaurarCampos(camposCapturados);
+    }
+    // Os dois nulos: formulário aberto por cima da página de detalhe — o
+    // voltarDoDetalhe() sozinho já cumpre a invariante; NÃO chama abridor
+    // nenhum, que sobrescreveria o formulário que está na gaveta.
     return true;
   }
 
   var drawer = el('drawer');
   var gavetaAberta = !!(drawer && drawer.classList.contains('open'));
   var idFichaAberta = detalheAbertoDe('ficha');
-  if(gavetaAberta && TELA_LARGA && idFichaAberta != null){
-    abrirFichaPagina(idFichaAberta); // fecha a gaveta lá dentro
+  var idOSAberta = detalheAbertoDe('os');
+  if(gavetaAberta && TELA_LARGA && (idFichaAberta != null || idOSAberta != null)){
+    if(idFichaAberta != null){
+      abrirFichaPagina(idFichaAberta); // fecha a gaveta lá dentro
+    } else {
+      var camposParaRestaurar = osCapturarCampos();
+      osAbrirPagina(idOSAberta); // fecha a gaveta lá dentro
+      osRestaurarCampos(camposParaRestaurar);
+    }
     return true;
   }
 
@@ -3984,6 +4002,11 @@ function osAbrirGaveta(logId){
   el('drawer-body').innerHTML = m.regua + m.contexto.join('') + m.trabalho.join('');
   el('drawer-footer').innerHTML = m.rodape.gaveta;
   openDrawer();
+  // D-jar (Task 3, mesmo precedente de D-92t abrirFichaGaveta): marca QUAL
+  // OS a gaveta mostra, em qualquer continente — é o que permite
+  // reAlojarDetalhe() reabrir como página ao alargar de volta quando a OS
+  // foi aberta direto pela gaveta (nunca passou por osAbrirPagina antes).
+  DETALHE_ABERTO = {tipo:'os', id:logId};
 }
 
 /* D-jar-07: grade dirigida pelo conteúdo — coluna única quando não há
@@ -4045,9 +4068,15 @@ function osAbrirPagina(logId){
 
   ativarPaginaDetalhe('page-os-detalhe');
 
+  // D-jar-10: preserva a rolagem só quando é a MESMA OS; volta a zero
+  // quando é outra — explícito, não depende do navegador zerar
+  // scrollTop sozinho ao trocar innerHTML.
   if (mesmaOS) {
     el('osd-contexto').scrollTop = scrollContexto;
     el('osd-trabalho').scrollTop = scrollTrabalho;
+  } else {
+    el('osd-contexto').scrollTop = 0;
+    el('osd-trabalho').scrollTop = 0;
   }
 
   DETALHE_ABERTO = {tipo:'os', id:logId}; // depois do closeDrawer(), nunca antes
@@ -4058,6 +4087,51 @@ function osAbrirPagina(logId){
 function manAbrirOS(logId){
   if (TELA_LARGA) return osAbrirPagina(logId);
   return osAbrirGaveta(logId);
+}
+
+/* D-jar-09: texto digitado e não salvo sobrevive ao cruzamento do limiar —
+   lista FECHADA dos ids de campo que a OS pode ter na tela (mesma técnica
+   de conjunto fechado que CASOS_INSTALACAO/MOV_TIPOS já usam neste
+   arquivo). O campo de fotos (3 · Execução, input type=file) fica
+   deliberadamente FORA: o `value` de um input[type=file] não é escrevível
+   por script, e listá-lo prometeria uma sobrevivência que não existe — o
+   campo em si continua existindo, só não entra nesta lista. */
+var OS_CAMPOS_VOLATEIS = [
+  'man-ed-data', 'man-ed-tecnico', 'man-ed-desc', 'man-ed-tipo',
+  'man-ed-ins', 'man-ed-ret', 'man-ed-corr', 'man-ed-press',
+  'man-ed-cap-marcha', 'man-ed-cap-partida', 'man-ed-tensao',
+  'man-delin-desc',
+  'man-ex-ti', 'man-ex-tr', 'man-ex-corr', 'man-ex-press',
+  'man-ex-cap-marcha', 'man-ex-cap-partida', 'man-ex-tensao',
+  'man-conf-estado', 'man-conf-parecer',
+  'man-fis-parecer',
+  'oi-un-tipo', 'oi-un-qtd', 'oi-un-desc', 'oi-un-vu',
+  'cp-item', 'cp-qtd',
+  'cf-nf', 'cf-datanf',
+  'os-comentario-texto'
+];
+
+/* Lê os campos voláteis que existem NA TELA agora — ignora os que não
+   existem (a OS de destino pode estar noutro passo, sem esse campo). */
+function osCapturarCampos(){
+  var mapa = {};
+  OS_CAMPOS_VOLATEIS.forEach(function(id){
+    var campo = el(id);
+    if (campo) mapa[id] = campo.value;
+  });
+  return mapa;
+}
+
+/* Reescreve .value nos campos que voltaram a existir depois do re-render —
+   chave ausente é ignorada, nunca lança. Só chamado no caminho de
+   re-alojamento (reAlojarDetalhe); dentro de manAbrirOS o re-render depois
+   de uma ação DEVE limpar o campo que acabou de ser gravado. */
+function osRestaurarCampos(mapa){
+  if (!mapa) return;
+  Object.keys(mapa).forEach(function(id){
+    var campo = el(id);
+    if (campo) campo.value = mapa[id];
+  });
 }
 
 async function manMudarStatus(logId, novo){

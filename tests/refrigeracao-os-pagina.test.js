@@ -404,6 +404,13 @@ function criarSandboxOSPagina(opts) {
   };
 
   vm.runInContext(recorte(MARCADOR_INICIO_DETALHE, MARCADOR_FIM_DETALHE), ctx);
+  // reAlojarDetalhe mora na seção da ficha (logo depois de abrirFichaPagina),
+  // fora do recorte compartilhado acima — carregado à parte, mesmo padrão
+  // de tests/refrigeracao-ficha-pagina.test.js. Os ramos de ficha (idFicha
+  // != null) nunca disparam nos testes de OS deste arquivo — DETALHE_ABERTO
+  // aqui é sempre null ou {tipo:'os',...} — então abrirFichaGaveta/
+  // abrirFichaPagina não precisam estar carregadas.
+  vm.runInContext(bloco(HTML, 'function reAlojarDetalhe(){'), ctx);
 
   return { ctx: ctx, nodes: nodes, navBtns: navBtns, chamadasNavTo: chamadasNavTo };
 }
@@ -536,4 +543,150 @@ test('D-92t/D-jar-16: tests/refrigeracao-desktop.test.js segue verde sem ediçã
   // já são cobertos noutro caso; este documenta a intenção — o gate real
   // é tests/refrigeracao-desktop.test.js, rodado à parte no verify da task.
   assert.equal((HTML.match(/<style>/g) || []).length, (HTML.match(/<\/style>/g) || []).length);
+});
+
+// ═══════ TAREFA 3 — cruzar o limiar nos dois sentidos, sem perder o que
+// foi digitado ═══════════════════════════════════════════════════════════
+
+test('OS_CAMPOS_VOLATEIS não contém man-ex-fotos — o value de um input[type=file] não é escrevível por script (D-jar-09)', () => {
+  const s = criarSandboxOSPagina({ telaLarga: true });
+  assert.ok(!s.ctx.OS_CAMPOS_VOLATEIS.includes('man-ex-fotos'));
+});
+
+test('osCapturarCampos/osRestaurarCampos: só lê/reescreve os que existem na tela, ignora ausentes, nunca lança', () => {
+  const s = criarSandboxOSPagina({ telaLarga: true });
+  // el() de criarSandboxOS auto-cria nó por id (para escritas do produto
+  // ficarem estáveis entre chamadas) — aqui, para provar "ausente" de
+  // verdade, um el() de mentira que devolve null para o que não foi
+  // explicitamente colocado na tela (o mesmo document.getElementById faria).
+  const camposReais = { 'man-delin-desc': criarElemento('man-delin-desc') };
+  camposReais['man-delin-desc'].value = 'texto digitado';
+  s.ctx.el = function (id) { return camposReais[id] || null; };
+
+  const mapa = s.ctx.osCapturarCampos();
+  assert.equal(mapa['man-delin-desc'], 'texto digitado');
+  assert.ok(!('man-conf-parecer' in mapa), 'campo ausente da tela não deveria entrar no mapa');
+
+  camposReais['man-delin-desc'].value = ''; // simula o re-render limpando o campo
+  assert.doesNotThrow(() => s.ctx.osRestaurarCampos(mapa));
+  assert.equal(camposReais['man-delin-desc'].value, 'texto digitado');
+  assert.doesNotThrow(() => s.ctx.osRestaurarCampos({ 'campo-fantasma': 'x' }));
+});
+
+test('reAlojarDetalhe: OS em página + estreitar — sai de #page-os-detalhe, volta à origem, abre a gaveta com a MESMA OS e preserva o texto digitado', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-pmoc'].classList.add('active');
+  s.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+  assert.ok(s.nodes['page-os-detalhe'].classList.contains('active'));
+
+  s.ctx.el('man-conf-parecer').value = 'parecer não salvo';
+
+  s.ctx.TELA_LARGA = false;
+  const houve = s.ctx.reAlojarDetalhe();
+  assert.equal(houve, true);
+  assert.ok(!s.nodes['page-os-detalhe'].classList.contains('active'));
+  assert.equal(s.chamadasNavTo.length, 1);
+  assert.equal(s.chamadasNavTo[0].pagina, 'pmoc');
+  assert.ok(s.nodes['drawer'].classList.contains('open'));
+  assert.strictEqual(s.nodes['drawer-body'].innerHTML, FIXTURE.b.corpo);
+  assert.equal(s.ctx.detalheAbertoDe('os'), CENARIOS.b.entry.id);
+  assert.equal(s.nodes['man-conf-parecer'].value, 'parecer não salvo');
+});
+
+test('reAlojarDetalhe: OS em gaveta + alargar — fecha a gaveta e abre a MESMA OS como página, preservando o texto digitado; a origem por baixo continua', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: false }));
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-alert'].classList.add('active');
+  s.ctx.osAbrirGaveta(CENARIOS.b.entry.id);
+
+  s.ctx.el('man-conf-parecer').value = 'parecer não salvo';
+
+  s.ctx.TELA_LARGA = true;
+  const houve = s.ctx.reAlojarDetalhe();
+  assert.equal(houve, true);
+  assert.ok(!s.nodes['drawer'].classList.contains('open'), 'a gaveta deveria fechar');
+  assert.ok(s.nodes['page-os-detalhe'].classList.contains('active'));
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'alert', 'a origem por baixo deveria continuar sendo a mesma');
+  assert.equal(s.nodes['man-conf-parecer'].value, 'parecer não salvo');
+});
+
+test('reAlojarDetalhe: correção de dados (MAN_EDIT_ID + man-ed-desc) sobrevive ao cruzamento nos dois sentidos', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.a, { telaLarga: true }));
+  s.ctx.MAN_EDIT_ID = CENARIOS.a.entry.id;
+  s.ctx.osAbrirPagina(CENARIOS.a.entry.id);
+  assert.ok(s.nodes['osd-corpo'].classList.contains('uma-coluna'));
+
+  s.ctx.el('man-ed-desc').value = 'correção não salva';
+  s.ctx.TELA_LARGA = false;
+  s.ctx.reAlojarDetalhe();
+  assert.equal(s.ctx.el('man-ed-desc').value, 'correção não salva');
+  assert.ok(s.nodes['drawer'].classList.contains('open'));
+
+  s.ctx.TELA_LARGA = true;
+  s.ctx.reAlojarDetalhe();
+  assert.ok(s.nodes['page-os-detalhe'].classList.contains('active'));
+  assert.equal(s.ctx.el('man-ed-desc').value, 'correção não salva');
+});
+
+test('reAlojarDetalhe: os dois estados já-corretos (página+largo, gaveta+estreito) devolvem false sem tocar em nada', () => {
+  const sPaginaLarga = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  sPaginaLarga.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+  const houvePaginaLarga = sPaginaLarga.ctx.reAlojarDetalhe();
+  assert.equal(houvePaginaLarga, false);
+  assert.ok(sPaginaLarga.nodes['page-os-detalhe'].classList.contains('active'));
+  assert.equal(sPaginaLarga.chamadasNavTo.length, 0);
+
+  const sGavetaEstreita = criarSandboxOSPagina(Object.assign({}, CENARIOS.a, { telaLarga: false }));
+  sGavetaEstreita.ctx.osAbrirGaveta(CENARIOS.a.entry.id);
+  const houveGavetaEstreita = sGavetaEstreita.ctx.reAlojarDetalhe();
+  assert.equal(houveGavetaEstreita, false);
+  assert.ok(sGavetaEstreita.nodes['drawer'].classList.contains('open'));
+});
+
+test('reAlojarDetalhe: gaveta com formulário (DETALHE_ABERTO nulo) — #page-os-detalhe nunca fica ativa no estreito, conteúdo da gaveta não é sobrescrito', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-os'].classList.add('active');
+  s.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+  assert.ok(s.nodes['page-os-detalhe'].classList.contains('active'));
+
+  // simula um formulário aberto sobre a página — openNewOS/openLogForm
+  // zerariam DETALHE_ABERTO (caso já provado em
+  // tests/refrigeracao-ficha-pagina.test.js).
+  s.ctx.DETALHE_ABERTO = null;
+  s.nodes['drawer-body'].innerHTML = '<div class="ds">FORM MARCADO</div>';
+  s.nodes['drawer'].classList.add('open');
+
+  s.ctx.TELA_LARGA = false;
+  const houve = s.ctx.reAlojarDetalhe();
+  assert.equal(houve, true);
+  assert.ok(!s.nodes['page-os-detalhe'].classList.contains('active'));
+  assert.match(s.nodes['drawer-body'].innerHTML, /FORM MARCADO/, 'o conteúdo do formulário foi sobrescrito — deveria sobreviver ao redimensionamento');
+});
+
+test('#page-os-detalhe nunca fica ativa com TELA_LARGA falso, mesmo tentando abrir explicitamente', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: false }));
+  s.ctx.manAbrirOS(CENARIOS.b.entry.id);
+  assert.ok(!s.nodes['page-os-detalhe'].classList.contains('active'));
+});
+
+test('a rolagem das duas zonas é preservada quando osAbrirPagina re-renderiza a MESMA OS, e volta a zero quando é outra', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  s.ctx._logCache[CENARIOS.d.equip.id] = [CENARIOS.d.entry];
+  s.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+  s.nodes['osd-contexto'].scrollTop = 120;
+  s.nodes['osd-trabalho'].scrollTop = 340;
+
+  s.ctx.osAbrirPagina(CENARIOS.b.entry.id); // mesma OS — preserva
+  assert.equal(s.nodes['osd-contexto'].scrollTop, 120);
+  assert.equal(s.nodes['osd-trabalho'].scrollTop, 340);
+
+  s.ctx.osAbrirPagina(CENARIOS.d.entry.id); // outra OS — volta a zero
+  assert.equal(s.nodes['osd-contexto'].scrollTop, 0);
+  assert.equal(s.nodes['osd-trabalho'].scrollTop, 0);
+});
+
+test('nenhuma função nova chama pushState', () => {
+  assert.equal((HTML.match(/pushState/g) || []).length, 0);
 });

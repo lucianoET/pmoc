@@ -1968,3 +1968,58 @@ do Supabase.
       chip "Interna".
 - [ ] **Coluna Executor na tabela de computador:** em `>=1024px`, a tabela de OS ganha a coluna
       "Executor", ordenável e filtrável como as demais.
+
+## Refrigeração — a OS como página inteira no computador (23/08/2026)
+
+Quick task 260823-jar (D-jar-01..20). Em `>=1024px` a OS deixa de ser painel lateral (~380px) e
+vira **página inteira** (`#page-os-detalhe`), com faixa de cabeçalho carregando a régua de
+passos permanentemente visível e um corpo de duas zonas (contexto/trabalho) que rolam por
+dentro enquanto a página não rola — irmã gêmea da ficha-página de 260823-92t, mesmo mecanismo
+compartilhado (`DETALHE_ABERTO`/`DETALHE_ORIGEM`/`voltarDoDetalhe`/`reAlojarDetalhe`).
+Instalação/Remoção entra junto, por construção. Abaixo de 1024px a OS é byte a byte a de hoje,
+provado por fixture (`tests/fixtures/refrigeracao-os-gaveta.json`) em cinco cenários, não
+afirmado. `node --test` cobre a lógica em Node (`node:vm`, sem DOM real); a conferência visual
+abaixo fica pendente para o usuário, mesma pendência de PLAT-15/16, 260822-8rz, 260823-3a6 e
+260823-92t (sem Playwright nem navegador neste ambiente).
+
+- [ ] **1440px, abrindo pela lista de OS:** na aba OS, clicar numa linha abre a OS como
+      **página inteira** — faixa de cabeçalho no topo (botão "Voltar às OS", identificação,
+      pílulas, a régua de passos e, à direita, as ações — "Imprimir OS" só em OS de contrato,
+      "Cancelar OS" quando a transição é permitida) e, abaixo, **duas zonas**: a estreita
+      (~360px) com "1 · Abertura" e Executor/Movimentação, a larga com Delineamento/Execução/
+      Conferência (ou Fiscalização+Composição da ata em OS de contrato), Itens e Registro.
+- [ ] **Abrindo pela lista de Inst./Remoção:** repetir a partir de uma linha do segmento
+      "Inst./Remoção" — abre como página igual, com o painel de Movimentação (origem, destino,
+      caso, máquina substituída, checklist de partes) na zona estreita.
+- [ ] **Abrindo pelo botão "Abrir OS" da ficha:** na ficha do equipamento (histórico), clicar
+      "Abrir OS" numa linha com fluxo — abre a OS como página, e o "Voltar" deve nomear e
+      alcançar a **ficha**, não a lista de origem de antes dela.
+- [ ] **Encadeamento Alertas → ficha → OS → volta:** triar um alerta, abrir a ficha do
+      equipamento por ele, e dali abrir uma OS — o "Voltar" da OS deve nomear e voltar para os
+      **Alertas** (a origem original), não para o Parque nem para a ficha.
+- [ ] **A página não rola:** com a OS aberta como página, a barra de rolagem do navegador não
+      se move — só a zona estreita e a zona larga rolam por dentro, cada uma com sua própria
+      barra, e o cabeçalho (régua incluída) fica sempre visível.
+- [ ] **Largura dos campos de texto:** medir os campos de parecer (conferência/fiscalização),
+      delineamento e comentário — devem ocupar **~985px** de largura na zona de trabalho em
+      1440px (contra os ~330px úteis do painel lateral de hoje), e ter pelo menos **140px** de
+      altura (contra os ~80px de hoje).
+- [ ] **Correção de dados vira coluna única:** clicar "Corrigir" no bloco 1 · Abertura — a
+      página deve reorganizar para **uma coluna centralizada de ~900px**, com o formulário de
+      correção (treze campos, incluindo o textarea de descrição) na largura toda; a zona de
+      trabalho deve desaparecer (não ficar vazia ao lado).
+- [ ] **OS legada sem fluxo, sem coluna vazia:** abrir uma OS antiga sem fluxo (nota "Registro
+      direto") — a página deve mostrar **uma coluna só**, nunca uma coluna vazia ao lado da
+      outra.
+- [ ] **Texto não salvo sobrevive ao redimensionamento:** com a OS aberta como página, digitar
+      algo num parecer (sem salvar) e arrastar a janela de 1440px para menos de 1024px — a
+      gaveta deve abrir com a **mesma OS**, e o texto digitado deve **continuar lá**. Alargar de
+      volta para 1440px deve reabrir a **mesma OS** como página, com o mesmo texto.
+- [ ] **A rolagem não pula ao registrar algo:** numa OS de contrato longa (com itens e
+      comentários), rolar a zona de trabalho até o fim e lançar um novo item — a zona não deve
+      voltar ao topo depois do re-render.
+- [ ] **Cancelar pela página:** cancelar uma OS a partir da página (botão "Cancelar OS" na
+      faixa) — deve voltar para a lista de origem, não deixar a OS cancelada na tela.
+- [ ] **375px (celular), com a OS aberta:** percorrer uma OS de cada tipo (interna, contrato,
+      movimentação, legada) — deve ser **idêntica à de hoje**, gaveta subindo de baixo, mesmo
+      conteúdo, mesmos botões.
