@@ -44,6 +44,11 @@
 -- constraint`, o mesmo *swap* que as migrações 40, 41 e 42 já
 -- fizeram, e que aqui só é seguro porque `logs_manutencao` está vazia
 -- hoje — nenhuma linha existente pode violar a trava nova.
+-- APLICADA EM PRODUÇÃO EM 23/08/2026, depois do deploy do frontend, e
+-- conferida pela porta da frente (anon key contra a API REST): a sonda
+-- UNI_OK (select id,tipo_executor) responde 200; as três tabelas novas
+-- respondem 200; as cinco dormentes seguem existindo; e o parque continua
+-- com 175 equipamentos.
 -- ══════════════════════════════════════════════════════════════════
 
 -- 1) tipo_executor — lista fechada interna | externa | contrato,
