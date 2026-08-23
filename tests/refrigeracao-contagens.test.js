@@ -40,6 +40,10 @@ function recorte(marcadorIni, marcadorFim) {
 
 function carregarNucleoAlertas() {
   const ctx = {
+    // 260823-cf8: UNI_OK falso é o padrão (banco sem a migração 43) — as
+    // cascas finas do fluxo (manPendente/manEhTerminal/…) resolvem pelo
+    // fluxo legado, o mesmo vocabulário de sempre.
+    UNI_OK: false,
     // nextPmoc controlado: cada equipamento traz _prox (dias a partir de 21/08/2026,
     // negativo = vencido, null/undefined = sem histórico — igual ao teste de inventário).
     nextPmoc(e) {
@@ -91,6 +95,20 @@ test('contarOSPendentes (260821-l7n): PARCIAL do legado e EM_EXECUCAO do fluxo n
     { entry: { status: 'CONCLUÍDA' } },     // legado, terminal via equivalência
   ];
   assert.strictEqual(ctx.contarOSPendentes(entradas), 2);
+});
+
+// 260823-cf8 (Task 2): CONCLUIDA (sem acento, D-cf8-10) é o terminal do
+// fluxo próprio/externa unificado — contarOSPendentes continua tratando-o
+// como terminal, com a migração 43 aplicada (UNI_OK verdadeiro).
+test('contarOSPendentes (260823-cf8): com UNI_OK verdadeiro, CONCLUIDA (sem acento) é terminal — não conta; EM_EXECUCAO continua contando', () => {
+  const ctx = carregarNucleoAlertas();
+  ctx.UNI_OK = true;
+  const entradas = [
+    { entry: { status: 'EM_EXECUCAO', tipoExecutor: 'interna' } },
+    { entry: { status: 'CONCLUIDA', tipoExecutor: 'interna' } },
+    { entry: { status: 'CANCELADA', tipoExecutor: 'externa' } },
+  ];
+  assert.strictEqual(ctx.contarOSPendentes(entradas), 1);
 });
 
 test('alertasPmoc conta um equipamento NOK-e-sem-histórico uma única vez no total e nas duas parcelas', () => {

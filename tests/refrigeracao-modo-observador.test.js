@@ -143,6 +143,13 @@ function carregarSandbox() {
     loadLogsFromSupabase() { return Promise.resolve(); },
     manSondarEsquema() { return Promise.resolve(); },
     movSondarEsquema() { return Promise.resolve(); },
+    // 260823-cf8: acessoLivre() ganhou as chamadas da OS unificada — fora
+    // dos três recortes (A/B/C), então precisam de stub aqui, mesma ideia
+    // de manSondarEsquema/movSondarEsquema acima.
+    uniSondarEsquema() { return Promise.resolve(); },
+    osInjectChipsExecutor() {},
+    carregarItensOS() { return Promise.resolve(); },
+    carregarComentarios() { return Promise.resolve(); },
     renderDash() {},
     renderInv() {},
     aplicarAlvoFicha() {},

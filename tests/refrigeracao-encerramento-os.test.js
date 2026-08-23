@@ -179,6 +179,12 @@ function carregarSandboxSaveLogEntry(opts) {
     'log-status': opts.status !== undefined ? opts.status : 'CONCLUÍDA',
     'log-tec': opts.tecnico || '',
     'log-desc': opts.desc || '',
+    // 260823-cf8: campos de executor — vazios por padrão (formulário sem
+    // UNI_OK não os desenha, val() de um id inexistente já devolve '').
+    'log-executor': opts.tipoExecutor !== undefined ? opts.tipoExecutor : '',
+    'log-executor-setor': opts.executorSetor || '',
+    'log-executor-pessoas': opts.executorPessoas || '',
+    'log-executor-org': opts.executorOrg || '',
   };
 
   const ctx = {
@@ -255,6 +261,20 @@ test('saveLogEntry com o fluxo ligado: OS nasce ABERTA, status nunca lido do for
   assert.strictEqual(ctx._updatesEquip.length, 0); // D-l7n-11: nada de última manutenção na abertura
   assert.strictEqual(ctx._chamadas.manAbrirOS, 1);
   assert.strictEqual(ctx._chamadas.openDetail, 0);
+});
+
+// 260823-cf8 (Task 2): o payload da abertura ganha tipoExecutor e os campos
+// do tipo escolhido — sem seletor no DOM (formulário sem UNI_OK), cai em
+// 'interna' pelo default de saveLogEntry, nunca undefined.
+test('saveLogEntry com o fluxo ligado grava tipoExecutor no entry — externa com organização preenchida, e interna como default sem seletor', async () => {
+  const comExterna = carregarSandboxSaveLogEntry({ fluxoLigado: true, data: [{ id: 41, ultimaManutencao: '' }], tipoExecutor: 'externa', executorOrg: 'Fulano Ltda' });
+  await comExterna.saveLogEntry(41, 0);
+  assert.strictEqual(comExterna._insercoes[0].entry.tipoExecutor, 'externa');
+  assert.strictEqual(comExterna._insercoes[0].entry.executorOrg, 'Fulano Ltda');
+
+  const semSeletor = carregarSandboxSaveLogEntry({ fluxoLigado: true, data: [{ id: 41, ultimaManutencao: '' }] });
+  await semSeletor.saveLogEntry(41, 0);
+  assert.strictEqual(semSeletor._insercoes[0].entry.tipoExecutor, 'interna');
 });
 
 test('saveLogEntry com o fluxo ligado recusa sem permissão para abrir', async () => {

@@ -332,7 +332,11 @@ test('o ramo de UPDATE existe no handler de realtime de logs_manutencao e substi
 function carregarVocabulario() {
   // esc() real do arquivo (utilitário fora do recorte) — reproduzido aqui para o teste
   // de escape do statusPillOS ser fiel ao comportamento real, não a um mock permissivo.
+  // 260823-cf8: UNI_OK falso é o padrão (banco sem a migração 43) — as
+  // cascas finas (manPasso/manRotulo/manProximos/…) resolvem pelo fluxo
+  // legado, byte a byte como antes da unificação.
   const ctx = {
+    UNI_OK: false,
     esc(s) {
       if (!s) return '';
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -379,7 +383,9 @@ test('manNormalizar traduz os três do legado, devolve intacto um status conheci
   const ctx = carregarVocabulario();
   assert.strictEqual(ctx.manNormalizar('PENDENTE'), 'ABERTA');
   assert.strictEqual(ctx.manNormalizar('PARCIAL'), 'EM_EXECUCAO');
-  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONFERIDA');
+  // 260823-cf8 (D-cf8-10): o alvo virou o bucket unificado CONCLUIDA, sem
+  // acento — nunca escrito, só a bucket de leitura do legado.
+  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONCLUIDA');
   assert.strictEqual(ctx.manNormalizar('APROVACAO'), 'APROVACAO');
   assert.strictEqual(ctx.manNormalizar('ESTADO_INVENTADO'), 'ESTADO_INVENTADO'); // nunca vira ABERTA por baixo do pano
 });
@@ -406,7 +412,7 @@ test('a equivalência agrupa sem renomear (D-l7n-01/02): a pílula do concluído
   const pillLegado = ctx.statusPillOS('CONCLUÍDA');
   assert.ok(pillLegado.indexOf('CONCLUÍDA') >= 0);
   assert.ok(pillLegado.indexOf('Conferida') < 0);
-  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONFERIDA'); // mesmo caindo junto no chip "Concluída"
+  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONCLUIDA'); // mesmo caindo junto no chip "Concluída" (D-cf8-10)
   const pillDesconhecido = ctx.statusPillOS('ALGO_ESTRANHO<script>');
   assert.ok(pillDesconhecido.indexOf('ALGO_ESTRANHO') >= 0);
   assert.ok(pillDesconhecido.indexOf('<script>') < 0); // esc() ativo
@@ -465,6 +471,15 @@ test('o corpo do drawer da OS interna chama manPode( e manPodeIrPara( no mesmo b
 // ══════════════════════════════════════════════════════════════════
 // Task 3 — evidência (fotos + as 5 medições) e a conferência do gestor
 // (D-l7n-08/09/11)
+//
+// 260823-cf8 (D-cf8-04/10/12/28): estes casos continuam corretos e não
+// são reescritos — descrevem o FLUXO LEGADO (UNI_OK falso, o único
+// estado real hoje: a migração 43 ainda não foi aplicada), que preserva
+// CONFERIDA como terminal por construção (FLUXO_LEGADO, D-cf8-12). O fato
+// NOVO — fluxo próprio/externa termina em CONCLUIDA, sem conferência,
+// D-cf8-04/24 — é testado em tests/refrigeracao-os-unificada.test.js
+// (manConcluir, manClasseCard/manEhTerminal com UNI_OK verdadeiro), sem
+// duplicar este sandbox.
 // ══════════════════════════════════════════════════════════════════
 
 function carregarFluxoCompleto(opts) {

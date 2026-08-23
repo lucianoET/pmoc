@@ -27,9 +27,14 @@ function recorte(ini, fim) {
 }
 
 function sandboxFiltro() {
-  const vocabulario = recorte('var MAN_STATUS = {', 'function manClasseCard');
+  // 260823-cf8: o recorte agora vai até loadData( — cobre manClasseCard e
+  // o núcleo puro de fluxo (osFluxoDe/osEhTerminal/OS_EXECUTORES/…) que
+  // osNoChip passou a consultar. UNI_OK é lido de fora (porta de escrita,
+  // fora deste recorte) — falso aqui é o comportamento de hoje sem a
+  // migração 43.
+  const vocabulario = recorte('var MAN_STATUS = {', 'function loadData(');
   const filtro = recorte('function osNoChip(', 'function renderOS()');
-  const ctx = { window: {} };
+  const ctx = { window: {}, UNI_OK: false };
   vm.createContext(ctx);
   vm.runInContext(vocabulario + '\n' + filtro, ctx);
   return ctx;
@@ -48,7 +53,10 @@ test('"Todos" é a fila de trabalho: conferida e cancelada ficam de fora', () =>
 
 test('a linha legada CONCLUÍDA sai do "Todos" pela mesma equivalência que já a agrupava', () => {
   const ctx = sandboxFiltro();
-  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONFERIDA');
+  // 260823-cf8: a equivalência agora mira o bucket unificado CONCLUIDA (sem
+  // acento, D-cf8-10), não mais o literal CONFERIDA do fluxo legado — o
+  // AGRUPAMENTO continua o mesmo (D-l7n-01/02), só o nome do destino mudou.
+  assert.strictEqual(ctx.manNormalizar('CONCLUÍDA'), 'CONCLUIDA');
   assert.strictEqual(ctx.osNoChip('todos', OS('CONCLUÍDA'), false), false);
   assert.strictEqual(ctx.osNoChip('concluida', OS('CONCLUÍDA'), false), true);
   // PENDENTE/PARCIAL são legado ATIVO — continuam na fila

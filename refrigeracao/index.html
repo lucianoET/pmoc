@@ -653,13 +653,27 @@ async function manSondarEsquema() {
 }
 
 async function manAtualizarOS(logId, equipId, patch, msg) {
+  // 260823-cf8: lido ANTES do update (senão a trilha sairia X → X, mesmo
+  // raciocínio de ctUpd/D-jpd-05) — direto do cache, sem depender de
+  // manEntrada (que vive noutra seção do arquivo).
+  var lista = _logCache[equipId];
+  var atual = lista ? lista.find(function(e){ return e.id === logId; }) : null;
+  var statusAnterior = atual ? atual.status : undefined;
+  var tipoAnterior = atual ? atual.tipoExecutor : undefined;
   var r = await supa.from('logs_manutencao').update(logParaDb(patch)).eq('id', logId).select().single();
   if(r.error){ showToast('Erro: '+r.error.message,'error'); return false; }
   var novo = dbToLog(r.data);
-  var lista = _logCache[equipId];
   if (lista) {
     var i = lista.findIndex(function(e){ return e.id === logId; });
     if (i >= 0) lista[i] = novo;
+  }
+  // D-cf8-15: cada transição de estado grava um comentário de
+  // origem='sistema' — um ponto só, para que nenhuma transição futura
+  // escape da trilha. Sem UNI_OK, os_comentarios não existe: nem tenta.
+  if (UNI_OK && patch && patch.status !== undefined) {
+    var f = osFluxoDe({tipoExecutor: tipoAnterior});
+    var detalhe = osDetalheEvento(f, statusAnterior, patch.status);
+    if (detalhe) await osRegistrarEvento(logId, detalhe);
   }
   if (msg) showToast(msg, 'ok');
   return true;
@@ -692,6 +706,73 @@ async function uniSondarEsquema() {
   var r2 = await supa.from('os_itens').select('id').limit(1);
   UNI_OK = !r1.error && !r2.error;
   return UNI_OK;
+}
+
+/* 260823-cf8: ponte de campos de os_itens/os_comentarios — camelCase no
+   app, snake_case no banco, mesma ideia de CAMPOS_LOG (D-cf8-05/08). */
+function dbToItem(r){
+  return { id:r.id, osId:r.os_id, tipo:r.tipo, descricao:r.descricao, unidade:r.unidade,
+    quantidade:r.quantidade, valorUnitario:r.valor_unitario, total:r.total, ordem:r.ordem };
+}
+function dbToComentario(r){
+  return { id:r.id, osId:r.os_id, origem:r.origem, texto:r.texto, autor:r.autor,
+    cargo:r.cargo, criadoEm:r.criado_em };
+}
+
+/* D-cf8-27: mesmo padrão de carregarCatalogoReparos()/carregarItensOS()/
+   carregarCompras() em Máquinas — FORA do Promise.all principal, e
+   guardadas por UNI_OK: sem a migração 43 os dois mapas ficam vazios e
+   todo consumidor cai no ramo de lista vazia que já existe, sem erro. */
+var OS_ITENS = {};
+var OS_COMENTARIOS = {};
+
+async function carregarItensOS(){
+  if (!UNI_OK) { OS_ITENS = {}; return; }
+  try{
+    var r = await supa.from('os_itens').select('*').order('ordem');
+    if (r.error) throw r.error;
+    var mapa = {};
+    (r.data||[]).forEach(function(i){ (mapa[i.os_id]=mapa[i.os_id]||[]).push(dbToItem(i)); });
+    OS_ITENS = mapa;
+  }catch(e){ console.warn('carregarItensOS', e); }
+}
+
+async function carregarComentarios(){
+  if (!UNI_OK) { OS_COMENTARIOS = {}; return; }
+  try{
+    var r = await supa.from('os_comentarios').select('*').order('criado_em');
+    if (r.error) throw r.error;
+    var mapa = {};
+    (r.data||[]).forEach(function(c){ (mapa[c.os_id]=mapa[c.os_id]||[]).push(dbToComentario(c)); });
+    OS_COMENTARIOS = mapa;
+  }catch(e){ console.warn('carregarComentarios', e); }
+}
+
+/* D-cf8-15: os_comentarios é a MESMA tabela do comentário do usuário e do
+   evento de sistema, distinguidos por origem. osRegistrarEvento escreve
+   'sistema' (chamada só de dentro de manAtualizarOS); osAdicionarComentario
+   escreve 'usuario' (chamada da caixa de texto). */
+async function osRegistrarEvento(osId, texto){
+  try{
+    var nome = ctUser ? ctUser.nome : '';
+    var cargo = ctUser ? ctUser.role : '';
+    var r = await supa.from('os_comentarios').insert({os_id:osId, origem:'sistema', texto:texto, autor:nome||null, cargo:cargo||null}).select().single();
+    if (r.error) { console.warn('osRegistrarEvento', r.error); return false; }
+    (OS_COMENTARIOS[osId] = OS_COMENTARIOS[osId] || []).push(dbToComentario(r.data));
+    return true;
+  }catch(e){ console.warn('osRegistrarEvento', e); return false; }
+}
+
+async function osAdicionarComentario(osId, texto){
+  if (somenteLeitura()) { showToast('Modo somente leitura', ''); return false; }
+  var t = (texto||'').trim();
+  if (!t) { showToast('Escreva um comentário antes de enviar','error'); return false; }
+  var nome = ctUser ? ctUser.nome : '';
+  var cargo = ctUser ? ctUser.role : '';
+  var r = await supa.from('os_comentarios').insert({os_id:osId, origem:'usuario', texto:t, autor:nome||null, cargo:cargo||null}).select().single();
+  if (r.error) { showToast('Erro ao registrar comentário','error'); return false; }
+  (OS_COMENTARIOS[osId] = OS_COMENTARIOS[osId] || []).push(dbToComentario(r.data));
+  return true;
 }
 
 // carregarPerfil só é CHAMADA em initAppOnce, depois de todos os scripts terem rodado — por isso pode atribuir a ctUser mesmo estando num bloco <script> anterior ao que a declara.
@@ -1180,7 +1261,7 @@ function alertasPmoc(lista, agora){
   return {nok:nok, vencidos:vencidos, semHist:semHist, restricao:restricao, todos:todos, total:todos.length};
 }
 function contarOSPendentes(entradas){
-  return entradas.filter(function(o){ return o.entry && manPendente(o.entry.status); }).length;
+  return entradas.filter(function(o){ return o.entry && manPendente(o.entry.status, o.entry.tipoExecutor); }).length;
 }
 
 function dueBadgeHtml(d){
@@ -1226,20 +1307,39 @@ var MAN_ORDEM = ['ABERTA','DELINEAMENTO','APROVACAO','EM_EXECUCAO','EXECUTADA','
 /* D-l7n-02: a equivalência AGRUPA (filtro, badge, classe do cartão), nunca
    RENOMEIA — o rótulo de uma linha sem fluxo continua sendo a palavra da
    própria linha (manRotulo/statusPillOS). */
-var MAN_EQUIVALENCIA = {'PENDENTE':'ABERTA', 'PARCIAL':'EM_EXECUCAO', 'CONCLUÍDA':'CONFERIDA'};
+/* 260823-cf8: o alvo da equivalência passou a ser o vocabulário UNIFICADO
+   (CONCLUIDA, sem acento — D-cf8-10), não mais o literal do fluxo legado
+   (CONFERIDA). É o que permite manEhTerminal reconhecer um registro direto
+   legado como terminal em QUALQUER fluxo, próprio ou de contrato — nunca
+   escrito, só a bucket de leitura. manNormalizar/manSemFluxo continuam
+   fazendo exatamente o que faziam (D-l7n-02: a equivalência AGRUPA, nunca
+   RENOMEIA — a palavra da própria linha continua sendo a própria linha em
+   manRotulo/statusPillOS). */
+var MAN_EQUIVALENCIA = {'PENDENTE':'ABERTA', 'PARCIAL':'EM_EXECUCAO', 'CONCLUÍDA':'CONCLUIDA'};
 
-/* Cargos que podem executar cada ação do fluxo interno (D-l7n-05) — empresa e
-   fiscal são papéis do ciclo de contratação (ctCan), não deste. */
+/* Cargos que podem executar cada ação, nos dois fluxos (D-l7n-05: nenhum
+   papel de contratação por LOGIN aparece aqui — D-cf8-07, executor é texto
+   por tipo, não cargo). concluir reusa a lista de executar (D-cf8-24: sem
+   conferência do gestor, quem conclui é quem executou). orcar/fiscalizar/
+   certificar são as três ações do ciclo de contrato que passam a viver
+   nesta mesma lista, unificada com o resto (antes eram ctCan, que incluía
+   os papéis 'empresa'/'fiscal'/'executor' — nunca cargos reais de login,
+   D-l7n-05 já rejeitava o mesmo problema para o fluxo próprio). */
 var MAN_ACOES_CARGO = {
-  abrir:    ['admin','gestor','tecnico'],
-  delinear: ['admin','gestor','tecnico'],
-  executar: ['admin','gestor','tecnico'],
-  aprovar:  ['admin','gestor'],
-  conferir: ['admin','gestor'],
-  cancelar: ['admin','gestor']
+  abrir:      ['admin','gestor','tecnico'],
+  delinear:   ['admin','gestor','tecnico'],
+  executar:   ['admin','gestor','tecnico'],
+  aprovar:    ['admin','gestor'],
+  conferir:   ['admin','gestor'],
+  cancelar:   ['admin','gestor'],
+  concluir:   ['admin','gestor','tecnico'],
+  orcar:      ['admin','gestor','tecnico'],
+  fiscalizar: ['admin','gestor'],
+  certificar: ['admin','gestor']
 };
 /* Ação exigida para MOVER a OS para cada estado — usada pela guarda dupla de
-   manMudarStatus. */
+   manMudarStatus. CONFERIDA fica pelo fluxo legado (banco sem a migração
+   43); CONCLUIDA é o terminal do fluxo próprio/externa (D-cf8-04/24). */
 var MAN_ACAO_DESTINO = {
   'ABERTA':       'abrir',
   'DELINEAMENTO': 'delinear',
@@ -1247,7 +1347,10 @@ var MAN_ACAO_DESTINO = {
   'EM_EXECUCAO':  'aprovar',
   'EXECUTADA':    'executar',
   'CONFERIDA':    'conferir',
-  'CANCELADA':    'cancelar'
+  'CANCELADA':    'cancelar',
+  'CONCLUIDA':    'concluir',
+  'FISCALIZADA':  'fiscalizar',
+  'ENCERRADA':    'certificar'
 };
 
 function manNormalizar(s){
@@ -1255,25 +1358,23 @@ function manNormalizar(s){
   return s; // conhecido ou desconhecido: devolvido intacto
 }
 function manSemFluxo(s){ return MAN_EQUIVALENCIA.hasOwnProperty(s); }
-function manEhTerminal(s){ var n = manNormalizar(s); return n==='CONFERIDA' || n==='CANCELADA'; }
-function manPendente(s){ return !manEhTerminal(manNormalizar(s)); } // desconhecido conta como pendente, de propósito
-function manPasso(s){ var n = manNormalizar(s); return MAN_STATUS[n] ? MAN_STATUS[n].step : -1; }
-function manRotulo(s){
+/* 260823-cf8: casca fina sobre osFluxoDe/osEhTerminal — tipo omitido
+   significa 'interna' (o padrão do banco). O ramo de registro direto do
+   legado (manSemFluxo) não passa pelo núcleo de fluxo: ele responde pelo
+   NOME do bucket unificado (CONCLUIDA/CANCELADA), a mesma pergunta que
+   osEhTerminal responde para um status que o fluxo conhece direto. */
+function manEhTerminal(s, tipo){
+  if (manSemFluxo(s)) { var eq = MAN_EQUIVALENCIA[s]; return eq==='CONCLUIDA' || eq==='CANCELADA'; }
+  return osEhTerminal(osFluxoDe({tipoExecutor: tipo||'interna'}), s);
+}
+function manPendente(s, tipo){ return !manEhTerminal(s, tipo); } // desconhecido conta como pendente, de propósito
+function manPasso(s, tipo){ return osPasso(osFluxoDe({tipoExecutor: tipo||'interna'}), s); }
+function manRotulo(s, tipo){
   if (manSemFluxo(s)) return s;             // D-l7n-02: a palavra da própria linha, nunca a do estado equivalente
-  if (MAN_STATUS[s]) return MAN_STATUS[s].label;
-  return s;                                  // desconhecido: o próprio id
+  return osRotulo(osFluxoDe({tipoExecutor: tipo||'interna'}), s);
 }
-function manProximos(s){
-  var n = manNormalizar(s);
-  if (manEhTerminal(n)) return [];
-  var i = MAN_ORDEM.indexOf(n);
-  var out = [];
-  if (i>=0 && i+1<MAN_ORDEM.length) out.push(MAN_ORDEM[i+1]); // seguinte
-  if (i>0) out.push(MAN_ORDEM[i-1]);                           // anterior
-  out.push('CANCELADA');
-  return out;
-}
-function manPodeIrPara(atual, destino){ return manProximos(atual).indexOf(destino) >= 0; }
+function manProximos(s, tipo){ return osProximos(osFluxoDe({tipoExecutor: tipo||'interna'}), s); }
+function manPodeIrPara(atual, destino, tipo){ return manProximos(atual, tipo).indexOf(destino) >= 0; }
 function manDeltaT(insuflamento, retorno){
   if (insuflamento===undefined||insuflamento===null||insuflamento===''||retorno===undefined||retorno===null||retorno==='') return null;
   var ins = parseFloat(insuflamento), ret = parseFloat(retorno);
@@ -1281,11 +1382,23 @@ function manDeltaT(insuflamento, retorno){
   return Math.round((ret-ins)*10)/10; // ΔT é sempre derivado, nunca digitado
 }
 function manPodeCargo(acao, cargo){ return (MAN_ACOES_CARGO[acao]||[]).indexOf(cargo) >= 0; }
-function manClasseCard(s){
-  var n = manNormalizar(s);
-  if (n==='CONFERIDA') return 'concluida';
-  if (n==='CANCELADA') return 'cancelada';
-  if (n==='ABERTA') return 'pendente';
+/* Mesmo raciocínio de manEhTerminal: o ramo legado responde pelo bucket
+   unificado (nunca pela forma específica de um fluxo), o ramo com fluxo
+   pergunta ao núcleo direto — sem depender de sinônimo cruzado entre
+   fluxos, que é exatamente o que quebraria uma OS de contrato legada
+   (D-cf8-11 é sobre CONFERIDA, não sobre esta função). */
+function manClasseCard(s, tipo){
+  if (manSemFluxo(s)) {
+    var eq = MAN_EQUIVALENCIA[s];
+    if (eq==='CANCELADA') return 'cancelada';
+    if (eq==='CONCLUIDA') return 'concluida';
+    if (eq==='ABERTA') return 'pendente';
+    return 'parcial';
+  }
+  var f = osFluxoDe({tipoExecutor: tipo||'interna'});
+  if (s === f.cancelado) return 'cancelada';
+  if (osEhTerminal(f, s)) return 'concluida';
+  if (osPasso(f, s) === 0) return 'pendente';
   return 'parcial';
 }
 
@@ -1303,17 +1416,14 @@ function reguaPassos(passoAtual, passos){
   return h+'</div>';
 }
 
-function statusPillOS(s){
+function statusPillOS(s, tipo){
   if (manSemFluxo(s)) {
     var clsLeg = s==='CONCLUÍDA'?'pill-ok':s==='PARCIAL'?'pill-ver':'pill-nok';
     return '<span class="pill '+clsLeg+'" title="Registro direto — não percorreu as etapas de aprovação">'+esc(s)+'</span>';
   }
-  if (MAN_STATUS[s]) {
-    var t = MAN_TONS[MAN_STATUS[s].tom] || MAN_TONS.neutro;
-    return '<span class="pill" style="background:'+t.bg+';color:'+t.fg+'">'+esc(MAN_STATUS[s].label)+'</span>';
-  }
-  var tu = MAN_TONS.neutro;
-  return '<span class="pill" style="background:'+tu.bg+';color:'+tu.fg+'">'+esc(s)+'</span>';
+  var f = osFluxoDe({tipoExecutor: tipo||'interna'});
+  var t = MAN_TONS[osTom(f, s)] || MAN_TONS.neutro;
+  return '<span class="pill" style="background:'+t.bg+';color:'+t.fg+'">'+esc(osRotulo(f, s))+'</span>';
 }
 
 /* Dois wrappers que leem estado global — o gate testa a versão pura acima. */
@@ -1488,6 +1598,18 @@ function osTotalItens(itens){
 }
 
 function osRotuloExecutor(entry){ return OS_EXECUTOR_ROTULOS[osTipoExecutor(entry)] || OS_EXECUTOR_ROTULOS.interna; }
+
+/* D-cf8-15: texto do evento de sistema da trilha — mesma forma que
+   ctDetalheEvento já produzia (rótulo anterior → rótulo novo), agora
+   resolvido pelo fluxo unificado em vez de CT_STATUS. Sem mudança de
+   status, ou sem status anterior conhecido, devolve vazio — nunca um
+   "X → X" falso. */
+function osDetalheEvento(f, statusAnterior, statusNovo){
+  if (statusNovo===undefined || statusNovo===statusAnterior) return '';
+  var de = statusAnterior ? osRotulo(f, statusAnterior) : '—';
+  var para = osRotulo(f, statusNovo);
+  return de + ' → ' + para;
+}
 
 function loadData(){ /* no-op: dados carregados via loadDataFromSupabase() */ }
 function saveData(){
@@ -1806,6 +1928,24 @@ function setOSChip(btn, val){
   renderOS();
 }
 
+/* 260823-cf8 (D-cf8-19): três chips de executor, injetados só quando
+   UNI_OK — mesma técnica de injeção dinâmica que o resto do arquivo já
+   usa (ctInjectToggle), para o markup estático de #os-chips continuar
+   byte a byte o de hoje sem a migração 43. */
+function osInjectChipsExecutor(){
+  if (!UNI_OK) return;
+  var chips = el('os-chips');
+  if (!chips || el('os-chip-interna')) return; // sem o container, ou já injetado
+  OS_EXECUTORES.forEach(function(t){
+    var btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.id = 'os-chip-'+t;
+    btn.textContent = OS_EXECUTOR_ROTULOS[t];
+    btn.onclick = function(){ setOSChip(btn, t); };
+    chips.appendChild(btn);
+  });
+}
+
 /* Regra dos chips da aba OS, em função pura — o "Todos" é a FILA DE
    TRABALHO, não o arquivo: uma OS conferida ou cancelada só aparece no chip
    que a nomeia. Antes ela ficava no Todos para sempre, e a lista crescia
@@ -1814,13 +1954,21 @@ function setOSChip(btn, val){
    máquina crítica passou por aqui", e recortá-la por estado responderia
    outra coisa. */
 function osNoChip(chip, entry, ehCritica){
-  var n = manNormalizar(entry.status);
-  if(chip==='aberto')    return manPendente(entry.status);
-  if(chip==='aprovacao') return n==='APROVACAO';
-  if(chip==='concluida') return n==='CONFERIDA';
-  if(chip==='cancelada') return n==='CANCELADA';
+  // 260823-cf8: concluida/cancelada passam a ler o BUCKET unificado
+  // (manClasseCard, D-cf8-10/11) em vez de comparar o literal CONFERIDA —
+  // é o que mantém o chip "Concluída" enxergando tanto uma OS própria
+  // real (status CONFERIDA, banco sem a migração 43) quanto uma OS
+  // legada (status CONCLUÍDA com acento, D-l7n-02) sob o MESMO chip, sem
+  // reescrever a régua de estado duas vezes.
+  if(chip==='aberto')    return manPendente(entry.status, entry.tipoExecutor);
+  if(chip==='aprovacao') return manNormalizar(entry.status)==='APROVACAO';
+  if(chip==='concluida') return manClasseCard(entry.status, entry.tipoExecutor)==='concluida';
+  if(chip==='cancelada') return manClasseCard(entry.status, entry.tipoExecutor)==='cancelada';
   if(chip==='critica')   return !!ehCritica;
-  return !manEhTerminal(entry.status); // 'todos' e qualquer chip desconhecido
+  // D-cf8-19: os três chips de executor, deliberadamente à parte dos
+  // chips de estado — uma OS sem tipo_executor cai em 'interna'.
+  if(OS_EXECUTORES.indexOf(chip)>=0) return osTipoExecutor(entry)===chip;
+  return !manEhTerminal(entry.status, entry.tipoExecutor); // 'todos' e qualquer chip desconhecido
 }
 
 function renderOS(){
@@ -1845,16 +1993,17 @@ function renderOS(){
 
   el('os-list').innerHTML = all.map(function(o){
     var st = o.entry.status||'PENDENTE';
-    var cls = manClasseCard(st);
+    var cls = manClasseCard(st, o.entry.tipoExecutor);
     var done = (o.entry.checklist||[]).filter(function(c){ return c.done; }).length;
     var total = (o.entry.checklist||[]).length;
     var abrir = MAN_FLUXO_OK ? "manAbrirOS('"+esc(o.entry.id||'')+"')" : ('openDetail('+o.equipId+')');
     return '<div class="os-card '+cls+'" onclick="'+abrir+'">' +
       '<div class="os-hdr"><div><div class="os-local">'+esc(o.equip.local)+'</div>' +
       '<div class="os-predio">'+esc(o.equip.predio)+'</div></div>' +
-      statusPillOS(st)+'</div>' +
+      statusPillOS(st, o.entry.tipoExecutor)+'</div>' +
       '<div class="os-meta">'+critPill(autoCrit(o.equip))+
       '<span class="pill pill-tipo">'+esc(o.entry.tipo||'—')+'</span>' +
+      (UNI_OK?'<span class="pill pill-tipo">'+esc(osRotuloExecutor(o.entry))+'</span>':'') +
       '<span style="font-size:11px;color:#888"><i class="fas fa-calendar mr1" aria-hidden="true"></i>'+fmtDate(o.entry.date)+'</span>' +
       (total?'<span style="font-size:11px;color:#888"><i class="fas fa-check-double mr1" aria-hidden="true"></i>'+done+'/'+total+'</span>':'') +
       '</div>' +
@@ -2411,6 +2560,29 @@ function openDetail(id){
 /* ═══════════════════════════════════════════════════════════
    LOG FORM (OS)
 ═══════════════════════════════════════════════════════════ */
+/* D-cf8-07: executor é texto por tipo, sem tabela de empresas nem de
+   setores — interna → setor + pessoa(s); externa → organização; contrato
+   fica anunciado e desabilitado nesta tarefa (Task 3 habilita). Reescreve
+   SÓ o div dos campos no onchange, nunca o formulário inteiro — trocar de
+   tipo não pode apagar o que já foi digitado no resto da OS. */
+function osCamposExecutorHtml(tipo){
+  if (tipo==='externa') {
+    return '<div class="fg-full"><label class="fgl">Organização</label><input class="fgi" id="log-executor-org" type="text" placeholder="Outra OM, órgão…"/></div>';
+  }
+  if (tipo==='contrato') {
+    return '<div class="fg-full" style="font-size:11px;color:#888"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>Abertura de OS de contrato ainda não disponível por aqui.</div>';
+  }
+  return '<div class="fg2">' +
+    '<div><label class="fgl">Setor</label><input class="fgi" id="log-executor-setor" type="text" placeholder="Setor responsável"/></div>' +
+    '<div><label class="fgl">Pessoa(s)</label><input class="fgi" id="log-executor-pessoas" type="text" placeholder="Quem executa"/></div>' +
+    '</div>';
+}
+function osOnChangeExecutor(){
+  var tipo = val('log-executor');
+  var alvo = el('log-executor-campos');
+  if (alvo) alvo.innerHTML = osCamposExecutorHtml(tipo);
+}
+
 function openLogForm(equipId){
   var e = DATA.find(function(r){ return r.id===equipId; }); if(!e) return;
   FICHA_ABERTA = null; // D-92t: cruzar o limiar com um formulário não o descarta
@@ -2435,7 +2607,19 @@ function openLogForm(equipId){
   var avisoFluxo = MAN_FLUXO_OK ?
     '<div style="font-size:11px;color:#888;margin-top:6px"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>A OS nasce aberta — o gestor autoriza antes da execução e confere depois.</div>' : '';
 
+  // 260823-cf8: seletor de executor atrás de UNI_OK — sem a migração 43 o
+  // formulário é byte a byte o de hoje (D-cf8-13/25). Contrato entra
+  // desabilitado nesta tarefa (Task 3 habilita).
+  var blocoExecutor = UNI_OK ?
+    '<div class="ds"><div class="ds-title"><i class="fas fa-user-cog mr1" aria-hidden="true"></i>Executor</div>' +
+    '<select class="fgs fg-full" id="log-executor" onchange="osOnChangeExecutor()">' +
+    OS_EXECUTORES.map(function(t){ return '<option value="'+t+'"'+(t==='contrato'?' disabled':'')+'>'+esc(OS_EXECUTOR_ROTULOS[t])+'</option>'; }).join('') +
+    '</select>' +
+    '<div id="log-executor-campos" style="margin-top:8px">'+osCamposExecutorHtml('interna')+'</div>' +
+    '</div>' : '';
+
   el('drawer-body').innerHTML =
+    blocoExecutor +
     '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-clipboard-check mr1" aria-hidden="true"></i>'+tituloDados+'</div>' +
     '<div class="fg2">' +
@@ -2817,7 +3001,15 @@ async function saveLogEntry(equipId, clistLen){
   if (MAN_FLUXO_OK) {
     // A OS nasce ABERTA — o status nunca é lido de campo (D-l7n-06/11).
     if (!manPode('abrir')) { showToast('Sem permissão para abrir OS', 'error'); return; }
-    var logIdMan = await addLogEntryAsync(equipId,{date:date,tipo:tipo,status:'ABERTA',tecnico:val('log-tec').trim(),desc:val('log-desc').trim(),checklist:checklist});
+    // 260823-cf8: os campos de executor só existem no DOM quando UNI_OK —
+    // val() devolve '' para um id inexistente, então ler estes quatro sem
+    // guarda de UNI_OK é seguro (extraUni em addLogEntryAsync já gateia).
+    var entryMan = {date:date,tipo:tipo,status:'ABERTA',tecnico:val('log-tec').trim(),desc:val('log-desc').trim(),checklist:checklist,
+      tipoExecutor: val('log-executor')||'interna',
+      executorSetor: val('log-executor-setor').trim()||null,
+      executorPessoas: val('log-executor-pessoas').trim()||null,
+      executorOrg: val('log-executor-org').trim()||null};
+    var logIdMan = await addLogEntryAsync(equipId, entryMan);
     if (!logIdMan) return;
     showToast('OS aberta com sucesso','ok');
     manAbrirOS(logIdMan);
@@ -3361,18 +3553,28 @@ function manAbrirOS(logId){
   var achado = manEntrada(logId); if(!achado) return;
   var equipId = achado.equipId, e = achado.equip || {local:'—',predio:''}, entry = achado.entry;
   var st = entry.status;
+  // 260823-cf8: o fluxo é resolvido UMA VEZ por abertura da gaveta — osFluxoDe
+  // cai no fluxo legado enquanto UNI_OK for falso (D-cf8-13/25, tela intocada).
+  var flOS = osFluxoDe(entry);
+  var flTipo = entry.tipoExecutor;
+  // D-cf8-29 + escopo: OS de movimentação continua no caminho de conferência
+  // de sempre (aplicarInstalacao/aplicarRemocao/baixa), independente do
+  // fluxo unificado — não tocado por este plano. Fora dela, a régua com
+  // Conferência só existe quando o fluxo do momento TEM a etapa CONFERIDA
+  // (fluxo legado, D-cf8-12); interna/externa unificadas (D-cf8-04) não têm.
+  var flComConferencia = osEhMovimentacao(entry) || osEtapas(flOS).indexOf('CONFERIDA')>=0;
 
   el('dh-id').textContent = 'OS · #'+equipId;
   el('dh-local').textContent = e.local;
   el('dh-predio').textContent = e.predio;
-  el('dh-pills').innerHTML = statusPillOS(st);
+  el('dh-pills').innerHTML = statusPillOS(st, flTipo);
 
   var h = '';
   if (manSemFluxo(st)) {
     // D-l7n-02: linha sem fluxo não mostra régua — afirmaria uma aprovação que ninguém deu.
     h += '<div style="font-size:12px;color:#999;margin-bottom:8px"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>Registro direto — não percorreu as etapas de aprovação.</div>';
   } else {
-    h += reguaPassos(manPasso(st), MAN_STEPS);
+    h += reguaPassos(osPasso(flOS, st), osCurtos(flOS));
   }
 
   var done = (entry.checklist||[]).filter(function(c){ return c.done; }).length;
@@ -3397,6 +3599,15 @@ function manAbrirOS(logId){
     // D-uyz: painel próprio de movimentação, logo depois do bloco 1 — não
     // é um quinto bloco solto, é a mesma OS.
     h += movPainelDaOS(entry, equipId, logId);
+  } else if (UNI_OK) {
+    // D-cf8-29: bloco de executor NUNCA em OS de movimentação. Atrás de
+    // UNI_OK — sem a migração 43 nenhuma OS tem tipo_executor real.
+    h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-cog mr1" aria-hidden="true"></i>Executor</div>' +
+      '<div class="dfield"><label>Tipo</label><div class="dval" style="font-size:13px">'+esc(osRotuloExecutor(entry))+'</div></div>' +
+      (entry.executorSetor?'<div class="dfield"><label>Setor</label><div class="dval" style="font-size:13px">'+esc(entry.executorSetor)+'</div></div>':'') +
+      (entry.executorPessoas?'<div class="dfield"><label>Pessoa(s)</label><div class="dval" style="font-size:13px">'+esc(entry.executorPessoas)+'</div></div>':'') +
+      (entry.executorOrg?'<div class="dfield"><label>Organização</label><div class="dval" style="font-size:13px">'+esc(entry.executorOrg)+'</div></div>':'') +
+      '</div>';
   }
 
   if (!manSemFluxo(st)) {
@@ -3405,10 +3616,10 @@ function manAbrirOS(logId){
     if (entry.delineadoPor) {
       h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Delineado por '+esc(entry.delineadoPor)+' em '+fmtDate((entry.delineadoEm||'').slice(0,10))+'</div>';
     }
-    if (st==='ABERTA' && manPode('delinear') && manPodeIrPara(st,'DELINEAMENTO')) {
+    if (st==='ABERTA' && manPode('delinear') && manPodeIrPara(st,'DELINEAMENTO',flTipo)) {
       h += '<button class="btn-primary" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'DELINEAMENTO\')"><i class="fas fa-play mr1" aria-hidden="true"></i>Iniciar delineamento</button>';
     }
-    if (st==='DELINEAMENTO' && manPode('delinear') && manPodeIrPara(st,'APROVACAO')) {
+    if (st==='DELINEAMENTO' && manPode('delinear') && manPodeIrPara(st,'APROVACAO',flTipo)) {
       h += '<label class="fgl" style="margin-top:8px">Diagnóstico / serviços a executar</label>' +
         '<textarea class="fgt" id="man-delin-desc">'+esc(entry.desc||'')+'</textarea>' +
         '<button class="btn-primary" style="width:100%;margin-top:8px" onclick="manDelinear(\''+esc(logId)+'\')"><i class="fas fa-paper-plane mr1" aria-hidden="true"></i>Enviar para aprovação</button>';
@@ -3419,14 +3630,18 @@ function manAbrirOS(logId){
     if (entry.aprovador) {
       h += '<div style="margin-top:8px;font-size:11px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Aprovado por '+esc(entry.aprovador)+' em '+fmtDate(entry.dataAprovacao)+'</div>';
     }
-    if (st==='APROVACAO' && manPode('aprovar') && manPodeIrPara(st,'EM_EXECUCAO')) {
+    if (st==='APROVACAO' && manPode('aprovar') && manPodeIrPara(st,'EM_EXECUCAO',flTipo)) {
       h += '<div class="ct-btn-row">' +
         '<button class="btn-success" onclick="manAprovar(\''+esc(logId)+'\')"><i class="fas fa-check mr1" aria-hidden="true"></i>Aprovar</button>' +
         '<button class="btn-danger" onclick="manDevolver(\''+esc(logId)+'\')"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolver</button></div>';
     }
     h += '</div>';
 
-    /* 3 · Execução — evidência: fotos comprimidas + as cinco medições (D-l7n-09) */
+    /* 3 · Execução — evidência: fotos comprimidas + as cinco medições (D-l7n-09).
+       260823-cf8 (D-cf8-04/24): sem conferência, EM_EXECUCAO conclui direto
+       — o seletor de estado do equipamento e o botão migram para o FIM
+       deste bloco, com o rótulo "Concluir OS". flComConferencia decide
+       qual das duas saídas este bloco oferece; nunca as duas juntas. */
     h += '<div class="ds"><div class="ds-title"><i class="fas fa-hard-hat mr1" aria-hidden="true"></i>3 · Execução</div>';
     h += manRenderEvidencia(entry);
     if (st==='EM_EXECUCAO' && manPode('executar')) {
@@ -3444,18 +3659,29 @@ function manAbrirOS(logId){
         '<label class="fgl" style="margin-top:8px">Fotos</label>' +
         '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" capture="environment" multiple/>' +
         '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="manRegistrarEvidencia(\''+esc(logId)+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar evidência</button></div>';
-      if (manTemEvidencia(entry) && manPode('executar') && manPodeIrPara(st,'EXECUTADA')) {
-        h += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
+      if (flComConferencia) {
+        if (manTemEvidencia(entry) && manPode('executar') && manPodeIrPara(st,'EXECUTADA',flTipo)) {
+          h += '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manMudarStatus(\''+esc(logId)+'\',\'EXECUTADA\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir execução</button>';
+        }
+      } else if (manTemEvidencia(entry) && manPode('concluir') && manPodeIrPara(st,'CONCLUIDA',flTipo)) {
+        var estadoAtualConcl = equipEstado(e);
+        var optsConclEstado = (estadoAtualConcl ? '' : '<option value="" selected disabled>(não cadastrado)</option>') +
+          EQUIP_ORDEM.map(function(k){ return '<option value="'+k+'"'+(estadoAtualConcl===k?' selected':'')+'>'+esc(EQUIP_ESTADOS[k].rotulo)+'</option>'; }).join('');
+        h += '<label class="fgl" style="margin-top:10px;display:block">Estado do equipamento após a manutenção</label>' +
+          '<select class="fgs" id="man-conf-estado">'+optsConclEstado+'</select>' +
+          '<button class="btn-success" style="width:100%;margin-top:8px" onclick="manConcluir(\''+esc(logId)+'\')"><i class="fas fa-flag-checkered mr1" aria-hidden="true"></i>Concluir OS</button>';
       }
     }
     h += '</div>';
 
-    /* 4 · Conferência — o gestor confere e encerra, ou devolve com parecer obrigatório */
+    /* 4 · Conferência — SÓ existe quando o fluxo do momento tem essa etapa
+       (D-cf8-04): fluxo legado (UNI_OK falso) e OS de movimentação. */
+    if (flComConferencia) {
     h += '<div class="ds"><div class="ds-title"><i class="fas fa-user-shield mr1" aria-hidden="true"></i>4 · Conferência</div>';
     if (entry.conferente) {
       h += '<div style="font-size:12px;color:#168821"><i class="fas fa-check-circle mr1" aria-hidden="true"></i>Conferido por '+esc(entry.conferente)+' em '+fmtDate(entry.dataConferencia)+'</div>' +
         (entry.parecerConferencia?'<div class="le-desc" style="margin-top:4px">'+esc(entry.parecerConferencia)+'</div>':'');
-    } else if (st==='EXECUTADA' && manPode('conferir') && manPodeIrPara(st,'CONFERIDA')) {
+    } else if (st==='EXECUTADA' && manPode('conferir') && manPodeIrPara(st,'CONFERIDA',flTipo)) {
       if (entry.parecerConferencia) {
         h += '<div style="font-size:11px;color:#B46800;background:#FEF3E2;border-radius:8px;padding:8px;margin-bottom:8px"><i class="fas fa-undo mr1" aria-hidden="true"></i>Devolvida anteriormente: '+esc(entry.parecerConferencia)+'</div>';
       }
@@ -3480,12 +3706,26 @@ function manAbrirOS(logId){
       h += '<div style="font-size:12px;color:#999">Aguardando conclusão da execução.</div>';
     }
     h += '</div>';
+    }
+
+    // D-cf8-05/29: itens em toda OS que não seja de movimentação, atrás de
+    // UNI_OK (a tabela os_itens só existe com a migração 43).
+    if (UNI_OK && !osEhMovimentacao(entry)) {
+      h += osItensHtml(logId, entry);
+    }
+  }
+
+  // D-cf8-08/15: registro (comentário do usuário + trilha de sistema) em
+  // toda OS, atrás de UNI_OK — a tabela os_comentarios só existe com a
+  // migração 43.
+  if (UNI_OK) {
+    h += osComentariosHtml(logId);
   }
 
   el('drawer-body').innerHTML = h;
 
   var foot = '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>';
-  if (manPode('cancelar') && manPodeIrPara(st,'CANCELADA')) {
+  if (manPode('cancelar') && manPodeIrPara(st,'CANCELADA',flTipo)) {
     foot += '<button class="btn-danger" style="flex:1" onclick="manCancelar(\''+esc(logId)+'\')"><i class="fas fa-ban mr1" aria-hidden="true"></i>Cancelar OS</button>';
   }
   el('drawer-footer').innerHTML = foot;
@@ -3496,7 +3736,7 @@ async function manMudarStatus(logId, novo){
   var achado = manEntrada(logId); if(!achado) return;
   var atual = achado.entry.status;
   var acao = MAN_ACAO_DESTINO[novo];
-  if (!manPodeIrPara(atual, novo) || !manPode(acao)) { showToast('Ação não permitida','error'); return; }
+  if (!manPodeIrPara(atual, novo, achado.entry.tipoExecutor) || !manPode(acao)) { showToast('Ação não permitida','error'); return; }
   if (novo==='EXECUTADA' && !manTemEvidencia(achado.entry)) { showToast('Registre ao menos uma evidência antes de concluir a execução','error'); return; } // D-l7n-09: botão escondido não é validação
   var ok = await manAtualizarOS(logId, achado.equipId, {status:novo});
   if (ok) { manAbrirOS(logId); renderOS(); }
@@ -3506,7 +3746,7 @@ async function manDelinear(logId){
   var achado = manEntrada(logId); if(!achado) return;
   var texto = (val('man-delin-desc')||'').trim();
   if(!texto){ showToast('Descreva o diagnóstico','error'); return; }
-  if(!manPodeIrPara(achado.entry.status,'APROVACAO') || !manPode('delinear')){ showToast('Ação não permitida','error'); return; }
+  if(!manPodeIrPara(achado.entry.status,'APROVACAO',achado.entry.tipoExecutor) || !manPode('delinear')){ showToast('Ação não permitida','error'); return; }
   var nome = ctUser?ctUser.nome:'';
   var ok = await manAtualizarOS(logId, achado.equipId, {status:'APROVACAO', desc:texto, delineadoPor:nome, delineadoEm:new Date().toISOString()});
   if (ok) { manAbrirOS(logId); renderOS(); }
@@ -3514,7 +3754,7 @@ async function manDelinear(logId){
 
 async function manAprovar(logId){
   var achado = manEntrada(logId); if(!achado) return;
-  if(!manPodeIrPara(achado.entry.status,'EM_EXECUCAO') || !manPode('aprovar')){ showToast('Ação não permitida','error'); return; }
+  if(!manPodeIrPara(achado.entry.status,'EM_EXECUCAO',achado.entry.tipoExecutor) || !manPode('aprovar')){ showToast('Ação não permitida','error'); return; }
   var nome = ctUser?ctUser.nome:'';
   var ok = await manAtualizarOS(logId, achado.equipId, {status:'EM_EXECUCAO', aprovador:nome, dataAprovacao:today(), parecerAprovacao:null}, 'OS aprovada');
   if (ok) { manAbrirOS(logId); renderOS(); }
@@ -3526,7 +3766,7 @@ async function manDevolver(logId){
   if (motivo===null) return;
   motivo = motivo.trim();
   if (!motivo) { showToast('Informe o motivo da devolução','error'); return; }
-  if(!manPodeIrPara(achado.entry.status,'DELINEAMENTO') || !manPode('aprovar')){ showToast('Ação não permitida','error'); return; }
+  if(!manPodeIrPara(achado.entry.status,'DELINEAMENTO',achado.entry.tipoExecutor) || !manPode('aprovar')){ showToast('Ação não permitida','error'); return; }
   var ok = await manAtualizarOS(logId, achado.equipId, {status:'DELINEAMENTO', parecerAprovacao:motivo}, 'Devolvida p/ ajuste');
   if (ok) { manAbrirOS(logId); renderOS(); }
 }
@@ -3534,7 +3774,7 @@ async function manDevolver(logId){
 async function manCancelar(logId){
   var achado = manEntrada(logId); if(!achado) return;
   if(!confirm('Cancelar esta OS?')) return;
-  if(!manPodeIrPara(achado.entry.status,'CANCELADA') || !manPode('cancelar')){ showToast('Ação não permitida','error'); return; }
+  if(!manPodeIrPara(achado.entry.status,'CANCELADA',achado.entry.tipoExecutor) || !manPode('cancelar')){ showToast('Ação não permitida','error'); return; }
   var ok = await manAtualizarOS(logId, achado.equipId, {status:'CANCELADA'}, 'OS cancelada');
   if (ok) { closeDrawer(); renderOS(); }
 }
@@ -3653,6 +3893,122 @@ async function manConferir(logId, aprovado){
     var ok2 = await manAtualizarOS(logId, achado.equipId, {status:'EM_EXECUCAO', parecerConferencia:parecer}, 'Devolvida p/ correção');
     if (ok2) { manAbrirOS(logId); renderOS(); }
   }
+}
+
+/* 260823-cf8 (D-cf8-04/24): terminal do fluxo próprio/externa — sem
+   conferência do gestor, quem conclui é quem executou (mesma lista de
+   cargo de 'executar'). Reusa os campos conferente/data_conferencia da
+   migração 40 para registrar quem concluiu e quando — nenhuma coluna
+   nova só para isto. Evidência exigida (D-l7n-09: botão escondido não é
+   validação) e última manutenção/estado gravados na mesma transição
+   (D-cf8-24), como a conferência já fazia para o ramo de manutenção. */
+async function manConcluir(logId){
+  var achado = manEntrada(logId); if(!achado) return;
+  var tipo = achado.entry.tipoExecutor;
+  if (!manPode('concluir') || !manPodeIrPara(achado.entry.status,'CONCLUIDA',tipo)) { showToast('Ação não permitida','error'); return; }
+  if (!manTemEvidencia(achado.entry)) { showToast('Registre ao menos uma evidência antes de concluir','error'); return; }
+  var nome = ctUser?ctUser.nome:'';
+  var ok = await manAtualizarOS(logId, achado.equipId, {status:'CONCLUIDA', conferente:nome, dataConferencia:today()}, 'OS concluída');
+  if (ok) {
+    await atualizarUltimaManutencao(achado.equipId, achado.entry.date); // D-l7n-11: a data da OS
+    await atualizarEstadoEquip(achado.equipId, val('man-conf-estado'));
+    manAbrirOS(logId); renderOS();
+  }
+}
+
+/* ── OS unificada: itens de serviço e material (D-cf8-05/14) ── */
+/* Escrita/remoção gateadas por manPode('delinear') e recusadas depois do
+   terminal (D-cf8-05 action) — item acrescentado a OS encerrada é
+   reescrita de custo consumado. Reusa .orc-item/.orc-tipo/.orc-desc/
+   .orc-val/.orc-del (D-cf8-20), a mesma folha da contratação. */
+function osItensHtml(osId, entry){
+  var itens = OS_ITENS[osId] || [];
+  var podeEditar = manPode('delinear') && !manEhTerminal(entry.status, entry.tipoExecutor);
+  var h = '<div class="ds"><div class="ds-title"><i class="fas fa-boxes mr1" aria-hidden="true"></i>Itens · serviços e materiais</div>';
+  if (itens.length) {
+    h += itens.map(function(i){
+      return '<div class="orc-item"><span class="orc-tipo '+i.tipo+'">'+(i.tipo==='SERVICO'?'SERV':'MAT')+'</span>' +
+        '<div class="orc-desc">'+esc(i.descricao)+'<div style="color:#999;font-size:10px">'+i.quantidade+' × '+fmtMoney(i.valorUnitario)+'</div></div>' +
+        '<span class="orc-val">'+fmtMoney(i.total)+'</span>' +
+        (podeEditar?'<button class="orc-del" title="Excluir item" aria-label="Excluir item" onclick="osDelItem(\''+esc(osId)+'\',\''+esc(i.id)+'\')"><i class="fas fa-trash" aria-hidden="true"></i></button>':'') +
+        '</div>';
+    }).join('');
+    h += '<div class="ct-total-row"><span>TOTAL</span><span style="color:#1351B4">'+fmtMoney(osTotalItens(itens))+'</span></div>';
+  } else {
+    h += '<div style="font-size:12px;color:#999">Nenhum item lançado ainda.</div>';
+  }
+  if (podeEditar) {
+    h += '<div style="margin-top:10px;border-top:1px dashed #DDD;padding-top:10px">' +
+      '<div class="fg2"><div><label class="fgl">Tipo</label><select class="fgs" id="oi-un-tipo"><option value="SERVICO">Serviço</option><option value="MATERIAL">Material/Peça</option></select></div>' +
+      '<div><label class="fgl">Qtd</label><input class="fgi" id="oi-un-qtd" type="number" value="1" min="0.01" step="0.01"/></div></div>' +
+      '<label class="fgl">Descrição</label><input class="fgi" id="oi-un-desc" placeholder="Ex.: Substituição do compressor"/>' +
+      '<label class="fgl" style="margin-top:8px">Valor unitário (R$)</label><input class="fgi" id="oi-un-vu" type="number" min="0" step="0.01" placeholder="0,00"/>' +
+      '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="osAddItemUI(\''+esc(osId)+'\')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Adicionar item</button></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+async function osAddItem(osId, item){
+  var achado = manEntrada(osId);
+  if (!manPode('delinear')) { showToast('Sem permissão para lançar item','error'); return false; }
+  if (achado && manEhTerminal(achado.entry.status, achado.entry.tipoExecutor)) { showToast('OS encerrada — item não pode ser lançado','error'); return false; }
+  var payload = {os_id:osId, tipo:item.tipo, descricao:item.descricao, unidade:item.unidade||null,
+    quantidade:item.quantidade, valor_unitario:item.valorUnitario, ordem:(OS_ITENS[osId]||[]).length};
+  var r = await supa.from('os_itens').insert(payload).select().single();
+  if (r.error) { showToast('Erro ao adicionar item','error'); return false; }
+  (OS_ITENS[osId]=OS_ITENS[osId]||[]).push(dbToItem(r.data));
+  return true;
+}
+async function osAddItemUI(osId){
+  var desc = (val('oi-un-desc')||'').trim();
+  var qtd = parseFloat(val('oi-un-qtd'))||0;
+  var vu = parseFloat(val('oi-un-vu'))||0;
+  if(!desc || qtd<=0 || vu<0){ showToast('Preencha descrição, qtd e valor','error'); return; }
+  var ok = await osAddItem(osId, {tipo:val('oi-un-tipo'), descricao:desc, quantidade:qtd, valorUnitario:vu});
+  if (ok) manAbrirOS(osId);
+}
+
+async function osDelItem(osId, itemId){
+  var achado = manEntrada(osId);
+  if (!manPode('delinear')) { showToast('Sem permissão para remover item','error'); return false; }
+  if (achado && manEhTerminal(achado.entry.status, achado.entry.tipoExecutor)) { showToast('OS encerrada — item não pode ser removido','error'); return false; }
+  var r = await supa.from('os_itens').delete().eq('id', itemId);
+  if (r.error) { showToast('Erro ao remover','error'); return false; }
+  OS_ITENS[osId] = (OS_ITENS[osId]||[]).filter(function(i){ return i.id!==itemId; });
+  manAbrirOS(osId);
+  return true;
+}
+
+/* ── OS unificada: registro (comentário do usuário + trilha de sistema) ── */
+/* D-cf8-08/15: reusa .exec-reg (D-cf8-20) — linhas de sistema mais claras,
+   sem borda de destaque, para a leitura distinguir o que uma pessoa
+   escreveu do que a máquina de estados registrou sozinha. */
+function osComentariosHtml(osId){
+  var lista = OS_COMENTARIOS[osId] || [];
+  var h = '<div class="ds"><div class="ds-title"><i class="fas fa-comments mr1" aria-hidden="true"></i>Registro</div>';
+  if (lista.length) {
+    h += lista.map(function(c){
+      var sistema = c.origem==='sistema';
+      return '<div class="exec-reg"'+(sistema?' style="border-left-color:#CCC"':'')+'>' +
+        '<div class="le-hdr"><span class="le-date">'+fmtDate((c.criadoEm||'').slice(0,10))+'</span>' +
+        (c.autor?'<span class="le-tec"><i class="fas fa-user mr1" aria-hidden="true"></i>'+esc(c.autor)+(c.cargo?' ('+esc(c.cargo)+')':'')+'</span>':'') +
+        '</div><div class="le-desc"'+(sistema?' style="color:#999"':'')+'>'+esc(c.texto)+'</div></div>';
+    }).join('');
+  } else {
+    h += '<div style="font-size:12px;color:#999">Nenhum registro ainda.</div>';
+  }
+  if (!somenteLeitura()) {
+    h += '<textarea class="fgt" id="os-comentario-texto" style="margin-top:8px" placeholder="Escreva um comentário…"></textarea>' +
+      '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="osEnviarComentarioUI(\''+esc(osId)+'\')"><i class="fas fa-paper-plane mr1" aria-hidden="true"></i>Registrar</button>';
+  }
+  h += '</div>';
+  return h;
+}
+async function osEnviarComentarioUI(osId){
+  var texto = val('os-comentario-texto');
+  var ok = await osAdicionarComentario(osId, texto);
+  if (ok) manAbrirOS(osId);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -3845,6 +4201,10 @@ async function acessoLivre() {
     await loadLogsFromSupabase();
     await manSondarEsquema();
     await movSondarEsquema();
+    await uniSondarEsquema();
+    osInjectChipsExecutor();
+    await carregarItensOS();
+    await carregarComentarios();
     // Remove tela de login
     var lw = document.getElementById('login-mobile');
     if (lw) lw.remove();
@@ -3876,6 +4236,10 @@ async function initAppOnce(){
   await loadLogsFromSupabase();
   await manSondarEsquema();
   await movSondarEsquema();
+  await uniSondarEsquema();
+  osInjectChipsExecutor();
+  await carregarItensOS();
+  await carregarComentarios();
   await carregarPerfil();
   setupRealtime();
   renderDash();
@@ -6644,12 +7008,17 @@ var COLS_OS = [
     valor:function(o){ return o.entry.tipo; },
     texto:function(o){ return o.entry.tipo; } },
   { id:'estado', rotulo:'Estado', tipo:'texto',
-    valor:function(o){ return manRotulo(o.entry.status); },
-    texto:function(o){ return manRotulo(o.entry.status); },
-    celula:function(o){ return statusPillOS(o.entry.status); } },
+    valor:function(o){ return manRotulo(o.entry.status, o.entry.tipoExecutor); },
+    texto:function(o){ return manRotulo(o.entry.status, o.entry.tipoExecutor); },
+    celula:function(o){ return statusPillOS(o.entry.status, o.entry.tipoExecutor); } },
   { id:'tecnico', rotulo:'Técnico', tipo:'texto',
     valor:function(o){ return o.entry.tecnico; },
-    texto:function(o){ return o.entry.tecnico; } }
+    texto:function(o){ return o.entry.tecnico; } },
+  /* 260823-cf8 (D-cf8-19): coluna Executor, ordenável e filtrável pelo
+     mesmo núcleo de tabela de hoje — nenhuma regra nova de ordenação. */
+  { id:'executor', rotulo:'Executor', tipo:'texto',
+    valor:function(o){ return osRotuloExecutor(o.entry); },
+    texto:function(o){ return osRotuloExecutor(o.entry); } }
 ];
 
 /* A mesma linha que renderMovim já monta, extraída em duas formas: texto

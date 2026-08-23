@@ -410,6 +410,306 @@ test('a trava de status da migração 43 contém CONCLUIDA e CONCLUÍDA como lit
 });
 
 // ══════════════════════════════════════════════════════════════════
+// Task 2 — a OS própria na tela: executor, itens, comentários, cinco
+// passos terminando em Concluída (D-cf8-01..30)
+// ══════════════════════════════════════════════════════════════════
+
+function carregarTelaCompleta(opts) {
+  opts = opts || {};
+  const updatesLog = [];
+  const updatesEquip = [];
+  const insertsItens = [];
+  const deletesItens = [];
+  const insertsComentarios = [];
+  const chamadas = { manAbrirOS: 0, renderOS: 0 };
+  const toasts = [];
+
+  const linhaBase = Object.assign({
+    id: 'log-1', equip_id: opts.equipId !== undefined ? opts.equipId : 10,
+    data_os: opts.date || '2026-08-23', status: opts.status || 'EM_EXECUCAO',
+    fotos: opts.fotosIniciais || [], tipo_executor: opts.tipoExecutorDb !== undefined ? opts.tipoExecutorDb : 'interna',
+  }, opts.linhaExtra || {});
+
+  const ctx = {
+    UNI_OK: opts.uniOk !== undefined ? opts.uniOk : true,
+    esc(s) {
+      if (!s) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    },
+    el(id) { return (ctx._campos && ctx._campos[id]) || { querySelectorAll() { return []; } }; },
+    val(id) { return (ctx._valores && ctx._valores[id] !== undefined) ? ctx._valores[id] : ''; },
+    _valores: opts.valores || {},
+    _campos: opts.campos || {},
+    somenteLeitura() { return !!opts.observador; },
+    ctUser: opts.ctUser !== undefined ? opts.ctUser : { nome: 'Fulano', role: 'gestor' },
+    DATA: opts.data || [{ id: opts.equipId !== undefined ? opts.equipId : 10, ultimaManutencao: opts.ultimaManutencaoAtual || '', funciona: opts.funcionaAtual !== undefined ? opts.funcionaAtual : 'INOP' }],
+    showToast(msg, tipo) { toasts.push({ msg, tipo }); },
+    console: { warn() {}, error() {} },
+    today() { return '2026-08-23'; },
+    fmtDate(iso) { return iso || ''; },
+    confirm() { return opts.confirmar !== false; },
+    prompt() { return opts.motivoPrompt !== undefined ? opts.motivoPrompt : 'motivo'; },
+    openDrawer() {}, closeDrawer() {},
+    osEhMovimentacao() { return !!opts.movimentacao; },
+    podeDarBaixa() { return false; },
+    OS_ITENS: opts.osItensIniciais || {},
+    OS_COMENTARIOS: opts.osComentariosIniciais || {},
+    supa: {
+      from(tabela) {
+        if (tabela === 'logs_manutencao') {
+          return {
+            update(patch) {
+              return {
+                eq(col, val) {
+                  return {
+                    select() {
+                      return {
+                        single() {
+                          if (opts.erroUpdateLog) return Promise.resolve({ error: { message: 'falhou' } });
+                          updatesLog.push({ id: val, patch });
+                          return Promise.resolve({ error: null, data: Object.assign({}, linhaBase, patch) });
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            },
+          };
+        }
+        if (tabela === 'equipamentos') {
+          return { update(patch) { return { eq(col, val) { updatesEquip.push({ patch, col, val }); return Promise.resolve({ error: null }); } }; } };
+        }
+        if (tabela === 'os_itens') {
+          return {
+            insert(payload) {
+              return {
+                select() {
+                  return {
+                    single() {
+                      if (opts.erroInsertItem) return Promise.resolve({ error: { message: 'falhou' } });
+                      const linha = Object.assign({ id: 'item-' + (insertsItens.length + 1) }, payload);
+                      insertsItens.push(linha);
+                      return Promise.resolve({ error: null, data: linha });
+                    },
+                  };
+                },
+              };
+            },
+            delete() {
+              return { eq(col, val) { deletesItens.push(val); return Promise.resolve({ error: opts.erroDeleteItem ? { message: 'falhou' } : null }); } };
+            },
+            select() { return { order() { return Promise.resolve({ error: opts.erroCarregarItens ? { message: 'falhou' } : null, data: opts.itensBanco || [] }); } }; },
+          };
+        }
+        if (tabela === 'os_comentarios') {
+          return {
+            insert(payload) {
+              return {
+                select() {
+                  return {
+                    single() {
+                      if (opts.erroInsertComentario) return Promise.resolve({ error: { message: 'falhou' } });
+                      const linha = Object.assign({ id: 'com-' + (insertsComentarios.length + 1), criado_em: '2026-08-23T12:00:00Z' }, payload);
+                      insertsComentarios.push(linha);
+                      return Promise.resolve({ error: null, data: linha });
+                    },
+                  };
+                },
+              };
+            },
+            select() { return { order() { return Promise.resolve({ error: opts.erroCarregarComentarios ? { message: 'falhou' } : null, data: opts.comentariosBanco || [] }); } }; },
+          };
+        }
+        throw new Error('tabela inesperada: ' + tabela);
+      },
+      storage: { from() { return { upload() { return Promise.resolve({ error: null }); }, getPublicUrl() { return { data: { publicUrl: '' } }; } }; } },
+    },
+  };
+  ctx._logCache = {};
+  ctx._logCache[ctx.DATA[0] ? ctx.DATA[0].id : (opts.equipId !== undefined ? opts.equipId : 10)] = [Object.assign({ id: linhaBase.id, status: linhaBase.status, date: linhaBase.data_os, fotos: linhaBase.fotos, tipoExecutor: linhaBase.tipo_executor }, opts.entryExtra || {})];
+
+  vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── estado do equipamento: vocabulário OP/INOP/OR ── */', '/* ── alertas: contagem única ── */'), ctx);
+  vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
+  vm.runInContext(recorte('/* ── encerramento de OS: última manutenção ── */', 'async function saveLogEntry('), ctx);
+  vm.runInContext(recorte('function osNoChip(', 'function renderOS(){'), ctx);
+  vm.runInContext(recorte('/* ── fluxo da OS interna: tela e ações ── */', 'function showSearch(){'), ctx);
+  // 260823-cf8: OS_ITENS/OS_COMENTARIOS são "var" nos recortes acima — um
+  // valor pré-semeado em ctx antes do vm.runInContext seria sobrescrito
+  // pela própria declaração ("var X = {}" reatribui ao rodar). Semeados
+  // DEPOIS, como manAbrirOS/renderOS abaixo.
+  if (opts.osItensIniciais) ctx.OS_ITENS = opts.osItensIniciais;
+  if (opts.osComentariosIniciais) ctx.OS_COMENTARIOS = opts.osComentariosIniciais;
+  // sobrepõe o UNI_OK real, gravado pelo recorte da porta de escrita, pelo
+  // que o teste pediu — a porta de escrita declara "var UNI_OK = false"
+  // sempre que roda, então a ordem dos runInContext importa.
+  ctx.UNI_OK = opts.uniOk !== undefined ? opts.uniOk : true;
+  ctx.manAbrirOS = function () { chamadas.manAbrirOS++; };
+  ctx.renderOS = function () { chamadas.renderOS++; };
+
+  ctx._updatesLog = updatesLog;
+  ctx._updatesEquip = updatesEquip;
+  ctx._insertsItens = insertsItens;
+  ctx._deletesItens = deletesItens;
+  ctx._insertsComentarios = insertsComentarios;
+  ctx._chamadas = chamadas;
+  ctx._toasts = toasts;
+  return ctx;
+}
+
+test('osDetalheEvento devolve rótulo anterior → rótulo novo, vazio sem mudança de status ou sem status anterior conhecido', () => {
+  const ctx = carregarTelaCompleta({});
+  assert.strictEqual(ctx.osDetalheEvento(ctx.FLUXO_PROPRIO, 'DELINEAMENTO', 'APROVACAO'), 'Em delineamento → Aguardando aprovação do gestor');
+  assert.strictEqual(ctx.osDetalheEvento(ctx.FLUXO_PROPRIO, 'APROVACAO', 'APROVACAO'), '');
+  assert.strictEqual(ctx.osDetalheEvento(ctx.FLUXO_PROPRIO, undefined, undefined), '');
+  assert.match(ctx.osDetalheEvento(ctx.FLUXO_PROPRIO, undefined, 'ABERTA'), /^— →/);
+});
+
+test('manAtualizarOS grava um comentário de origem=sistema quando o patch muda o status, só com UNI_OK', async () => {
+  const ligado = carregarTelaCompleta({ uniOk: true, status: 'DELINEAMENTO', tipoExecutorDb: 'interna', entryExtra: { tipoExecutor: 'interna' } });
+  await ligado.manAtualizarOS('log-1', 10, { status: 'APROVACAO' }, 'msg');
+  assert.strictEqual(ligado._insertsComentarios.length, 1);
+  assert.strictEqual(ligado._insertsComentarios[0].origem, 'sistema');
+  assert.match(ligado._insertsComentarios[0].texto, /Em delineamento → Aguardando aprovação do gestor/);
+
+  const desligado = carregarTelaCompleta({ uniOk: false, status: 'DELINEAMENTO' });
+  await desligado.manAtualizarOS('log-1', 10, { status: 'APROVACAO' }, 'msg');
+  assert.strictEqual(desligado._insertsComentarios.length, 0);
+});
+
+test('manAtualizarOS não grava comentário quando o patch não muda o status', async () => {
+  const ctx = carregarTelaCompleta({ uniOk: true, status: 'DELINEAMENTO' });
+  await ctx.manAtualizarOS('log-1', 10, { desc: 'novo texto' }, 'msg');
+  assert.strictEqual(ctx._insertsComentarios.length, 0);
+});
+
+test('osAdicionarComentario grava origem=usuario, recusa texto em branco, e respeita somente leitura', async () => {
+  const ctx = carregarTelaCompleta({});
+  const semTexto = await ctx.osAdicionarComentario('log-1', '   ');
+  assert.strictEqual(semTexto, false);
+  assert.strictEqual(ctx._insertsComentarios.length, 0);
+
+  const ok = await ctx.osAdicionarComentario('log-1', 'Peça chegou amanhã');
+  assert.strictEqual(ok, true);
+  assert.strictEqual(ctx._insertsComentarios[0].origem, 'usuario');
+  assert.strictEqual(ctx._insertsComentarios[0].texto, 'Peça chegou amanhã');
+  assert.strictEqual(ctx.OS_COMENTARIOS['log-1'].length, 1);
+
+  const ctxObservador = carregarTelaCompleta({ observador: true });
+  const recusado = await ctxObservador.osAdicionarComentario('log-1', 'x');
+  assert.strictEqual(recusado, false);
+  assert.strictEqual(ctxObservador._insertsComentarios.length, 0);
+});
+
+test('osAddItem grava o item, recusa sem permissão de delinear, e recusa numa OS terminal', async () => {
+  const ctx = carregarTelaCompleta({ status: 'DELINEAMENTO' });
+  const ok = await ctx.osAddItem('log-1', { tipo: 'MATERIAL', descricao: 'Capacitor', quantidade: 2, valorUnitario: 15 });
+  assert.strictEqual(ok, true);
+  assert.strictEqual(ctx._insertsItens[0].tipo, 'MATERIAL');
+  assert.strictEqual(ctx._insertsItens[0].valor_unitario, 15);
+  assert.strictEqual(ctx.OS_ITENS['log-1'].length, 1);
+
+  const ctxTecnico = carregarTelaCompleta({ status: 'DELINEAMENTO', ctUser: { nome: 'Técnico', role: 'observador' } });
+  const recusadoCargo = await ctxTecnico.osAddItem('log-1', { tipo: 'MATERIAL', descricao: 'x', quantidade: 1, valorUnitario: 1 });
+  assert.strictEqual(recusadoCargo, false);
+
+  const ctxTerminal = carregarTelaCompleta({ status: 'CONCLUIDA', entryExtra: { tipoExecutor: 'interna' } });
+  const recusadoTerminal = await ctxTerminal.osAddItem('log-1', { tipo: 'MATERIAL', descricao: 'x', quantidade: 1, valorUnitario: 1 });
+  assert.strictEqual(recusadoTerminal, false);
+  assert.strictEqual(ctxTerminal._insertsItens.length, 0);
+});
+
+test('osDelItem remove o item do cache local e recusa numa OS terminal', async () => {
+  const ctx = carregarTelaCompleta({ status: 'DELINEAMENTO', osItensIniciais: { 'log-1': [{ id: 'item-1', tipo: 'SERVICO', descricao: 'x', quantidade: 1, valorUnitario: 10, total: 10 }] } });
+  const ok = await ctx.osDelItem('log-1', 'item-1');
+  assert.strictEqual(ok, true);
+  assert.strictEqual(ctx.OS_ITENS['log-1'].length, 0);
+
+  const ctxTerminal = carregarTelaCompleta({ status: 'CONCLUIDA', entryExtra: { tipoExecutor: 'interna' }, osItensIniciais: { 'log-1': [{ id: 'item-1' }] } });
+  const recusado = await ctxTerminal.osDelItem('log-1', 'item-1');
+  assert.strictEqual(recusado, false);
+  assert.strictEqual(ctxTerminal.OS_ITENS['log-1'].length, 1);
+});
+
+test('carregarItensOS agrupa por os_id em OS_ITENS, e não consulta nada com UNI_OK falso', async () => {
+  const ligado = carregarTelaCompleta({ uniOk: true, itensBanco: [{ id: 'i1', os_id: 'log-1', tipo: 'SERVICO', descricao: 'a', quantidade: 1, valor_unitario: 10, total: 10, ordem: 0 }] });
+  await ligado.carregarItensOS();
+  assert.strictEqual(ligado.OS_ITENS['log-1'].length, 1);
+  assert.strictEqual(ligado.OS_ITENS['log-1'][0].valorUnitario, 10);
+
+  const desligado = carregarTelaCompleta({ uniOk: false });
+  await desligado.carregarItensOS();
+  assert.deepStrictEqual(Object.keys(desligado.OS_ITENS), []);
+});
+
+test('conclusão própria (manConcluir): grava CONCLUIDA, exige evidência, chama última manutenção e estado do equipamento', async () => {
+  const ctx = carregarTelaCompleta({
+    status: 'EM_EXECUCAO', equipId: 77, ultimaManutencaoAtual: '', date: '2026-08-20',
+    entryExtra: { fotos: ['a.jpg'], tipoExecutor: 'interna' },
+    valores: { 'man-conf-estado': 'OP' },
+    ctUser: { nome: 'Gestora Fulana', role: 'gestor' },
+  });
+  const ok = await ctx.manConcluir('log-1');
+  assert.strictEqual(ok !== false, true);
+  assert.strictEqual(ctx._updatesLog.length, 1);
+  assert.strictEqual(ctx._updatesLog[0].patch.status, 'CONCLUIDA');
+  assert.strictEqual(ctx._updatesEquip.length, 2); // ultima_manutencao + funciona
+  const patchData = ctx._updatesEquip.find((u) => 'ultima_manutencao' in u.patch);
+  assert.strictEqual(patchData.patch.ultima_manutencao, '2026-08-20');
+});
+
+test('manConcluir sem evidência é recusado, e um técnico sem manPode("concluir") também', async () => {
+  const semEvidencia = carregarTelaCompleta({ status: 'EM_EXECUCAO', entryExtra: { fotos: [], tipoExecutor: 'interna' } });
+  await semEvidencia.manConcluir('log-1');
+  assert.strictEqual(semEvidencia._updatesLog.length, 0);
+
+  // técnico PODE concluir (D-cf8-24, mesma lista de executar) — o teste
+  // negativo usa um cargo fora de MAN_ACOES_CARGO.concluir.
+  const cargoErrado = carregarTelaCompleta({ status: 'EM_EXECUCAO', entryExtra: { fotos: ['a.jpg'], tipoExecutor: 'interna' }, ctUser: { nome: 'X', role: 'observador' } });
+  await cargoErrado.manConcluir('log-1');
+  assert.strictEqual(cargoErrado._updatesLog.length, 0);
+});
+
+test('manClasseCard/manEhTerminal reconhecem CONCLUIDA como terminal sob o fluxo próprio (UNI_OK verdadeiro)', () => {
+  const ctx = carregarTelaCompleta({});
+  assert.strictEqual(ctx.manClasseCard('CONCLUIDA', 'interna'), 'concluida');
+  assert.strictEqual(ctx.manEhTerminal('CONCLUIDA', 'interna'), true);
+  assert.strictEqual(ctx.manPendente('EM_EXECUCAO', 'interna'), true);
+});
+
+test('osNoChip responde pelos três chips de executor, e uma OS sem tipo_executor cai no chip interna', () => {
+  const ctx = carregarTelaCompleta({});
+  assert.strictEqual(ctx.osNoChip('interna', { status: 'ABERTA' }, false), true);
+  assert.strictEqual(ctx.osNoChip('externa', { status: 'ABERTA' }, false), false);
+  assert.strictEqual(ctx.osNoChip('interna', { status: 'ABERTA', tipoExecutor: 'externa' }, false), false);
+  assert.strictEqual(ctx.osNoChip('externa', { status: 'ABERTA', tipoExecutor: 'externa' }, false), true);
+});
+
+test('o corpo de openLogForm só desenha o bloco Executor atrás de UNI_OK, com contrato desabilitado', () => {
+  const corpo = recorte('function openLogForm(equipId){', 'function updateChkCnt(){');
+  assert.match(corpo, /var blocoExecutor = UNI_OK \?/);
+  assert.match(corpo, /osCamposExecutorHtml/);
+  assert.match(corpo, /t==='contrato'\?' disabled':''/);
+});
+
+test('o corpo de manAbrirOS resolve o fluxo por osFluxoDe e desenha a régua por osPasso/osCurtos, nunca MAN_STEPS fixo', () => {
+  const corpo = recorte('function manAbrirOS(logId){', 'async function manMudarStatus(');
+  assert.match(corpo, /var flOS = osFluxoDe\(entry\);/);
+  assert.match(corpo, /reguaPassos\(osPasso\(flOS, st\), osCurtos\(flOS\)\)/);
+  assert.doesNotMatch(corpo, /reguaPassos\(manPasso\(st\), MAN_STEPS\)/);
+});
+
+test('o corpo de manAbrirOS só desenha o bloco 4 · Conferência quando flComConferencia, e sempre desenha itens/comentários atrás de UNI_OK', () => {
+  const corpo = recorte('function manAbrirOS(logId){', 'async function manMudarStatus(');
+  assert.match(corpo, /if \(flComConferencia\) \{/);
+  assert.match(corpo, /osItensHtml\(logId, entry\)/);
+  assert.match(corpo, /osComentariosHtml\(logId\)/);
+});
+
+// ══════════════════════════════════════════════════════════════════
 // os quatro grep do PLAT-15 — D-04 (refrigeração congelada/standalone)
 // ══════════════════════════════════════════════════════════════════
 
