@@ -325,7 +325,8 @@ test('filtrarInventario com três argumentos continua devolvendo exatamente o de
 test('tabCabecalho e tabCorpo emitem doze <th>/<td> na ordem de COLS_INV', () => {
   const ctx = carregarSandbox();
   const cab = ctx.tabCabecalho('inv', ctx.COLS_INV);
-  assert.equal((cab.match(/<th/g) || []).length, 12);
+  // [ >] evita casar o <thead> que abre o cabeçalho (prefixo de <th).
+  assert.equal((cab.match(/<th[ >]/g) || []).length, 12);
   const corpo = ctx.tabCorpo('inv', ctx.COLS_INV, [equipTeste({ id: 1 })], 'openDetail');
   assert.equal((corpo.match(/<td/g) || []).length, 12);
 });

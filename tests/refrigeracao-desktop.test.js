@@ -249,15 +249,18 @@ test('COLS_INV.criticidade ordena CRÍTICA→ALTA→MÉDIA→BAIXA (semântica) 
   assert.equal(c.texto(critica), 'CRÍTICA');
 });
 
-test('COLS_INV.predio ordena pelo prédio, não pelo texto concatenado "Prédio · Área"', () => {
+// 260823-3a6, D-3a6-18: a coluna composta "Prédio · Área" foi separada em
+// duas colunas próprias (predio e area) — a intenção continua sendo
+// "prédio ordena por prédio", mas a prova passou a ser que a área NÃO
+// participa da comparação de prédio, e texto() do prédio é só o prédio.
+test('COLS_INV.predio ordena pelo prédio; a área não vaza para a comparação, e texto() é só o prédio (260823-3a6)', () => {
   const ctx = carregarSandbox();
-  // mesmo prédio, área diferente: pelo dado principal (prédio) é empate;
-  // pelo texto concatenado NÃO seria (ZZZ vs AAA divergem).
+  // mesmo prédio, área diferente: pelo dado principal (prédio) é empate.
   const a = equipTeste({ id: 1, predio: 'F21', area: 'ZZZ' });
   const b = equipTeste({ id: 2, predio: 'F21', area: 'AAA' });
   assert.equal(ctx.tabComparar(a, b, 'predio', 'asc', ctx.COLS_INV), 0);
   const c = col(ctx.COLS_INV, 'predio');
-  assert.equal(c.texto(a), 'F21 · ZZZ');
+  assert.equal(c.texto(a), 'F21');
 });
 
 test('COLS_INV.prox: equipamento sem histórico vai para o fim nas duas direções', () => {

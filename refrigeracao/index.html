@@ -4813,6 +4813,20 @@ async function doLoginRole(){
   }
   .lista-tabela :focus-visible{ outline:2px solid #1351B4; outline-offset:-2px; }
 
+  /* D-3a6-23: só #inv-list — as outras cinco tabelas têm no máximo seis
+     colunas e cabem sem rolar. O teto de altura EXISTE PARA O
+     position:sticky DO <thead> CONTINUAR FUNCIONANDO: com overflow no
+     próprio contêiner, o cabeçalho passa a se prender a ele, e sem altura
+     limitada ele nunca gruda — remover o max-height por achá-lo
+     arbitrário mataria D-8rz-20 em silêncio. Sem largura de coluna nem
+     table-layout (D-3a6-14): quem cede é a rolagem, nunca a coluna. */
+  #inv-list{
+    overflow:auto;
+    -webkit-overflow-scrolling:touch;
+    max-height:calc(100vh - 240px);
+    min-height:320px;
+  }
+
   .tab-barra{
     display:flex;
     align-items:center;
@@ -6062,22 +6076,55 @@ function tabAplicar(lista, ord, filtros, colunas){
    devolve HTML já escapado (pílula, distintivo); sem celula(), a tabela
    imprime esc(texto(x)). */
 
+/* D-3a6-22: varre getEquipLog(id) pelo maior date entre as entradas de
+   tipo 'INSPEÇÃO', sem ordenar o array no lugar — getEquipLog(id) é o
+   próprio _logCache[id], e um .sort() aqui reordenaria o cache real
+   (mesmo efeito colateral que getLatestLogDate já tem e que este plano
+   NÃO conserta, D-3a6-22 no PLAN — pendência registrada, não somada a
+   uma segunda ocorrência). Devolve a data ISO (string) ou null. */
+function ultimaInspecaoISO(id){
+  var log = getEquipLog(id);
+  var maior = null;
+  for(var i=0;i<log.length;i++){
+    if(log[i].tipo==='INSPEÇÃO' && (!maior || log[i].date>maior)) maior = log[i].date;
+  }
+  return maior;
+}
+
 var COLS_INV = [
   { id:'id', rotulo:'#', tipo:'numero',
     valor:function(e){ return e.id; },
     texto:function(e){ return '#'+e.id; } },
+  { id:'area', rotulo:'Área', tipo:'texto',
+    valor:function(e){ return e.area; },
+    texto:function(e){ return e.area; } },
+  { id:'predio', rotulo:'Prédio', tipo:'texto',
+    valor:function(e){ return e.predio; },
+    texto:function(e){ return e.predio; } },
   { id:'local', rotulo:'Local', tipo:'texto',
     valor:function(e){ return e.local; },
     texto:function(e){ return e.local; } },
-  { id:'predio', rotulo:'Prédio · Área', tipo:'texto',
-    valor:function(e){ return e.predio; },
-    texto:function(e){ return (e.predio||'')+' · '+(e.area||''); } },
   { id:'tipo', rotulo:'Tipo', tipo:'texto',
     valor:function(e){ return e.tipo; },
     texto:function(e){ return e.tipo; } },
   { id:'btu', rotulo:'BTU', tipo:'numero',
     valor:function(e){ return e.btu||null; },
     texto:function(e){ if(!e.btu) return ''; return e.btu>=1000 ? (e.btu/1000).toFixed(0)+'K BTU' : e.btu+' BTU'; } },
+  /* D-3a6-21: rótulo Marca — a palavra do usuário — sobre o dado
+     e.fabricante. modelo está preenchido em 0 de 171 registros hoje; não
+     é defeito desta tarefa, é o estado do cadastro (migração 41 criou a
+     coluna, a importação de planilha de 260822-5hy existe para
+     preenchê-la em massa). A folha de cadastro/busca/CSV continuam
+     dizendo "Fabricante" — não mexido aqui. */
+  { id:'fabricante', rotulo:'Marca', tipo:'texto',
+    valor:function(e){ return e.fabricante||''; },
+    texto:function(e){ return e.fabricante||''; } },
+  /* dbToEquip não preenche e.modelo — chega null nas 171 linhas de hoje.
+     Sem a queda para texto vazio, texto() devolveria null e a tela
+     quebraria em 171 de 171 (T-3a6-04). */
+  { id:'modelo', rotulo:'Modelo', tipo:'texto',
+    valor:function(e){ return e.modelo||''; },
+    texto:function(e){ return e.modelo||''; } },
   { id:'estado', rotulo:'Estado', tipo:'texto',
     valor:function(e){ return rotuloEstadoEquip(e.funciona); },
     texto:function(e){
@@ -6093,7 +6140,20 @@ var COLS_INV = [
   { id:'prox', rotulo:'Próx. manutenção', tipo:'numero',
     valor:function(e){ var d=proxManut(e); return d?d.getTime():null; },
     texto:function(e){ var d=proxManut(e); return d?fmtDate(d.toISOString().slice(0,10)):'Sem hist.'; },
-    celula:function(e){ return dueBadgeHtml(proxManut(e)); } }
+    celula:function(e){ return dueBadgeHtml(proxManut(e)); } },
+  /* D-3a6-22b, registrado aqui e no SUMMARY: esta coluna NÃO é a base de
+     nextPmoc. nextPmoc(e,tipo) parte de e.ultimaManutencao ||
+     getLatestLogDate(e.id) — o último log de QUALQUER tipo, inclusive
+     corretiva e movimentação — e só o INTERVALO muda por tipo
+     (PMOC_INT). Logo "Próx. manutenção" menos "Última inspeção" NÃO dá o
+     intervalo da criticidade, e as duas datas podem discordar na mesma
+     linha (um equipamento sem nenhuma inspeção mostra "Sem hist." ao
+     lado de uma previsão com data) — isso é esperado, não defeito. Sem
+     celula(): a pílula de "Próx. manutenção" diz urgência (futuro); uma
+     data passada é só uma data. */
+  { id:'ultimaInspecao', rotulo:'Última inspeção', tipo:'numero',
+    valor:function(e){ var iso=ultimaInspecaoISO(e.id); return iso ? new Date(iso+'T12:00:00').getTime() : null; },
+    texto:function(e){ var iso=ultimaInspecaoISO(e.id); return iso ? fmtDate(iso) : 'Sem hist.'; } }
 ];
 
 var COLS_OS = [
