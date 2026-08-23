@@ -999,7 +999,7 @@ document.addEventListener('DOMContentLoaded', function() {
          fora do @media (min-width:1024px) que já existe. -->
     <div class="page" id="page-ficha">
       <div id="ficha-hdr">
-        <button id="fh-voltar" onclick="voltarDaFicha()" title="Voltar" aria-label="Voltar"><i class="fas fa-arrow-left mr1" aria-hidden="true"></i><span id="fh-voltar-txt">Voltar</span></button>
+        <button id="fh-voltar" onclick="voltarDoDetalhe()" title="Voltar" aria-label="Voltar"><i class="fas fa-arrow-left mr1" aria-hidden="true"></i><span id="fh-voltar-txt">Voltar</span></button>
         <span id="fh-id"></span>
         <span id="fh-local"></span>
         <span id="fh-predio"></span>
@@ -1010,6 +1010,28 @@ document.addEventListener('DOMContentLoaded', function() {
         <div class="ficha-col" id="ficha-col-1"></div>
         <div class="ficha-col" id="ficha-col-2"></div>
         <div class="ficha-col" id="ficha-col-3"></div>
+      </div>
+    </div>
+
+    <!-- ══ PAGE: OS — página inteira em >=1024px (quick-260823-jar) ══ -->
+    <!-- D-jar: sétima .page, irmã das outras, nunca um segundo HTML.
+         Identificadores osd-* — nenhum dh-* é duplicado. Não passa por
+         navTo, nasce sem .active, nunca ativada abaixo de 1024px — por
+         isso não precisa (e não deve) ganhar CSS fora do
+         @media (min-width:1024px) que já existe. -->
+    <div class="page" id="page-os-detalhe">
+      <div id="osd-hdr">
+        <button id="osd-voltar" onclick="voltarDoDetalhe()" title="Voltar" aria-label="Voltar"><i class="fas fa-arrow-left mr1" aria-hidden="true"></i><span id="osd-voltar-txt">Voltar</span></button>
+        <span id="osd-id"></span>
+        <span id="osd-local"></span>
+        <span id="osd-predio"></span>
+        <span id="osd-pills"></span>
+        <div id="osd-regua"></div>
+        <div id="osd-acoes"></div>
+      </div>
+      <div id="osd-corpo">
+        <div id="osd-contexto"></div>
+        <div id="osd-trabalho"></div>
       </div>
     </div>
 
@@ -1645,6 +1667,10 @@ function saveData(){
    NAV
 ═══════════════════════════════════════════════════════════ */
 function navTo(page, btn){
+  // D-jar-14: navegar para uma lista significa que nenhum detalhe está
+  // aberto — sem isto o registro mentiria depois de sair de uma página de
+  // detalhe pela barra de navegação.
+  DETALHE_ABERTO = null;
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
   document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
   el('page-'+page).classList.add('active');
@@ -2128,7 +2154,7 @@ function renderMovim(){
 }
 
 function openNewOS(){
-  FICHA_ABERTA = null; // D-92t: cruzar o limiar com um formulário não o descarta
+  DETALHE_ABERTO = null; // D-92t/D-jar: cruzar o limiar com um formulário não o descarta
   // Abre formulário para selecionar equipamento
   openNewOSForm();
 }
@@ -2316,7 +2342,7 @@ function atualizarBadgeAlertas(ag){
    DRAWER / DETAIL
 ═══════════════════════════════════════════════════════════ */
 function openDrawer(){ el('drawer').classList.add('open'); document.body.style.overflow='hidden'; }
-function closeDrawer(){ MAN_EDIT_ID = null; FICHA_ABERTA = null; el('drawer').classList.remove('open'); document.body.style.overflow=''; }
+function closeDrawer(){ MAN_EDIT_ID = null; DETALHE_ABERTO = null; el('drawer').classList.remove('open'); document.body.style.overflow=''; }
 
 /* Um campo de link vira âncora SÓ quando linkSeguro devolver algo — valor
    gravado que não passe (ex: javascript:, ou herança de um cadastro antigo)
@@ -2328,6 +2354,103 @@ function campoLinkFicha(rotulo, valor){
     ? '<a href="'+esc(seguro)+'" target="_blank" rel="noopener">'+esc(valor)+'</a>'
     : esc(valor);
   return '<div class="dfield"><label>'+rotulo+'</label><div class="dval">'+conteudo+'</div></div>';
+}
+
+/* ── detalhe em página: estado e navegação (ficha e OS) ── */
+/* D-jar-01/20: sobe para cá o que é genuinamente a MESMA coisa entre ficha
+   e OS — existe uma gaveta e um lugar de página ativa só, logo só uma
+   coisa de detalhe pode estar aberta por vez (D-jar-02); voltar é a mesma
+   ação nos dois (D-jar-01); e há um gancho só de cruzar o limiar
+   (reAlojarDetalhe, abaixo). Conteúdo e layout ficam por consumidor —
+   generalizar isso produziria um switch fantasiado de abstração. As cinco
+   abas de navegação (ABAS_NAV/indiceDaAba/ROTULOS_VOLTA/rotuloVolta/
+   botaoDaAba) já eram genéricas e mudam de ENDEREÇO, não de corpo —
+   D-92t-11, movidas para cá sem reescrever uma linha. */
+var ABAS_NAV = ['dash','inv','os','pmoc','alert'];
+function indiceDaAba(chave){
+  return ABAS_NAV.indexOf(chave);
+}
+var ROTULOS_VOLTA = {
+  dash: 'Voltar ao Painel',
+  inv: 'Voltar ao Parque',
+  os: 'Voltar às OS',
+  pmoc: 'Voltar ao PMOC',
+  alert: 'Voltar aos Alertas'
+};
+function rotuloVolta(chave){
+  return ROTULOS_VOLTA[chave] || 'Voltar';
+}
+/* Usa indiceDaAba para achar o botão correspondente dentro de #bottom-nav —
+   NÃO mexe em showSearch(), que hoje pega o botão por índice cru (fora do
+   escopo desta task). */
+function botaoDaAba(chave){
+  var i = indiceDaAba(chave);
+  if(i<0) return null;
+  var btns = document.querySelectorAll('#bottom-nav .nav-btn');
+  return btns[i] || null;
+}
+
+/* D-jar-02: um registro só, com tipo — {tipo:'ficha'|'os', id} ou null.
+   null continua significando exatamente o que FICHA_ABERTA significava: a
+   gaveta mostra um FORMULÁRIO, não um detalhe (zerado por openLogForm/
+   openEquipForm/openNewOS/closeDrawer, os mesmos quatro pontos de sempre).
+   DETALHE_ORIGEM substitui FICHA_ORIGEM 1:1. */
+var DETALHE_ABERTO = null;
+var DETALHE_ORIGEM = 'inv';
+
+/* D-jar-02: leitura por tipo — nenhum chamador desestrutura DETALHE_ABERTO
+   à mão. */
+function detalheAbertoDe(tipo){
+  return (DETALHE_ABERTO && DETALHE_ABERTO.tipo===tipo) ? DETALHE_ABERTO.id : null;
+}
+
+/* D-jar-03: a origem é ATUALIZADA, nunca redefinida às cegas — só grava
+   quando a .page.active é uma das cinco abas; em qualquer outro caso
+   MANTÉM a atual em vez de cair para 'inv'. É o que faz o encadeamento
+   funcionar (Alertas → ficha → OS → volta aos Alertas). Os casos do gate
+   irmão continuam passando sem edição porque o valor inicial já é 'inv' —
+   o comportamento antigo (D-92t-11) era um caso particular deste. */
+function lerOrigemDetalhe(){
+  var ativa = document.querySelector('.page.active');
+  var chaveAtiva = (ativa && ativa.id) ? ativa.id.replace('page-','') : '';
+  if (indiceDaAba(chaveAtiva) >= 0) DETALHE_ORIGEM = chaveAtiva;
+}
+
+/* D-jar-15: lista fechada das páginas de detalhe — Escape usa isso em vez
+   de um terceiro if avulso, sem trocar a ordem dos dois ramos (gaveta
+   primeiro, página depois). */
+var PAGINAS_DETALHE = ['page-ficha','page-os-detalhe'];
+function paginaDetalheAtiva(){
+  for (var i=0;i<PAGINAS_DETALHE.length;i++){
+    var p = el(PAGINAS_DETALHE[i]);
+    if (p && p.classList.contains('active')) return PAGINAS_DETALHE[i];
+  }
+  return null;
+}
+
+/* Apaga .active de todas as .page, acende a pedida, esconde #fab — nunca
+   toca em .nav-btn (D-92t-06/D-jar-01). */
+function ativarPaginaDetalhe(idDaPagina){
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  el(idDaPagina).classList.add('active');
+  el('fab').style.display = 'none';
+}
+
+/* D-jar-01: substitui a antiga função de voltar da ficha-página, que
+   deixou de existir — zera
+   DETALHE_ABERTO e devolve à página de origem. navTo já reacende a aba,
+   redesenha a lista no modo corrente e devolve o #fab. */
+function voltarDoDetalhe(){
+  DETALHE_ABERTO = null;
+  navTo(DETALHE_ORIGEM, botaoDaAba(DETALHE_ORIGEM));
+}
+
+/* D-jar-12: manCancelar é o único ponto de ação de OS que fechava a gaveta
+   direto — numa página, closeDrawer() não fecha nada. fecharDetalhe()
+   resolve: página de detalhe ativa → volta; senão → fecha a gaveta. */
+function fecharDetalhe(){
+  if (paginaDetalheAtiva()) voltarDoDetalhe();
+  else closeDrawer();
 }
 
 /* -- ficha: uma fonte, dois continentes -- */
@@ -2465,44 +2588,11 @@ function fichaAcoes(id, alvo){
    Histórico+QR. Achatada é permutação de [0,1,2,3,4] (gate). */
 var FICHA_COLUNAS = [[0,1],[2],[3,4]];
 
-/* D-92t-11: as cinco abas de navegação, na mesma ordem de #bottom-nav — dado
-   fechado e função pura, sem API de navegador, para o gate exercitar como
-   comportamento em vez de regex. */
-var ABAS_NAV = ['dash','inv','os','pmoc','alert'];
-function indiceDaAba(chave){
-  return ABAS_NAV.indexOf(chave);
-}
-var ROTULOS_VOLTA = {
-  dash: 'Voltar ao Painel',
-  inv: 'Voltar ao Parque',
-  os: 'Voltar às OS',
-  pmoc: 'Voltar ao PMOC',
-  alert: 'Voltar aos Alertas'
-};
-function rotuloVolta(chave){
-  return ROTULOS_VOLTA[chave] || 'Voltar';
-}
-
-/* D-92t-11: origem lida de .page.active no momento em que a ficha abre —
-   quem triava Alertas volta aos Alertas. Origem desconhecida (nenhuma
-   página ativa, ou a própria ficha) cai para 'inv'. FICHA_ABERTA é o id
-   aberto na página — null quando a gaveta mostra um formulário por cima
-   dela (Task 3). */
-var FICHA_ABERTA = null;
-var FICHA_ORIGEM = 'inv';
-
-/* Usa indiceDaAba para achar o botão correspondente dentro de #bottom-nav —
-   NÃO mexe em showSearch(), que hoje pega o botão por índice cru (fora do
-   escopo desta task). */
-function botaoDaAba(chave){
-  var i = indiceDaAba(chave);
-  if(i<0) return null;
-  var btns = document.querySelectorAll('#bottom-nav .nav-btn');
-  return btns[i] || null;
-}
-
 /* D-92t-01/03/05/06/07/09/10/11: abre a ficha como PÁGINA — mesma fonte de
-   dados de abrirFichaGaveta, continente diferente. */
+   dados de abrirFichaGaveta, continente diferente. D-jar-01: origem,
+   ativação de página e registro de detalhe agora vêm da camada
+   compartilhada, no topo deste arquivo (lerOrigemDetalhe/
+   ativarPaginaDetalhe/DETALHE_ABERTO). */
 function abrirFichaPagina(id){
   var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
   var logs = getEquipLog(id);
@@ -2514,18 +2604,13 @@ function abrirFichaPagina(id){
   var drawer = el('drawer');
   if(drawer && drawer.classList.contains('open')) closeDrawer();
 
-  // Origem: .page.active no momento da abertura. indiceDaAba já devolve -1
-  // tanto para uma chave desconhecida quanto para 'ficha' (ABAS_NAV não a
-  // lista) — um só teste cobre os dois casos do D-92t-11.
-  var ativa = document.querySelector('.page.active');
-  var chaveAtiva = (ativa && ativa.id) ? ativa.id.replace('page-','') : '';
-  FICHA_ORIGEM = indiceDaAba(chaveAtiva) >= 0 ? chaveAtiva : 'inv';
+  lerOrigemDetalhe();
 
   el('fh-id').textContent = ident.id;
   el('fh-local').textContent = ident.local;
   el('fh-predio').textContent = ident.predio;
   el('fh-pills').innerHTML = ident.pills;
-  el('fh-voltar-txt').textContent = rotuloVolta(FICHA_ORIGEM);
+  el('fh-voltar-txt').textContent = rotuloVolta(DETALHE_ORIGEM);
   el('fh-acoes').innerHTML = fichaAcoes(id, 'pagina');
 
   var blocos = fichaBlocos(e, logs, id);
@@ -2535,51 +2620,43 @@ function abrirFichaPagina(id){
     col.scrollTop = 0; // D-92t: as três colunas voltam ao topo a cada abertura
   });
 
-  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
-  el('page-ficha').classList.add('active');
-  el('fab').style.display = 'none';
+  ativarPaginaDetalhe('page-ficha');
 
-  FICHA_ABERTA = id; // depois do closeDrawer(), nunca antes
+  DETALHE_ABERTO = {tipo:'ficha', id:id}; // depois do closeDrawer(), nunca antes
 }
 
-/* D-92t-06/11: zera FICHA_ABERTA e devolve à página de origem — navTo já
-   reacende a aba, redesenha a lista no modo corrente e devolve o #fab. */
-function voltarDaFicha(){
-  FICHA_ABERTA = null;
-  navTo(FICHA_ORIGEM, botaoDaAba(FICHA_ORIGEM));
-}
-
-/* D-92t (Task 3): o gancho de cruzar o limiar de largura já existe
+/* D-92t (Task 3)/D-jar-01: o gancho de cruzar o limiar de largura já existe
    (iniciarModoDeTela chama renderPaginaAtiva a cada mudança) — esta função
    só corrige o CONTINENTE quando ele está errado para o TELA_LARGA
-   corrente. Dois ramos, cada um só dispara quando o continente está
-   errado; nos dois estados já-corretos devolve false sem tocar nada —
-   T-92t-04 (DoS auto-infligido): não há como este laço se realimentar,
-   porque o opener sempre corrige o continente antes de qualquer novo
-   evento de resize. */
-function reAlojarFicha(){
+   corrente. Dois ramos aqui — os ramos da OS são a Task 3 de 260823-jar —
+   cada um só dispara quando o continente está errado; nos dois estados
+   já-corretos devolve false sem tocar nada — T-92t-04 (DoS
+   auto-infligido): não há como este laço se realimentar, porque o opener
+   sempre corrige o continente antes de qualquer novo evento de resize. */
+function reAlojarDetalhe(){
   var pf = el('page-ficha');
   var fichaAtivaNaPagina = !!(pf && pf.classList.contains('active'));
 
   if(fichaAtivaNaPagina && !TELA_LARGA){
-    // Guarda ANTES de voltarDaFicha() zerar. Sem id (formulário aberto por
-    // cima da ficha-página) o voltarDaFicha() sozinho já cumpre a
+    // Guarda ANTES de voltarDoDetalhe() zerar. Sem id (formulário aberto
+    // por cima da ficha-página) o voltarDoDetalhe() sozinho já cumpre a
     // invariante — NÃO chama abrirFichaGaveta, que sobrescreveria o
     // formulário que está na gaveta.
-    var idGuardado = FICHA_ABERTA;
-    voltarDaFicha();
+    var idGuardado = detalheAbertoDe('ficha');
+    voltarDoDetalhe();
     if(idGuardado != null) abrirFichaGaveta(idGuardado);
     return true;
   }
 
   var drawer = el('drawer');
   var gavetaAberta = !!(drawer && drawer.classList.contains('open'));
-  if(gavetaAberta && TELA_LARGA && FICHA_ABERTA != null){
-    abrirFichaPagina(FICHA_ABERTA); // fecha a gaveta lá dentro
+  var idFichaAberta = detalheAbertoDe('ficha');
+  if(gavetaAberta && TELA_LARGA && idFichaAberta != null){
+    abrirFichaPagina(idFichaAberta); // fecha a gaveta lá dentro
     return true;
   }
 
-  return false; // gaveta com FICHA_ABERTA nulo é formulário — sobrevive ao alargamento
+  return false; // gaveta com DETALHE_ABERTO nulo é formulário — sobrevive ao alargamento
 }
 
 function abrirFichaGaveta(id){
@@ -2597,12 +2674,12 @@ function abrirFichaGaveta(id){
   el('drawer-footer').innerHTML = fichaAcoes(id, 'gaveta');
 
   openDrawer();
-  // D-92t (Task 3): FICHA_ABERTA marca QUAL equipamento a ficha mostra,
-  // em qualquer continente — é o que permite reAlojarFicha() reabrir como
-  // página ao alargar de volta. Os formulários (openLogForm/openEquipForm/
-  // openNewOS) e closeDrawer() zeram — é o que distingue "a gaveta mostra
-  // a ficha" de "a gaveta mostra um formulário".
-  FICHA_ABERTA = id;
+  // D-92t (Task 3)/D-jar-01: DETALHE_ABERTO marca QUAL equipamento a ficha
+  // mostra, em qualquer continente — é o que permite reAlojarDetalhe()
+  // reabrir como página ao alargar de volta. Os formulários
+  // (openLogForm/openEquipForm/openNewOS) e closeDrawer() zeram — é o que
+  // distingue "a gaveta mostra a ficha" de "a gaveta mostra um formulário".
+  DETALHE_ABERTO = {tipo:'ficha', id:id};
 }
 
 function openDetail(id){
@@ -2648,7 +2725,7 @@ function osOnChangeExecutor(){
 
 function openLogForm(equipId){
   var e = DATA.find(function(r){ return r.id===equipId; }); if(!e) return;
-  FICHA_ABERTA = null; // D-92t: cruzar o limiar com um formulário não o descarta
+  DETALHE_ABERTO = null; // D-92t/D-jar: cruzar o limiar com um formulário não o descarta
   var clist = checklistDaOS(null, e.tipo); // D-uyz-16: ponto único — manutenção cai na tabela CHECKLIST de sempre
   var tipoOpts = MAINT_TIPOS.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('');
   var chkHtml = clist.map(function(item,i){
@@ -2782,7 +2859,7 @@ function campoEquipForm(chave, e){
 function openEquipForm(id){
   var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
   if (!podeEditarCadastro()) { showToast('Sem permissão para editar cadastro','error'); return; }
-  FICHA_ABERTA = null; // D-92t: cruzar o limiar com um formulário não o descarta
+  DETALHE_ABERTO = null; // D-92t/D-jar: cruzar o limiar com um formulário não o descarta
   el('dh-id').textContent = 'Editar cadastro · #'+id;
   el('dh-local').textContent = e.local;
   el('dh-predio').textContent = e.predio;
@@ -3909,8 +3986,78 @@ function osAbrirGaveta(logId){
   openDrawer();
 }
 
+/* D-jar-07: grade dirigida pelo conteúdo — coluna única quando não há
+   trabalho (linha legada sem fluxo, sem Registro) OU quando se está
+   corrigindo dados (o formulário de correção mora no bloco 1, na zona
+   estreita — corrigir é um modo que toma a tela). Função pura, sem API de
+   navegador, para o gate exercitar como comportamento. */
+function osUmaColuna(temTrabalho, editando){
+  return !temTrabalho || !!editando;
+}
+
+/* D-jar-04/06/07/08/09/10/11: abre a OS como PÁGINA — mesma fonte de dados
+   de osAbrirGaveta (manMontarOS), continente diferente. */
+function osAbrirPagina(logId){
+  var m = manMontarOS(logId); if(!m) return;
+
+  // D-jar-10: a rolagem das duas zonas só é preservada quando o re-render
+  // é da MESMA OS — abrir uma OS diferente começa do topo, como deve.
+  var mesmaOS = detalheAbertoDe('os') === logId;
+  var scrollContexto = 0, scrollTrabalho = 0;
+  if (mesmaOS) {
+    var ctxZonaAntes = el('osd-contexto'), trabZonaAntes = el('osd-trabalho');
+    scrollContexto = ctxZonaAntes ? ctxZonaAntes.scrollTop : 0;
+    scrollTrabalho = trabZonaAntes ? trabZonaAntes.scrollTop : 0;
+  }
+
+  // Fecha a gaveta se estiver aberta — é closeDrawer() quem devolve o
+  // overflow do body.
+  var drawer = el('drawer');
+  if (drawer && drawer.classList.contains('open')) closeDrawer();
+
+  lerOrigemDetalhe();
+
+  el('osd-id').textContent = m.ident.id;
+  el('osd-local').textContent = m.ident.local;
+  el('osd-predio').textContent = m.ident.predio;
+  el('osd-pills').innerHTML = m.ident.pills;
+  el('osd-regua').innerHTML = m.regua;
+  el('osd-acoes').innerHTML = m.rodape.pagina;
+  el('osd-voltar-txt').textContent = rotuloVolta(DETALHE_ORIGEM);
+
+  var umaColuna = osUmaColuna(m.trabalho.length > 0, MAN_EDIT_ID === logId);
+  var corpo = el('osd-corpo');
+  if (umaColuna) {
+    // D-jar-07: coluna única concatena contexto+trabalho dentro de
+    // #osd-contexto e esconde #osd-trabalho (innerHTML vazio) — não se
+    // resolve isso por CSS puro, senão a rolagem volta a estourar o
+    // contêiner.
+    el('osd-contexto').innerHTML = m.contexto.join('') + m.trabalho.join('');
+    el('osd-trabalho').innerHTML = '';
+    corpo.classList.add('uma-coluna');
+  } else {
+    el('osd-contexto').innerHTML = m.contexto.join('');
+    el('osd-trabalho').innerHTML = m.trabalho.join('');
+    // Remove — nunca só adiciona: abrir uma OS normal depois de uma
+    // legada não pode herdar o modo de coluna única.
+    corpo.classList.remove('uma-coluna');
+  }
+
+  ativarPaginaDetalhe('page-os-detalhe');
+
+  if (mesmaOS) {
+    el('osd-contexto').scrollTop = scrollContexto;
+    el('osd-trabalho').scrollTop = scrollTrabalho;
+  }
+
+  DETALHE_ABERTO = {tipo:'os', id:logId}; // depois do closeDrawer(), nunca antes
+}
+
+/* D-jar-04: TELA_LARGA decide o continente — o mesmo contrato de D-92t-01
+   para openDetail. Os 25 pontos de chamada continuam intocados. */
 function manAbrirOS(logId){
-  osAbrirGaveta(logId);
+  if (TELA_LARGA) return osAbrirPagina(logId);
+  return osAbrirGaveta(logId);
 }
 
 async function manMudarStatus(logId, novo){
@@ -3957,7 +4104,10 @@ async function manCancelar(logId){
   if(!confirm('Cancelar esta OS?')) return;
   if(!manPodeIrPara(achado.entry.status,'CANCELADA',achado.entry.tipoExecutor) || !manPode('cancelar')){ showToast('Ação não permitida','error'); return; }
   var ok = await manAtualizarOS(logId, achado.equipId, {status:'CANCELADA'}, 'OS cancelada');
-  if (ok) { closeDrawer(); renderOS(); }
+  // D-jar-12: manCancelar é o único ponto de ação de OS que fechava a
+  // gaveta direto — numa página de detalhe closeDrawer() não fecha nada;
+  // fecharDetalhe() fecha o continente certo nos dois casos.
+  if (ok) { fecharDetalhe(); renderOS(); }
 }
 
 /* ── fluxo da OS interna: evidência da execução (fotos + as cinco medições) ── */
@@ -5525,6 +5675,56 @@ async function doLoginRole(){
      adapta entre 1024px e 1400px é o INTERIOR da coluna, não o número de
      colunas. */
   #page-ficha .dfields2{ grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }
+
+  /* ── #page-os-detalhe: a OS como página inteira (quick-260823-jar,
+     D-jar-06/07/08/16) — mesmo desenho de #page-ficha (a página não rola,
+     cada zona rola por dentro), com uma diferença: a grade é dirigida pelo
+     CONTEÚDO (D-jar-07) — coluna única quando não há trabalho ou quando se
+     está corrigindo dados, nunca uma coluna vazia ao lado de outra. */
+  #page-os-detalhe{ max-width:none; padding:0; overflow:hidden; }
+  #page-os-detalhe.active{ display:grid; grid-template-rows:auto 1fr; height:100%; min-height:0; }
+  #osd-hdr{
+    grid-row:1;
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:12px;
+    padding:12px 24px;
+    background:#fff;
+    border-bottom:1px solid #E0E0E0;
+  }
+  #osd-voltar{
+    background:none; border:none; cursor:pointer;
+    font:inherit; font-weight:700; color:#1351B4;
+    padding:4px 8px; display:flex; align-items:center; gap:6px;
+  }
+  #osd-regua{ flex:1 1 320px; min-width:0; }
+  #osd-regua .ct-timeline{ margin:0; }
+  #osd-acoes{ margin-left:auto; display:flex; gap:8px; flex-wrap:wrap; }
+  /* D-jar-08: duas colunas — trilha de contexto de 360px, zona de trabalho
+     no resto da largura. D-jar-07: coluna única quando trabalho está vazio
+     ou quando se corrige dados — trilha fechada de 900px centrada. */
+  #osd-corpo{
+    grid-row:2;
+    min-height:0;
+    display:grid;
+    grid-template-columns:minmax(0,360px) minmax(0,1fr);
+    gap:20px;
+    padding:16px 24px;
+  }
+  #osd-corpo.uma-coluna{ grid-template-columns:minmax(0,900px); justify-content:center; }
+  #osd-corpo.uma-coluna #osd-trabalho{ display:none; }
+  /* D-jar-06/D-92t-10: min-height:0 obrigatório — item de grade nasce com
+     min-height:auto e se recusa a encolher abaixo do conteúdo; sem isto a
+     zona empurra a página e a rolagem volta para o lugar de onde este
+     pedido a tirou. */
+  #osd-contexto, #osd-trabalho{ min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  /* D-jar-08: os seis campos de texto da OS deixam de morar num painel de
+     ~380px — na zona de trabalho o textarea chega a ~985px (contra os
+     ~330px úteis de hoje), na coluna única a ~875px. */
+  #page-os-detalhe .fgt{ min-height:140px; }
+  #page-os-detalhe .fg2{ grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); }
+  #page-os-detalhe .dfields2{ grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); }
 }</style>
 <script>
 /* ══ QR CODE — tela inicial ══ */
@@ -7002,7 +7202,7 @@ function aplicarModoDeTela(largura){
    manutenção/contratações/movimentação via ctMode — chamar renderOS() é
    suficiente e não duplica aquela regra. */
 function renderPaginaAtiva(){
-  if(reAlojarFicha()) return; // D-92t (Task 3): corrige o continente da ficha antes de redesenhar
+  if(reAlojarDetalhe()) return; // D-92t/D-jar: corrige o continente do detalhe (ficha ou OS) antes de redesenhar
   var ativa = document.querySelector('.page.active');
   if(!ativa) return;
   var id = ativa.id || '';
@@ -7030,15 +7230,16 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* Escape fecha a gaveta nas duas larguras — num celular não há teclado, e
    num painel lateral de computador é o caminho esperado. Dois ramos, nesta
-   ordem (D-92t, Task 2): gaveta aberta fecha a gaveta e retorna; senão,
-   ficha-página ativa volta à origem. A ordem é o ponto — um formulário
-   aberto SOBRE a ficha-página tem que fechar o formulário, nunca navegar
-   para longe do que o usuário estava digitando. */
+   ordem (D-92t, Task 2; D-jar-15 estende para as duas páginas de detalhe
+   via PAGINAS_DETALHE/paginaDetalheAtiva, SEM trocar a ordem): gaveta
+   aberta fecha a gaveta e retorna; senão, a página de detalhe ativa (ficha
+   ou OS) volta à origem. A ordem é o ponto — um formulário aberto SOBRE
+   uma página de detalhe tem que fechar o formulário, nunca navegar para
+   longe do que o usuário estava digitando. */
 document.addEventListener('keydown', function(e){
   if(e.key!=='Escape') return;
   if(el('drawer') && el('drawer').classList.contains('open')){ closeDrawer(); return; }
-  var pf = el('page-ficha');
-  if(pf && pf.classList.contains('active')) voltarDaFicha();
+  if(paginaDetalheAtiva()) voltarDoDetalhe();
 });
 
 /* ── tabelas de desktop: cabeçalho e linhas ── */

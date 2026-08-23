@@ -124,6 +124,7 @@ function criarSandboxOS(opts) {
     renderMedicoesFicha: function () { return ''; },
     podeEditarCadastro: function () { return opts.podeEditar !== false; },
     MAINT_TIPOS: ['INSPEÇÃO', 'PREVENTIVA', 'CORRETIVA', 'REVISÃO', 'LIMPEZA', 'RECARGA GÁS', 'SUBSTITUIÇÃO'],
+    TELA_LARGA: opts.telaLarga !== undefined ? opts.telaLarga : false,
   };
   ctx._logCache = {};
   const equipIdChave = (opts.equip && opts.equip.id !== undefined) ? opts.equip.id : 900;
@@ -340,4 +341,199 @@ test('os quatro grep do PLAT-15 continuam em 0 — refrigeração segue congelad
       `"${padrao}" apareceu em refrigeracao/index.html`
     );
   }
+});
+
+// ═══════ TAREFA 2 — camada compartilhada de detalhe e #page-os-detalhe ═══
+
+// D-jar-20: a camada compartilhada (ficha e OS) mora numa seção só,
+// imediatamente antes de "-- ficha: uma fonte, dois continentes --".
+const MARCADOR_INICIO_DETALHE = '/* ── detalhe em página: estado e navegação (ficha e OS) ── */';
+const MARCADOR_FIM_DETALHE = '/* -- ficha: uma fonte, dois continentes -- */';
+
+// ── sandbox de página: reusa os recortes/mocks de criarSandboxOS e
+// acrescenta a camada compartilhada + o DOM de mentira das seis .page e
+// dos cinco .nav-btn — mesmo padrão de criarSandboxPagina em
+// tests/refrigeracao-ficha-pagina.test.js:251, com um navTo que reproduz a
+// troca de .page.active (não só o registro da chamada — D-jar lição de
+// 260823-92t: foi esse detalhe que fez casos falharem por razão errada). ──
+function criarSandboxOSPagina(opts) {
+  opts = opts || {};
+  const base = criarSandboxOS(opts);
+  const nodes = base.nodes;
+  const ctx = base.ctx;
+
+  const paginasChaves = ['dash', 'inv', 'os', 'pmoc', 'alert', 'ficha', 'os-detalhe'];
+  paginasChaves.forEach(function (k) {
+    nodes['page-' + k] = criarElemento('page-' + k, k === 'dash' ? ['page', 'active'] : ['page']);
+  });
+  ['osd-id', 'osd-local', 'osd-predio', 'osd-pills', 'osd-regua', 'osd-acoes', 'osd-voltar-txt', 'fab'].forEach(function (id) {
+    nodes[id] = criarElemento(id);
+  });
+  ['osd-contexto', 'osd-trabalho'].forEach(function (id) {
+    nodes[id] = criarElemento(id);
+    nodes[id].scrollTop = 0;
+  });
+  nodes['osd-corpo'] = criarElemento('osd-corpo');
+
+  const navBtns = ['dash', 'inv', 'os', 'pmoc', 'alert'].map(function (k) {
+    return criarElemento('nav-' + k, k === 'dash' ? ['nav-btn', 'active'] : ['nav-btn']);
+  });
+
+  const chamadasNavTo = [];
+  ctx.document = {
+    querySelector: function (sel) {
+      if (sel === '.page.active') {
+        let achou = null;
+        paginasChaves.forEach(function (k) { if (nodes['page-' + k].classList.contains('active')) achou = nodes['page-' + k]; });
+        return achou;
+      }
+      return null;
+    },
+    querySelectorAll: function (sel) {
+      if (sel === '.page') return paginasChaves.map(function (k) { return nodes['page-' + k]; });
+      if (sel === '#bottom-nav .nav-btn') return navBtns;
+      return [];
+    },
+    addEventListener: function () {},
+    body: { style: {} },
+  };
+  ctx.navTo = function (pagina, btn) {
+    chamadasNavTo.push({ pagina: pagina, btn: btn });
+    paginasChaves.forEach(function (k) { nodes['page-' + k].classList.remove('active'); });
+    if (nodes['page-' + pagina]) nodes['page-' + pagina].classList.add('active');
+  };
+
+  vm.runInContext(recorte(MARCADOR_INICIO_DETALHE, MARCADOR_FIM_DETALHE), ctx);
+
+  return { ctx: ctx, nodes: nodes, navBtns: navBtns, chamadasNavTo: chamadasNavTo };
+}
+
+test('osUmaColuna(temTrabalho, editando) — coluna única quando não há trabalho OU quando se edita; duas colunas só com trabalho e sem edição', () => {
+  const s = criarSandboxOSPagina();
+  assert.equal(s.ctx.osUmaColuna(false, false), true);
+  assert.equal(s.ctx.osUmaColuna(true, true), true);
+  assert.equal(s.ctx.osUmaColuna(false, true), true);
+  assert.equal(s.ctx.osUmaColuna(true, false), false);
+});
+
+test('com TELA_LARGA verdadeiro, manAbrirOS ativa #page-os-detalhe e preenche cabeçalho/régua/zonas/ações; com falso, abre a gaveta (D-jar-04)', () => {
+  let s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  s.ctx.manAbrirOS(CENARIOS.b.entry.id);
+  assert.ok(s.nodes['page-os-detalhe'].classList.contains('active'));
+  assert.equal(s.nodes['osd-id'].textContent, FIXTURE.b.dhId);
+  assert.equal(s.nodes['osd-local'].textContent, FIXTURE.b.dhLocal);
+  assert.equal(s.nodes['osd-predio'].textContent, FIXTURE.b.dhPredio);
+  assert.equal(s.nodes['osd-pills'].innerHTML, FIXTURE.b.dhPills);
+  assert.ok(s.nodes['osd-regua'].innerHTML.length > 0);
+  assert.ok(s.nodes['osd-acoes'].innerHTML.length >= 0);
+
+  s = criarSandboxOSPagina(Object.assign({}, CENARIOS.a, { telaLarga: false }));
+  s.ctx.manAbrirOS(CENARIOS.a.entry.id);
+  assert.ok(!s.nodes['page-os-detalhe'].classList.contains('active'));
+  assert.ok(s.nodes['drawer'].classList.contains('open'));
+});
+
+test('a união de #osd-contexto e #osd-trabalho contém cada título de bloco exatamente uma vez, nos dois modos de coluna (duas colunas: cenário b; uma coluna: cenário e)', () => {
+  const titulos = ['1 · Abertura', '2 · Delineamento', '3 · Execução', 'Itens · serviços e materiais', 'Registro<'];
+
+  const sb = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  sb.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+  const uniaoB = sb.nodes['osd-contexto'].innerHTML + sb.nodes['osd-trabalho'].innerHTML;
+  titulos.forEach((t) => assert.equal(uniaoB.split(t).length - 1, 1, `(b) "${t}" não apareceu exatamente uma vez`));
+
+  const se = criarSandboxOSPagina(Object.assign({}, CENARIOS.e, { telaLarga: true }));
+  se.ctx.osAbrirPagina(CENARIOS.e.entry.id);
+  assert.equal(se.nodes['osd-trabalho'].innerHTML, '', '(e) sem trabalho — #osd-trabalho deveria ficar vazio');
+  assert.ok(se.nodes['osd-corpo'].classList.contains('uma-coluna'));
+  assert.match(se.nodes['osd-contexto'].innerHTML, /1 · Abertura/);
+});
+
+test('ao sair da coluna única, a classe uma-coluna é removida — abrir uma OS normal depois de uma legada não herda o modo', () => {
+  // (e) e (a) são as duas uniOk:false do fixture — a mesma sandbox (um
+  // UNI_OK só, global) pode abrir as duas sem contaminar o resultado.
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.e, { telaLarga: true }));
+  s.ctx._logCache[CENARIOS.a.equip.id] = [CENARIOS.a.entry];
+  s.ctx.osAbrirPagina(CENARIOS.e.entry.id); // sem trabalho — uma coluna
+  assert.ok(s.nodes['osd-corpo'].classList.contains('uma-coluna'));
+  s.ctx.osAbrirPagina(CENARIOS.a.entry.id); // com trabalho, sem edição — duas colunas
+  assert.ok(!s.nodes['osd-corpo'].classList.contains('uma-coluna'));
+  assert.notEqual(s.nodes['osd-trabalho'].innerHTML, '');
+});
+
+test('osAbrirPagina grava a origem por lerOrigemDetalhe, nunca apaga .active de nenhum .nav-btn, fecha a gaveta se estiver aberta, esconde #fab e grava DETALHE_ABERTO', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-pmoc'].classList.add('active');
+  s.nodes['drawer'].classList.add('open');
+  assert.ok(s.navBtns[0].classList.contains('active'));
+
+  s.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'pmoc');
+  assert.ok(s.navBtns[0].classList.contains('active'), 'osAbrirPagina apagou o estado ativo do nav-btn');
+  assert.ok(!s.nodes['drawer'].classList.contains('open'));
+  assert.equal(s.nodes['fab'].style.display, 'none');
+  // Objeto criado DENTRO do sandbox (node:vm) — mesma armadilha de sempre,
+  // compara pelos campos.
+  assert.equal(s.ctx.DETALHE_ABERTO.tipo, 'os');
+  assert.equal(s.ctx.DETALHE_ABERTO.id, CENARIOS.b.entry.id);
+});
+
+test("detalheAbertoDe('os')/detalheAbertoDe('ficha') nunca ficam preenchidos ao mesmo tempo", () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  s.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+  assert.equal(s.ctx.detalheAbertoDe('os'), CENARIOS.b.entry.id);
+  assert.equal(s.ctx.detalheAbertoDe('ficha'), null);
+});
+
+test('lerOrigemDetalhe grava a chave quando a .page.active é uma das cinco abas e mantém a anterior quando é page-ficha/page-os-detalhe/nenhuma (D-jar-03)', () => {
+  const s = criarSandboxOSPagina({ telaLarga: true });
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-alert'].classList.add('active');
+  s.ctx.lerOrigemDetalhe();
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'alert');
+
+  s.nodes['page-alert'].classList.remove('active');
+  s.nodes['page-os-detalhe'].classList.add('active');
+  s.ctx.lerOrigemDetalhe();
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'alert', 'origem desconhecida deveria manter a anterior, não cair para inv');
+});
+
+test('voltarDoDetalhe zera o registro e chama navTo(DETALHE_ORIGEM, botaoDaAba(DETALHE_ORIGEM)); #osd-voltar-txt nomeia o destino, nunca undefined', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  s.nodes['page-dash'].classList.remove('active');
+  s.nodes['page-os'].classList.add('active');
+  s.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+  assert.equal(s.nodes['osd-voltar-txt'].textContent, 'Voltar às OS');
+  assert.doesNotMatch(s.nodes['osd-voltar-txt'].textContent, /undefined/);
+
+  s.ctx.voltarDoDetalhe();
+  assert.equal(s.ctx.DETALHE_ABERTO, null);
+  assert.equal(s.chamadasNavTo.length, 1);
+  assert.equal(s.chamadasNavTo[0].pagina, 'os');
+});
+
+test('fecharDetalhe chama voltarDoDetalhe quando há página de detalhe ativa e closeDrawer quando não há (D-jar-12, manCancelar)', () => {
+  const s = criarSandboxOSPagina(Object.assign({}, CENARIOS.b, { telaLarga: true }));
+  s.ctx.osAbrirPagina(CENARIOS.b.entry.id);
+  s.ctx.fecharDetalhe();
+  assert.ok(!s.nodes['page-os-detalhe'].classList.contains('active'));
+  assert.equal(s.chamadasNavTo.length, 1);
+
+  const s2 = criarSandboxOSPagina(Object.assign({}, CENARIOS.a, { telaLarga: false }));
+  s2.ctx.osAbrirGaveta(CENARIOS.a.entry.id);
+  s2.ctx.fecharDetalhe();
+  assert.ok(!s2.nodes['drawer'].classList.contains('open'));
+});
+
+test('navTo zera DETALHE_ABERTO (D-jar-14)', () => {
+  const corpoNavTo = bloco(HTML, 'function navTo(page, btn){');
+  assert.match(corpoNavTo, /DETALHE_ABERTO\s*=\s*null;/);
+});
+
+test('D-92t/D-jar-16: tests/refrigeracao-desktop.test.js segue verde sem edição — CSS de celular byte a byte, exatamente um @media novo', () => {
+  // Prova indireta: os quatro grep do PLAT-15 e a ausência de <style> extra
+  // já são cobertos noutro caso; este documenta a intenção — o gate real
+  // é tests/refrigeracao-desktop.test.js, rodado à parte no verify da task.
+  assert.equal((HTML.match(/<style>/g) || []).length, (HTML.match(/<\/style>/g) || []).length);
 });

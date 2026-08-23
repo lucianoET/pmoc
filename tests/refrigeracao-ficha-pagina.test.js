@@ -219,15 +219,23 @@ test('os quatro grep do PLAT-15 continuam em 0 — refrigeração segue congelad
 
 // ═══════════ TAREFA 2 — #page-ficha: marcação, CSS, abrir e voltar ═══════
 
+// 260823-jar (D-jar-18): a camada compartilhada de estado/navegação
+// (detalheAbertoDe/lerOrigemDetalhe/paginaDetalheAtiva/ativarPaginaDetalhe/
+// fecharDetalhe/voltarDoDetalhe) — voltarDoDetalhe deixou de existir.
 const MARCADORES_PAGINA = [
   'function botaoDaAba(chave){',
+  'function detalheAbertoDe(tipo){',
+  'function lerOrigemDetalhe(){',
+  'function paginaDetalheAtiva(){',
+  'function ativarPaginaDetalhe(idDaPagina){',
+  'function voltarDoDetalhe(){',
+  'function fecharDetalhe(){',
   'function abrirFichaPagina(id){',
-  'function voltarDaFicha(){',
   'function abrirFichaGaveta(id){',
   'function openDetail(id){',
 ];
 
-// ── DOM de mentira: só o suficiente para abrirFichaPagina/voltarDaFicha —
+// ── DOM de mentira: só o suficiente para abrirFichaPagina/voltarDoDetalhe —
 // mesmo padrão de objetos com classList de conjunto e querySelector(All)
 // sobre uma lista declarada no teste já usado nos outros gates do módulo. ──
 function criarElemento(id, classesIniciais) {
@@ -247,7 +255,7 @@ function criarElemento(id, classesIniciais) {
 }
 
 // navTo tem gate próprio (chamadas registradas, não reexecutadas — o que
-// está sob teste aqui é abrirFichaPagina/voltarDaFicha, não navTo em si).
+// está sob teste aqui é abrirFichaPagina/voltarDoDetalhe, não navTo em si).
 function criarSandboxPagina(extras) {
   const paginasChaves = ['dash', 'inv', 'os', 'pmoc', 'alert', 'ficha'];
   const nodes = {};
@@ -292,7 +300,7 @@ function criarSandboxPagina(extras) {
     closeDrawer: function () { nodes['drawer'].classList.remove('open'); },
     openDrawer: function () { nodes['drawer'].classList.add('open'); },
     // navTo tem gate próprio — o mock reproduz só o efeito de marcação que
-    // reAlojarFicha/voltarDaFicha dependem (troca de .page.active), não a
+    // reAlojarDetalhe/voltarDoDetalhe dependem (troca de .page.active), não a
     // lógica real de qual render* chamar.
     navTo: function (pagina, btn) {
       chamadasNavTo.push({ pagina: pagina, btn: btn });
@@ -308,8 +316,9 @@ function criarSandboxPagina(extras) {
   vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_COLUNAS = '), ctx);
   vm.runInContext(ateFimDeLinha(HTML, 'var ABAS_NAV = '), ctx);
   vm.runInContext(bloco(HTML, 'var ROTULOS_VOLTA = {'), ctx);
-  vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_ABERTA = '), ctx);
-  vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_ORIGEM = '), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var DETALHE_ABERTO = '), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var DETALHE_ORIGEM = '), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var PAGINAS_DETALHE = '), ctx);
   return { ctx: ctx, nodes: nodes, navBtns: navBtns, chamadasNavTo: chamadasNavTo };
 }
 
@@ -337,23 +346,23 @@ test('as três colunas recebem os blocos por FICHA_COLUNAS — os cinco títulos
   assert.equal((uniao.match(/qr-mock/g) || []).length, 1, 'bloco 5 (QR, mockado) não apareceu exatamente uma vez');
 });
 
-test('abrirFichaPagina grava FICHA_ORIGEM a partir de .page.active, cai para \'inv\' quando desconhecida/nenhuma/a própria ficha', () => {
+test('abrirFichaPagina grava DETALHE_ORIGEM a partir de .page.active, cai para \'inv\' quando desconhecida/nenhuma/a própria ficha', () => {
   let s = criarSandboxPagina();
   s.nodes['page-dash'].classList.remove('active');
   s.nodes['page-alert'].classList.add('active');
   s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
-  assert.equal(s.ctx.FICHA_ORIGEM, 'alert');
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'alert');
 
   s = criarSandboxPagina();
   s.nodes['page-dash'].classList.remove('active'); // nenhuma página ativa
   s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
-  assert.equal(s.ctx.FICHA_ORIGEM, 'inv');
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'inv');
 
   s = criarSandboxPagina();
   s.nodes['page-dash'].classList.remove('active');
   s.nodes['page-ficha'].classList.add('active'); // a própria ficha já ativa
   s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
-  assert.equal(s.ctx.FICHA_ORIGEM, 'inv');
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'inv');
 });
 
 test('abrirFichaPagina nunca apaga .active de nenhum .nav-btn', () => {
@@ -370,14 +379,14 @@ test('abrirFichaPagina fecha a gaveta se estiver aberta — impede gaveta órfã
   assert.ok(!s.nodes['drawer'].classList.contains('open'));
 });
 
-test('voltarDaFicha chama navTo(FICHA_ORIGEM, botaoDaAba(FICHA_ORIGEM)) e zera FICHA_ABERTA', () => {
+test('voltarDoDetalhe chama navTo(DETALHE_ORIGEM, botaoDaAba(DETALHE_ORIGEM)) e zera DETALHE_ABERTO', () => {
   const s = criarSandboxPagina();
   s.nodes['page-dash'].classList.remove('active');
   s.nodes['page-pmoc'].classList.add('active');
   s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
-  assert.equal(s.ctx.FICHA_ABERTA, EQUIP_FIXO.id);
-  s.ctx.voltarDaFicha();
-  assert.equal(s.ctx.FICHA_ABERTA, null);
+  assert.equal(s.ctx.detalheAbertoDe('ficha'), EQUIP_FIXO.id);
+  s.ctx.voltarDoDetalhe();
+  assert.equal(s.ctx.detalheAbertoDe('ficha'), null);
   assert.equal(s.chamadasNavTo.length, 1);
   assert.equal(s.chamadasNavTo[0].pagina, 'pmoc');
   assert.strictEqual(s.chamadasNavTo[0].btn, s.navBtns[3]); // pmoc = índice 3 em ABAS_NAV
@@ -429,7 +438,7 @@ test('D-92t-04: nenhum id dh-* é duplicado no documento — um só elemento por
 
 // ═══════════ TAREFA 3 — cruzar o limiar, formulários, link profundo ══════
 
-test('FICHA_ABERTA é zerado no topo de openLogForm/openEquipForm/openNewOS e dentro de closeDrawer', () => {
+test('DETALHE_ABERTO é zerado no topo de openLogForm/openEquipForm/openNewOS e dentro de closeDrawer', () => {
   const casos = [
     'function openLogForm(equipId){',
     'function openEquipForm(id){',
@@ -438,71 +447,71 @@ test('FICHA_ABERTA é zerado no topo de openLogForm/openEquipForm/openNewOS e de
   ];
   casos.forEach((marcador) => {
     const corpo = bloco(HTML, marcador);
-    assert.match(corpo, /FICHA_ABERTA\s*=\s*null;/, `"${marcador}" não zera FICHA_ABERTA`);
+    assert.match(corpo, /DETALHE_ABERTO\s*=\s*null;/, `"${marcador}" não zera DETALHE_ABERTO`);
   });
 });
 
-test('reAlojarFicha: página+estreitar sai da ficha-página, volta à origem, e abre a gaveta com o MESMO equipamento', () => {
+test('reAlojarDetalhe: página+estreitar sai da ficha-página, volta à origem, e abre a gaveta com o MESMO equipamento', () => {
   const s = criarSandboxPagina({ TELA_LARGA: true });
   s.nodes['page-dash'].classList.remove('active');
   s.nodes['page-pmoc'].classList.add('active');
   s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
   assert.ok(s.nodes['page-ficha'].classList.contains('active'));
 
-  vm.runInContext(bloco(HTML, 'function reAlojarFicha(){'), s.ctx);
+  vm.runInContext(bloco(HTML, 'function reAlojarDetalhe(){'), s.ctx);
   s.ctx.TELA_LARGA = false;
-  const houve = s.ctx.reAlojarFicha();
+  const houve = s.ctx.reAlojarDetalhe();
   assert.equal(houve, true);
   assert.ok(!s.nodes['page-ficha'].classList.contains('active'));
   assert.equal(s.chamadasNavTo.length, 1);
   assert.equal(s.chamadasNavTo[0].pagina, 'pmoc');
   assert.ok(s.nodes['drawer'].classList.contains('open'), 'a gaveta deveria abrir com o mesmo equipamento');
   assert.match(s.nodes['dh-id'].textContent, new RegExp('#' + EQUIP_FIXO.id));
-  assert.equal(s.ctx.FICHA_ABERTA, EQUIP_FIXO.id);
+  assert.equal(s.ctx.detalheAbertoDe('ficha'), EQUIP_FIXO.id);
 });
 
-test('reAlojarFicha: página+largo (já correto) devolve false, sem chamar navTo nem tocar #page-ficha', () => {
+test('reAlojarDetalhe: página+largo (já correto) devolve false, sem chamar navTo nem tocar #page-ficha', () => {
   const s = criarSandboxPagina({ TELA_LARGA: true });
   s.ctx.abrirFichaPagina(EQUIP_FIXO.id);
-  vm.runInContext(bloco(HTML, 'function reAlojarFicha(){'), s.ctx);
-  const houve = s.ctx.reAlojarFicha();
+  vm.runInContext(bloco(HTML, 'function reAlojarDetalhe(){'), s.ctx);
+  const houve = s.ctx.reAlojarDetalhe();
   assert.equal(houve, false);
   assert.ok(s.nodes['page-ficha'].classList.contains('active'));
   assert.equal(s.chamadasNavTo.length, 0);
 });
 
-test('reAlojarFicha: gaveta+alargar fecha a gaveta e abre a ficha-página com o MESMO equipamento; a origem por baixo continua', () => {
+test('reAlojarDetalhe: gaveta+alargar fecha a gaveta e abre a ficha-página com o MESMO equipamento; a origem por baixo continua', () => {
   const s = criarSandboxPagina({ TELA_LARGA: true });
   s.nodes['page-dash'].classList.remove('active');
   s.nodes['page-alert'].classList.add('active');
-  s.ctx.abrirFichaPagina(EQUIP_FIXO.id); // origem = alert, FICHA_ABERTA = id
+  s.ctx.abrirFichaPagina(EQUIP_FIXO.id); // origem = alert, DETALHE_ABERTO = id
 
-  vm.runInContext(bloco(HTML, 'function reAlojarFicha(){'), s.ctx);
+  vm.runInContext(bloco(HTML, 'function reAlojarDetalhe(){'), s.ctx);
   // estreita — vira gaveta com o mesmo equipamento (ramo já provado acima)
   s.ctx.TELA_LARGA = false;
-  s.ctx.reAlojarFicha();
+  s.ctx.reAlojarDetalhe();
   assert.ok(s.nodes['drawer'].classList.contains('open'));
-  assert.equal(s.ctx.FICHA_ABERTA, EQUIP_FIXO.id);
+  assert.equal(s.ctx.detalheAbertoDe('ficha'), EQUIP_FIXO.id);
 
   // alarga de volta — vira página de novo, com o MESMO equipamento
   s.ctx.TELA_LARGA = true;
-  const houve = s.ctx.reAlojarFicha();
+  const houve = s.ctx.reAlojarDetalhe();
   assert.equal(houve, true);
   assert.ok(!s.nodes['drawer'].classList.contains('open'), 'a gaveta deveria fechar');
   assert.ok(s.nodes['page-ficha'].classList.contains('active'));
-  assert.equal(s.ctx.FICHA_ORIGEM, 'alert', 'a origem por baixo deveria continuar sendo a mesma');
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'alert', 'a origem por baixo deveria continuar sendo a mesma');
 });
 
-test('reAlojarFicha: gaveta+estreito (já correto, gaveta comum) devolve false', () => {
+test('reAlojarDetalhe: gaveta+estreito (já correto, gaveta comum) devolve false', () => {
   const s = criarSandboxPagina({ TELA_LARGA: false });
   s.ctx.abrirFichaGaveta(EQUIP_FIXO.id);
-  vm.runInContext(bloco(HTML, 'function reAlojarFicha(){'), s.ctx);
-  const houve = s.ctx.reAlojarFicha();
+  vm.runInContext(bloco(HTML, 'function reAlojarDetalhe(){'), s.ctx);
+  const houve = s.ctx.reAlojarDetalhe();
   assert.equal(houve, false);
   assert.ok(s.nodes['drawer'].classList.contains('open'));
 });
 
-test('reAlojarFicha: formulário aberto sobre a ficha-página (FICHA_ABERTA nulo) — #page-ficha nunca fica ativa no estreito, e o conteúdo da gaveta não é sobrescrito', () => {
+test('reAlojarDetalhe: formulário aberto sobre a ficha-página (DETALHE_ABERTO nulo) — #page-ficha nunca fica ativa no estreito, e o conteúdo da gaveta não é sobrescrito', () => {
   const s = criarSandboxPagina({ TELA_LARGA: true });
   s.nodes['page-dash'].classList.remove('active');
   s.nodes['page-os'].classList.add('active');
@@ -510,14 +519,14 @@ test('reAlojarFicha: formulário aberto sobre a ficha-página (FICHA_ABERTA nulo
   assert.ok(s.nodes['page-ficha'].classList.contains('active'));
 
   // simula um formulário aberto sobre a ficha-página — openEquipForm/
-  // openLogForm/openNewOS zerariam FICHA_ABERTA (caso já provado acima).
-  s.ctx.FICHA_ABERTA = null;
+  // openLogForm/openNewOS zerariam DETALHE_ABERTO (caso já provado acima).
+  s.ctx.DETALHE_ABERTO = null;
   s.nodes['drawer-body'].innerHTML = '<div class="ds">FORM MARCADO</div>';
   s.nodes['drawer'].classList.add('open');
 
-  vm.runInContext(bloco(HTML, 'function reAlojarFicha(){'), s.ctx);
+  vm.runInContext(bloco(HTML, 'function reAlojarDetalhe(){'), s.ctx);
   s.ctx.TELA_LARGA = false;
-  const houve = s.ctx.reAlojarFicha();
+  const houve = s.ctx.reAlojarDetalhe();
   assert.equal(houve, true);
   assert.ok(!s.nodes['page-ficha'].classList.contains('active'));
   assert.match(s.nodes['drawer-body'].innerHTML, /FORM MARCADO/, 'o conteúdo do formulário foi sobrescrito — deveria sobreviver ao redimensionamento');
@@ -586,8 +595,9 @@ function criarSandboxAlvoFicha(overrides) {
   vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_COLUNAS = '), ctx);
   vm.runInContext(ateFimDeLinha(HTML, 'var ABAS_NAV = '), ctx);
   vm.runInContext(bloco(HTML, 'var ROTULOS_VOLTA = {'), ctx);
-  vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_ABERTA = '), ctx);
-  vm.runInContext(ateFimDeLinha(HTML, 'var FICHA_ORIGEM = '), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var DETALHE_ABERTO = '), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var DETALHE_ORIGEM = '), ctx);
+  vm.runInContext(ateFimDeLinha(HTML, 'var PAGINAS_DETALHE = '), ctx);
   vm.runInContext(ateFimDeLinha(HTML, 'var PARAM_FICHA = '), ctx);
   vm.runInContext(ateFimDeLinha(HTML, 'var ALVO_FICHA = null;'), ctx);
   MARCADORES_ALVO.forEach(function (m) { vm.runInContext(bloco(HTML, m), ctx); });
@@ -601,7 +611,7 @@ test('aplicarAlvoFicha em tela larga: URL consumida uma vez, ficha abre como pá
   assert.equal(achou, true);
   assert.equal(s.ctx.ALVO_FICHA, null, 'ALVO_FICHA deveria ser consumido uma única vez');
   assert.ok(s.nodes['page-ficha'].classList.contains('active'));
-  assert.equal(s.ctx.FICHA_ORIGEM, 'inv');
+  assert.equal(s.ctx.DETALHE_ORIGEM, 'inv');
   assert.equal(s.chamadasNavTo.length, 1);
   assert.equal(s.chamadasNavTo[0].pagina, 'inv');
 });
