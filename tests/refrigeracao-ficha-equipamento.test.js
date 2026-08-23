@@ -189,18 +189,35 @@ test('podeEditarCadastro é verdadeiro para admin/gestor, falso para tecnico/obs
   assert.equal(ctx.podeEditarCadastro(), false);
 });
 
-test('fiação: openDetail traz os quatro blocos na ordem, salvarEquip chama podeEditarCadastro(), e o formulário rotula o campo de estado como Idade aparente', () => {
-  const iniDetail = HTML.indexOf('function openDetail(id){');
-  const fimDetail = HTML.indexOf('\n}', HTML.indexOf('openDrawer();', iniDetail));
-  assert.ok(iniDetail > 0 && fimDetail > iniDetail, 'openDetail não encontrada');
-  const corpoDetail = HTML.slice(iniDetail, fimDetail);
+// 260823-92t, D-92t-15: openDetail deixou de montar os quatro blocos por
+// conta própria — a extração da Task 1 (D-92t-02) moveu-os para dentro de
+// fichaBlocos() (fichaBlocoLocal/fichaBlocoDados/fichaBlocoEstado/
+// fichaBlocoHistorico), e openDetail passou a só DELEGAR (abrirFichaGaveta
+// na Task 1; abrirFichaGaveta/abrirFichaPagina por TELA_LARGA na Task 2).
+// O caso é reescrito, não apagado (precedente D-3a6-18): prova as duas
+// metades — os títulos na ordem dentro dos blocos, e openDetail sem montar
+// nenhum deles por conta própria.
+test('fiação: os quatro títulos vivem em fichaBlocoLocal/Dados/Estado/Historico na ordem, openDetail delega sem montar bloco por conta própria (D-92t-15), salvarEquip chama podeEditarCadastro(), e o formulário rotula o campo de estado como Idade aparente', () => {
+  const iniBlocos = HTML.indexOf('function fichaBlocoLocal(e){');
+  const fimBlocos = HTML.indexOf('function fichaBlocos(e, logs, id){');
+  assert.ok(iniBlocos > 0 && fimBlocos > iniBlocos, 'fichaBlocoLocal..fichaBlocoHistorico não encontrados');
+  const corpoBlocos = HTML.slice(iniBlocos, fimBlocos);
   const titulos = ['1 · Local', '2 · Dados do equipamento', '3 · Estado e PMOC', '4 · Histórico de OS/manutenções'];
   let ultimoIndice = -1;
   for (const titulo of titulos) {
-    const idx = corpoDetail.indexOf(titulo);
-    assert.ok(idx >= 0, `bloco "${titulo}" não encontrado em openDetail`);
+    const idx = corpoBlocos.indexOf(titulo);
+    assert.ok(idx >= 0, `bloco "${titulo}" não encontrado em fichaBlocoLocal..fichaBlocoHistorico`);
     assert.ok(idx > ultimoIndice, `bloco "${titulo}" fora de ordem`);
     ultimoIndice = idx;
+  }
+
+  // openDetail não monta nenhum dos quatro títulos por conta própria — só delega.
+  const iniDetail = HTML.indexOf('function openDetail(id){');
+  const fimDetail = HTML.indexOf('\n}', iniDetail);
+  assert.ok(iniDetail > 0 && fimDetail > iniDetail, 'openDetail não encontrada');
+  const corpoDetail = HTML.slice(iniDetail, fimDetail);
+  for (const titulo of titulos) {
+    assert.ok(corpoDetail.indexOf(titulo) === -1, `openDetail monta o bloco "${titulo}" por conta própria — deveria só delegar`);
   }
 
   const iniSalvar = HTML.indexOf('async function salvarEquip(id){');

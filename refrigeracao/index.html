@@ -1885,22 +1885,15 @@ function campoLinkFicha(rotulo, valor){
   return '<div class="dfield"><label>'+rotulo+'</label><div class="dval">'+conteudo+'</div></div>';
 }
 
-function openDetail(id){
-  var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
-  var logs = getEquipLog(id);
-  var lastDate = e.ultimaManutencao || getLatestLogDate(id);
-  var crit = autoCrit(e);
-  var horas = (e.horasDia||0)*(e.diasSemana||0);
-  var ni = nextPmoc(e,'inspecao'); var np = nextPmoc(e,'preventiva');
-  var btuK = e.btu? (e.btu/1000).toFixed(0)+'K BTU' : '—';
-  var kw = e.btu? (e.btu/3412).toFixed(2)+' kW' : '—';
-  var tr = e.btu? (e.btu/12000).toFixed(2)+' TR' : '—';
+/* -- ficha: uma fonte, dois continentes -- */
+/* D-92t-17: todo o código novo dos dois continentes mora nesta seção só,
+   imediatamente antes de openDetail(id). D-92t-02: os cinco blocos saem de
+   fichaBlocos(), que devolve um ARRAY de cinco strings — a gaveta faz
+   .join(''), a página distribui por coluna (Task 2). Nenhum bloco foi
+   reescrito nesta extração: byte a byte o mesmo HTML de antes, provado por
+   fixture (D-92t-14, tests/fixtures/refrigeracao-ficha-gaveta.json). */
 
-  el('dh-id').textContent = '#'+id+' · '+(e.area||'');
-  el('dh-local').textContent = equipInstalado(e) ? e.local : rotuloSituacaoEquip(e.situacao);
-  el('dh-predio').textContent = equipInstalado(e) ? e.predio : '';
-  el('dh-pills').innerHTML = statusPill(e.funciona)+critPill(crit)+situacaoPill(e.situacao);
-
+function fichaBlocoLocal(e){
   // D-uyz-10/f: máquina não instalada não mostra predio/local vazios — mostra
   // uma linha honesta dizendo o que aconteceu e quando (sem inventar dado).
   var blocoLocal = equipInstalado(e)
@@ -1915,12 +1908,16 @@ function openDetail(id){
         ? 'Baixado' + (e.dataBaixa ? ' em '+fmtDate(e.dataBaixa) : '')
         : 'Sem local — removido' + (e.dataRemocao ? ' em '+fmtDate(e.dataRemocao) : '')) +
       '</div></div>';
-
-  el('drawer-body').innerHTML =
-    '<div class="ds">' +
+  return '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-map-marker-alt mr1" aria-hidden="true"></i>1 · Local</div>' +
-    blocoLocal + '</div>' +
-    '<div class="ds">' +
+    blocoLocal + '</div>';
+}
+
+function fichaBlocoDados(e){
+  var btuK = e.btu? (e.btu/1000).toFixed(0)+'K BTU' : '—';
+  var kw = e.btu? (e.btu/3412).toFixed(2)+' kW' : '—';
+  var tr = e.btu? (e.btu/12000).toFixed(2)+' TR' : '—';
+  return '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>2 · Dados do equipamento</div>' +
     '<div class="dfields2">' +
     '<div class="dfield"><label>Tipo</label><div class="dval">'+esc(e.tipo)+'</div></div>' +
@@ -1934,8 +1931,12 @@ function openDetail(id){
     '<div class="dfield"><label>Data de instalação</label><div class="dval">'+(e.dataInstalacao?fmtDate(e.dataInstalacao):'—')+'</div></div>' +
     campoLinkFicha('Link', e.link) +
     campoLinkFicha('Manual', e.manualUrl) +
-    '</div></div>' +
-    '<div class="ds">' +
+    '</div></div>';
+}
+
+function fichaBlocoEstado(e, logs, crit, lastDate, ni, np){
+  var horas = (e.horasDia||0)*(e.diasSemana||0);
+  return '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-calendar-check mr1" aria-hidden="true"></i>3 · Estado e PMOC</div>' +
     '<div class="dfields2">' +
     '<div class="dfield"><label>Estado</label><div class="dval">'+statusPill(e.funciona)+'</div></div>' +
@@ -1948,8 +1949,11 @@ function openDetail(id){
     '</div>' +
     (e.obs?'<div class="dfield" style="margin-top:4px"><label>Observações</label><div class="dval" style="color:#E52207;font-weight:600">'+esc(e.obs)+'</div></div>':'') +
     renderMedicoesFicha(logs) +
-    '</div>' +
-    '<div class="ds">' +
+    '</div>';
+}
+
+function fichaBlocoHistorico(id, logs){
+  return '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-history mr1" aria-hidden="true"></i>4 · Histórico de OS/manutenções ('+logs.length+')</div>' +
     (logs.length ? logs.map(function(entry){
       var done = (entry.checklist||[]).filter(function(c){return c.done;}).length;
@@ -1967,16 +1971,95 @@ function openDetail(id){
         '<button class="le-del" onclick="delLog('+id+',\''+esc(entry.id||'')+'\')" style="margin-top:4px"><i class="fas fa-trash mr1" aria-hidden="true"></i>Excluir</button>' +
         '</div>';
     }).join('') : '<div class="empty" style="padding:10px 0"><p>Nenhuma OS/manutenção registrada ainda.</p></div>') +
-    '</div>' +
-    blocoQrFicha(id);
+    '</div>';
+}
 
-  el('drawer-footer').innerHTML =
-    '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>' +
+/* D-92t-02: cinco strings, nunca já concatenadas — a gaveta faz .join(''),
+   a página (Task 2) distribui por FICHA_COLUNAS. crit/lastDate/ni/np são
+   calculados uma vez só, aqui. */
+function fichaBlocos(e, logs, id){
+  var lastDate = e.ultimaManutencao || getLatestLogDate(id);
+  var crit = autoCrit(e);
+  var ni = nextPmoc(e,'inspecao'); var np = nextPmoc(e,'preventiva');
+  return [
+    fichaBlocoLocal(e),
+    fichaBlocoDados(e),
+    fichaBlocoEstado(e, logs, crit, lastDate, ni, np),
+    fichaBlocoHistorico(id, logs),
+    blocoQrFicha(id)
+  ];
+}
+
+function fichaIdentidade(e, crit){
+  return {
+    id: '#'+e.id+' · '+(e.area||''),
+    local: equipInstalado(e) ? e.local : rotuloSituacaoEquip(e.situacao),
+    predio: equipInstalado(e) ? e.predio : '',
+    pills: statusPill(e.funciona)+critPill(crit)+situacaoPill(e.situacao)
+  };
+}
+
+/* D-92t-07: as mesmas quatro ações de sempre, sem inventar nenhuma — muda a
+   forma. alvo==='gaveta' é byte a byte o rodapé de hoje; alvo==='pagina'
+   (Task 2) troca "fechar" por #fh-voltar (navegação, não ação) e rotula os
+   outros três em texto. */
+function fichaAcoes(id, alvo){
+  if(alvo==='pagina'){
+    return '<button class="btn-secondary" onclick="printFicha('+id+')"><i class="fas fa-print mr1" aria-hidden="true"></i>Imprimir ficha</button>' +
+      (podeEditarCadastro()?'<button class="btn-secondary" onclick="openEquipForm('+id+')"><i class="fas fa-pen mr1" aria-hidden="true"></i>Editar cadastro</button>':'') +
+      '<button class="btn-primary" onclick="openLogForm('+id+')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Registrar OS-Manutenção</button>';
+  }
+  return '<button class="btn-secondary" onclick="closeDrawer()" title="Fechar" aria-label="Fechar"><i class="fas fa-times" aria-hidden="true"></i></button>' +
     '<button class="btn-secondary" onclick="printFicha('+id+')" title="Imprimir ficha" aria-label="Imprimir ficha"><i class="fas fa-print" aria-hidden="true"></i></button>' +
     (podeEditarCadastro()?'<button class="btn-secondary" onclick="openEquipForm('+id+')"><i class="fas fa-pen mr1" aria-hidden="true"></i>Editar cadastro</button>':'') +
     '<button class="btn-primary" onclick="openLogForm('+id+')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Registrar OS/Manutenção</button>';
+}
+
+/* D-92t-09: distribuição fechada das colunas da ficha-página — coluna 1 =
+   Local+Dados, coluna 2 = Estado e PMOC (o bloco mais denso), coluna 3 =
+   Histórico+QR. Achatada é permutação de [0,1,2,3,4] (gate). */
+var FICHA_COLUNAS = [[0,1],[2],[3,4]];
+
+/* D-92t-11: as cinco abas de navegação, na mesma ordem de #bottom-nav — dado
+   fechado e função pura, sem API de navegador, para o gate exercitar como
+   comportamento em vez de regex. */
+var ABAS_NAV = ['dash','inv','os','pmoc','alert'];
+function indiceDaAba(chave){
+  return ABAS_NAV.indexOf(chave);
+}
+var ROTULOS_VOLTA = {
+  dash: 'Voltar ao Painel',
+  inv: 'Voltar ao Parque',
+  os: 'Voltar às OS',
+  pmoc: 'Voltar ao PMOC',
+  alert: 'Voltar aos Alertas'
+};
+function rotuloVolta(chave){
+  return ROTULOS_VOLTA[chave] || 'Voltar';
+}
+
+/* Corpo de openDetail até a Task 2 (D-92t-01): openDetail ainda não escolhe
+   continente, só delega — o fixture desta task prova a extração isolada da
+   mudança de continente, que é a Task 2. */
+function abrirFichaGaveta(id){
+  var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
+  var logs = getEquipLog(id);
+  var crit = autoCrit(e);
+  var ident = fichaIdentidade(e, crit);
+
+  el('dh-id').textContent = ident.id;
+  el('dh-local').textContent = ident.local;
+  el('dh-predio').textContent = ident.predio;
+  el('dh-pills').innerHTML = ident.pills;
+
+  el('drawer-body').innerHTML = fichaBlocos(e, logs, id).join('');
+  el('drawer-footer').innerHTML = fichaAcoes(id, 'gaveta');
 
   openDrawer();
+}
+
+function openDetail(id){
+  return abrirFichaGaveta(id);
 }
 
 /* ═══════════════════════════════════════════════════════════
