@@ -782,6 +782,124 @@ async function osAdicionarComentario(osId, texto){
   return true;
 }
 
+/* ── estoque: catálogo, movimentos e baixa ── */
+/* D-6wy-06/08: /refrigeracao é o único módulo da plataforma que faz
+   manutenção sem saber o que tem na prateleira — o item de OS hoje é
+   texto livre com valor digitado. Esta subseção traz o mesmo desenho
+   que os outros módulos já usam: catálogo (materiais), histórico
+   (estoque_movimentos) e baixa na entrada em execução.
+
+   EST_OK é sonda PRÓPRIA, separada de MAN_FLUXO_OK/MOV_OK/UNI_OK — a
+   lição de D-uyz-13 e D-cf8-13: estender uma sonda existente
+   desligaria um fluxo inteiro num banco que tem as migrações
+   anteriores e não tem esta. E mora AQUI, dentro do recorte
+   "── fluxo da OS interna: porta de escrita ──", de propósito
+   (D-6wy-08): os cinco gates que já carregam este recorte em seus
+   sandboxes (refrigeracao-os-pagina, refrigeracao-desktop,
+   refrigeracao-trilha-os, refrigeracao-fluxo-os-interna,
+   refrigeracao-os-unificada, refrigeracao-encerramento-os) recebem
+   EST_OK declarado e falso de graça — nenhum deles precisa de uma
+   linha mudada para continuar passando. Declarar em outro lugar
+   produziria ReferenceError em sandbox, falha de infraestrutura
+   fingindo de regressão. */
+var EST_OK = false;
+
+async function estSondarEsquema() {
+  var r = await supa.from('materiais').select('id').limit(1);
+  EST_OK = !r.error;
+  return EST_OK;
+}
+
+/* D-6wy-11: um campo fora deste mapa é gravado como null sem erro
+   nenhum — a lição já paga em /calibracao. O gate compara esta ponte
+   coluna a coluna com a migração 44. */
+var CAMPOS_MATERIAL = {
+  id: 'id', codigo: 'codigo', nome: 'nome', tipo: 'tipo', unidade: 'unidade',
+  aplicacao: 'aplicacao', preco: 'preco', estoqueAtual: 'estoque_atual',
+  estoqueMinimo: 'estoque_minimo', obs: 'obs', ativo: 'ativo'
+};
+function dbToMaterial(r){
+  var m = {};
+  Object.keys(CAMPOS_MATERIAL).forEach(function(k){ m[k] = r[CAMPOS_MATERIAL[k]]; });
+  return m;
+}
+function materialParaDb(m){
+  var db = {};
+  Object.keys(CAMPOS_MATERIAL).forEach(function(k){ if (m[k] !== undefined) db[CAMPOS_MATERIAL[k]] = m[k]; });
+  return db;
+}
+
+/* D-cf8-27: fora do Promise.all principal, mesmo padrão de
+   carregarItensOS()/carregarComposicaoArp() — sem a migração 44 o
+   catálogo fica vazio e todo consumidor cai no ramo que já existe. */
+var MATERIAIS = [];
+async function carregarMateriais(){
+  if (!EST_OK) { MATERIAIS = []; return; }
+  try{
+    var r = await supa.from('materiais').select('*').order('codigo');
+    if (r.error) throw r.error;
+    MATERIAIS = (r.data||[]).map(dbToMaterial);
+  }catch(e){ console.warn('carregarMateriais', e); }
+}
+
+/* ── núcleo puro: sem API de navegador nenhuma (é o que o gate roda em Node) ── */
+
+/* D-6wy-10: consolida por material — duas linhas de MATERIAL do mesmo
+   material na mesma OS produzem UM decremento e UMA linha de saída no
+   histórico. Sem isso a aritmética do saldo dependeria da ordem em
+   que as linhas foram lançadas. */
+function estItensParaBaixa(itens){
+  var mapa = {};
+  (itens||[]).forEach(function(i){
+    if (!i || i.tipo !== 'MATERIAL') return;
+    if (i.materialId === undefined || i.materialId === null || i.materialId === '') return;
+    var q = Number(i.quantidade);
+    if (!(q > 0)) return;
+    var chave = String(i.materialId);
+    if (!mapa[chave]) mapa[chave] = { materialId: i.materialId, quantidade: 0 };
+    mapa[chave].quantidade += q;
+  });
+  return Object.keys(mapa).map(function(k){ return mapa[k]; });
+}
+
+/* Mínimo zero nunca alerta: quem não declarou mínimo não pediu
+   vigilância. */
+function estAbaixoDoMinimo(materiais){
+  return (materiais||[]).filter(function(m){
+    if (!m || m.ativo !== true) return false;
+    var min = Number(m.estoqueMinimo) || 0;
+    if (!(min > 0)) return false;
+    var atual = Number(m.estoqueAtual) || 0;
+    return atual < min;
+  });
+}
+
+function estIdentCurto(id){
+  return id ? String(id).slice(0, 8) : '—';
+}
+function estMotivoDaOS(entry){
+  var n = (entry && entry.tipoExecutor === 'contrato' && entry.numero) ? entry.numero : estIdentCurto(entry && entry.id);
+  return 'OS ' + n + ' — material lançado na ordem';
+}
+
+/* Rótulo de uma opção do catálogo — puro e AUTOSSUFICIENTE de
+   propósito: esta subseção não chama fmtMoney (declarada bem mais
+   adiante no arquivo) para não depender, no núcleo puro testado em
+   node:vm, de um recorte que este não carrega — em produção o
+   hoisting resolveria, mas o gate do núcleo puro carregaria só esta
+   subseção. */
+function estFmtMoneyLocal(v){
+  var n = Number(v) || 0;
+  return 'R$ ' + n.toFixed(2).replace('.', ',');
+}
+function estRotuloMaterial(m){
+  if (!m) return '';
+  var rotulo = (m.codigo ? m.codigo + ' — ' : '') + (m.nome || '');
+  if (m.unidade) rotulo += ' (' + m.unidade + ')';
+  rotulo += ' · ' + estFmtMoneyLocal(m.preco);
+  return rotulo;
+}
+
 // carregarPerfil só é CHAMADA em initAppOnce, depois de todos os scripts terem rodado — por isso pode atribuir a ctUser mesmo estando num bloco <script> anterior ao que a declara.
 async function carregarPerfil() {
   var s = await supa.auth.getSession();
@@ -4740,11 +4858,13 @@ async function acessoLivre() {
     await manSondarEsquema();
     await movSondarEsquema();
     await uniSondarEsquema();
+    await estSondarEsquema();
     osInjectChipsExecutor();
     await carregarItensOS();
     await carregarComentarios();
     await carregarArp();
     await carregarComposicaoArp();
+    await carregarMateriais();
     // Remove tela de login
     var lw = document.getElementById('login-mobile');
     if (lw) lw.remove();
@@ -4777,11 +4897,13 @@ async function initAppOnce(){
   await manSondarEsquema();
   await movSondarEsquema();
   await uniSondarEsquema();
+  await estSondarEsquema();
   osInjectChipsExecutor();
   await carregarItensOS();
   await carregarComentarios();
   await carregarArp();
   await carregarComposicaoArp();
+  await carregarMateriais();
   await carregarPerfil();
   setupRealtime();
   renderDash();
