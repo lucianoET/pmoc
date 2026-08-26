@@ -2434,12 +2434,16 @@ function renderAlerts(){
   var vencList = ag.vencidos.slice()
     .sort(function(a,b){ var o=['CRÍTICA','ALTA','MÉDIA','BAIXA']; return o.indexOf(autoCrit(a))-o.indexOf(autoCrit(b)); });
   var semHistCrit = ag.semHist.filter(function(e){ return autoCrit(e)==='CRÍTICA'; });
+  // D-6wy-05: calculado UMA vez, concatenado nos dois ramos abaixo —
+  // vazio quando EST_OK é falso ou não há material abaixo do mínimo
+  // (mantém os dois ramos byte a byte o de hoje nesse caso).
+  var estAlerta = estAlertaHtml();
 
   if(TELA_LARGA){
     atualizarBadgeAlertas(ag);
     var linhasTab = linhasAlertas(ag, now);
-    if(!linhasTab.length){ el('alert-list').innerHTML = '<div class="empty"><i class="fas fa-check-circle" style="color:#168821"></i><p>Nenhum alerta ativo!</p></div>'; return; }
-    el('alert-list').innerHTML = '<div style="font-size:11px;color:#888;padding:2px 2px 8px">Total sem repetição: '+ag.total+'. Um equipamento aparece em mais de uma seção quando tem mais de um motivo.</div>' + tabDesenhar('alert', COLS_ALERT, linhasTab, 'openDetail');
+    if(!linhasTab.length && !estAlerta){ el('alert-list').innerHTML = '<div class="empty"><i class="fas fa-check-circle" style="color:#168821"></i><p>Nenhum alerta ativo!</p></div>'; return; }
+    el('alert-list').innerHTML = '<div style="font-size:11px;color:#888;padding:2px 2px 8px">Total sem repetição: '+ag.total+'. Um equipamento aparece em mais de uma seção quando tem mais de um motivo.</div>' + tabDesenhar('alert', COLS_ALERT, linhasTab, 'openDetail') + estAlerta;
     return;
   }
 
@@ -2493,6 +2497,8 @@ function renderAlerts(){
       html += '<div class="alert-sub" style="padding:6px 2px;color:#888">+'+(ag.semHist.length-semHistCrit.length)+' não críticos sem registro de manutenção</div>';
     }
   }
+
+  html += estAlerta;
 
   if(html){
     html = '<div style="font-size:11px;color:#888;padding:2px 2px 8px">Total sem repetição: '+ag.total+'. Um equipamento aparece em mais de uma seção quando tem mais de um motivo.</div>' + html;
@@ -2707,6 +2713,27 @@ async function estRegistrarEntrada(id){
   closeDrawer();
   await carregarMateriais();
   renderEstoque();
+}
+
+/* D-6wy-05: bloco de alerta de estoque abaixo do mínimo, calculado
+   numa função separada para entrar nos DOIS ramos de renderAlerts
+   (celular e tabela de desktop) sem duplicar a regra. Vazio quando
+   EST_OK é falso ou quando não há nada abaixo do mínimo — a seção só
+   aparece quando há o que dizer, e some sozinha do fixture quando a
+   sonda está desligada (byte a byte o de hoje). */
+function estAlertaHtml(){
+  if (!EST_OK) return '';
+  var abaixo = estAbaixoDoMinimo(MATERIAIS);
+  if (!abaixo.length) return '';
+  var h = '<div class="sec-head" style="margin-top:16px"><span class="sec-title" style="color:#E52207"><i class="fas fa-boxes mr1" aria-hidden="true"></i>Estoque abaixo do mínimo</span><span class="sec-count">'+abaixo.length+'</span></div>';
+  h += abaixo.map(function(m){
+    return '<div class="alert-card" style="border-left-color:#E52207" onclick="navTo(\'estoque\', el(\'nav-estoque\'))">' +
+      '<div class="alert-icon"><i class="fas fa-boxes" style="color:#E52207"></i></div>' +
+      '<div class="alert-body"><div class="alert-title">'+esc(m.codigo||m.nome)+'</div>' +
+      '<div class="alert-sub">'+esc(m.nome)+' · '+m.estoqueAtual+' / mín '+m.estoqueMinimo+'</div></div>' +
+      '</div>';
+  }).join('');
+  return h;
 }
 
 /* ═══════════════════════════════════════════════════════════
