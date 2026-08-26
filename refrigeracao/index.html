@@ -5160,9 +5160,21 @@ var DV_SEQ = ['#B8CBEA','#5E85CB','#1351B4'];        /* NOVA→SEMI→VELHA (um 
 
 function dvFmt(n,dec){ return (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:dec||0,maximumFractionDigits:dec||0}); }
 
+/* ── potência estimada: sem corrente de placa, capacidade vira potência ──
+   corrente_nominal é nula nas 175 linhas do banco (a migração 05 nunca
+   importou o campo) — tensão × corrente produzia 0 para o parque inteiro.
+   Sem corrente cadastrada a potência é estimada pela capacidade: BTU/h vira
+   kW térmicos (÷ 3412) e depois kW elétricos (÷ COP); COP 3 dá ~1,17 kW por
+   12.000 BTU/h. Com corrente cadastrada a conta continua tensão × corrente
+   (380 V trifásico ×√3), porque dado de placa vence estimativa. */
+var DV_BTU_POR_KW = 3412;
+var DV_COP = 3;
+
 function dvPotenciaW(e){
-  var v=e.tensao||220, i=e.correnteNominal||0;
-  return v===380 ? Math.round(1.732*v*i) : Math.round(v*i);
+  var v=e.tensao||220, i=parseFloat(e.correnteNominal)||0;
+  if (i) return v===380 ? Math.round(1.732*v*i) : Math.round(v*i);
+  var btu = e.btu||0;
+  return btu>0 ? Math.round(btu/DV_BTU_POR_KW/DV_COP*1000) : 0;
 }
 
 function dvDonut(segs, centerTop, centerBot){
@@ -5254,7 +5266,7 @@ function dvRenderCharts(){
     '<div class="tarifa-row"><span style="font-size:11px;color:#666;font-weight:600;flex:1">Tarifa (R$/kWh)</span>' +
     '<input type="number" step="0.01" min="0" value="'+tarifa.toFixed(2)+'" onchange="dvSetTarifa(this.value)"/>' +
     '<span style="font-size:15px;font-weight:800;color:#1351B4">'+('R$ '+dvFmt(custoMes,2))+'/mês</span></div>' +
-    '<div class="chart-note">Estimativa: corrente nominal de placa × tensão (380 V trifásico ×√3), horas de uso semanais cadastradas e fator de ciclo do compressor de 70%. Considera apenas máquinas operacionais (OK). O consumo real varia com carga térmica e regulagem.</div></div>';
+    '<div class="chart-note">Estimativa: onde há corrente nominal de placa, potência é corrente × tensão (380 V trifásico ×√3); onde falta — hoje, a maior parte do parque — potência é estimada pela capacidade (BTU/h ÷ 3412 ÷ COP 3, ~1,17 kW por 12.000 BTU/h). Horas de uso semanais cadastradas e fator de ciclo do compressor de 70%. Considera apenas máquinas operacionais (OK). O consumo real varia com carga térmica e regulagem.</div></div>';
 
   /* ── BTU por prédio (top 8) ── */
   var byPredio = {};
