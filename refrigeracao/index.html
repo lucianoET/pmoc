@@ -682,6 +682,12 @@ async function manAtualizarOS(logId, equipId, patch, msg) {
     var detalhe = osDetalheEvento(f, statusAnterior, patch.status);
     if (detalhe) await osRegistrarEvento(logId, detalhe);
   }
+  // D-6wy-03: a baixa acontece SÓ na entrada em execução, nunca na
+  // abertura nem no delineamento — ponto único; qualquer caminho
+  // futuro que leve a OS à execução passa por aqui.
+  if (EST_OK && patch && patch.status === 'EM_EXECUCAO') {
+    await estBaixarItensDaOS(logId, novo);
+  }
   if (msg) showToast(msg, 'ok');
   return true;
 }
@@ -719,7 +725,8 @@ async function uniSondarEsquema() {
    app, snake_case no banco, mesma ideia de CAMPOS_LOG (D-cf8-05/08). */
 function dbToItem(r){
   return { id:r.id, osId:r.os_id, tipo:r.tipo, descricao:r.descricao, unidade:r.unidade,
-    quantidade:r.quantidade, valorUnitario:r.valor_unitario, total:r.total, ordem:r.ordem };
+    quantidade:r.quantidade, valorUnitario:r.valor_unitario, total:r.total, ordem:r.ordem,
+    materialId:r.material_id /* D-6wy-11/12: campo a mais numa ponte que já existe, sem efeito quando a coluna não existe */ };
 }
 function dbToComentario(r){
   return { id:r.id, osId:r.os_id, origem:r.origem, texto:r.texto, autor:r.autor,
@@ -898,6 +905,41 @@ function estRotuloMaterial(m){
   if (m.unidade) rotulo += ' (' + m.unidade + ')';
   rotulo += ' · ' + estFmtMoneyLocal(m.preco);
   return rotulo;
+}
+
+/* D-6wy-15: a resposta vem do REGISTRO DO PRÓPRIO ESTOQUE, nunca de
+   uma bandeira paralela que uma retentativa de rede dessincronizaria
+   (T-6wy-02). */
+async function estJaBaixadoDaOS(osId){
+  var r = await supa.from('estoque_movimentos').select('id').eq('os_id', osId).eq('tipo', 'saida').limit(1);
+  return !!(r.data && r.data.length);
+}
+
+/* D-6wy-13 — LIMITE CONHECIDO, registrado e não resolvido: voltar de
+   EM_EXECUCAO para trás NÃO estorna o estoque. A saída já aconteceu
+   no mundo (a peça saiu da prateleira quando a execução começou); um
+   estorno automático inventaria uma entrada que ninguém recebeu.
+   Correção manual: registrar uma ENTRADA na página Estoque, o
+   caminho que já existe. */
+async function estBaixarItensDaOS(osId, entry){
+  if (!EST_OK) return;
+  var pecas = estItensParaBaixa(OS_ITENS[osId] || []);
+  if (!pecas.length) return; // OS só de serviço, ou só texto livre: não pergunta nada ao estoque
+  if (await estJaBaixadoDaOS(osId)) return;
+  var motivo = estMotivoDaOS(entry);
+  for (var k = 0; k < pecas.length; k++) {
+    var p = pecas[k];
+    var mat = MATERIAIS.find(function(m){ return String(m.id) === String(p.materialId); });
+    if (!mat) continue;
+    var novoSaldo = Math.max(0, (Number(mat.estoqueAtual) || 0) - p.quantidade);
+    try {
+      var ru = await supa.from('materiais').update({ estoque_atual: novoSaldo }).eq('id', mat.id);
+      if (ru.error) throw ru.error;
+      var ri = await supa.from('estoque_movimentos').insert({ material_id: mat.id, os_id: osId, tipo: 'saida', quantidade: p.quantidade, motivo: motivo });
+      if (ri.error) throw ri.error;
+      mat.estoqueAtual = novoSaldo;
+    } catch(e) { console.warn('estBaixarItensDaOS', e); } // erro de escrita não derruba a transição já ocorrida
+  }
 }
 
 // carregarPerfil só é CHAMADA em initAppOnce, depois de todos os scripts terem rodado — por isso pode atribuir a ctUser mesmo estando num bloco <script> anterior ao que a declara.
@@ -4474,8 +4516,15 @@ function osItensHtml(osId, entry){
   var h = '<div class="ds"><div class="ds-title"><i class="fas fa-boxes mr1" aria-hidden="true"></i>Itens · serviços e materiais</div>';
   if (itens.length) {
     h += itens.map(function(i){
+      // D-6wy-02/EST_OK: código do material só quando veio do catálogo —
+      // item de texto livre continua idêntico ao de hoje.
+      var codigoMat = '';
+      if (EST_OK && i.materialId) {
+        var m = MATERIAIS.find(function(x){ return String(x.id)===String(i.materialId); });
+        if (m && m.codigo) codigoMat = ' · '+esc(m.codigo);
+      }
       return '<div class="orc-item"><span class="orc-tipo '+i.tipo+'">'+(i.tipo==='SERVICO'?'SERV':'MAT')+'</span>' +
-        '<div class="orc-desc">'+esc(i.descricao)+'<div style="color:#999;font-size:10px">'+i.quantidade+' × '+fmtMoney(i.valorUnitario)+'</div></div>' +
+        '<div class="orc-desc">'+esc(i.descricao)+'<div style="color:#999;font-size:10px">'+i.quantidade+' × '+fmtMoney(i.valorUnitario)+codigoMat+'</div></div>' +
         '<span class="orc-val">'+fmtMoney(i.total)+'</span>' +
         (podeEditar?'<button class="orc-del" title="Excluir item" aria-label="Excluir item" onclick="osDelItem(\''+esc(osId)+'\',\''+esc(i.id)+'\')"><i class="fas fa-trash" aria-hidden="true"></i></button>':'') +
         '</div>';
@@ -4488,6 +4537,7 @@ function osItensHtml(osId, entry){
     h += '<div style="margin-top:10px;border-top:1px dashed #DDD;padding-top:10px">' +
       '<div class="fg2"><div><label class="fgl">Tipo</label><select class="fgs" id="oi-un-tipo"><option value="SERVICO">Serviço</option><option value="MATERIAL">Material/Peça</option></select></div>' +
       '<div><label class="fgl">Qtd</label><input class="fgi" id="oi-un-qtd" type="number" value="1" min="0.01" step="0.01"/></div></div>' +
+      (EST_OK ? osSeletorMaterialHtml() : '') +
       '<label class="fgl">Descrição</label><input class="fgi" id="oi-un-desc" placeholder="Ex.: Substituição do compressor"/>' +
       '<label class="fgl" style="margin-top:8px">Valor unitário (R$)</label><input class="fgi" id="oi-un-vu" type="number" min="0" step="0.01" placeholder="0,00"/>' +
       '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="osAddItemUI(\''+esc(osId)+'\')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Adicionar item</button></div>';
@@ -4496,12 +4546,42 @@ function osItensHtml(osId, entry){
   return h;
 }
 
+/* D-6wy-02/07/12: seletor do catálogo, concatenado SÓ quando EST_OK —
+   nunca escrito quando falso, o que mantém o fixture da gaveta byte a
+   byte sem a migração 44. Texto livre é a primeira opção; material
+   arquivado (ativo=false) não aparece. */
+function osSeletorMaterialHtml(){
+  var opcoes = '<option value="">Texto livre</option>' +
+    MATERIAIS.filter(function(m){ return m.ativo===true; }).map(function(m){
+      return '<option value="'+m.id+'">'+esc(estRotuloMaterial(m))+'</option>';
+    }).join('');
+  return '<label class="fgl">Material do catálogo</label><select class="fgs" id="oi-un-mat" onchange="estPreencherItemDaOS()">'+opcoes+'</select>';
+}
+
+/* Escolher uma peça do catálogo preenche descrição e valor unitário e
+   força o tipo MATERIAL — deixar o tipo em Serviço seria uma
+   contradição silenciosa. Sem escolha, não mexe em nada: quem já
+   digitou não perde o que digitou. */
+function estPreencherItemDaOS(){
+  var sel = val('oi-un-mat');
+  if (!sel) return;
+  var m = MATERIAIS.find(function(x){ return String(x.id)===String(sel); });
+  if (!m) return;
+  var descEl = el('oi-un-desc'); if (descEl) descEl.value = m.nome;
+  var vuEl = el('oi-un-vu'); if (vuEl) vuEl.value = (m.preco!=null ? m.preco : '');
+  var tipoEl = el('oi-un-tipo'); if (tipoEl) tipoEl.value = 'MATERIAL';
+}
+
 async function osAddItem(osId, item){
   var achado = manEntrada(osId);
   if (!manPode('delinear')) { showToast('Sem permissão para lançar item','error'); return false; }
   if (achado && manEhTerminal(achado.entry.status, achado.entry.tipoExecutor)) { showToast('OS encerrada — item não pode ser lançado','error'); return false; }
   var payload = {os_id:osId, tipo:item.tipo, descricao:item.descricao, unidade:item.unidade||null,
     quantidade:item.quantidade, valor_unitario:item.valorUnitario, ordem:(OS_ITENS[osId]||[]).length};
+  // D-6wy-12: material_id só entra quando um material foi escolhido —
+  // nunca com valor null incondicional, que mudaria o payload de todo
+  // item de texto livre.
+  if (item.materialId) payload.material_id = item.materialId;
   var r = await supa.from('os_itens').insert(payload).select().single();
   if (r.error) { showToast('Erro ao adicionar item','error'); return false; }
   (OS_ITENS[osId]=OS_ITENS[osId]||[]).push(dbToItem(r.data));
@@ -4512,7 +4592,15 @@ async function osAddItemUI(osId){
   var qtd = parseFloat(val('oi-un-qtd'))||0;
   var vu = parseFloat(val('oi-un-vu'))||0;
   if(!desc || qtd<=0 || vu<0){ showToast('Preencha descrição, qtd e valor','error'); return; }
-  var ok = await osAddItem(osId, {tipo:val('oi-un-tipo'), descricao:desc, quantidade:qtd, valorUnitario:vu});
+  var item = {tipo:val('oi-un-tipo'), descricao:desc, quantidade:qtd, valorUnitario:vu};
+  if (EST_OK) {
+    var selMat = val('oi-un-mat');
+    if (selMat) {
+      var m = MATERIAIS.find(function(x){ return String(x.id)===String(selMat); });
+      if (m) { item.materialId = m.id; item.unidade = m.unidade; }
+    }
+  }
+  var ok = await osAddItem(osId, item);
   if (ok) manAbrirOS(osId);
 }
 

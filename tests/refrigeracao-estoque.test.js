@@ -709,10 +709,13 @@ test('osItensHtml: com EST_OK true, o seletor traz "Texto livre" primeiro e uma 
   });
   const html = ctx.osItensHtml('os-1', { status: 'DELINEAMENTO', tipoExecutor: 'interna' });
   assert.match(html, /id="oi-un-mat"/);
-  const iniLivre = html.indexOf('<option value="">');
-  const iniA = html.indexOf('value="1"');
+  const iniSelect = html.indexOf('id="oi-un-mat"');
+  const fimSelect = html.indexOf('</select>', iniSelect);
+  const trechoSelect = html.slice(iniSelect, fimSelect);
+  const iniLivre = trechoSelect.indexOf('<option value="">');
+  const iniA = trechoSelect.indexOf('value="1"');
   assert.ok(iniLivre >= 0 && iniA > iniLivre, 'a opção de texto livre não veio primeiro');
-  assert.doesNotMatch(html, /value="2"/); // material arquivado não aparece
+  assert.doesNotMatch(trechoSelect, /value="2"/); // material arquivado não aparece
 });
 
 test('estPreencherItemDaOS: escolher um material preenche descrição, valor unitário e força o tipo MATERIAL', () => {
