@@ -208,3 +208,8 @@ O histórico do setup inicial, da recuperação dos dados do refrigeração e da
 - [ ] Centrais F21 são 30 TR; itens 1365/1366 aderidos são 12 TR — verificar aplicabilidade
 - [ ] Trocar senhas dos cargos
 - [ ] Valores de aquisição das máquinas são estimativas — ajustar com patrimônio real
+- [ ] Corrente nominal de placa continua ausente no banco de `/refrigeracao` (0 de 175); enquanto
+      estiver, a potência de toda a frota é estimada pela capacidade (BTU/h), não medida — o
+      número real entra pela planilha exportar/importar já existente (quick-260822-5hy),
+      equipamento por equipamento. O card deixou de mentir zero, mas ainda não diz a verdade
+      medida.

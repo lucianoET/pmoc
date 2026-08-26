@@ -2023,3 +2023,15 @@ abaixo fica pendente para o usuário, mesma pendência de PLAT-15/16, 260822-8rz
 - [ ] **375px (celular), com a OS aberta:** percorrer uma OS de cada tipo (interna, contrato,
       movimentação, legada) — deve ser **idêntica à de hoje**, gaveta subindo de baixo, mesmo
       conteúdo, mesmos botões.
+
+## Refrigeração — fallback de potência por BTU e seletor de fotos livre (26/08/2026)
+
+Quick task 260826-3v8. Provado por `node --test` (`tests/refrigeracao-energia-fotos.test.js`);
+os dois itens abaixo são conferência visual, o que o Node não prova.
+
+- [ ] No celular, abrir uma OS em execução, tocar em **Fotos** e confirmar que o seletor
+      oferece **câmera, fototeca e arquivos** (antes abria a câmera direto). Anexar uma foto da
+      galeria e confirmar que o upload conclui.
+- [ ] Na visão geral, conferir que o card **Energia Elétrica — Estimativa** deixou de mostrar
+      0 kW / 0 kWh / R$ 0,00, que as duas barras por área têm valor, e que a nota explica de
+      onde veio o número.
