@@ -385,3 +385,382 @@ test('EST_OK está declarado dentro do recorte "── fluxo da OS interna: port
   assert.match(trecho, /var EST_OK = false;/);
   assert.ok(trecho.includes(MARCA_ESTOQUE_INI), 'subseção "estoque: catálogo, movimentos e baixa" não está dentro do recorte da porta de escrita');
 });
+
+// ══════════════════════════════════════════════════════════════════
+// Task 2 — baixa idempotente ao entrar em EM_EXECUCAO, e item de OS
+// escolhido do catálogo
+// ══════════════════════════════════════════════════════════════════
+
+const MARCA_PONTE_LOG_INI = '/* ── ponte de campos de logs_manutencao ── */';
+const MARCA_PONTE_LOG_FIM = '/* ── CAMADA DE DADOS SUPABASE ── */';
+const MARCA_ITENS_INI = '/* ── OS unificada: itens de serviço e material (D-cf8-05/14) ── */';
+const MARCA_ITENS_FIM = '/* ── OS unificada: contrato — fiscalização, composição da ata, certificação ── */';
+
+// ── sandbox da baixa (D-6wy-03): logs_manutencao + os_comentarios +
+// estoque_movimentos + materiais dublados, mesma forma de
+// tests/refrigeracao-trilha-os.test.js:carregarSandbox — UNI_OK fica
+// FALSO por padrão de propósito (o objeto sob teste aqui é a baixa de
+// estoque, não a trilha de auditoria da OS unificada; falso evita
+// depender de osFluxoDe/osDetalheEvento, que têm gate próprio noutro
+// arquivo).
+function carregarSandboxBaixa(opts) {
+  opts = opts || {};
+  const updatesLog = [];
+  const insertsMovimentos = [];
+  const updatesMateriais = [];
+  const selectsMovimentos = [];
+  const chamadasFrom = [];
+  const toasts = [];
+  const warns = [];
+
+  const linhaBase = { id: 'log-1', equip_id: 10 };
+  const movimentosExistentes = opts.movimentosExistentes || [];
+
+  const ctx = {
+    esc(s) { if (!s) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+    ctUser: opts.ctUser !== undefined ? opts.ctUser : { nome: 'Fulano', role: 'gestor' },
+    showToast(msg, tipo) { toasts.push({ msg, tipo }); },
+    console: { warn(...args) { warns.push(args); }, error() {} },
+    supa: {
+      from(tabela) {
+        chamadasFrom.push(tabela);
+        if (tabela === 'logs_manutencao') {
+          return {
+            update(patch) {
+              return {
+                eq(col, val) {
+                  return {
+                    select() {
+                      return {
+                        single() {
+                          if (opts.erroUpdateLog) return Promise.resolve({ error: { message: 'falhou' } });
+                          updatesLog.push({ id: val, patch });
+                          return Promise.resolve({ error: null, data: Object.assign({}, linhaBase, patch) });
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            },
+          };
+        }
+        if (tabela === 'os_comentarios') {
+          return { insert() { return { select() { return { single() { return Promise.resolve({ error: null, data: { id: 'com-1' } }); } }; } }; } };
+        }
+        if (tabela === 'estoque_movimentos') {
+          return {
+            select() {
+              return {
+                eq(col1, val1) {
+                  return {
+                    eq(col2, val2) {
+                      return {
+                        limit() {
+                          selectsMovimentos.push({ col1, val1, col2, val2 });
+                          const existe = movimentosExistentes.some((m) => m.os_id === val1 && m.tipo === val2);
+                          return Promise.resolve({ error: null, data: existe ? [{ id: 'mov-existente' }] : [] });
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            },
+            insert(payload) {
+              if (opts.erroInsertMovimento) return Promise.resolve({ error: { message: 'falhou' } });
+              insertsMovimentos.push(payload);
+              return Promise.resolve({ error: null, data: payload });
+            },
+          };
+        }
+        if (tabela === 'materiais') {
+          return {
+            update(patch) {
+              return {
+                eq(col, val) {
+                  updatesMateriais.push({ id: val, patch });
+                  return Promise.resolve({ error: null, data: null });
+                },
+              };
+            },
+          };
+        }
+        throw new Error('tabela inesperada: ' + tabela);
+      },
+    },
+  };
+  ctx._logCache = {};
+  ctx._logCache[linhaBase.equip_id] = [Object.assign({ id: linhaBase.id }, opts.entryInicial || {})];
+
+  vm.createContext(ctx);
+  vm.runInContext(recorte(MARCA_PONTE_LOG_INI, MARCA_PONTE_LOG_FIM), ctx);
+  vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
+
+  // UNI_OK/EST_OK/OS_ITENS/MATERIAIS são "var" dentro dos recortes acima —
+  // reatribuídos ao rodar. Semeados DEPOIS de todos os runInContext (mesmo
+  // cuidado de tests/refrigeracao-trilha-os.test.js).
+  ctx.UNI_OK = opts.uniOk !== undefined ? opts.uniOk : false;
+  ctx.EST_OK = opts.estOk !== undefined ? opts.estOk : true;
+  ctx.OS_ITENS = opts.osItens || {};
+  ctx.MATERIAIS = opts.materiais || [];
+
+  ctx._updatesLog = updatesLog;
+  ctx._insertsMovimentos = insertsMovimentos;
+  ctx._updatesMateriais = updatesMateriais;
+  ctx._selectsMovimentos = selectsMovimentos;
+  ctx._chamadasFrom = chamadasFrom;
+  ctx._toasts = toasts;
+  ctx._warns = warns;
+  return ctx;
+}
+
+test('manAtualizarOS: com EST_OK falso, EM_EXECUCAO não consulta nem escreve nada de estoque', async () => {
+  const ctx = carregarSandboxBaixa({
+    estOk: false,
+    entryInicial: { status: 'APROVACAO' },
+    osItens: { 'log-1': [{ id: 'i1', tipo: 'MATERIAL', materialId: 1, quantidade: 2 }] },
+    materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 }],
+  });
+  await ctx.manAtualizarOS('log-1', 10, { status: 'EM_EXECUCAO' }, 'msg');
+  assert.strictEqual(ctx._chamadasFrom.includes('estoque_movimentos'), false);
+  assert.strictEqual(ctx._chamadasFrom.includes('materiais'), false);
+});
+
+test('manAtualizarOS: EST_OK true, dois itens de MATERIAL catalogados — duas saídas gravadas com os_id/material_id/quantidade/motivo', async () => {
+  const ctx = carregarSandboxBaixa({
+    estOk: true,
+    entryInicial: { status: 'APROVACAO' },
+    osItens: { 'log-1': [
+      { id: 'i1', tipo: 'MATERIAL', materialId: 1, quantidade: 2 },
+      { id: 'i2', tipo: 'MATERIAL', materialId: 2, quantidade: 1 },
+    ] },
+    materiais: [
+      { id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 },
+      { id: 2, codigo: 'B', nome: 'Correia', estoqueAtual: 3 },
+    ],
+  });
+  await ctx.manAtualizarOS('log-1', 10, { status: 'EM_EXECUCAO' }, 'msg');
+  assert.strictEqual(ctx._insertsMovimentos.length, 2);
+  ctx._insertsMovimentos.forEach((m) => {
+    assert.strictEqual(m.os_id, 'log-1');
+    assert.strictEqual(m.tipo, 'saida');
+    assert.ok(m.material_id === 1 || m.material_id === 2);
+    assert.ok(m.motivo && m.motivo.indexOf('material lançado na ordem') >= 0);
+  });
+});
+
+test('manAtualizarOS: estoque_atual atualizado para atual - quantidade, nunca abaixo de zero', async () => {
+  const ctx = carregarSandboxBaixa({
+    estOk: true,
+    entryInicial: { status: 'APROVACAO' },
+    osItens: { 'log-1': [{ id: 'i1', tipo: 'MATERIAL', materialId: 1, quantidade: 50 }] },
+    materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 }],
+  });
+  await ctx.manAtualizarOS('log-1', 10, { status: 'EM_EXECUCAO' }, 'msg');
+  assert.strictEqual(ctx._updatesMateriais.length, 1);
+  assert.strictEqual(ctx._updatesMateriais[0].patch.estoque_atual, 0);
+});
+
+test('manAtualizarOS: repetir a mesma transição com saída já existente para o os_id não grava nada e não altera saldo', async () => {
+  const ctx = carregarSandboxBaixa({
+    estOk: true,
+    entryInicial: { status: 'APROVACAO' },
+    osItens: { 'log-1': [{ id: 'i1', tipo: 'MATERIAL', materialId: 1, quantidade: 2 }] },
+    materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 }],
+    movimentosExistentes: [{ os_id: 'log-1', tipo: 'saida' }],
+  });
+  await ctx.manAtualizarOS('log-1', 10, { status: 'EM_EXECUCAO' }, 'msg');
+  assert.strictEqual(ctx._insertsMovimentos.length, 0);
+  assert.strictEqual(ctx._updatesMateriais.length, 0);
+});
+
+test('manAtualizarOS: transição para outro status (DELINEAMENTO/APROVACAO/CONCLUIDA) não baixa nada', async () => {
+  for (const destino of ['DELINEAMENTO', 'APROVACAO', 'CONCLUIDA']) {
+    const ctx = carregarSandboxBaixa({
+      estOk: true,
+      entryInicial: { status: 'ABERTA' },
+      osItens: { 'log-1': [{ id: 'i1', tipo: 'MATERIAL', materialId: 1, quantidade: 2 }] },
+      materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 }],
+    });
+    await ctx.manAtualizarOS('log-1', 10, { status: destino }, 'msg');
+    assert.strictEqual(ctx._insertsMovimentos.length, 0, `status ${destino} não deveria baixar`);
+  }
+});
+
+test('manAtualizarOS: patch sem status não baixa nada', async () => {
+  const ctx = carregarSandboxBaixa({
+    estOk: true,
+    entryInicial: { status: 'EM_EXECUCAO' },
+    osItens: { 'log-1': [{ id: 'i1', tipo: 'MATERIAL', materialId: 1, quantidade: 2 }] },
+    materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 }],
+  });
+  await ctx.manAtualizarOS('log-1', 10, { fiscal: 'Fulano' }, 'msg');
+  assert.strictEqual(ctx._insertsMovimentos.length, 0);
+});
+
+test('manAtualizarOS: OS só com itens de SERVICO, ou só com material de texto livre, não gera movimento nenhum e não consulta o saldo', async () => {
+  const ctx = carregarSandboxBaixa({
+    estOk: true,
+    entryInicial: { status: 'APROVACAO' },
+    osItens: { 'log-1': [
+      { id: 'i1', tipo: 'SERVICO', quantidade: 1 },
+      { id: 'i2', tipo: 'MATERIAL', quantidade: 2 }, // texto livre: sem materialId
+    ] },
+    materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 }],
+  });
+  await ctx.manAtualizarOS('log-1', 10, { status: 'EM_EXECUCAO' }, 'msg');
+  assert.strictEqual(ctx._chamadasFrom.includes('estoque_movimentos'), false);
+  assert.strictEqual(ctx._chamadasFrom.includes('materiais'), false);
+});
+
+test('manAtualizarOS: falha do insert do movimento não derruba a transição — devolve true, toast de sucesso uma vez (D-jpd-05)', async () => {
+  const ctx = carregarSandboxBaixa({
+    estOk: true,
+    entryInicial: { status: 'APROVACAO' },
+    osItens: { 'log-1': [{ id: 'i1', tipo: 'MATERIAL', materialId: 1, quantidade: 2 }] },
+    materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 }],
+    erroInsertMovimento: true,
+  });
+  const ok = await ctx.manAtualizarOS('log-1', 10, { status: 'EM_EXECUCAO' }, 'msg');
+  assert.strictEqual(ok, true);
+  const toastsSucesso = ctx._toasts.filter((t) => t.tipo === 'ok');
+  assert.strictEqual(toastsSucesso.length, 1);
+});
+
+// ── sandbox do formulário de item — só o que osItensHtml/osAddItem/
+// osAddItemUI/estPreencherItemDaOS precisam; o resto (manPode,
+// manEhTerminal, osTotalItens, fmtMoney) é stub simples, cada um com
+// gate próprio noutro arquivo (mesmo idioma de
+// tests/refrigeracao-trilha-os.test.js, que estuba esc()). ──
+function elFalso(id) {
+  return { id: id, value: '', textContent: '', innerHTML: '' };
+}
+function carregarSandboxItens(opts) {
+  opts = opts || {};
+  const nodes = {};
+  const insertsItens = [];
+  const chamadasManAbrirOS = [];
+  const toasts = [];
+
+  const ctx = {
+    esc(s) { if (!s) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+    el(id) { return nodes[id] || (nodes[id] = elFalso(id)); },
+    val(id) { const n = nodes[id]; return n ? n.value : ''; },
+    fmtMoney(v) { return 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ','); },
+    manPode() { return opts.podeEditar !== false; },
+    manEhTerminal() { return opts.terminal === true; },
+    manEntrada() { return opts.entradaDe || null; },
+    osTotalItens(itens) { return (itens || []).reduce((s, i) => s + (Number(i.total) || 0), 0); },
+    manAbrirOS(osId) { chamadasManAbrirOS.push(osId); },
+    showToast(msg, tipo) { toasts.push({ msg, tipo }); },
+    console: { warn() {}, error() {} },
+    supa: {
+      from(tabela) {
+        if (tabela !== 'os_itens') throw new Error('tabela inesperada: ' + tabela);
+        return {
+          insert(payload) {
+            return {
+              select() {
+                return {
+                  single() {
+                    const linha = Object.assign({ id: 'item-' + (insertsItens.length + 1) }, payload);
+                    insertsItens.push({ payload: payload, linha: linha });
+                    return Promise.resolve({ error: null, data: linha });
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    },
+  };
+
+  vm.createContext(ctx);
+  vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
+  vm.runInContext(recorte(MARCA_ITENS_INI, MARCA_ITENS_FIM), ctx);
+
+  // EST_OK/MATERIAIS/OS_ITENS são "var" dentro dos recortes acima.
+  ctx.EST_OK = opts.estOk !== undefined ? opts.estOk : false;
+  ctx.MATERIAIS = opts.materiais || [];
+  ctx.OS_ITENS = opts.osItens || {};
+
+  ctx._insertsItens = insertsItens;
+  ctx._chamadasManAbrirOS = chamadasManAbrirOS;
+  ctx._toasts = toasts;
+  return ctx;
+}
+
+test('osItensHtml: com EST_OK falso, o formulário de item não contém nenhum identificador novo (byte a byte o de hoje)', () => {
+  const ctx = carregarSandboxItens({ estOk: false, materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', unidade: 'un', preco: 10, ativo: true }] });
+  const html = ctx.osItensHtml('os-1', { status: 'DELINEAMENTO', tipoExecutor: 'interna' });
+  assert.doesNotMatch(html, /oi-un-mat/);
+  assert.doesNotMatch(html, /Material do catálogo/);
+});
+
+test('osItensHtml: com EST_OK true, o seletor traz "Texto livre" primeiro e uma opção por material ativo; arquivado não aparece', () => {
+  const ctx = carregarSandboxItens({
+    estOk: true,
+    materiais: [
+      { id: 1, codigo: 'A', nome: 'Filtro', unidade: 'un', preco: 10, ativo: true },
+      { id: 2, codigo: 'B', nome: 'Correia', unidade: 'un', preco: 20, ativo: false },
+    ],
+  });
+  const html = ctx.osItensHtml('os-1', { status: 'DELINEAMENTO', tipoExecutor: 'interna' });
+  assert.match(html, /id="oi-un-mat"/);
+  const iniLivre = html.indexOf('<option value="">');
+  const iniA = html.indexOf('value="1"');
+  assert.ok(iniLivre >= 0 && iniA > iniLivre, 'a opção de texto livre não veio primeiro');
+  assert.doesNotMatch(html, /value="2"/); // material arquivado não aparece
+});
+
+test('estPreencherItemDaOS: escolher um material preenche descrição, valor unitário e força o tipo MATERIAL', () => {
+  const ctx = carregarSandboxItens({ estOk: true, materiais: [{ id: 5, codigo: 'X', nome: 'Compressor', unidade: 'un', preco: 350.5, ativo: true }] });
+  ctx.el('oi-un-mat').value = '5';
+  ctx.estPreencherItemDaOS();
+  assert.strictEqual(ctx.el('oi-un-desc').value, 'Compressor');
+  assert.strictEqual(ctx.el('oi-un-vu').value, 350.5);
+  assert.strictEqual(ctx.el('oi-un-tipo').value, 'MATERIAL');
+});
+
+test('estPreencherItemDaOS: sem material escolhido, não mexe em nada (quem já digitou não perde o que digitou)', () => {
+  const ctx = carregarSandboxItens({ estOk: true, materiais: [{ id: 5, codigo: 'X', nome: 'Compressor', unidade: 'un', preco: 350.5, ativo: true }] });
+  ctx.el('oi-un-desc').value = 'texto já digitado';
+  ctx.el('oi-un-mat').value = '';
+  ctx.estPreencherItemDaOS();
+  assert.strictEqual(ctx.el('oi-un-desc').value, 'texto já digitado');
+});
+
+test('osAddItem sem material escolhido: payload byte a byte o de hoje (sem a chave material_id) — D-6wy-12', async () => {
+  const ctx = carregarSandboxItens({ estOk: true });
+  await ctx.osAddItem('os-1', { tipo: 'SERVICO', descricao: 'Troca de filtro', quantidade: 1, valorUnitario: 50 });
+  const payload = ctx._insertsItens[0].payload;
+  assert.strictEqual('material_id' in payload, false);
+  eq(Object.keys(payload).sort(), ['os_id', 'tipo', 'descricao', 'unidade', 'quantidade', 'valor_unitario', 'ordem'].sort());
+});
+
+test('osAddItem com material escolhido: inclui material_id e a unidade do catálogo, valor unitário do momento do lançamento', async () => {
+  const ctx = carregarSandboxItens({ estOk: true });
+  await ctx.osAddItem('os-1', { tipo: 'MATERIAL', descricao: 'Compressor', quantidade: 1, valorUnitario: 350.5, materialId: 5, unidade: 'un' });
+  const payload = ctx._insertsItens[0].payload;
+  assert.strictEqual(payload.material_id, 5);
+  assert.strictEqual(payload.unidade, 'un');
+  assert.strictEqual(payload.valor_unitario, 350.5);
+});
+
+test('a linha renderizada de um item do catálogo mostra o código do material; a de texto livre não ganha código nenhum', () => {
+  const ctx = carregarSandboxItens({
+    estOk: true,
+    materiais: [{ id: 5, codigo: 'CMP-01', nome: 'Compressor', unidade: 'un', preco: 350.5, ativo: true }],
+    osItens: { 'os-1': [
+      { id: 'i1', tipo: 'MATERIAL', descricao: 'Compressor', quantidade: 1, valorUnitario: 350.5, total: 350.5, materialId: 5 },
+      { id: 'i2', tipo: 'SERVICO', descricao: 'Mão de obra', quantidade: 1, valorUnitario: 100, total: 100 },
+    ] },
+  });
+  const html = ctx.osItensHtml('os-1', { status: 'DELINEAMENTO', tipoExecutor: 'interna' });
+  assert.match(html, /CMP-01/);
+  const iniServico = html.indexOf('Mão de obra');
+  const linhaServico = html.slice(Math.max(0, iniServico - 20), iniServico + 120);
+  assert.doesNotMatch(linhaServico, /CMP-01/);
+});
