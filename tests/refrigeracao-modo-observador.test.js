@@ -152,10 +152,12 @@ function carregarSandbox() {
     carregarComentarios() { return Promise.resolve(); },
     carregarArp() { return Promise.resolve(); },
     carregarComposicaoArp() { return Promise.resolve(); },
-    // 260826-6wy: acessoLivre() ganhou a sonda e a carga do estoque —
-    // mesma ideia de uniSondarEsquema acima, mesmo motivo (D-cf8-28:
-    // aprender o fato novo com uma linha, nenhum caso apagado).
+    // 260826-6wy: acessoLivre() ganhou a sonda, a injeção de navegação e
+    // a carga do estoque — mesma ideia de uniSondarEsquema acima, mesmo
+    // motivo (D-cf8-28: aprender o fato novo com uma linha, nenhum caso
+    // apagado).
     estSondarEsquema() { return Promise.resolve(); },
+    estInjectNav() {},
     carregarMateriais() { return Promise.resolve(); },
     renderDash() {},
     renderInv() {},

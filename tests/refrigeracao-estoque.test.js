@@ -946,9 +946,9 @@ test('renderEstoque: desenha uma linha por material ativo, com código/nome/tipo
   assert.match(html, /FLT-01/);
   assert.match(html, /Filtro de ar/);
   assert.match(html, /SPLIT/);
-  assert.match(html, /un/);
-  assert.match(html, />8</);
-  assert.match(html, />2</);
+  assert.match(html, /\(un\)/);
+  assert.match(html, /8 \/ mín 2/);
+  assert.match(html, /R\$ 12,50/);
 });
 
 test('renderEstoque: material abaixo do mínimo recebe o aviso; material em dia não recebe', () => {

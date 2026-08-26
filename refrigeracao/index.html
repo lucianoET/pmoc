@@ -1151,6 +1151,14 @@ document.addEventListener('DOMContentLoaded', function() {
       <div id="alert-list"></div>
     </div>
 
+    <!-- ══ PAGE: ESTOQUE (D-6wy-07/09) ══ -->
+    <!-- Nasce vazia — só é preenchida por renderEstoque(). Não recebe CSS
+         próprio: todas as classes usadas já existem (D-8rz-04/D-cf8-20).
+         O botão de navegação NÃO é escrito aqui (é injetado em runtime,
+         D-6wy-07) — esta página fica inerte enquanto ninguém a ativa,
+         como page-ficha e page-os-detalhe já são. -->
+    <div class="page" id="page-estoque"></div>
+
     <!-- ══ PAGE: FICHA — página inteira em >=1024px (quick-260823-92t) ══ -->
     <!-- D-92t-03: sexta .page, irmã das outras, nunca um segundo HTML.
          D-92t-04: identificadores fh-*/ficha-* — nenhum dh-* é duplicado.
@@ -1525,7 +1533,12 @@ var MAN_ACOES_CARGO = {
   concluir:   ['admin','gestor','tecnico'],
   orcar:      ['admin','gestor','tecnico'],
   fiscalizar: ['admin','gestor'],
-  certificar: ['admin','gestor']
+  certificar: ['admin','gestor'],
+  // D-6wy-04: quem consome peça (executa) é quem corrige saldo — mesma
+  // lista de 'executar'. Cadastrar material continua em
+  // podeEditarCadastro (admin/gestor): cadastro é ato de registro, não
+  // rotina diária.
+  estoque:    ['admin','gestor','tecnico']
 };
 /* Ação exigida para MOVER a OS para cada estado — usada pela guarda dupla de
    manMudarStatus. CONFERIDA fica pelo fluxo legado (banco sem a migração
@@ -1841,6 +1854,7 @@ function navTo(page, btn){
   if(page==='pmoc') renderPmoc();
   if(page==='alert') renderAlerts();
   if(page==='dash') renderDash();
+  if(page==='estoque') renderEstoque();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -2496,6 +2510,203 @@ function renderAlerts(){
 function atualizarBadgeAlertas(ag){
   el('alert-badge').textContent = ag.total;
   el('alert-badge').style.display = ag.total>0?'block':'none';
+}
+
+/* ── ESTOQUE: página, navegação injetada, edição inline ── */
+/* D-6wy-07: o botão de Estoque é INJETADO em runtime — nunca escrito
+   na marcação estática (page-estoque nasce vazia, ver a marcação
+   acima). Dois motivos, ambos duros: tests/refrigeracao-topbar-
+   parque.test.js e tests/refrigeracao-desktop.test.js afirmam
+   EXATAMENTE cinco .nav-btn em #bottom-nav; e "sem a migração 44 o
+   botão não existe" fica estruturalmente verdadeiro em vez de
+   escondido por CSS, o que D-6wy-06 pede. */
+function estInjectNav(){
+  if (!EST_OK) return;
+  if (el('nav-estoque')) return;
+  var nav = el('bottom-nav'); if (!nav) return;
+  var btn = document.createElement('button');
+  btn.className = 'nav-btn';
+  btn.id = 'nav-estoque';
+  btn.innerHTML = '<i class="fas fa-boxes" aria-hidden="true"></i>Estoque';
+  btn.onclick = function(){ navTo('estoque', btn); };
+  nav.appendChild(btn);
+}
+
+/* D-6wy-09: lista de CARTÕES nas duas larguras, nunca tabDesenhar —
+   mesmo precedente de ctRenderSaldo() (o relatório de Saldo Atas):
+   .lista-tabela só existe dentro do @media de computador (uma tabela
+   no celular sairia sem estilo, e criar estilo é proibido aqui), e a
+   edição inline não sobrevive a uma tabela que se redesenha a cada
+   tecla — a lição que Máquinas pagou ao partir renderMateriais() em
+   cabeçalho e corpo. */
+var EST_EDIT_ID = null; // espírito de MAN_EDIT_ID: id do material em edição inline de linha
+var EST_MATERIAL_EDIT_ID = null; // id do material em edição de CADASTRO na gaveta (null = cadastro novo)
+
+function renderEstoque(){
+  var ativos = MATERIAIS.filter(function(m){ return m.ativo===true; });
+  var abaixo = estAbaixoDoMinimo(MATERIAIS);
+  var valorTotal = ativos.reduce(function(s,m){ return s + (Number(m.estoqueAtual)||0)*(Number(m.preco)||0); }, 0);
+  var html = '<div class="kpi-row">' +
+    '<div class="kpi-card"><div class="kpi-label">Materiais ativos</div><div class="kpi-val">'+ativos.length+'</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Abaixo do mínimo</div><div class="kpi-val" style="color:#E52207">'+abaixo.length+'</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Valor em prateleira</div><div class="kpi-val" style="font-size:16px">'+fmtMoney(valorTotal)+'</div></div></div>';
+  html += '<div class="sec-head"><span class="sec-title">Estoque</span><span class="sec-count">'+ativos.length+'</span>' +
+    (podeEditarCadastro() ? '<button class="btn-sm" onclick="openMaterialForm()"><i class="fas fa-plus mr1" aria-hidden="true"></i>Material</button>' : '') +
+    '</div>';
+  if (!ativos.length) {
+    html += '<div class="empty"><i class="fas fa-boxes"></i><p>Nenhum material cadastrado.</p></div>';
+  } else {
+    html += '<div id="est-lista">' + ativos.map(function(m){ return estLinhaHtml(m); }).join('') + '</div>';
+  }
+  el('page-estoque').innerHTML = html;
+}
+
+function estLinhaHtml(m){
+  if (EST_EDIT_ID === m.id) return estLinhaEdicaoHtml(m);
+  var podeGerir = manPode('estoque');
+  var abaixo = estAbaixoDoMinimo([m]).length > 0;
+  // D-6wy-09: reusa .orc-tipo — as duas classes de cor que já
+  // distinguem SERVICO de MATERIAL, aqui distinguindo peça de
+  // consumível. Nenhuma classe nova.
+  var classeTipo = m.tipo==='peca' ? 'MATERIAL' : 'SERVICO';
+  var rotuloTipo = m.tipo==='peca' ? 'PEÇA' : 'CONSUM.';
+  return '<div class="orc-item" id="mat-row-'+m.id+'"><span class="orc-tipo '+classeTipo+'">'+rotuloTipo+'</span>' +
+    '<div class="orc-desc">'+esc(m.codigo||'')+' — '+esc(m.nome)+(m.aplicacao?' · '+esc(m.aplicacao):'')+' ('+esc(m.unidade)+')</div>' +
+    '<span class="orc-val">'+m.estoqueAtual+' / mín '+m.estoqueMinimo+' · '+fmtMoney(m.preco)+(abaixo?' <span class="pill pill-nok">abaixo</span>':'')+'</span>' +
+    (podeGerir?'<button class="btn-sm" onclick="estIniciarEdicaoLinha('+m.id+')" title="Editar" aria-label="Editar"><i class="fas fa-edit" aria-hidden="true"></i></button>':'') +
+    (podeGerir?'<button class="btn-sm" onclick="openEntradaForm('+m.id+')" title="Entrada" aria-label="Entrada"><i class="fas fa-arrow-down" aria-hidden="true"></i></button>':'') +
+    (podeEditarCadastro()?'<button class="btn-sm" onclick="openMaterialForm('+m.id+')" title="Editar cadastro" aria-label="Editar cadastro"><i class="fas fa-cog" aria-hidden="true"></i></button>':'') +
+    '</div>';
+}
+
+function estLinhaEdicaoHtml(m){
+  return '<div class="orc-item" id="mat-row-'+m.id+'">' +
+    '<div class="fg2"><div><label class="fgl">Atual</label><input class="fgi" id="est-ed-atual" type="number" step="0.01" value="'+m.estoqueAtual+'"/></div>' +
+    '<div><label class="fgl">Mínimo</label><input class="fgi" id="est-ed-minimo" type="number" step="0.01" value="'+m.estoqueMinimo+'"/></div></div>' +
+    '<div><label class="fgl">Preço</label><input class="fgi" id="est-ed-preco" type="number" step="0.01" value="'+(m.preco!=null?m.preco:'')+'"/></div>' +
+    '<button class="btn-secondary btn-sm" onclick="estCancelarEdicaoLinha('+m.id+')">Cancelar</button>' +
+    '<button class="btn-primary btn-sm" onclick="estSalvarLinha('+m.id+')">Salvar</button>' +
+    '</div>';
+}
+
+/* Redesenha SÓ a linha do material — nunca a lista inteira, senão o
+   foco e o cursor se perdem a cada tecla (D-6wy-09). */
+function estRedesenharLinha(id){
+  var m = MATERIAIS.find(function(x){ return x.id===id; });
+  var linha = el('mat-row-'+id);
+  if (m && linha) linha.outerHTML = estLinhaHtml(m);
+}
+function estIniciarEdicaoLinha(id){
+  if (!manPode('estoque')) { showToast('Sem permissão para editar estoque','error'); return; }
+  EST_EDIT_ID = id;
+  estRedesenharLinha(id);
+}
+function estCancelarEdicaoLinha(id){
+  EST_EDIT_ID = null;
+  estRedesenharLinha(id);
+}
+
+async function estSalvarLinha(id){
+  if (!manPode('estoque')) { showToast('Sem permissão para editar estoque','error'); return; } // guarda na ação, não só no botão (D-l7n-03)
+  var atual = parseFloat(val('est-ed-atual'));
+  var minimo = parseFloat(val('est-ed-minimo'));
+  var precoTxt = val('est-ed-preco');
+  var preco = precoTxt===''? null : parseFloat(precoTxt);
+  if (!(atual>=0) || !(minimo>=0) || (preco!==null && preco<0)) { showToast('Valores inválidos','error'); return; }
+  var r = await supa.from('materiais').update({estoque_atual:atual, estoque_minimo:minimo, preco:preco}).eq('id', id);
+  if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
+  EST_EDIT_ID = null;
+  await carregarMateriais();
+  renderEstoque();
+}
+
+/* '+ Material' e '⚙ Editar cadastro' abrem a mesma gaveta, no molde
+   de openEquipForm — um formulário para inserir e atualizar, escolhido
+   por EST_MATERIAL_EDIT_ID. */
+function openMaterialForm(id){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar material','error'); return; }
+  var m = id ? MATERIAIS.find(function(x){ return x.id===id; }) : null;
+  EST_MATERIAL_EDIT_ID = id || null;
+  el('dh-id').textContent = id ? 'Editar material · #'+id : 'Novo material';
+  el('dh-local').textContent = '';
+  el('dh-predio').textContent = '';
+  el('dh-pills').innerHTML = '';
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-box mr1" aria-hidden="true"></i>Material</div><div class="fg2">' +
+    '<div><label class="fgl">Código</label><input class="fgi" id="mt-codigo" value="'+esc(m?m.codigo:'')+'"/></div>' +
+    '<div><label class="fgl">Nome</label><input class="fgi" id="mt-nome" value="'+esc(m?m.nome:'')+'"/></div>' +
+    '<div><label class="fgl">Tipo</label><select class="fgs" id="mt-tipo"><option value="consumivel"'+(!m||m.tipo==='consumivel'?' selected':'')+'>Consumível</option><option value="peca"'+(m&&m.tipo==='peca'?' selected':'')+'>Peça</option></select></div>' +
+    '<div><label class="fgl">Unidade</label><input class="fgi" id="mt-unidade" value="'+esc(m?m.unidade:'un')+'"/></div>' +
+    '<div><label class="fgl">Aplicação</label><input class="fgi" id="mt-aplicacao" value="'+esc(m&&m.aplicacao?m.aplicacao:'')+'"/></div>' +
+    '<div><label class="fgl">Preço (R$)</label><input class="fgi" id="mt-preco" type="number" step="0.01" value="'+(m&&m.preco!=null?m.preco:'')+'"/></div>' +
+    '<div><label class="fgl">Estoque atual</label><input class="fgi" id="mt-atual" type="number" step="0.01" value="'+(m?m.estoqueAtual:0)+'"/></div>' +
+    '<div><label class="fgl">Estoque mínimo</label><input class="fgi" id="mt-minimo" type="number" step="0.01" value="'+(m?m.estoqueMinimo:0)+'"/></div>' +
+    '<div class="fg-full"><label class="fgt">Observação</label><textarea class="fgi" id="mt-obs">'+esc(m&&m.obs?m.obs:'')+'</textarea></div>' +
+    '</div></div>';
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
+    '<button class="btn-primary" onclick="estSalvarMaterial()"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar</button>';
+  openDrawer();
+}
+
+async function estSalvarMaterial(){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar material','error'); return; }
+  var nome = (val('mt-nome')||'').trim();
+  if (!nome) { showToast('Informe o nome do material','error'); return; }
+  var precoTxt = val('mt-preco');
+  var m = {
+    codigo: (val('mt-codigo')||'').trim() || null,
+    nome: nome,
+    tipo: val('mt-tipo') || 'consumivel',
+    unidade: (val('mt-unidade')||'un').trim() || 'un',
+    aplicacao: (val('mt-aplicacao')||'').trim() || null,
+    preco: precoTxt===''? null : parseFloat(precoTxt),
+    estoqueAtual: parseFloat(val('mt-atual'))||0,
+    estoqueMinimo: parseFloat(val('mt-minimo'))||0,
+    obs: (val('mt-obs')||'').trim() || null
+  };
+  var db = materialParaDb(m);
+  var r = EST_MATERIAL_EDIT_ID
+    ? await supa.from('materiais').update(db).eq('id', EST_MATERIAL_EDIT_ID)
+    : await supa.from('materiais').insert(db);
+  if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
+  EST_MATERIAL_EDIT_ID = null;
+  closeDrawer();
+  await carregarMateriais();
+  renderEstoque();
+}
+
+function openEntradaForm(id){
+  if (!manPode('estoque')) { showToast('Sem permissão para registrar entrada','error'); return; }
+  var m = MATERIAIS.find(function(x){ return x.id===id; }); if (!m) return;
+  el('dh-id').textContent = 'Entrada · '+(m.codigo||m.nome);
+  el('dh-local').textContent = ''; el('dh-predio').textContent = ''; el('dh-pills').innerHTML = '';
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-arrow-down mr1" aria-hidden="true"></i>Registrar entrada</div>' +
+    '<label class="fgl">Quantidade</label><input class="fgi" id="ent-qtd" type="number" min="0.01" step="0.01"/>' +
+    '<label class="fgl" style="margin-top:8px">Motivo</label><input class="fgi" id="ent-motivo" placeholder="Ex.: Recebimento de compra"/></div>';
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
+    '<button class="btn-primary" onclick="estRegistrarEntrada('+id+')"><i class="fas fa-save mr1" aria-hidden="true"></i>Registrar entrada</button>';
+  openDrawer();
+}
+
+/* Entrada é recebimento, nunca vínculo com OS (D-6wy-13 lê essa mesma
+   frase: o estorno da baixa também é uma entrada, feita por aqui). */
+async function estRegistrarEntrada(id){
+  if (!manPode('estoque')) { showToast('Sem permissão para registrar entrada','error'); return; }
+  var qtd = parseFloat(val('ent-qtd'))||0;
+  if (!(qtd>0)) { showToast('Informe uma quantidade válida','error'); return; }
+  var motivo = (val('ent-motivo')||'').trim() || null;
+  var m = MATERIAIS.find(function(x){ return x.id===id; }); if (!m) return;
+  var ri = await supa.from('estoque_movimentos').insert({material_id:id, tipo:'entrada', quantidade:qtd, motivo:motivo});
+  if (ri.error) { showToast('Erro: '+ri.error.message,'error'); return; }
+  var novoSaldo = (Number(m.estoqueAtual)||0) + qtd;
+  var ru = await supa.from('materiais').update({estoque_atual:novoSaldo}).eq('id', id);
+  if (ru.error) { showToast('Erro: '+ru.error.message,'error'); return; }
+  closeDrawer();
+  await carregarMateriais();
+  renderEstoque();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -4947,6 +5158,7 @@ async function acessoLivre() {
     await movSondarEsquema();
     await uniSondarEsquema();
     await estSondarEsquema();
+    estInjectNav();
     osInjectChipsExecutor();
     await carregarItensOS();
     await carregarComentarios();
@@ -4986,6 +5198,7 @@ async function initAppOnce(){
   await movSondarEsquema();
   await uniSondarEsquema();
   await estSondarEsquema();
+  estInjectNav();
   osInjectChipsExecutor();
   await carregarItensOS();
   await carregarComentarios();
@@ -7507,6 +7720,7 @@ function renderPaginaAtiva(){
   else if(id==='page-os') renderOS();
   else if(id==='page-pmoc') renderPmoc();
   else if(id==='page-alert') renderAlerts();
+  else if(id==='page-estoque') renderEstoque();
 }
 
 function iniciarModoDeTela(){
