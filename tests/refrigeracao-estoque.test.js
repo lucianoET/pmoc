@@ -1065,3 +1065,76 @@ test('estRegistrarEntrada: recusa quantidade zero/negativa, recusa cargo sem a a
   await ctxSemAcao.estRegistrarEntrada(1);
   assert.strictEqual(ctxSemAcao._insertsMovimentosEntrada.length, 0);
 });
+
+// ══════════════════════════════════════════════════════════════════
+// Task 4 — alerta abaixo do mínimo em Alertas
+// ══════════════════════════════════════════════════════════════════
+
+function carregarSandboxAlerta(opts) {
+  opts = opts || {};
+  const ctx = {
+    esc(s) { if (!s) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+    el() { return null; },
+    navTo() {},
+  };
+  vm.createContext(ctx);
+  vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
+  vm.runInContext(recorte(MARCA_PAGINA_INI, MARCA_PAGINA_FIM), ctx);
+  ctx.EST_OK = opts.estOk !== undefined ? opts.estOk : true;
+  ctx.MATERIAIS = opts.materiais || [];
+  return ctx;
+}
+
+test('estAlertaHtml: com EST_OK falso, devolve string vazia', () => {
+  const ctx = carregarSandboxAlerta({ estOk: false, materiais: [{ id: 1, ativo: true, estoqueAtual: 0, estoqueMinimo: 5 }] });
+  assert.strictEqual(ctx.estAlertaHtml(), '');
+});
+
+test('estAlertaHtml: com EST_OK true e nenhum material abaixo do mínimo, devolve string vazia — a seção só aparece quando há o que dizer', () => {
+  const ctx = carregarSandboxAlerta({ estOk: true, materiais: [{ id: 1, ativo: true, estoqueAtual: 10, estoqueMinimo: 5 }] });
+  assert.strictEqual(ctx.estAlertaHtml(), '');
+});
+
+test('estAlertaHtml: com EST_OK true e materiais abaixo do mínimo, devolve título, contagem, uma linha por material, e onclick leva à página Estoque', () => {
+  const ctx = carregarSandboxAlerta({
+    estOk: true,
+    materiais: [
+      { id: 1, codigo: 'A', nome: 'Filtro', ativo: true, estoqueAtual: 1, estoqueMinimo: 5 },
+      { id: 2, codigo: 'B', nome: 'Correia', ativo: true, estoqueAtual: 0, estoqueMinimo: 2 },
+    ],
+  });
+  const html = ctx.estAlertaHtml();
+  assert.match(html, /Estoque abaixo do mínimo/);
+  assert.match(html, /<span class="sec-count">2<\/span>/);
+  assert.match(html, /Filtro/);
+  assert.match(html, /Correia/);
+  assert.match(html, /navTo\('estoque', el\('nav-estoque'\)\)/);
+  assert.match(html, /class="alert-card"/);
+});
+
+test('renderAlerts: var estAlerta = estAlertaHtml() calculado depois de semHistCrit e antes do ramo TELA_LARGA', () => {
+  const corpo = recorte('function renderAlerts(){', 'function atualizarBadgeAlertas(');
+  const iniSemHist = corpo.indexOf('var semHistCrit');
+  const iniEstAlerta = corpo.indexOf('var estAlerta = estAlertaHtml();');
+  const iniTelaLarga = corpo.indexOf('if(TELA_LARGA){');
+  assert.ok(iniSemHist >= 0 && iniEstAlerta > iniSemHist && iniTelaLarga > iniEstAlerta, 'ordem incorreta: semHistCrit -> estAlerta -> if(TELA_LARGA)');
+});
+
+test('renderAlerts: ramo TELA_LARGA só mostra "Nenhum alerta ativo" quando também não há alerta de estoque, e concatena estAlerta', () => {
+  const corpo = recorte('function renderAlerts(){', 'function atualizarBadgeAlertas(');
+  assert.match(corpo, /if\(!linhasTab\.length && !estAlerta\)/);
+  assert.match(corpo, /tabDesenhar\('alert', COLS_ALERT, linhasTab, 'openDetail'\) \+ estAlerta/);
+});
+
+test('renderAlerts: ramo de cartões concatena estAlerta antes da decisão de estado vazio', () => {
+  const corpo = recorte('function renderAlerts(){', 'function atualizarBadgeAlertas(');
+  const iniHtmlEstAlerta = corpo.indexOf('html += estAlerta;');
+  const iniIfHtml = corpo.indexOf('if(html){');
+  assert.ok(iniHtmlEstAlerta >= 0 && iniIfHtml > iniHtmlEstAlerta, 'estAlerta não concatenado antes do bloco de total/estado vazio');
+});
+
+test('renderAlerts: atualizarBadgeAlertas(ag) continua aparecendo exatamente duas vezes — o distintivo não muda por causa do estoque', () => {
+  const corpo = recorte('function renderAlerts(){', 'function atualizarBadgeAlertas(');
+  const qtd = (corpo.match(/atualizarBadgeAlertas\(ag\)/g) || []).length;
+  assert.strictEqual(qtd, 2);
+});
