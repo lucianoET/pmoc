@@ -767,3 +767,301 @@ test('a linha renderizada de um item do catálogo mostra o código do material; 
   const linhaServico = html.slice(Math.max(0, iniServico - 20), iniServico + 120);
   assert.doesNotMatch(linhaServico, /CMP-01/);
 });
+
+// ══════════════════════════════════════════════════════════════════
+// Task 3 — página Estoque: navegação injetada, lista, edição inline,
+// cadastro e entrada
+// ══════════════════════════════════════════════════════════════════
+
+const MARCA_PAGINA_INI = '/* ── ESTOQUE: página, navegação injetada, edição inline ── */';
+const MARCA_PAGINA_FIM = 'function openDrawer(){';
+const MARCA_VOCAB_INI = '/* ── fluxo da OS interna: vocabulário e transições ── */';
+const MARCA_VOCAB_FIM = 'function loadData(';
+
+test('#bottom-nav continua com exatamente cinco .nav-btn na marcação', () => {
+  const ini = HTML.indexOf('<div id="bottom-nav">');
+  assert.ok(ini > 0, '#bottom-nav não encontrado');
+  const fim = HTML.indexOf('</div>', ini);
+  const trecho = HTML.slice(ini, fim);
+  const qtd = (trecho.match(/class="nav-btn/g) || []).length;
+  assert.equal(qtd, 5);
+});
+
+test('existe <div class="page" id="page-estoque"> na marcação, irmã de page-alert', () => {
+  assert.match(HTML, /<div class="page" id="page-estoque">/);
+});
+
+test('MAN_ACOES_CARGO ganha a ação estoque com admin, gestor e tecnico', () => {
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(recorte(MARCA_VOCAB_INI, MARCA_VOCAB_FIM), ctx);
+  eq(ctx.MAN_ACOES_CARGO.estoque.slice().sort(), ['admin', 'gestor', 'tecnico'].sort());
+});
+
+test('navTo despacha "estoque" para renderEstoque(); renderPaginaAtiva despacha page-estoque para renderEstoque()', () => {
+  assert.match(HTML, /if\(page==='estoque'\) renderEstoque\(\);/);
+  assert.match(HTML, /id==='page-estoque'\) renderEstoque\(\);/);
+});
+
+test('estInjectNav é chamada nas duas sequências de arranque, logo depois de estSondarEsquema()', () => {
+  const acessoLivre = recorte('async function acessoLivre() {', '/* ═══════════════════════════════════════════════════════════\n   INIT');
+  const initAppOnce = recorte('async function initAppOnce(){', 'window.initAppOnce = initAppOnce;');
+  assert.match(acessoLivre, /await estSondarEsquema\(\);\s*\n\s*estInjectNav\(\);/);
+  assert.match(initAppOnce, /await estSondarEsquema\(\);\s*\n\s*estInjectNav\(\);/);
+});
+
+// ── sandbox de navegação: DOM estrito (getElementById nunca auto-cria —
+// é o que permite provar "não existe até ser injetado"), só para
+// estInjectNav. ──
+function carregarSandboxNav(opts) {
+  opts = opts || {};
+  const elementos = {};
+  const bottomNav = { id: 'bottom-nav', appendChild(b) { elementos[b.id] = b; } };
+  elementos['bottom-nav'] = bottomNav;
+  const documentFalso = {
+    getElementById(id) { return elementos[id] || null; },
+    createElement() { return { id: '', className: '', innerHTML: '', onclick: null, classList: { add() {}, remove() {}, contains() { return false; } } }; },
+  };
+  const chamadasNavTo = [];
+  const ctx = {
+    document: documentFalso,
+    el(id) { return documentFalso.getElementById(id); },
+    navTo(page, btn) { chamadasNavTo.push({ page, btn }); },
+  };
+  vm.createContext(ctx);
+  vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
+  vm.runInContext(recorte(MARCA_PAGINA_INI, MARCA_PAGINA_FIM), ctx);
+  ctx.EST_OK = opts.estOk !== undefined ? opts.estOk : true;
+  ctx._elementos = elementos;
+  ctx._chamadasNavTo = chamadasNavTo;
+  return ctx;
+}
+
+test('estInjectNav: com EST_OK falso, não cria botão nenhum', () => {
+  const ctx = carregarSandboxNav({ estOk: false });
+  ctx.estInjectNav();
+  assert.strictEqual(ctx.el('nav-estoque'), null);
+});
+
+test('estInjectNav: com EST_OK true, cria um .nav-btn que chama navTo(\'estoque\',…); chamar duas vezes não duplica', () => {
+  const ctx = carregarSandboxNav({ estOk: true });
+  ctx.estInjectNav();
+  const btn = ctx.el('nav-estoque');
+  assert.ok(btn, 'botão não foi criado');
+  assert.strictEqual(btn.className, 'nav-btn');
+  btn.onclick();
+  assert.strictEqual(ctx._chamadasNavTo.length, 1);
+  assert.strictEqual(ctx._chamadasNavTo[0].page, 'estoque');
+  ctx.estInjectNav(); // segunda chamada: não duplica
+  const total = Object.keys(ctx._elementos).filter((k) => k.indexOf('nav-estoque') === 0).length;
+  assert.strictEqual(total, 1);
+});
+
+// ── sandbox da página: el() AUTO-CRIA (mesma forma de
+// tests/refrigeracao-os-pagina.test.js:criarSandboxOS) — aqui o alvo é
+// renderEstoque/estLinhaHtml/openMaterialForm/estSalvar*/openEntradaForm/
+// estRegistrarEntrada, não a existência prévia de um nó. ──
+function elFalso(id) {
+  return { id: id, value: '', textContent: '', innerHTML: '', style: {}, classList: { add() {}, remove() {}, contains() { return false; } } };
+}
+function carregarSandboxEstoquePagina(opts) {
+  opts = opts || {};
+  const nodes = {};
+  const updatesLinha = [];
+  const insertsMateriaisCadastro = [];
+  const updatesMateriaisCadastro = [];
+  const insertsMovimentosEntrada = [];
+  const updatesMateriaisEntrada = [];
+  const toasts = [];
+  let chamadasCarregarMateriais = 0;
+
+  const ctx = {
+    esc(s) { if (!s) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+    el(id) { return nodes[id] || (nodes[id] = elFalso(id)); },
+    val(id) { const n = nodes[id]; return n ? n.value : ''; },
+    fmtMoney(v) { return 'R$ ' + (Number(v) || 0).toFixed(2).replace('.', ','); },
+    manPode(acao) { return opts.podeGerir !== false && acao === 'estoque'; },
+    podeEditarCadastro() { return opts.podeCadastro !== false; },
+    openDrawer() {},
+    closeDrawer() {},
+    showToast(msg, tipo) { toasts.push({ msg, tipo }); },
+    console: { warn() {}, error() {} },
+    supa: {
+      from(tabela) {
+        if (tabela === 'materiais') {
+          return {
+            update(patch) {
+              return {
+                eq(col, val) {
+                  updatesLinha.push({ id: val, patch });
+                  if (opts.erroUpdate) return Promise.resolve({ error: { message: 'falhou' } });
+                  return Promise.resolve({ error: null, data: null });
+                },
+              };
+            },
+            insert(payload) {
+              insertsMateriaisCadastro.push(payload);
+              return Promise.resolve({ error: null, data: Object.assign({ id: 99 }, payload) });
+            },
+          };
+        }
+        if (tabela === 'estoque_movimentos') {
+          return {
+            insert(payload) {
+              insertsMovimentosEntrada.push(payload);
+              return Promise.resolve({ error: null, data: payload });
+            },
+          };
+        }
+        throw new Error('tabela inesperada: ' + tabela);
+      },
+    },
+  };
+
+  vm.createContext(ctx);
+  vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
+  vm.runInContext(recorte(MARCA_PAGINA_INI, MARCA_PAGINA_FIM), ctx);
+
+  ctx.EST_OK = true;
+  ctx.MATERIAIS = opts.materiais || [];
+  ctx.carregarMateriais = function () { chamadasCarregarMateriais++; return Promise.resolve(); };
+
+  ctx._updatesLinha = updatesLinha;
+  ctx._insertsMateriaisCadastro = insertsMateriaisCadastro;
+  ctx._updatesMateriaisCadastro = updatesMateriaisCadastro;
+  ctx._insertsMovimentosEntrada = insertsMovimentosEntrada;
+  ctx._updatesMateriaisEntrada = updatesMateriaisEntrada;
+  ctx._toasts = toasts;
+  ctx._nodes = nodes;
+  ctx._chamadasCarregarMateriais = () => chamadasCarregarMateriais;
+  return ctx;
+}
+
+test('renderEstoque: desenha uma linha por material ativo, com código/nome/tipo/aplicação/unidade/atual/mínimo/preço', () => {
+  const ctx = carregarSandboxEstoquePagina({
+    materiais: [{ id: 1, codigo: 'FLT-01', nome: 'Filtro de ar', tipo: 'consumivel', unidade: 'un', aplicacao: 'SPLIT', preco: 12.5, estoqueAtual: 8, estoqueMinimo: 2, ativo: true }],
+  });
+  ctx.renderEstoque();
+  const html = ctx.el('page-estoque').innerHTML;
+  assert.match(html, /FLT-01/);
+  assert.match(html, /Filtro de ar/);
+  assert.match(html, /SPLIT/);
+  assert.match(html, /un/);
+  assert.match(html, />8</);
+  assert.match(html, />2</);
+});
+
+test('renderEstoque: material abaixo do mínimo recebe o aviso; material em dia não recebe', () => {
+  const ctx = carregarSandboxEstoquePagina({
+    materiais: [
+      { id: 1, codigo: 'A', nome: 'Abaixo', tipo: 'consumivel', unidade: 'un', preco: 1, estoqueAtual: 1, estoqueMinimo: 5, ativo: true },
+      { id: 2, codigo: 'B', nome: 'Em dia', tipo: 'consumivel', unidade: 'un', preco: 1, estoqueAtual: 10, estoqueMinimo: 5, ativo: true },
+    ],
+  });
+  ctx.renderEstoque();
+  const html = ctx.el('page-estoque').innerHTML;
+  const linhaA = html.slice(html.indexOf('mat-row-1'), html.indexOf('mat-row-2'));
+  const linhaB = html.slice(html.indexOf('mat-row-2'));
+  assert.match(linhaA, /pill-nok/);
+  assert.doesNotMatch(linhaB, /pill-nok/);
+});
+
+test('renderEstoque: catálogo vazio mostra o estado vazio, nunca uma lista em branco', () => {
+  const ctx = carregarSandboxEstoquePagina({ materiais: [] });
+  ctx.renderEstoque();
+  const html = ctx.el('page-estoque').innerHTML;
+  assert.match(html, /class="empty"/);
+});
+
+test('renderEstoque: cargo sem a ação estoque e sem podeEditarCadastro não desenha controle de edição, entrada nem cadastro', () => {
+  const ctx = carregarSandboxEstoquePagina({
+    podeGerir: false,
+    podeCadastro: false,
+    materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', tipo: 'consumivel', unidade: 'un', preco: 1, estoqueAtual: 5, estoqueMinimo: 1, ativo: true }],
+  });
+  ctx.renderEstoque();
+  const html = ctx.el('page-estoque').innerHTML;
+  assert.doesNotMatch(html, /estIniciarEdicaoLinha/);
+  assert.doesNotMatch(html, /openEntradaForm/);
+  assert.doesNotMatch(html, /openMaterialForm/);
+});
+
+test('renderEstoque: a lista não consulta TELA_LARGA — a mesma nas duas larguras', () => {
+  const corpo = recorte(MARCA_PAGINA_INI, MARCA_PAGINA_FIM);
+  const funcao = corpo.slice(corpo.indexOf('function renderEstoque('), corpo.indexOf('function estLinhaHtml('));
+  assert.doesNotMatch(funcao, /TELA_LARGA/);
+});
+
+test('estSalvarLinha: grava atual/mínimo/preço, recusa valores negativos, recusa cargo sem a ação, recarrega o catálogo', async () => {
+  const ctx = carregarSandboxEstoquePagina({ materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 5, estoqueMinimo: 1 }] });
+  ctx.el('est-ed-atual').value = '7';
+  ctx.el('est-ed-minimo').value = '2';
+  ctx.el('est-ed-preco').value = '10.5';
+  await ctx.estSalvarLinha(1);
+  assert.strictEqual(ctx._updatesLinha.length, 1);
+  assert.strictEqual(ctx._updatesLinha[0].patch.estoque_atual, 7);
+  assert.strictEqual(ctx._updatesLinha[0].patch.estoque_minimo, 2);
+  assert.strictEqual(ctx._updatesLinha[0].patch.preco, 10.5);
+  assert.strictEqual(ctx._chamadasCarregarMateriais(), 1);
+
+  const ctxNeg = carregarSandboxEstoquePagina({ materiais: [{ id: 1 }] });
+  ctxNeg.el('est-ed-atual').value = '-1';
+  ctxNeg.el('est-ed-minimo').value = '2';
+  await ctxNeg.estSalvarLinha(1);
+  assert.strictEqual(ctxNeg._updatesLinha.length, 0);
+
+  const ctxSemAcao = carregarSandboxEstoquePagina({ podeGerir: false, materiais: [{ id: 1 }] });
+  await ctxSemAcao.estSalvarLinha(1);
+  assert.strictEqual(ctxSemAcao._updatesLinha.length, 0);
+});
+
+test('estSalvarMaterial: insere quando não há id em edição e atualiza quando há; recusa sem podeEditarCadastro; recusa nome vazio; passa por materialParaDb', async () => {
+  const ctx = carregarSandboxEstoquePagina({});
+  ctx.el('mt-nome').value = 'Filtro novo';
+  ctx.el('mt-codigo').value = 'F-99';
+  ctx.el('mt-unidade').value = 'un';
+  await ctx.estSalvarMaterial();
+  assert.strictEqual(ctx._insertsMateriaisCadastro.length, 1);
+  assert.strictEqual(ctx._insertsMateriaisCadastro[0].nome, 'Filtro novo');
+  assert.strictEqual(ctx._insertsMateriaisCadastro[0].codigo, 'F-99');
+
+  const ctxEd = carregarSandboxEstoquePagina({});
+  ctxEd.EST_MATERIAL_EDIT_ID = 5;
+  ctxEd.el('mt-nome').value = 'Filtro editado';
+  await ctxEd.estSalvarMaterial();
+  assert.strictEqual(ctxEd._updatesLinha.length, 1);
+  assert.strictEqual(ctxEd._updatesLinha[0].id, 5);
+
+  const ctxSemPerm = carregarSandboxEstoquePagina({ podeCadastro: false });
+  ctxSemPerm.el('mt-nome').value = 'Não deveria gravar';
+  await ctxSemPerm.estSalvarMaterial();
+  assert.strictEqual(ctxSemPerm._insertsMateriaisCadastro.length, 0);
+
+  const ctxSemNome = carregarSandboxEstoquePagina({});
+  ctxSemNome.el('mt-nome').value = '   ';
+  await ctxSemNome.estSalvarMaterial();
+  assert.strictEqual(ctxSemNome._insertsMateriaisCadastro.length, 0);
+});
+
+test('estRegistrarEntrada: recusa quantidade zero/negativa, recusa cargo sem a ação, grava entrada com o motivo digitado, soma ao estoque_atual, não toca em os_id nenhum', async () => {
+  const ctx = carregarSandboxEstoquePagina({ materiais: [{ id: 1, codigo: 'A', nome: 'Filtro', estoqueAtual: 10 }] });
+  ctx.el('ent-qtd').value = '5';
+  ctx.el('ent-motivo').value = 'Recebimento NF 123';
+  await ctx.estRegistrarEntrada(1);
+  assert.strictEqual(ctx._insertsMovimentosEntrada.length, 1);
+  const mov = ctx._insertsMovimentosEntrada[0];
+  assert.strictEqual(mov.tipo, 'entrada');
+  assert.strictEqual(mov.motivo, 'Recebimento NF 123');
+  assert.strictEqual('os_id' in mov, false);
+  assert.strictEqual(ctx._updatesLinha[0].patch.estoque_atual, 15);
+
+  const ctxZero = carregarSandboxEstoquePagina({ materiais: [{ id: 1, estoqueAtual: 10 }] });
+  ctxZero.el('ent-qtd').value = '0';
+  await ctxZero.estRegistrarEntrada(1);
+  assert.strictEqual(ctxZero._insertsMovimentosEntrada.length, 0);
+
+  const ctxSemAcao = carregarSandboxEstoquePagina({ podeGerir: false, materiais: [{ id: 1, estoqueAtual: 10 }] });
+  ctxSemAcao.el('ent-qtd').value = '5';
+  await ctxSemAcao.estRegistrarEntrada(1);
+  assert.strictEqual(ctxSemAcao._insertsMovimentosEntrada.length, 0);
+});
