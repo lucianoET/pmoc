@@ -2035,3 +2035,52 @@ os dois itens abaixo são conferência visual, o que o Node não prova.
 - [ ] Na visão geral, conferir que o card **Energia Elétrica — Estimativa** deixou de mostrar
       0 kW / 0 kWh / R$ 0,00, que as duas barras por área têm valor, e que a nota explica de
       onde veio o número.
+
+## Refrigeração — estoque de peças e materiais (26/08/2026)
+
+Quick task 260826-6wy (D-6wy-01..15). `/refrigeracao` ganha catálogo (`materiais`), histórico
+(`estoque_movimentos`) e `os_itens.material_id`, com baixa idempotente na entrada em execução
+e alerta abaixo do mínimo. **`supabase/44_refrigeracao_estoque.sql` é escrita, aditiva e ainda
+NÃO aplicada** — o roteiro abaixo tem duas partes: a primeira, sem a migração 44 (o estado
+publicado hoje), e a segunda, depois que o usuário aplicar a migração no SQL editor do Supabase,
+**depois do deploy do frontend** (mesma ordem de D-cf8-25).
+
+### Parte 1 — sem a migração 44 (compatibilidade, o estado publicado)
+
+- [ ] **Sem botão de Estoque:** abrir `/refrigeracao` — a barra de navegação continua com os
+      cinco botões de sempre (Painel, Parque, OS, PMOC, Alertas), sem um sexto.
+- [ ] **Item de OS sem catálogo:** abrir uma OS e lançar um item de MATERIAL — o formulário é
+      idêntico ao de hoje, sem seletor de material do catálogo.
+- [ ] **Alertas sem seção de estoque:** abrir a página de Alertas (celular e computador) — não
+      existe a seção "Estoque abaixo do mínimo".
+- [ ] **Sem erro no console:** navegar pelas abas sem nenhum erro — o app se comporta
+      exatamente como antes desta tarefa.
+
+### Parte 2 — depois de aplicar a migração 44 (frontend já publicado primeiro)
+
+- [ ] **Botão de Estoque aparece:** a barra de navegação ganha um sexto botão, "Estoque".
+- [ ] **Cadastrar material:** na página Estoque, cadastrar um material novo com estoque mínimo
+      maior que zero (botão "+ Material", gaveta) — ele aparece na lista, com código, nome,
+      tipo, aplicação, unidade, estoque atual e mínimo.
+- [ ] **Item de OS pelo catálogo:** lançar um item de MATERIAL numa OS escolhendo o material
+      recém-cadastrado no seletor — descrição, unidade e valor unitário vêm preenchidos
+      automaticamente a partir do catálogo (e continuam editáveis antes de salvar). Escolher
+      "Texto livre" continua funcionando como hoje.
+- [ ] **Baixa única ao entrar em execução:** mover a OS para "Em execução" — o saldo do
+      material cai exatamente a quantidade lançada. Conferir na página Estoque.
+- [ ] **Idempotência (não baixa de novo):** mover a mesma OS de volta para um status anterior e
+      de novo para "Em execução" — o saldo **não** cai uma segunda vez.
+- [ ] **Movimento de saída na tabela:** no Supabase, consultar `estoque_movimentos` e conferir
+      a linha `saida` com o `os_id` da OS e o motivo ("OS ... — material lançado na ordem").
+- [ ] **Registrar entrada:** na página Estoque, registrar uma entrada de recebimento para um
+      material (quantidade + motivo) — o saldo sobe pela quantidade informada.
+- [ ] **Edição inline do saldo:** editar diretamente atual/mínimo/preço de um material na lista
+      — salvar atualiza só aquela linha (sem redesenhar a lista inteira, sem perder o foco de
+      quem estiver editando outra linha ao mesmo tempo).
+- [ ] **Alerta abaixo do mínimo:** com um material com saldo menor que o mínimo, abrir Alertas
+      — a seção "Estoque abaixo do mínimo" aparece **nas duas larguras** (celular e computador,
+      >=1024px), e clicar numa linha leva à página Estoque. O distintivo de alertas (badge) não
+      muda por causa disso — ele continua contando equipamento, não peça.
+- [ ] **Limite conhecido — sem estorno automático:** com uma OS em execução que já baixou
+      estoque, voltar o status para trás (ex.: Aprovação) — o saldo **não** volta sozinho. A
+      correção é registrar manualmente uma entrada na página Estoque com o motivo do estorno.
