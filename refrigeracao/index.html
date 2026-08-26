@@ -3865,7 +3865,7 @@ function manMontarOS(logId){
         '<div><label class="fgl">Capacitor de partida (µF)</label><input class="fgi" id="man-ex-cap-partida" type="number" step="0.1"/></div>' +
         '<div><label class="fgl">Tensão medida (V)</label><input class="fgi" id="man-ex-tensao" type="number" step="0.1"/></div></div>' +
         '<label class="fgl" style="margin-top:8px">Fotos</label>' +
-        '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" capture="environment" multiple/>' +
+        '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" multiple/>' +
         '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="manRegistrarEvidencia(\''+esc(logId)+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar evidência</button></div>';
       if (flTemExecutada) {
         if (manTemEvidencia(entry) && manPode('executar') && manPodeIrPara(st,'EXECUTADA',flTipo)) {
