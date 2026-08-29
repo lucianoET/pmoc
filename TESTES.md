@@ -2179,3 +2179,23 @@ já aplicada.
 - [ ] **Cabeçalho em duas linhas:** "Próx. manutenção" e "Última inspeção" quebram em
       duas linhas em vez de esticar a coluna.
 - [ ] **Celular intocado:** em 375px continua em cartões, sem rolagem lateral.
+
+## Refrigeração — menu de coluna estilo Excel (29/08/2026)
+
+Quick task 260829-a8u (D-a8u-01..09). Versão de computador; sem migração.
+
+- [ ] **Abrir o menu:** clicar na seta ao lado do nome de qualquer coluna — abre um
+      painel com ordenação, busca e a lista de marcar.
+- [ ] **Ordenar pelo menu:** "Ordenar crescente"/"decrescente" ordenam a coluna;
+      "Limpar ordenação" só aparece quando há ordem ativa.
+- [ ] **Marcar e desmarcar:** desmarcar um valor tira aquelas linhas; remarcar
+      devolve. "Limpar" esvazia a tabela; "Marcar todos" traz tudo de volta.
+- [ ] **Busca dentro do menu:** na coluna Local (125 valores), digitar "sala de"
+      reduz a lista de valores — sem filtrar a tabela ainda.
+- [ ] **Funil no cabeçalho:** coluna com filtro mostra um funil no lugar da seta.
+- [ ] **Fechar:** Esc, clique fora e um segundo clique na mesma seta fecham o painel.
+- [ ] **Combina com o filtro de texto:** marcar VERMELHA no menu de Área e digitar
+      F21 no filtro de Prédio — 23 equipamentos.
+- [ ] **Regressão que este trabalho corrigiu:** com um filtro multivalor ativo
+      (ex.: Área = AZUL + VERMELHA), abrir a ficha de um equipamento e voltar para
+      o Parque — a lista **não** pode ficar vazia. Antes ficava.
