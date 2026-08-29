@@ -59,6 +59,38 @@ date: 2026-08-29
 - 375×812: modo `cartao`, 175 `equip-card`, nenhuma tabela — o caminho de celular
   não foi tocado.
 
+## Segunda rodada — caber na tela (mesmo dia)
+
+| | Antes | Depois |
+|---|---|---|
+| Rolagem horizontal em 1440px | 137px | **0** |
+| Rolagem horizontal em 1024px | (não cabia) | **0** |
+| Colunas | 13 (uma de chips) | 15 (três de atributo, depois de Criticidade) |
+| Largura da tabela | 1489px | 1337px em container de 1352px |
+| Padding lateral | 12px | 8px (2px nas colunas de símbolo) |
+| Botões no cabeçalho | 2 por coluna (26) | 1 por coluna (15) + um "Filtros" na barra |
+
+**D-3a6-14 foi revertida a pedido do usuário.** Ela dizia "sem largura fixa e sem
+`table-layout:fixed`; o que resolve o excesso é rolagem". A preocupação registrada
+lá — Local é o único campo longo e variável — virou **peso**: Local leva a maior
+fatia das quinze colunas (195px em 1440, 140px em 1024).
+
+**De onde vinha a largura, e não era o dado:** o cabeçalho `nowrap` fazia
+"Próx. manutenção" pedir 149px para conteúdo que cabe em 90; o ⌕ eram doze botões
+de ~20px fazendo o que um faz; e o padding de coluna de texto numa coluna de `✓`
+é espaço morto.
+
+`largura` é **peso relativo normalizado no desenho**, não porcentagem — é o que
+deixa as três colunas de atributo entrar e sair pela sonda sem recalcular as
+outras doze à mão. E só vira `table-layout:fixed` quando **todas** declaram:
+meia declaração é pior que nenhuma, porque o navegador divide o resto igualmente
+e a coluna longa some.
+
+Medido depois: rolagem horizontal **0** em 1024, 1440 e 1920; `AZUL, VERMELHA` →
+175; Inverter `Sim` → 19; Redundante `Sim` → 16; celular em 375px continua com
+175 cartões e nenhuma tabela. `node --test` **1073/1073** (7 casos novos, 4
+reescritos porque o fato mudou — nenhum apagado).
+
 ## Fora de escopo
 
 Popover de caixas de marcar no filtro (o `<datalist>` entrega "mais de um" sem

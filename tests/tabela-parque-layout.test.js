@@ -36,6 +36,13 @@ function recorte(ini, fim) {
   return HTML.slice(i, f);
 }
 
+function larguras() {
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(recorte('function tabTemLarguras(', 'function tabDesenhar('), ctx);
+  return ctx;
+}
+
 function nucleo() {
   const ctx = {};
   vm.createContext(ctx);
@@ -138,14 +145,57 @@ test('D-8yc-05: a seta de ordenação tem largura fixa — a coluna não muda de
   assert.ok(HTML.includes('class="th-seta"'), 'o cabeçalho tem de usar a classe');
 });
 
-test('D-3a6-14 continua valendo: nem largura de coluna, nem table-layout, nem truncagem', () => {
-  // Comentário é prosa: o próprio CSS explica POR QUE não usa
-  // table-layout, e essa frase não é uma declaração.
+// D-3a6-14 dizia o contrário disto — "quem cede é a rolagem, nunca a
+// coluna" — e foi REVERTIDA a pedido do usuário em 29/08/2026: ele quer a
+// tabela cabendo na tela. A preocupação registrada lá (Local é o único
+// campo longo e variável) não foi ignorada: virou peso, e é o que estes
+// casos protegem.
+test('D-8yc-09: table-layout:fixed existe, mas só sob a classe .fixa', () => {
   const bloco = recorte('/* ── tabela (D-8rz-19', '.tab-barra{')
     .replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.ok(!/table-layout/.test(bloco), 'D-3a6-14: sem table-layout');
-  assert.ok(!/text-overflow/.test(bloco), 'D-3a6-14: quem cede é a rolagem, nunca o conteúdo');
-  assert.ok(!/\bmax-width:\s*\d/.test(bloco), 'D-3a6-14: sem largura fixada de coluna');
+  assert.match(bloco, /\.lista-tabela\.fixa\{\s*table-layout:fixed/,
+    'a largura declarada é o que faz a tabela caber');
+  assert.ok(!/^\s*\.lista-tabela\{[^}]*table-layout/m.test(bloco),
+    'a regra base não pode fixar o layout — as outras cinco tabelas seguem automáticas');
+});
+
+test('D-8yc-09: só vira fixa quando TODAS as colunas declaram largura', () => {
+  const ctx = larguras();
+  assert.equal(ctx.tabTemLarguras([{ largura: 1 }, { largura: 2 }]), true);
+  assert.equal(ctx.tabTemLarguras([{ largura: 1 }, {}]), false,
+    'meia declaração é pior que nenhuma: o navegador divide o resto igualmente e a coluna longa some');
+  assert.equal(ctx.tabTemLarguras([]), false);
+  assert.equal(ctx.tabGrupoLarguras([{ largura: 1 }, {}]), '', 'sem colgroup, sem layout fixo');
+});
+
+test('D-8yc-09: largura é PESO relativo — qualquer subconjunto soma 100%', () => {
+  const ctx = larguras();
+  const pct = (cols) => [...ctx.tabGrupoLarguras(cols).matchAll(/width:([\d.]+)%/g)].map((m) => Number(m[1]));
+  const soma = (a) => a.reduce((t, n) => t + n, 0);
+  assert.ok(Math.abs(soma(pct([{ largura: 3 }, { largura: 15 }, { largura: 8 }])) - 100) < 0.01);
+  // É isto que deixa as três colunas de atributo entrar e sair pela sonda
+  // sem ninguém recalcular as outras à mão.
+  assert.ok(Math.abs(soma(pct([{ largura: 3 }, { largura: 15 }, { largura: 8 }, { largura: 4 }])) - 100) < 0.01);
+});
+
+test('a preocupação de D-3a6-14 vira peso: Local é a coluna mais larga', () => {
+  const cols = recorte('var COLS_INV = [', 'function colAtributoEquip(');
+  const peso = (id) => Number(new RegExp(`\\{ id:'${id}', largura:(\\d+)`).exec(cols)[1]);
+  const outras = ['id', 'area', 'predio', 'tipo', 'btu', 'fabricante', 'modelo', 'estado', 'criticidade', 'prox', 'ultimaInspecao'];
+  for (const id of outras) {
+    assert.ok(peso('local') > peso(id),
+      `Local é o único campo longo e variável (D-3a6-14) e precisa de mais peso que "${id}"`);
+  }
+});
+
+test('D-8yc-10: quem trunca devolve o texto inteiro no title — nada é escondido', () => {
+  const bloco = recorte('.lista-tabela.fixa td{', '}');
+  assert.match(bloco, /text-overflow:\s*ellipsis/);
+  const corpo = recorte('function tabCorpo(', 'function tabRedesenhar');
+  assert.match(corpo, /title="'\+esc\(bruto\)\+'"/,
+    'reticências sem title esconderiam dado — o title é o que torna a truncagem honesta');
+  assert.match(corpo, /col\.celula \? '' :/,
+    'célula de pílula/símbolo não recebe title duplicado');
 });
 
 // ── 3. filtro com vários valores por coluna (D-8yc-08) ──────────────
@@ -233,43 +283,61 @@ test('sem cache, sem sugestão — e nunca uma exceção', () => {
 
 // ── 5. a coluna de atributos entra pela sonda (D-8yc-07) ────────────
 
-test('COLS_INV não nasce com a coluna de atributos — ela entra pela sonda', () => {
-  const cols = recorte('var COLS_INV = [', 'var COL_ATRIBUTOS = {');
-  assert.ok(!/id:'atributos'/.test(cols),
-    'sem a migração 45 a coluna não pode existir: nem cabeçalho, nem filtro, nem ordenação');
+test('COLS_INV não nasce com as colunas de atributo — elas entram pela sonda', () => {
+  const cols = recorte('var COLS_INV = [', 'function colAtributoEquip(');
+  for (const id of ['inverter', 'redundante', 'automacao']) {
+    assert.ok(!new RegExp(`\\{ id:'${id}'`).test(cols),
+      `sem a migração 45 a coluna "${id}" não pode existir: nem cabeçalho, nem filtro, nem ordenação`);
+  }
   const sonda = recorte('async function atribSondarEsquema()', '}\n');
-  assert.match(sonda, /COLS_INV = COLS_INV\.concat/,
-    'a coluna liga no MESMO ponto que liga EQUIP_EDITAVEIS (D-500-05/D-8yc-07)');
+  assert.match(sonda, /COLS_INV = COLS_INV\.slice\(0, posicao\)/,
+    'as colunas ligam no MESMO ponto que liga EQUIP_EDITAVEIS (D-500-05/D-8yc-07)');
 });
 
-function colAtributos() {
+test('D-8yc-12: as três entram logo depois de Criticidade, e caem para o fim se ela sumir', () => {
+  const sonda = recorte('async function atribSondarEsquema()', '}\n');
+  assert.match(sonda, /indexOf\('criticidade'\)/, 'a posição pedida pelo usuário é depois de Criticidade');
+  assert.match(sonda, /apos < 0 \? COLS_INV\.length : apos \+ 1/,
+    'sumindo a coluna de referência, as três vão para o fim em vez de derrubar a tabela');
+});
+
+function colAtributo(chave) {
   const ctx = {
     esc: (s) => String(s ?? ''),
-    EQUIP_ATRIBUTOS: ['inverter', 'redundante', 'automacao'],
     EQUIP_ROTULOS: { inverter: 'Inverter', redundante: 'Redundante', automacao: 'Automação' },
   };
   vm.createContext(ctx);
-  vm.runInContext(recorte('var COL_ATRIBUTOS = {', '\n};') + '\n};', ctx);
-  return ctx.COL_ATRIBUTOS;
+  vm.runInContext(recorte('function colAtributoEquip(chave){', '\n}') + '\n}', ctx);
+  return ctx.colAtributoEquip(chave);
 }
 
-test('a coluna de atributos filtra pela palavra inteira e desenha a sigla', () => {
-  const col = colAtributos();
-  const marcado = { inverter: true, redundante: true };
-  assert.equal(col.texto(marcado), 'Inverter Redundante',
-    'o filtro casa "inverter", que é o que a pessoa digita — não "INV"');
-  assert.ok(col.celula(marcado).includes('INV'));
-  assert.ok(col.celula(marcado).includes('RED'));
-  assert.ok(!col.celula(marcado).includes('AUT'), 'atributo não marcado não vira chip');
+test('cada atributo filtra por Sim/Não — é a palavra que a lista de sugestões oferece', () => {
+  const col = colAtributo('inverter');
+  assert.equal(col.rotulo, 'Inverter');
+  assert.equal(col.texto({ inverter: true }), 'Sim');
+  assert.equal(col.texto({ inverter: false }), 'Não');
+  assert.equal(col.texto({}), '', 'não avaliado não é "Não" — é ausência de resposta');
 });
 
-test('não avaliado é travessão, não chip vazio, e ordena depois dos marcados', () => {
-  const col = colAtributos();
-  assert.equal(col.texto({}), '');
-  assert.match(col.celula({}), /—/);
+test('a célula é símbolo, e o title diz de qual atributo se trata', () => {
+  const col = colAtributo('redundante');
+  assert.match(col.celula({ redundante: true }), /marca-sim/);
+  assert.match(col.celula({ redundante: true }), /Redundante: Sim/);
+  assert.match(col.celula({ redundante: false }), /Redundante: Não/);
+  assert.match(col.celula({}), /não avaliado/,
+    'sem title, um traço numa coluna estreita não diz nada a ninguém');
+});
+
+test('ordena marcado antes de não-marcado, e não avaliado sempre no fim', () => {
+  const col = colAtributo('automacao');
+  assert.equal(col.valor({ automacao: true }), 1);
+  assert.equal(col.valor({ automacao: false }), 0);
   assert.equal(col.valor({}), null, 'null é vazio para tabVazio — vai para o fim nas duas direções');
-  assert.equal(col.valor({ inverter: true }), 1);
-  assert.equal(col.valor({ inverter: true, redundante: true, automacao: true }), 3);
-  assert.equal(col.valor({ inverter: false }), null,
-    'marcado como "não" não é o mesmo que marcado — não conta');
+});
+
+test('a coluna de atributo é estreita: o espaçamento sai da célula, não do cabeçalho', () => {
+  assert.equal(colAtributo('inverter').largura, 4);
+  assert.equal(colAtributo('inverter').alinhar, 'centro');
+  assert.match(HTML, /\.lista-tabela td\.al-centro\{\s*padding-left:2px/,
+    'coluna de símbolo com padding de coluna de texto é espaço morto');
 });

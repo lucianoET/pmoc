@@ -2162,3 +2162,20 @@ já aplicada.
 - [ ] **Filtros combinam:** Área `AZUL, VERMELHA` mais Prédio `F21` — só o que casa nas
       duas condições (OU dentro da coluna, E entre colunas).
 - [ ] **Celular intacto:** em 375px o Parque continua em cartões, sem tabela.
+
+### Segunda rodada — caber na tela (mesma task)
+
+- [ ] **Sem rolagem horizontal:** abrir Parque em 1024px, 1440px e 1920px — a tabela
+      cabe inteira, sem barra de rolagem lateral.
+- [ ] **Inverter, Redundante e Automação depois de Criticidade:** três colunas
+      estreitas, com ✓ (marcado), – (não) e — (não avaliado). Passar o mouse mostra
+      de qual atributo se trata.
+- [ ] **Filtrar um atributo só:** abrir Filtros e digitar `Sim` em Inverter — 19
+      equipamentos. O mesmo em Redundante — 16.
+- [ ] **Texto cortado não some:** numa coluna estreita (Local, Prédio), passar o mouse
+      sobre um valor cortado — o texto completo aparece na dica.
+- [ ] **Filtros num botão só:** o ⌕ saiu do cabeçalho de cada coluna; agora é o botão
+      "Filtros" na barra acima da tabela, que abre a linha de campos.
+- [ ] **Cabeçalho em duas linhas:** "Próx. manutenção" e "Última inspeção" quebram em
+      duas linhas em vez de esticar a coluna.
+- [ ] **Celular intocado:** em 375px continua em cartões, sem rolagem lateral.

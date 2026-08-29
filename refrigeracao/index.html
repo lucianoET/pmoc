@@ -445,10 +445,16 @@ async function atribSondarEsquema() {
   ATRIB_OK = !r.error;
   if (ATRIB_OK && EQUIP_EDITAVEIS.indexOf('inverter') < 0) {
     EQUIP_EDITAVEIS = EQUIP_EDITAVEIS.concat(EQUIP_ATRIBUTOS);
-    // D-8yc-07: a coluna da tabela do Parque liga no mesmo ponto — a
-    // tela ganha os três campos e a coluna juntos, ou não ganha nenhum.
-    if (typeof COLS_INV !== 'undefined' && typeof COL_ATRIBUTOS !== 'undefined') {
-      COLS_INV = COLS_INV.concat([COL_ATRIBUTOS]);
+    // D-8yc-07/12: as três colunas da tabela do Parque ligam no mesmo
+    // ponto — a tela ganha os três campos e as três colunas juntos, ou
+    // não ganha nenhum. Entram logo DEPOIS de Criticidade, onde o
+    // usuário pediu; se a coluna de referência sumir um dia, vão para o
+    // fim em vez de derrubar a tabela.
+    if (typeof COLS_INV !== 'undefined' && typeof colAtributoEquip === 'function') {
+      var apos = COLS_INV.map(function(c){ return c.id; }).indexOf('criticidade');
+      var posicao = apos < 0 ? COLS_INV.length : apos + 1;
+      var novas = EQUIP_ATRIBUTOS.map(colAtributoEquip);
+      COLS_INV = COLS_INV.slice(0, posicao).concat(novas, COLS_INV.slice(posicao));
     }
   }
   return ATRIB_OK;
@@ -6165,7 +6171,7 @@ async function doLoginRole(){
     background:#fff;
     border-radius:12px;
     box-shadow:0 1px 4px rgba(0,0,0,.07);
-    --alt-rotulos:38px; /* D-8yc-02: a altura da linha 1 e o top da 2 */
+    --alt-rotulos:44px; /* D-8yc-02: a altura da linha 1 e o top da 2 */
   }
   .lista-tabela thead tr:first-child th:first-child{ border-top-left-radius:12px; }
   .lista-tabela thead tr:first-child th:last-child{ border-top-right-radius:12px; }
@@ -6173,12 +6179,24 @@ async function doLoginRole(){
   .lista-tabela tbody tr:last-child td:last-child{ border-bottom-right-radius:12px; }
   .lista-tabela th,
   .lista-tabela td{
-    padding:9px 12px;
+    padding:9px 8px;
     font-size:13px;
     text-align:left;
     vertical-align:middle;
     border-bottom:1px solid #F0F0F0;
   }
+  /* D-8yc-09: com largura declarada em todas as colunas, o navegador para
+     de medir o conteúdo e passa a respeitar o que se pede — é o que faz a
+     tabela caber. Sem isto, doze colunas de cabeçalho longo esticavam a
+     tabela para 1489px num container de 1352px. */
+  .lista-tabela.fixa{ table-layout:fixed; }
+  .lista-tabela.fixa td{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  /* O texto completo continua alcançável: `title` na célula (D-8yc-10) e
+     a linha inteira abre a ficha. */
   /* D-8yc-03: `.num` continua existindo e continua significando o que
      significava — é o padrão de quem não declara `alinhar`. As três
      classes novas são a declaração explícita, e vencem por vir depois. */
@@ -6191,6 +6209,10 @@ async function doLoginRole(){
      "9/8/2026" desencontram na mesma coluna, e a de BTU vira serrilha. */
   .lista-tabela td.num,
   .lista-tabela td.al-dir{ font-variant-numeric:tabular-nums; }
+  /* D-8yc-09: o cabeçalho deixa de ser `nowrap`. Era ELE, e não o dado,
+     que fixava o piso de largura: "Próx. manutenção" pedia 149px para uma
+     coluna cujo conteúdo cabe em 90. Quebrar em duas linhas custa altura
+     uma vez e devolve largura em todas as linhas. */
   .lista-tabela thead th{
     position:sticky; z-index:2;
     background:#F8F9FA;
@@ -6198,12 +6220,13 @@ async function doLoginRole(){
     text-transform:uppercase;
     letter-spacing:.3px;
     color:#555;
-    white-space:nowrap;
+    line-height:1.25;
     border-bottom:1px solid #E4E7EC;
   }
   .lista-tabela thead tr:first-child th{
     top:0;
     height:var(--alt-rotulos);
+    vertical-align:bottom;
   }
   /* D-8yc-02: sem este `top` as duas linhas do thead grudam ambas em 0 e
      a de filtros cobre a de rótulos — some justamente o nome da coluna
@@ -6234,6 +6257,11 @@ async function doLoginRole(){
   .lista-tabela td.col-id .cel-abrir{ color:#8A8A8A; font-weight:600; }
   /* Chips de atributo técnico (D-8yc-07) — mesma altura da linha, sem
      empurrar o ritmo vertical. */
+  /* Colunas de sim/não: o símbolo é estreito e o padding lateral seria
+     espaço morto — "o espaçamento vem da célula" (D-8yc-09). */
+  .lista-tabela td.al-centro{ padding-left:2px; padding-right:2px; }
+  .lista-tabela .marca-sim{ color:#168821; font-weight:700; }
+  .lista-tabela .marca-nao{ color:#CCC; }
   .lista-tabela .chip-atr{
     display:inline-block; padding:1px 6px; margin-right:3px;
     border-radius:999px; font-size:10px; font-weight:700;
@@ -7656,22 +7684,22 @@ function ultimaInspecaoISO(id){
 }
 
 var COLS_INV = [
-  { id:'id', rotulo:'#', tipo:'numero',
+  { id:'id', largura:3, rotulo:'#', tipo:'numero',
     valor:function(e){ return e.id; },
     texto:function(e){ return '#'+e.id; } },
-  { id:'area', rotulo:'Área', tipo:'texto',
+  { id:'area', largura:5, rotulo:'Área', tipo:'texto',
     valor:function(e){ return e.area; },
     texto:function(e){ return e.area; } },
-  { id:'predio', rotulo:'Prédio', tipo:'texto',
+  { id:'predio', largura:8, rotulo:'Prédio', tipo:'texto',
     valor:function(e){ return e.predio; },
     texto:function(e){ return e.predio; } },
-  { id:'local', rotulo:'Local', tipo:'texto',
+  { id:'local', largura:15, rotulo:'Local', tipo:'texto',
     valor:function(e){ return e.local; },
     texto:function(e){ return e.local; } },
-  { id:'tipo', rotulo:'Tipo', tipo:'texto',
+  { id:'tipo', largura:6, rotulo:'Tipo', tipo:'texto',
     valor:function(e){ return e.tipo; },
     texto:function(e){ return e.tipo; } },
-  { id:'btu', rotulo:'BTU', tipo:'numero',
+  { id:'btu', largura:6, rotulo:'BTU', tipo:'numero',
     valor:function(e){ return e.btu||null; },
     texto:function(e){ if(!e.btu) return ''; return e.btu>=1000 ? (e.btu/1000).toFixed(0)+'K BTU' : e.btu+' BTU'; } },
   /* D-3a6-21: rótulo Marca — a palavra do usuário — sobre o dado
@@ -7680,16 +7708,16 @@ var COLS_INV = [
      coluna, a importação de planilha de 260822-5hy existe para
      preenchê-la em massa). A folha de cadastro/busca/CSV continuam
      dizendo "Fabricante" — não mexido aqui. */
-  { id:'fabricante', rotulo:'Marca', tipo:'texto',
+  { id:'fabricante', largura:7, rotulo:'Marca', tipo:'texto',
     valor:function(e){ return e.fabricante||''; },
     texto:function(e){ return e.fabricante||''; } },
   /* dbToEquip não preenche e.modelo — chega null nas 171 linhas de hoje.
      Sem a queda para texto vazio, texto() devolveria null e a tela
      quebraria em 171 de 171 (T-3a6-04). */
-  { id:'modelo', rotulo:'Modelo', tipo:'texto',
+  { id:'modelo', largura:7, rotulo:'Modelo', tipo:'texto',
     valor:function(e){ return e.modelo||''; },
     texto:function(e){ return e.modelo||''; } },
-  { id:'estado', rotulo:'Estado', tipo:'texto', alinhar:'esq',
+  { id:'estado', largura:9, rotulo:'Estado', tipo:'texto', alinhar:'esq',
     valor:function(e){ return rotuloEstadoEquip(e.funciona); },
     texto:function(e){
       var base = rotuloEstadoEquip(e.funciona);
@@ -7700,11 +7728,11 @@ var COLS_INV = [
   /* D-8yc-03: `tipo:'numero'` continua — é o que ordena pela ordem
      semântica (CRÍTICA→BAIXA) e não pela alfabética. `alinhar:'esq'` é o
      que impede a pílula de sair encostada na coluna seguinte. */
-  { id:'criticidade', rotulo:'Criticidade', tipo:'numero', alinhar:'esq',
+  { id:'criticidade', largura:8, rotulo:'Criticidade', tipo:'numero', alinhar:'esq',
     valor:function(e){ var v=CRIT_ORDEM[autoCrit(e)]; return v===undefined?99:v; },
     texto:function(e){ return autoCrit(e); },
     celula:function(e){ return critPill(autoCrit(e)); } },
-  { id:'prox', rotulo:'Próx. manutenção', tipo:'numero', alinhar:'esq',
+  { id:'prox', largura:9, rotulo:'Próx. manutenção', tipo:'numero', alinhar:'esq',
     valor:function(e){ var d=proxManut(e); return d?d.getTime():null; },
     texto:function(e){ var d=proxManut(e); return d?fmtDate(d.toISOString().slice(0,10)):'Sem hist.'; },
     celula:function(e){ return dueBadgeHtml(proxManut(e)); } },
@@ -7718,7 +7746,7 @@ var COLS_INV = [
      lado de uma previsão com data) — isso é esperado, não defeito. Sem
      celula(): a pílula de "Próx. manutenção" diz urgência (futuro); uma
      data passada é só uma data. */
-  { id:'ultimaInspecao', rotulo:'Última inspeção', tipo:'numero', alinhar:'dir',
+  { id:'ultimaInspecao', largura:8, rotulo:'Última inspeção', tipo:'numero', alinhar:'dir',
     valor:function(e){ var iso=ultimaInspecaoISO(e.id); return iso ? new Date(iso+'T12:00:00').getTime() : null; },
     texto:function(e){ var iso=ultimaInspecaoISO(e.id); return iso ? fmtDate(iso) : 'Sem hist.'; } }
 ];
@@ -7729,22 +7757,28 @@ var COLS_INV = [
    `valor()` conta quantos atributos a máquina tem, para a ordenação pôr
    as marcadas primeiro; `texto()` devolve as palavras inteiras, porque é
    "inverter" que a pessoa digita no filtro, não "INV". */
-var COL_ATRIBUTOS = {
-  id:'atributos', rotulo:'Atributos', tipo:'numero', alinhar:'esq',
-  valor:function(e){
-    return EQUIP_ATRIBUTOS.reduce(function(n,k){ return n + (e[k]===true?1:0); }, 0) || null;
-  },
-  texto:function(e){
-    return EQUIP_ATRIBUTOS.filter(function(k){ return e[k]===true; })
-      .map(function(k){ return EQUIP_ROTULOS[k]; }).join(' ');
-  },
-  celula:function(e){
-    var siglas = {inverter:'INV', redundante:'RED', automacao:'AUT'};
-    return EQUIP_ATRIBUTOS.filter(function(k){ return e[k]===true; })
-      .map(function(k){ return '<span class="chip-atr" title="'+esc(EQUIP_ROTULOS[k])+'">'+siglas[k]+'</span>'; })
-      .join('') || '<span style="color:#BBB">—</span>';
-  }
-};
+/* D-8yc-12: três colunas, não uma de chips. O usuário pediu inverter,
+   redundante e automação logo depois de Criticidade — e três colunas
+   ordenam e filtram cada atributo por si ("só os inverter", "só os que
+   não são redundantes"), o que uma coluna de chips não faz. Cada uma é
+   estreita porque o conteúdo é um símbolo: o espaçamento sai da célula,
+   não do cabeçalho, que quebra em duas linhas.
+
+   `texto()` devolve Sim/Não/vazio — é o que o filtro casa e o que a
+   lista de sugestões oferece; `valor()` ordena com marcado primeiro e
+   não-avaliado sempre no fim (null é vazio para tabVazio). */
+function colAtributoEquip(chave){
+  return {
+    id:chave, largura:4, rotulo:EQUIP_ROTULOS[chave], tipo:'numero', alinhar:'centro',
+    valor:function(e){ return e[chave]===true ? 1 : (e[chave]===false ? 0 : null); },
+    texto:function(e){ return e[chave]===true ? 'Sim' : (e[chave]===false ? 'Não' : ''); },
+    celula:function(e){
+      if(e[chave]===true) return '<span class="marca-sim" title="'+esc(EQUIP_ROTULOS[chave])+': Sim">&#10003;</span>';
+      if(e[chave]===false) return '<span class="marca-nao" title="'+esc(EQUIP_ROTULOS[chave])+': Não">&#8211;</span>';
+      return '<span class="marca-nao" title="'+esc(EQUIP_ROTULOS[chave])+': não avaliado">&#8212;</span>';
+    }
+  };
+}
 
 var COLS_OS = [
   { id:'data', rotulo:'Data', tipo:'numero',
@@ -7976,12 +8010,34 @@ var TAB_ARG = {
    <tbody> sem precisar que o onchange inline carregue a lista inteira. */
 var TAB_CACHE = {};
 
+/* D-8yc-09: só vira `table-layout:fixed` quando TODAS as colunas
+   declaram largura — meia declaração é pior que nenhuma, porque o
+   navegador distribui o resto igualmente e a coluna longa some. Hoje só
+   COLS_INV declara; as outras cinco tabelas seguem em layout automático,
+   byte a byte como estavam. */
+function tabTemLarguras(colunas){
+  return (colunas||[]).length > 0 && colunas.every(function(c){ return typeof c.largura === 'number'; });
+}
+/* `largura` é PESO relativo, não porcentagem: normalizado aqui, no
+   desenho. É o que deixa a coluna de atributos entrar e sair (pela sonda
+   ATRIB_OK) sem que ninguém tenha de recalcular as outras catorze à mão
+   para somar 100 de novo. */
+function tabGrupoLarguras(colunas){
+  if(!tabTemLarguras(colunas)) return '';
+  var total = colunas.reduce(function(t,c){ return t + c.largura; }, 0);
+  if(!total) return '';
+  return '<colgroup>' + colunas.map(function(c){
+    return '<col style="width:'+((c.largura/total)*100).toFixed(3)+'%"/>';
+  }).join('') + '</colgroup>';
+}
+
 function tabDesenhar(tid, colunas, itens, aoAbrir){
   TAB_CACHE[tid] = {colunas:colunas, itens:itens, aoAbrir:aoAbrir};
   var estado = TAB_ESTADO[tid];
   var visiveis = tabAplicar(itens, estado.ord, estado.filtros, colunas);
+  var classe = 'lista-tabela' + (tabTemLarguras(colunas) ? ' fixa' : '');
   return tabBarra(tid, visiveis.length, itens.length) +
-    '<table class="lista-tabela">' +
+    '<table class="'+classe+'">' + tabGrupoLarguras(colunas) +
     tabCabecalho(tid, colunas) +
     '<tbody id="tbody-'+tid+'">' + tabCorpo(tid, colunas, itens, aoAbrir) + '</tbody>' +
     '</table>';
@@ -8009,8 +8065,7 @@ function tabCabecalho(tid, colunas){
     var classeNum = tabClasseAlinhamento(col);
     var filtroPreenchido = !!(estado.filtros && estado.filtros[col.id]);
     return '<th'+classeNum+' aria-sort="'+ariaSort+'">' +
-      '<button type="button" class="th-acao" onclick="tabOrdenarColuna(\''+tid+'\',\''+col.id+'\')" title="Ordenar por '+esc(col.rotulo)+'" aria-label="Ordenar por '+esc(col.rotulo)+'">'+esc(col.rotulo)+'<span class="th-seta" aria-hidden="true">'+seta+'</span></button>' +
-      '<button type="button" class="th-acao" onclick="tabAlternarFiltros(\''+tid+'\',\''+col.id+'\')" title="Filtrar '+esc(col.rotulo)+'" aria-label="Filtrar '+esc(col.rotulo)+'"'+(filtroPreenchido?' style="color:#1351B4;font-weight:800"':'')+'>⌕</button>' +
+      '<button type="button" class="th-acao'+(filtroPreenchido?' com-filtro':'')+'" onclick="tabOrdenarColuna(\''+tid+'\',\''+col.id+'\')" title="Ordenar por '+esc(col.rotulo)+'" aria-label="Ordenar por '+esc(col.rotulo)+'">'+esc(col.rotulo)+'<span class="th-seta" aria-hidden="true">'+seta+'</span></button>' +
       '</th>';
   }).join('') + '</tr>';
 
@@ -8063,25 +8118,37 @@ function tabCorpo(tid, colunas, itens, aoAbrir){
     var celulas = colunas.map(function(col, idx){
       var classeNum = tabClasseAlinhamento(col);
       if (col.id==='id') classeNum = classeNum ? classeNum.replace('"',' col-id "').replace(' "','"') : ' class="col-id"';
-      var conteudo = col.celula ? col.celula(item) : esc(col.texto(item));
+      // D-8yc-10: com reticências, o texto completo tem de continuar
+      // alcançável sem abrir a ficha — `title` na célula de texto puro.
+      // Célula com `celula()` desenha pílula/símbolo curto e não corta.
+      var bruto = col.celula ? '' : String(col.texto(item)===null||col.texto(item)===undefined?'':col.texto(item));
+      var titulo = bruto ? ' title="'+esc(bruto)+'"' : '';
+      var conteudo = col.celula ? col.celula(item) : esc(bruto);
       if(idx===0){
         // D-8rz-22: a primeira célula é um <button> de verdade — caminho
         // por teclado sem tabindex fingido — e para o clique dela não
         // disparar duas vezes o onclick da <tr>.
         conteudo = '<button type="button" class="cel-abrir" onclick="event.stopPropagation();'+onclickLinha+'">'+conteudo+'</button>';
       }
-      return '<td'+classeNum+'>'+conteudo+'</td>';
+      return '<td'+classeNum+titulo+'>'+conteudo+'</td>';
     }).join('');
     return '<tr onclick="'+onclickLinha+'">'+celulas+'</tr>';
   }).join('');
 }
 
+/* D-8yc-11: o ⌕ saiu do cabeçalho de cada coluna e virou um botão só,
+   aqui. Eram doze botões de ~20px empurrando a tabela em ~240px para
+   fazer o que um faz: abrir a linha de filtros. Aberta a linha, escolher
+   a coluna é clicar no campo dela — que é o que a pessoa já fazia depois
+   de clicar no ⌕. A barra passa a existir sempre, porque o botão precisa
+   de casa mesmo sem ordenação nem filtro ativos. */
 function tabBarra(tid, visiveis, total){
   var estado = TAB_ESTADO[tid];
   var temOrdem = !!(estado.ord && estado.ord.coluna);
   var temFiltro = Object.keys(estado.filtros||{}).some(function(k){ return estado.filtros[k]; });
-  if(!temOrdem && !temFiltro) return '';
-  var html = '<div class="tab-barra"><span>'+visiveis+' de '+total+'</span>';
+  var html = '<div class="tab-barra"><span>'+visiveis+' de '+total+'</span>' +
+    '<button type="button" onclick="tabAlternarFiltros(\''+tid+'\')" aria-expanded="'+(estado.aberto?'true':'false')+'">' +
+    (estado.aberto ? 'Ocultar filtros' : 'Filtros') + '</button>';
   if(temOrdem) html += '<button type="button" onclick="tabLimparOrdem(\''+tid+'\')">Limpar ordenação</button>';
   if(temFiltro) html += '<button type="button" onclick="tabLimparFiltros(\''+tid+'\')">Limpar filtros</button>';
   html += '</div>';
@@ -8121,7 +8188,11 @@ function tabAlternarFiltros(tid, coluna){
   }
   tabRedesenhar(tid);
   if(estado.aberto){
-    var campo = document.getElementById('tabf-'+tid+'-'+coluna);
+    // Sem coluna (botão único da barra, D-8yc-11): foca o primeiro campo,
+    // para o teclado não ficar parado no botão que acabou de sumir.
+    var campo = coluna
+      ? document.getElementById('tabf-'+tid+'-'+coluna)
+      : document.querySelector('#tbody-'+tid ? 'input[id^="tabf-'+tid+'-"]' : null);
     if(campo) campo.focus();
   }
 }
