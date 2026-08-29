@@ -2084,3 +2084,44 @@ publicado hoje), e a segunda, depois que o usuário aplicar a migração no SQL 
 - [ ] **Limite conhecido — sem estorno automático:** com uma OS em execução que já baixou
       estoque, voltar o status para trás (ex.: Aprovação) — o saldo **não** volta sozinho. A
       correção é registrar manualmente uma entrada na página Estoque com o motivo do estorno.
+
+## Refrigeração — atributos técnicos: inverter, redundante, automação (29/08/2026)
+
+Quick task 260829-500 (D-500-01..08). O cadastro de `equipamentos` passa a marcar três fatos que
+decidem manutenção e obra: **inverter** (compressor de rotação variável), **redundante** (unidade
+reserva do mesmo ambiente) e **automação** (controlável por automação predial).
+**`supabase/45_refrigeracao_atributos_tecnicos.sql` é escrita, aditiva e ainda NÃO aplicada**, e
+`46_refrigeracao_atributos_seed.sql` transcreve as marcações que o usuário já levantou em campo
+(19 inverter, 8 redundante). O roteiro tem duas partes, na ordem de publicação de D-cf8-25: o
+frontend vai ao ar antes do SQL.
+
+### Parte 1 — sem a migração 45 (compatibilidade, o estado publicado)
+
+- [ ] **Formulário idêntico:** abrir a ficha de um equipamento → "Editar cadastro" — os 22 campos
+      de sempre, sem Inverter, sem Redundante, sem Automação.
+- [ ] **Ficha idêntica:** o bloco "2 · Dados do equipamento" não ganha nenhuma linha nova.
+- [ ] **Salvar cadastro continua funcionando:** editar qualquer campo e salvar — sem erro
+      "column does not exist" (é a regressão que a sonda existe para impedir).
+- [ ] **Planilha idêntica:** exportar o inventário — o CSV tem exatamente as mesmas 25 colunas de
+      hoje; reimportar o arquivo sem editar continua fechando em zero mudança.
+
+### Parte 2 — depois de aplicar as migrações 45 e 46 (frontend já publicado primeiro)
+
+- [ ] **Três checkboxes no cadastro:** "Editar cadastro" mostra Inverter, Redundante e Automação
+      como caixas de marcar, no fim do formulário.
+- [ ] **Marcar e salvar:** marcar Inverter num equipamento e salvar — reabrir a ficha e conferir
+      que o bloco "2 · Dados do equipamento" mostra `Inverter: Sim`.
+- [ ] **Três estados, não dois:** um equipamento nunca avaliado mostra `—` (travessão), não `Não`.
+      Marcar e desmarcar deixa `Não`; é diferente de nunca ter sido avaliado.
+- [ ] **Seed conferido:** na página Parque, os 19 equipamentos do F21/EXOCET marcados como
+      inverter e os 8 redundantes (7 do PAIOL + o segundo split do servidor do COMANDO) aparecem
+      com o atributo na ficha.
+- [ ] **Três marcações que ficaram de fora:** marcar à mão o redundante das linhas do PAIOL **D-5**,
+      **K-6** e **R-7** — elas vieram sem id na planilha entregue e não foram adivinhadas
+      (D-500-08).
+- [ ] **Planilha ganha as três colunas:** exportar o inventário — o CSV tem Inverter, Redundante e
+      Automação no fim, com `SIM`/`NÃO`/vazio.
+- [ ] **Importar com `X`:** marcar `X` numa dessas colunas na planilha e reimportar — a tela de
+      conferência mostra a alteração e, ao confirmar, o equipamento fica marcado. Célula deixada
+      **vazia continua "não avaliado"** e não vira `Não`.
+- [ ] **Ciclo fechado:** exportar e reimportar sem editar nada — zero alterações, como antes.
