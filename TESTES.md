@@ -2199,3 +2199,10 @@ Quick task 260829-a8u (D-a8u-01..09). Versão de computador; sem migração.
 - [ ] **Regressão que este trabalho corrigiu:** com um filtro multivalor ativo
       (ex.: Área = AZUL + VERMELHA), abrir a ficha de um equipamento e voltar para
       o Parque — a lista **não** pode ficar vazia. Antes ficava.
+- [ ] **Não dá para ficar preso:** no menu de qualquer coluna, clicar em "Limpar"
+      (desmarca todos) e fechar o painel — a tabela fica vazia **mas continua na
+      tela**, com cabeçalho e a barra dizendo `0 de 175`; clicar em "Limpar filtros"
+      traz tudo de volta. Antes, a tela virava "Nenhum equipamento encontrado" sem
+      nada para clicar.
+- [ ] **Busca sem resultado continua como era:** digitar algo inexistente no campo
+      de busca ainda mostra o estado vazio — ali o campo continua na tela para desfazer.
