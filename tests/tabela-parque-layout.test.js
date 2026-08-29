@@ -138,11 +138,14 @@ test('numerais tabulares nas colunas de número e data', () => {
   assert.match(HTML, /\.lista-tabela td\.num,\s*\n\s*\.lista-tabela td\.al-dir\{\s*font-variant-numeric:tabular-nums/);
 });
 
-test('D-8yc-05: a seta de ordenação tem largura fixa — a coluna não muda de tamanho ao ordenar', () => {
+test('D-8yc-05: a seta tem largura fixa — a coluna não muda de tamanho ao ordenar', () => {
   const seta = recorte('.lista-tabela .th-seta{', '}');
-  assert.match(seta, /width:\s*1em/);
+  assert.match(seta, /width:\s*[\d.]+em/, 'sem largura fixa, ⇅/↑/↓/funil mudam a largura da coluna');
   assert.match(seta, /display:\s*inline-block/);
-  assert.ok(HTML.includes('class="th-seta"'), 'o cabeçalho tem de usar a classe');
+  // 260829-a8u: a seta deixou de ser um <span> e virou o botão que abre o
+  // menu de coluna — mesma largura, comportamento novo (D-a8u-01).
+  assert.match(HTML, /class="th-seta'\+\(filtroPreenchido\?' com-filtro':''\)\+'"/,
+    'o cabeçalho tem de usar a classe, e marcar quando a coluna está filtrada');
 });
 
 // D-3a6-14 dizia o contrário disto — "quem cede é a rolagem, nunca a
@@ -253,7 +256,17 @@ test('um valor só continua se comportando como antes desta task', () => {
 function sugestoes() {
   const ctx = { esc: (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'), TAB_CACHE: {} };
   vm.createContext(ctx);
-  vm.runInContext(recorte('var TAB_TETO_SUGESTOES', 'function tabCorpo('), ctx);
+  // 260829-a8u: tabSugestoes passou a reusar tabValoresDistintos, do
+  // núcleo puro — uma função com dois consumidores (o datalist e a lista
+  // de marcar do menu de coluna). O recorte do núcleo entra junto porque
+  // a dependência é real, não andaime de teste.
+  vm.runInContext(
+    recorte('/* ── tabelas de desktop: núcleo puro ── */', '/* ── tabelas de desktop: colunas ── */'),
+    ctx
+  );
+  // Recorte fecha ANTES do menu de coluna: aquele bloco registra
+  // ouvintes no `document` ao carregar, e o sandbox não tem DOM.
+  vm.runInContext(recorte('var TAB_TETO_SUGESTOES', '/* ── menu de coluna estilo Excel'), ctx);
   return ctx;
 }
 

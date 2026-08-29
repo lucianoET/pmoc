@@ -2095,8 +2095,8 @@ function filtrarInventario(dados, busca, chip, filtrosColuna){
         return pares.every(function(par){
           var col = null;
           for(var i=0;i<COLS_INV.length;i++){ if(COLS_INV[i].id===par[0]){ col=COLS_INV[i]; break; } }
-          if(!col) return true; // coluna de filtro ausente da definição é ignorada, não zera a lista
-          return tabNormalizar(col.texto(e)).indexOf(tabNormalizar(par[1])) >= 0;
+          // D-a8u-09: a MESMA regra que tabAplicar usa — nunca uma cópia.
+          return tabCasaFiltro(col, par[1], e);
         });
       });
     }
@@ -2140,7 +2140,13 @@ function renderInv(){
     el('inv-list').innerHTML = '<div class="empty">' + vazio + '</div>';
     return;
   }
-  if(TELA_LARGA){ el('inv-list').innerHTML = tabDesenhar('inv', COLS_INV, list, 'openDetail'); return; }
+  if(TELA_LARGA){
+    // A segunda lista é a mesma seleção SEM os filtros de coluna: é dela
+    // que o menu de coluna tira os valores para marcar (D-a8u-04).
+    var semColuna = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
+    el('inv-list').innerHTML = tabDesenhar('inv', COLS_INV, list, 'openDetail', semColuna);
+    return;
+  }
   el('inv-list').innerHTML = list.map(function(e){
     var estEq = equipEstado(e);
     var fn = estEq==='OP'?'ok':estEq==='INOP'?'nok':estEq==='OR'?'or':'ver';
@@ -6248,11 +6254,19 @@ async function doLoginRole(){
   }
   /* D-8yc-05: ⇅, ↑ e ↓ têm larguras diferentes — sem largura fixa a
      coluna muda de tamanho ao ordenar e a tabela inteira pula. */
+  /* D-8yc-05 + D-a8u-01: largura fixa (⇅/↑/↓/funil têm larguras
+     diferentes e a coluna mudaria de tamanho), e agora é o gatilho do
+     menu de coluna — sem custar um pixel a mais que a seta de ontem. */
   .lista-tabela .th-seta{
-    display:inline-block; width:1em; text-align:center; opacity:.55;
+    display:inline-block; width:1.15em; text-align:center; opacity:.55;
+    background:none; border:none; padding:0; margin-left:2px;
+    font:inherit; color:inherit; cursor:pointer; line-height:1;
   }
+  .lista-tabela .th-seta:hover{ opacity:1; }
+  .lista-tabela .th-seta:focus-visible{ outline:2px solid #1351B4; outline-offset:1px; }
   .lista-tabela th[aria-sort="ascending"] .th-seta,
   .lista-tabela th[aria-sort="descending"] .th-seta{ opacity:1; color:#1351B4; }
+  .lista-tabela .th-seta.com-filtro{ opacity:1; color:#1351B4; }
   /* A coluna # é referência, não leitura — pesa menos que o resto. */
   .lista-tabela td.col-id .cel-abrir{ color:#8A8A8A; font-weight:600; }
   /* Chips de atributo técnico (D-8yc-07) — mesma altura da linha, sem
@@ -6295,6 +6309,55 @@ async function doLoginRole(){
     -webkit-overflow-scrolling:touch;
     max-height:calc(100vh - 240px);
     min-height:320px;
+  }
+
+  /* ── menu de coluna (quick-260829-a8u) ── */
+  #tab-menu{
+    position:fixed; z-index:1200;
+    width:250px; max-height:min(70vh,460px);
+    display:flex; flex-direction:column;
+    background:#fff; border:1px solid #D9DEE8; border-radius:10px;
+    box-shadow:0 8px 28px rgba(0,0,0,.18);
+    padding:8px; font-size:13px;
+  }
+  #tab-menu[hidden]{ display:none; }
+  #tab-menu .tm-titulo{
+    font-size:11px; text-transform:uppercase; letter-spacing:.3px;
+    color:#777; padding:2px 6px 6px;
+  }
+  #tab-menu .tm-acao{
+    display:block; width:100%; text-align:left;
+    background:none; border:none; border-radius:6px;
+    padding:7px 8px; font:inherit; color:#1C1C1C; cursor:pointer;
+  }
+  #tab-menu .tm-acao:hover{ background:#F1F4FA; }
+  #tab-menu .tm-acao.ativo{ background:#E8ECF5; color:#1351B4; font-weight:700; }
+  #tab-menu .tm-sep{ height:1px; background:#EDEFF3; margin:6px 0; }
+  #tab-menu .tm-busca{
+    width:100%; padding:6px 8px; margin-bottom:6px;
+    border:1px solid #E0E0E0; border-radius:6px; font-size:12px;
+  }
+  #tab-menu .tm-todos{
+    display:flex; align-items:center; gap:6px;
+    padding:0 2px 6px; font-size:11px; color:#777;
+  }
+  #tab-menu .tm-todos button{
+    background:#E8ECF5; color:#1351B4; border:none; border-radius:6px;
+    padding:3px 8px; font-size:11px; font-weight:600; cursor:pointer;
+  }
+  #tab-menu .tm-todos span{ margin-left:auto; }
+  #tab-menu .tm-lista{ overflow:auto; flex:1; }
+  #tab-menu .tm-item{
+    display:flex; align-items:center; gap:8px;
+    padding:5px 6px; border-radius:6px; cursor:pointer;
+  }
+  #tab-menu .tm-item:hover{ background:#F1F4FA; }
+  #tab-menu .tm-item span{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #tab-menu .tm-vazio{ padding:10px 6px; color:#999; }
+  #tab-menu .tm-rodape{ padding-top:8px; text-align:right; }
+  #tab-menu .tm-fechar{
+    background:#1351B4; color:#fff; border:none; border-radius:6px;
+    padding:5px 14px; font-size:12px; font-weight:600; cursor:pointer;
   }
 
   .tab-barra{
@@ -7630,6 +7693,70 @@ function tabTermos(valor){
     .filter(function(t){ return t !== ''; });
 }
 
+/* D-a8u-09: a regra de "esta linha passa no filtro desta coluna",
+   escrita UMA vez. `filtrarInventario` tinha a própria cópia — feita
+   antes de D-8yc-08 existir — e por isso não entendia a vírgula: com
+   "AZUL, VERMELHA" ela procurava a subcadeia literal "azul, vermelha" e
+   devolvia zero linha, enquanto a mesma tela, redesenhando só o <tbody>,
+   devolvia 175. Duas implementações da mesma regra divergem no primeiro
+   dia em que uma delas muda; esta é a prova. */
+function tabCasaFiltro(col, filtro, item){
+  if(!col) return true;              // coluna ausente da definição é ignorada, não zera a lista
+  var termos = tabTermos(filtro);
+  if(!termos.length) return true;
+  var alvo = tabNormalizar(col.texto(item));
+  return termos.some(function(t){ return alvo.indexOf(t) >= 0; });
+}
+
+/* D-a8u-04: os valores distintos de uma coluna, na ordem de leitura.
+   Uma função, dois consumidores — o `<datalist>` da linha de campos e a
+   lista de marcar do menu de coluna. Sai sempre da lista INTEIRA: sobre
+   a já filtrada, marcar um valor apagaria os outros da própria lista e
+   não haveria como desmarcar. Valor que contém vírgula fica fora, porque
+   a vírgula é o separador do filtro (D-8yc-08) e oferecê-lo ensinaria um
+   filtro que não funciona. */
+function tabValoresDistintos(itens, col, teto){
+  var vistos = {}, saida = [];
+  var limite = teto || 500;
+  for(var i=0;i<(itens||[]).length && saida.length<limite;i++){
+    var t = col.texto(itens[i]);
+    if(t===null || t===undefined) continue;
+    t = String(t).trim();
+    if(t==='' || t.indexOf(',')>=0 || vistos[t]) continue;
+    vistos[t] = true;
+    saida.push(t);
+  }
+  saida.sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
+  return saida;
+}
+
+/* D-a8u-02: o estado das caixas de marcar é DERIVADO da string do
+   filtro, não guardado em paralelo — não existe segunda fonte de verdade
+   para divergir dela. Filtro vazio significa "tudo marcado" (D-a8u-05):
+   marcar tudo e não filtrar são a mesma coisa. */
+function tabValorSelecionado(filtro, valor, valores){
+  var termos = tabTermos(filtro);
+  if(!termos.length) return true;
+  return termos.indexOf(tabNormalizar(valor).trim()) >= 0;
+}
+
+/* Marca/desmarca um valor e devolve a string nova. Desmarcar a partir do
+   estado "tudo marcado" precisa materializar a lista inteira menos o
+   desmarcado — é a única forma de "todos menos um" existir numa string
+   de termos. Voltar a ter todos marcados devolve string vazia, para o
+   filtro sumir em vez de listar 175 valores (D-a8u-05). */
+function tabAlternarValor(filtro, valor, valores){
+  var atuais = tabTermos(filtro).length
+    ? (valores||[]).filter(function(v){ return tabValorSelecionado(filtro, v, valores); })
+    : (valores||[]).slice();
+  var i = atuais.indexOf(valor);
+  if(i >= 0) atuais.splice(i, 1);
+  else atuais.push(valor);
+  if(!atuais.length) return '\u0000';           // nada marcado: filtro que não casa nada
+  if(atuais.length === (valores||[]).length) return '';
+  return atuais.join(', ');
+}
+
 /* Filtra por subcadeia normalizada sobre texto() de cada coluna com filtro
    preenchido (conjunção — todos os filtros ativos precisam casar), depois
    ordena. Sem ord.coluna preserva a ordem de entrada. Sem sintaxe de
@@ -7644,12 +7771,7 @@ function tabAplicar(lista, ord, filtros, colunas){
   var resultado = filtrosAtivos.length
     ? (lista||[]).filter(function(item){
         return filtrosAtivos.every(function(par){
-          var col = _tabColuna(colunas, par[0]);
-          if(!col) return true;
-          var termos = tabTermos(par[1]);
-          if(!termos.length) return true;
-          var alvo = tabNormalizar(col.texto(item));
-          return termos.some(function(t){ return alvo.indexOf(t) >= 0; });
+          return tabCasaFiltro(_tabColuna(colunas, par[0]), par[1], item);
         });
       })
     : (lista||[]).slice();
@@ -8031,8 +8153,13 @@ function tabGrupoLarguras(colunas){
   }).join('') + '</colgroup>';
 }
 
-function tabDesenhar(tid, colunas, itens, aoAbrir){
-  TAB_CACHE[tid] = {colunas:colunas, itens:itens, aoAbrir:aoAbrir};
+/* `todos` é a lista ANTES dos filtros de coluna — o que a lista de
+   marcar do menu precisa (D-a8u-04). Sem ela, `renderInv` entrega uma
+   lista já filtrada e desmarcar um valor o apagaria da própria lista,
+   sem caminho de volta. Opcional: quem não passa (as outras cinco
+   tabelas, que não pré-filtram) cai em `itens`, como antes. */
+function tabDesenhar(tid, colunas, itens, aoAbrir, todos){
+  TAB_CACHE[tid] = {colunas:colunas, itens:itens, aoAbrir:aoAbrir, todos:todos||itens};
   var estado = TAB_ESTADO[tid];
   var visiveis = tabAplicar(itens, estado.ord, estado.filtros, colunas);
   var classe = 'lista-tabela' + (tabTemLarguras(colunas) ? ' fixa' : '');
@@ -8064,8 +8191,17 @@ function tabCabecalho(tid, colunas){
     var seta = dir==='asc' ? '↑' : (dir==='desc' ? '↓' : '⇅');
     var classeNum = tabClasseAlinhamento(col);
     var filtroPreenchido = !!(estado.filtros && estado.filtros[col.id]);
+    // D-a8u-01: a seta que já existia vira o gatilho do menu — largura
+    // idêntica à de hoje, comportamento novo. Somar um ícone por coluna
+    // custaria ~11px × 15 e desfaria o "cabe na tela" de D-8yc-09.
+    // D-a8u-07: funil quando a coluna tem filtro, que é o sinal que
+    // faltava — com o painel fechado, nada dizia que ela estava filtrada.
+    var glifo = filtroPreenchido ? '\u2707' : seta;
     return '<th'+classeNum+' aria-sort="'+ariaSort+'">' +
-      '<button type="button" class="th-acao'+(filtroPreenchido?' com-filtro':'')+'" onclick="tabOrdenarColuna(\''+tid+'\',\''+col.id+'\')" title="Ordenar por '+esc(col.rotulo)+'" aria-label="Ordenar por '+esc(col.rotulo)+'">'+esc(col.rotulo)+'<span class="th-seta" aria-hidden="true">'+seta+'</span></button>' +
+      '<button type="button" class="th-acao" onclick="tabOrdenarColuna(\''+tid+'\',\''+col.id+'\')" title="Ordenar por '+esc(col.rotulo)+'" aria-label="Ordenar por '+esc(col.rotulo)+'">'+esc(col.rotulo)+'</button>' +
+      '<button type="button" class="th-seta'+(filtroPreenchido?' com-filtro':'')+'" id="thmenu-'+tid+'-'+col.id+'"'+
+        ' onclick="event.stopPropagation();tabAbrirMenu(\''+tid+'\',\''+col.id+'\')"'+
+        ' aria-haspopup="dialog" title="Ordenar e filtrar '+esc(col.rotulo)+'" aria-label="Ordenar e filtrar '+esc(col.rotulo)+'">'+glifo+'</button>' +
       '</th>';
   }).join('') + '</tr>';
 
@@ -8093,21 +8229,159 @@ var TAB_TETO_SUGESTOES = 200;
 function tabSugestoes(tid, col, idLista){
   var cache = TAB_CACHE[tid];
   if(!cache || !cache.itens) return '';
-  var vistos = {}, opcoes = [];
-  for(var i=0;i<cache.itens.length && opcoes.length<TAB_TETO_SUGESTOES;i++){
-    var t = col.texto(cache.itens[i]);
-    if(t===null || t===undefined) continue;
-    t = String(t).trim();
-    if(t==='' || t.indexOf(',')>=0 || vistos[t]) continue; // vírgula é o separador: um valor que a contém não é selecionável
-    vistos[t] = true;
-    opcoes.push(t);
-  }
+  var opcoes = tabValoresDistintos(cache.todos || cache.itens, col, TAB_TETO_SUGESTOES);
   if(!opcoes.length) return '';
-  opcoes.sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
   return '<datalist id="'+idLista+'">' +
     opcoes.map(function(o){ return '<option value="'+esc(o)+'"></option>'; }).join('') +
     '</datalist>';
 }
+
+/* ── menu de coluna estilo Excel (quick-260829-a8u) ── */
+/* D-a8u-03: o painel mora no <body> com position:fixed. Dentro da tabela
+   ele seria recortado pelo `overflow:auto` do #inv-list — a mesma
+   armadilha de recorte que D-8yc-01 pagou caro para descobrir. */
+var TAB_MENU = null; // {tid, colId, busca}
+
+function tabMenuEl(){
+  var el = document.getElementById('tab-menu');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'tab-menu';
+    el.setAttribute('role','dialog');
+    el.hidden = true;
+    document.body.appendChild(el);
+  }
+  return el;
+}
+
+function tabAbrirMenu(tid, colId){
+  if(TAB_MENU && TAB_MENU.tid===tid && TAB_MENU.colId===colId){ tabFecharMenu(); return; }
+  TAB_MENU = {tid:tid, colId:colId, busca:''};
+  tabRenderMenu();
+}
+
+function tabFecharMenu(){
+  var anterior = TAB_MENU;
+  TAB_MENU = null;
+  var el = document.getElementById('tab-menu');
+  if(el){ el.hidden = true; el.innerHTML = ''; }
+  // D-a8u-06: o foco volta para o gatilho — um popover que fecha e larga
+  // o foco no <body> deixa o teclado no vazio.
+  if(anterior){
+    var gatilho = document.getElementById('thmenu-'+anterior.tid+'-'+anterior.colId);
+    if(gatilho) gatilho.focus();
+  }
+}
+
+function tabMenuBuscar(v){
+  if(!TAB_MENU) return;
+  TAB_MENU.busca = v;
+  tabRenderMenu(true);
+}
+
+function tabMenuOrdenar(dir){
+  if(!TAB_MENU) return;
+  var estado = TAB_ESTADO[TAB_MENU.tid];
+  estado.ord = dir ? {coluna:TAB_MENU.colId, dir:dir} : {coluna:null, dir:null};
+  var alvo = TAB_MENU;
+  tabRedesenhar(alvo.tid);
+  TAB_MENU = alvo;
+  tabRenderMenu();
+}
+
+function tabMenuMarcar(valor){
+  if(!TAB_MENU) return;
+  var m = TAB_MENU, estado = TAB_ESTADO[m.tid];
+  var cache = TAB_CACHE[m.tid];
+  var col = (cache.colunas||[]).filter(function(c){ return c.id===m.colId; })[0];
+  if(!col) return;
+  var valores = tabValoresDistintos(cache.todos || cache.itens, col);
+  estado.filtros = estado.filtros || {};
+  estado.filtros[m.colId] = tabAlternarValor(estado.filtros[m.colId]||'', valor, valores);
+  tabRedesenhar(m.tid);
+  TAB_MENU = m;
+  tabRenderMenu();
+}
+
+function tabMenuTodos(marcar){
+  if(!TAB_MENU) return;
+  var m = TAB_MENU, estado = TAB_ESTADO[m.tid];
+  estado.filtros = estado.filtros || {};
+  // D-a8u-05: tudo marcado é filtro nenhum; nada marcado é um termo que
+  // não casa com valor algum (a tabela fica vazia, que é o que a pessoa
+  // pediu ao desmarcar tudo).
+  estado.filtros[m.colId] = marcar ? '' : '\u0000';
+  tabRedesenhar(m.tid);
+  TAB_MENU = m;
+  tabRenderMenu();
+}
+
+function tabRenderMenu(manterFoco){
+  var el = tabMenuEl();
+  if(!TAB_MENU){ el.hidden = true; el.innerHTML=''; return; }
+  var m = TAB_MENU;
+  var estado = TAB_ESTADO[m.tid], cache = TAB_CACHE[m.tid];
+  var col = (cache && cache.colunas || []).filter(function(c){ return c.id===m.colId; })[0];
+  if(!col){ tabFecharMenu(); return; }
+
+  var filtro = (estado.filtros && estado.filtros[m.colId]) || '';
+  var valores = tabValoresDistintos(cache.todos || cache.itens, col);
+  var busca = tabNormalizar(m.busca).trim();
+  var visiveis = busca ? valores.filter(function(v){ return tabNormalizar(v).indexOf(busca)>=0; }) : valores;
+  var marcados = valores.filter(function(v){ return tabValorSelecionado(filtro, v, valores); }).length;
+  var dirAtual = (estado.ord && estado.ord.coluna===m.colId) ? estado.ord.dir : null;
+
+  var lista = visiveis.map(function(v){
+    var on = tabValorSelecionado(filtro, v, valores);
+    return '<label class="tm-item"><input type="checkbox"'+(on?' checked':'')+
+      ' onchange="tabMenuMarcar('+JSON.stringify(v).replace(/"/g,'&quot;')+')"/>'+
+      '<span>'+esc(v)+'</span></label>';
+  }).join('') || '<div class="tm-vazio">Nenhum valor encontrado</div>';
+
+  el.innerHTML =
+    '<div class="tm-titulo">'+esc(col.rotulo)+'</div>' +
+    '<button type="button" class="tm-acao'+(dirAtual==='asc'?' ativo':'')+'" onclick="tabMenuOrdenar(\'asc\')">Ordenar crescente</button>' +
+    '<button type="button" class="tm-acao'+(dirAtual==='desc'?' ativo':'')+'" onclick="tabMenuOrdenar(\'desc\')">Ordenar decrescente</button>' +
+    (dirAtual ? '<button type="button" class="tm-acao" onclick="tabMenuOrdenar(null)">Limpar ordenação</button>' : '') +
+    '<div class="tm-sep"></div>' +
+    '<input type="search" class="tm-busca" id="tm-busca" placeholder="Buscar valor…" value="'+esc(m.busca)+'" oninput="tabMenuBuscar(this.value)"/>' +
+    '<div class="tm-todos">' +
+      '<button type="button" onclick="tabMenuTodos(true)">Marcar todos</button>' +
+      '<button type="button" onclick="tabMenuTodos(false)">Limpar</button>' +
+      '<span>'+marcados+' de '+valores.length+'</span>' +
+    '</div>' +
+    '<div class="tm-lista">'+lista+'</div>' +
+    '<div class="tm-rodape"><button type="button" class="tm-fechar" onclick="tabFecharMenu()">Fechar</button></div>';
+
+  el.hidden = false;
+  var gatilho = document.getElementById('thmenu-'+m.tid+'-'+m.colId);
+  if(gatilho){
+    var r = gatilho.getBoundingClientRect();
+    var largura = el.offsetWidth || 240;
+    // Não sair da janela pela direita nem por baixo.
+    var esq = Math.min(r.left, window.innerWidth - largura - 8);
+    el.style.left = Math.max(8, esq) + 'px';
+    el.style.top = Math.min(r.bottom + 4, window.innerHeight - el.offsetHeight - 8) + 'px';
+  }
+  if(!manterFoco){
+    var campo = document.getElementById('tm-busca');
+    if(campo) campo.focus();
+  } else {
+    var c2 = document.getElementById('tm-busca');
+    if(c2){ c2.focus(); c2.setSelectionRange(c2.value.length, c2.value.length); }
+  }
+}
+
+/* D-a8u-06: clique fora e Esc fecham. Registrados uma vez, no documento —
+   não um par de ouvintes por abertura, que vazaria a cada clique. */
+document.addEventListener('click', function(ev){
+  if(!TAB_MENU) return;
+  var el = document.getElementById('tab-menu');
+  if(el && !el.contains(ev.target)) tabFecharMenu();
+});
+document.addEventListener('keydown', function(ev){
+  if(ev.key==='Escape' && TAB_MENU) tabFecharMenu();
+});
 
 function tabCorpo(tid, colunas, itens, aoAbrir){
   var estado = TAB_ESTADO[tid];
