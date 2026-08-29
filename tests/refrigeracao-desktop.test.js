@@ -501,9 +501,8 @@ test('as cinco tabelas têm sua própria chamada tabDesenhar — um desenhista, 
   }
 });
 
-test('estrutural: as guardas de TELA_LARGA em renderInv/renderOS/renderMovim/renderPmoc vêm depois do primeiro "return;" do corpo (o ramo de lista vazia)', () => {
+test('estrutural: as guardas de TELA_LARGA em renderOS/renderMovim/renderPmoc vêm depois do primeiro "return;" do corpo (o ramo de lista vazia)', () => {
   const casos = [
-    ['renderInv', "tabDesenhar('inv'"],
     ['renderOS', "tabDesenhar('os'"],
     ['renderMovim', "tabDesenhar('movim'"],
     ['renderPmoc', "tabDesenhar('pmoc'"],
@@ -516,6 +515,32 @@ test('estrutural: as guardas de TELA_LARGA em renderInv/renderOS/renderMovim/ren
     const posReturn = HTML.indexOf('return;', iniFn);
     assert.ok(posReturn > iniFn && posReturn < posGuarda, `guarda de ${fn} não vem depois do ramo de lista vazia`);
   });
+});
+
+// 260829-a8u (D-a8u-10): renderInv saiu desta lista porque o fato mudou,
+// não porque a regra foi afrouxada. Ela passou a ter DOIS desenhos de
+// tabela: o primeiro só quando há filtro de coluna ativo — aí zero linha
+// desenha a tabela vazia, com cabeçalho e "Limpar filtros", que são os
+// únicos caminhos de volta —, e o segundo, o de sempre, depois do ramo
+// de lista vazia. Sem o primeiro, um filtro que não casa nada trocava o
+// #inv-list inteiro pelo estado vazio e prendia o usuário.
+test('estrutural: renderInv desenha a tabela ANTES do ramo vazio só sob filtro de coluna, e o desenho normal continua depois', () => {
+  const iniFn = HTML.indexOf('function renderInv(){');
+  assert.ok(iniFn > 0, 'renderInv não encontrada');
+  const fimFn = HTML.indexOf('\nfunction ', iniFn + 10);
+  const corpo = HTML.slice(iniFn, fimFn);
+
+  const posGuardaFiltro = corpo.indexOf('if(!list.length && TELA_LARGA && temFiltroColuna)');
+  assert.ok(posGuardaFiltro > 0, 'o desenho sob filtro de coluna precisa existir — é o caminho de volta');
+
+  const posRamoVazio = corpo.indexOf('if(!list.length){');
+  assert.ok(posRamoVazio > posGuardaFiltro,
+    'o ramo de lista vazia tem de vir DEPOIS: busca e chip continuam caindo nele');
+
+  const desenhos = [...corpo.matchAll(/tabDesenhar\('inv'/g)].map((m) => m.index);
+  assert.equal(desenhos.length, 2, 'exatamente dois desenhos: o de filtro vazio e o normal');
+  assert.ok(desenhos[0] < posRamoVazio, 'o primeiro desenho é o de filtro de coluna');
+  assert.ok(desenhos[1] > posRamoVazio, 'o desenho normal continua depois do ramo de lista vazia');
 });
 
 test('estrutural: a guarda de renderAlerts entra depois dos quatro conjuntos calculados (forma própria, D-8rz-23)', () => {

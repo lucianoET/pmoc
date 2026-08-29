@@ -2119,6 +2119,28 @@ function renderInv(){
     el('inv-label').textContent = list.length===DATA.length ? 'Todos os Equipamentos' : 'Filtrado';
   }
 
+  /* D-a8u-10: com filtro de coluna ativo, zero linha NÃO cai no estado
+     vazio — a tabela é desenhada mesmo assim, vazia. O estado vazio
+     substitui o `#inv-list` inteiro, e com ele somem o cabeçalho e a
+     barra "Limpar filtros", que são os únicos caminhos de volta: o
+     usuário ficava preso, sem nada na tela para desfazer o próprio
+     filtro. O menu de coluna tornou isso trivial de alcançar ("Limpar"
+     desmarca tudo), mas a armadilha já existia para quem digitasse um
+     termo que não casa. Busca e chip continuam caindo no estado vazio,
+     porque para esses o caminho de volta (campo de busca, faixa de
+     chips) continua na tela. */
+  var temFiltroColuna = Object.keys(TAB_ESTADO.inv.filtros||{}).some(function(k){
+    return TAB_ESTADO.inv.filtros[k];
+  });
+  if(!list.length && TELA_LARGA && temFiltroColuna){
+    // Entrega a lista SEM filtro de coluna como itens: `tabAplicar` aplica
+    // os filtros de novo (mesma regra, D-a8u-09) e a barra diz "0 de 175"
+    // em vez de "0 de 0" — o total tem de continuar sendo o do inventário.
+    var semColunaVazio = filtrarInventario(DATA, busca, invChip).sort(cmpInv);
+    el('inv-list').innerHTML = tabDesenhar('inv', COLS_INV, semColunaVazio, 'openDetail', semColunaVazio);
+    return;
+  }
+
   if(!list.length){
     /* "Vencidos" vazio quase nunca significa "em dia": hoje 169 dos 171 equipamentos
        não têm histórico, e sem data anterior nextPmoc() não tem de onde contar. */

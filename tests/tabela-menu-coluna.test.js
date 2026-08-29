@@ -192,3 +192,33 @@ test('os ouvintes de documento são registrados UMA vez, não por abertura', () 
   assert.equal((bloco.match(/document\.addEventListener/g) || []).length, 2,
     'um por evento (click e keydown) — registrar por abertura vazaria um ouvinte a cada clique');
 });
+
+// ── 7. o caminho de volta (D-a8u-10) ────────────────────────────────
+
+// Achado ao conferir em produção: "Limpar" no menu desmarca tudo, a
+// tabela fica com zero linha, e o estado vazio substituía o #inv-list
+// INTEIRO — sumindo com o cabeçalho e com a barra "Limpar filtros", que
+// são os únicos caminhos de volta. O usuário ficava preso com a tela
+// dizendo "Nenhum equipamento encontrado" e nada para clicar.
+test('D-a8u-10: filtro de coluna que não casa nada mantém a tabela — com cabeçalho e barra', () => {
+  const iniFn = HTML.indexOf('function renderInv(){');
+  const corpo = HTML.slice(iniFn, HTML.indexOf('\nfunction ', iniFn + 10));
+  assert.match(corpo, /var temFiltroColuna = Object\.keys\(TAB_ESTADO\.inv\.filtros\|\|\{\}\)\.some/);
+  assert.match(corpo, /if\(!list\.length && TELA_LARGA && temFiltroColuna\)\{/);
+  assert.ok(corpo.indexOf('if(!list.length && TELA_LARGA && temFiltroColuna)') < corpo.indexOf('if(!list.length){'),
+    'a saída pelo filtro tem de vir ANTES do estado vazio, senão nunca é alcançada');
+});
+
+test('D-a8u-10: busca e chip continuam caindo no estado vazio', () => {
+  const iniFn = HTML.indexOf('function renderInv(){');
+  const corpo = HTML.slice(iniFn, HTML.indexOf('\nfunction ', iniFn + 10));
+  assert.match(corpo, /Nenhum equipamento encontrado/,
+    'para busca e chip o caminho de volta (campo, faixa de chips) continua na tela — o estado vazio fica');
+  assert.match(corpo, /invChip==='vencidos'/, 'as mensagens específicas de chip continuam');
+});
+
+test('a barra da tabela oferece "Limpar filtros" — é o caminho de volta que a tabela vazia preserva', () => {
+  const barra = HTML.slice(HTML.indexOf('function tabBarra('), HTML.indexOf('\nfunction ', HTML.indexOf('function tabBarra(') + 10));
+  assert.match(barra, /Limpar filtros/);
+  assert.match(barra, /if\(temFiltro\) html \+=/, 'só aparece quando há filtro — não é ruído permanente');
+});

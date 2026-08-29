@@ -63,6 +63,22 @@ isto, porque ele redesenha a tabela inteira a cada clique.
 - Filtro do menu combina com o de texto: VERMELHA (91) + Prédio F21 = 23.
 - Rolagem horizontal continua **0** (1337px em 1352px). Console sem erro.
 
+## Segundo achado — a tabela vazia prendia o usuário (D-a8u-10)
+
+Conferindo **em produção** depois do merge: "Limpar" no menu desmarca tudo, a
+tabela fica com zero linha, e o estado vazio substituía o `#inv-list` **inteiro**
+— sumindo com o cabeçalho e com a barra "Limpar filtros", que são os únicos
+caminhos de volta. A tela dizia "Nenhum equipamento encontrado" e não havia nada
+para clicar; só recarregando.
+
+A armadilha já existia para quem digitasse um termo que não casa; o menu a
+tornou trivial de alcançar, com um clique num botão chamado "Limpar".
+
+Agora, com filtro de coluna ativo, zero linha **desenha a tabela mesmo assim**:
+cabeçalho, barra `0 de 175`, e "Limpar filtros" funcionando. Busca e chip
+continuam caindo no estado vazio, porque para esses o caminho de volta (campo de
+busca, faixa de chips) continua na tela.
+
 ## Fora de escopo
 
 Cartão de celular (tabelas só existem ≥1024px); nenhuma das outras cinco tabelas
