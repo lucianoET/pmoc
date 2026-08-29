@@ -2093,7 +2093,7 @@ arranjo em que só um equipamento do conjunto opera por vez — rodízio das dua
 central do prédio × splits no F21) e **automação** (controlável por automação predial).
 **`supabase/45_refrigeracao_atributos_tecnicos.sql` é escrita, aditiva e ainda NÃO aplicada**, e
 `46_refrigeracao_atributos_seed.sql` transcreve as marcações que o usuário já levantou em campo
-(19 inverter, 8 redundante). O roteiro tem duas partes, na ordem de publicação de D-cf8-25: o
+(19 inverter, 16 redundante). O roteiro tem duas partes, na ordem de publicação de D-cf8-25: o
 frontend vai ao ar antes do SQL.
 
 ### Parte 1 — sem a migração 45 (compatibilidade, o estado publicado)

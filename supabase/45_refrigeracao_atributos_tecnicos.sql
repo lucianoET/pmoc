@@ -57,7 +57,7 @@ alter table equipamentos add column if not exists redundante boolean;
 alter table equipamentos add column if not exists automacao  boolean;
 
 comment on column equipamentos.inverter   is 'Compressor de rotação variável (inverter). null = não avaliado.';
-comment on column equipamentos.redundante is 'Unidade reserva do mesmo ambiente. null = não avaliado.';
+comment on column equipamentos.redundante is 'Participa de arranjo em que só um equipamento do conjunto opera por vez (rodízio no paiol; central x splits no F21). Não é reserva fixa. null = não avaliado.';
 comment on column equipamentos.automacao  is 'Controlável por sistema de automação predial. null = não avaliado.';
 
 -- Conferência (esperado: 3 linhas, todas boolean e is_nullable = YES):

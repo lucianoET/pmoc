@@ -1,7 +1,8 @@
 // Gate da quick-260829-500 — três atributos técnicos no cadastro de
-// /refrigeracao: inverter (rotação variável), redundante (unidade
-// reserva do mesmo ambiente) e automacao (controlável por automação
-// predial).
+// /refrigeracao: inverter (rotação variável), redundante (participa de
+// arranjo em que só um equipamento do conjunto opera por vez — rodízio
+// entre as duas máquinas do paiol, central × splits no F21) e automacao
+// (controlável por automação predial).
 //
 // O que este gate protege, em ordem de gravidade:
 //
