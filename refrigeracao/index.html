@@ -445,6 +445,11 @@ async function atribSondarEsquema() {
   ATRIB_OK = !r.error;
   if (ATRIB_OK && EQUIP_EDITAVEIS.indexOf('inverter') < 0) {
     EQUIP_EDITAVEIS = EQUIP_EDITAVEIS.concat(EQUIP_ATRIBUTOS);
+    // D-8yc-07: a coluna da tabela do Parque liga no mesmo ponto — a
+    // tela ganha os três campos e a coluna juntos, ou não ganha nenhum.
+    if (typeof COLS_INV !== 'undefined' && typeof COL_ATRIBUTOS !== 'undefined') {
+      COLS_INV = COLS_INV.concat([COL_ATRIBUTOS]);
+    }
   }
   return ATRIB_OK;
 }
@@ -6145,37 +6150,95 @@ async function doLoginRole(){
   .search-wrap{ position:static; }
 
   /* ── tabela (D-8rz-19: tudo escopado em .lista-tabela) ── */
+  /* D-8yc-01: o `overflow:hidden` que estava aqui existia SÓ para o
+     border-radius recortar os cantos — e, sendo a tabela o scrollport
+     mais próximo do <thead>, matava em silêncio o position:sticky de
+     D-8rz-20 (medido: com o container em y=644, o cabeçalho rolava até
+     y=44, 600px acima da área visível). Os cantos passam a ser
+     recortados nas próprias células das pontas, que desenha igual e não
+     cria scrollport nenhum. Devolver `overflow:hidden` aqui reintroduz o
+     defeito sem nenhum sintoma visível no CSS — por isso há gate. */
   .lista-tabela{
     width:100%;
-    border-collapse:collapse;
+    border-collapse:separate;
+    border-spacing:0;
     background:#fff;
     border-radius:12px;
-    overflow:hidden;
     box-shadow:0 1px 4px rgba(0,0,0,.07);
+    --alt-rotulos:38px; /* D-8yc-02: a altura da linha 1 e o top da 2 */
   }
+  .lista-tabela thead tr:first-child th:first-child{ border-top-left-radius:12px; }
+  .lista-tabela thead tr:first-child th:last-child{ border-top-right-radius:12px; }
+  .lista-tabela tbody tr:last-child td:first-child{ border-bottom-left-radius:12px; }
+  .lista-tabela tbody tr:last-child td:last-child{ border-bottom-right-radius:12px; }
   .lista-tabela th,
   .lista-tabela td{
-    padding:10px 12px;
+    padding:9px 12px;
     font-size:13px;
     text-align:left;
+    vertical-align:middle;
     border-bottom:1px solid #F0F0F0;
   }
+  /* D-8yc-03: `.num` continua existindo e continua significando o que
+     significava — é o padrão de quem não declara `alinhar`. As três
+     classes novas são a declaração explícita, e vencem por vir depois. */
   .lista-tabela th.num,
   .lista-tabela td.num{ text-align:right; }
+  .lista-tabela th.al-esq,   .lista-tabela td.al-esq{ text-align:left; }
+  .lista-tabela th.al-dir,   .lista-tabela td.al-dir{ text-align:right; }
+  .lista-tabela th.al-centro,.lista-tabela td.al-centro{ text-align:center; }
+  /* D-8yc-04: dígito alinhado com dígito. Sem isto "12/08/2026" e
+     "9/8/2026" desencontram na mesma coluna, e a de BTU vira serrilha. */
+  .lista-tabela td.num,
+  .lista-tabela td.al-dir{ font-variant-numeric:tabular-nums; }
   .lista-tabela thead th{
-    position:sticky; top:0; z-index:2;
+    position:sticky; z-index:2;
     background:#F8F9FA;
     font-size:11px;
     text-transform:uppercase;
     letter-spacing:.3px;
     color:#555;
     white-space:nowrap;
+    border-bottom:1px solid #E4E7EC;
+  }
+  .lista-tabela thead tr:first-child th{
+    top:0;
+    height:var(--alt-rotulos);
+  }
+  /* D-8yc-02: sem este `top` as duas linhas do thead grudam ambas em 0 e
+     a de filtros cobre a de rótulos — some justamente o nome da coluna
+     que se está filtrando (medido: 42px de sobreposição). */
+  .lista-tabela thead tr:nth-child(2) th{
+    top:var(--alt-rotulos);
+    background:#FDFDFE;
+    z-index:1;
   }
   .lista-tabela tbody tr:nth-child(even){ background:#FAFBFC; }
   .lista-tabela tbody tr:hover{ background:#EEF2FA; cursor:pointer; }
+  /* D-8yc-06: a tabela é larga porque o dado é largo (D-3a6-14 —
+     ninguém trunca coluna aqui); o que dá para devolver é o espaço que
+     não é dado, e são dois botões por coluna em doze colunas. */
   .lista-tabela .th-acao{
     background:none; border:none; cursor:pointer;
-    color:inherit; font:inherit; padding:2px 4px; margin-left:4px;
+    color:inherit; font:inherit; padding:1px 2px; margin-left:2px;
+    line-height:1;
+  }
+  /* D-8yc-05: ⇅, ↑ e ↓ têm larguras diferentes — sem largura fixa a
+     coluna muda de tamanho ao ordenar e a tabela inteira pula. */
+  .lista-tabela .th-seta{
+    display:inline-block; width:1em; text-align:center; opacity:.55;
+  }
+  .lista-tabela th[aria-sort="ascending"] .th-seta,
+  .lista-tabela th[aria-sort="descending"] .th-seta{ opacity:1; color:#1351B4; }
+  /* A coluna # é referência, não leitura — pesa menos que o resto. */
+  .lista-tabela td.col-id .cel-abrir{ color:#8A8A8A; font-weight:600; }
+  /* Chips de atributo técnico (D-8yc-07) — mesma altura da linha, sem
+     empurrar o ritmo vertical. */
+  .lista-tabela .chip-atr{
+    display:inline-block; padding:1px 6px; margin-right:3px;
+    border-radius:999px; font-size:10px; font-weight:700;
+    letter-spacing:.4px; background:#E8ECF5; color:#1351B4;
+    vertical-align:middle;
   }
   .lista-tabela .th-acao:focus-visible{ outline:2px solid #1351B4; outline-offset:1px; }
   .lista-tabela .cel-abrir{
@@ -7525,6 +7588,20 @@ function tabComparar(a, b, coluna, dir, colunas){
   return dir==='desc' ? -cmp : cmp;
 }
 
+/* D-8yc-08: um filtro de coluna aceita VÁRIOS valores separados por
+   vírgula — "AZUL, VERMELHA" traz as duas áreas. Dentro da coluna é OU;
+   entre colunas continua sendo E, que é a regra que já existia. Termo
+   vazio é descartado, e não só por higiene: sem isso a vírgula recém
+   digitada (antes do segundo valor) zeraria a lista inteira na frente do
+   usuário. Coluna cujos termos somem todos volta a ser coluna sem
+   filtro. */
+function tabTermos(valor){
+  return String(valor===null||valor===undefined?'':valor)
+    .split(',')
+    .map(function(t){ return tabNormalizar(t).trim(); })
+    .filter(function(t){ return t !== ''; });
+}
+
 /* Filtra por subcadeia normalizada sobre texto() de cada coluna com filtro
    preenchido (conjunção — todos os filtros ativos precisam casar), depois
    ordena. Sem ord.coluna preserva a ordem de entrada. Sem sintaxe de
@@ -7541,7 +7618,10 @@ function tabAplicar(lista, ord, filtros, colunas){
         return filtrosAtivos.every(function(par){
           var col = _tabColuna(colunas, par[0]);
           if(!col) return true;
-          return tabNormalizar(col.texto(item)).indexOf(tabNormalizar(par[1])) >= 0;
+          var termos = tabTermos(par[1]);
+          if(!termos.length) return true;
+          var alvo = tabNormalizar(col.texto(item));
+          return termos.some(function(t){ return alvo.indexOf(t) >= 0; });
         });
       })
     : (lista||[]).slice();
@@ -7609,7 +7689,7 @@ var COLS_INV = [
   { id:'modelo', rotulo:'Modelo', tipo:'texto',
     valor:function(e){ return e.modelo||''; },
     texto:function(e){ return e.modelo||''; } },
-  { id:'estado', rotulo:'Estado', tipo:'texto',
+  { id:'estado', rotulo:'Estado', tipo:'texto', alinhar:'esq',
     valor:function(e){ return rotuloEstadoEquip(e.funciona); },
     texto:function(e){
       var base = rotuloEstadoEquip(e.funciona);
@@ -7617,11 +7697,14 @@ var COLS_INV = [
       return base+sit;
     },
     celula:function(e){ return statusPill(e.funciona)+situacaoPill(e.situacao); } },
-  { id:'criticidade', rotulo:'Criticidade', tipo:'numero',
+  /* D-8yc-03: `tipo:'numero'` continua — é o que ordena pela ordem
+     semântica (CRÍTICA→BAIXA) e não pela alfabética. `alinhar:'esq'` é o
+     que impede a pílula de sair encostada na coluna seguinte. */
+  { id:'criticidade', rotulo:'Criticidade', tipo:'numero', alinhar:'esq',
     valor:function(e){ var v=CRIT_ORDEM[autoCrit(e)]; return v===undefined?99:v; },
     texto:function(e){ return autoCrit(e); },
     celula:function(e){ return critPill(autoCrit(e)); } },
-  { id:'prox', rotulo:'Próx. manutenção', tipo:'numero',
+  { id:'prox', rotulo:'Próx. manutenção', tipo:'numero', alinhar:'esq',
     valor:function(e){ var d=proxManut(e); return d?d.getTime():null; },
     texto:function(e){ var d=proxManut(e); return d?fmtDate(d.toISOString().slice(0,10)):'Sem hist.'; },
     celula:function(e){ return dueBadgeHtml(proxManut(e)); } },
@@ -7635,10 +7718,33 @@ var COLS_INV = [
      lado de uma previsão com data) — isso é esperado, não defeito. Sem
      celula(): a pílula de "Próx. manutenção" diz urgência (futuro); uma
      data passada é só uma data. */
-  { id:'ultimaInspecao', rotulo:'Última inspeção', tipo:'numero',
+  { id:'ultimaInspecao', rotulo:'Última inspeção', tipo:'numero', alinhar:'dir',
     valor:function(e){ var iso=ultimaInspecaoISO(e.id); return iso ? new Date(iso+'T12:00:00').getTime() : null; },
     texto:function(e){ var iso=ultimaInspecaoISO(e.id); return iso ? fmtDate(iso) : 'Sem hist.'; } }
 ];
+
+/* D-8yc-07: a coluna de atributos técnicos entra por ATRIB_OK, empurrada
+   no MESMO ponto que já empurra EQUIP_EDITAVEIS (D-500-05) — sem a
+   migração 45 ela não existe: nem cabeçalho, nem filtro, nem ordenação.
+   `valor()` conta quantos atributos a máquina tem, para a ordenação pôr
+   as marcadas primeiro; `texto()` devolve as palavras inteiras, porque é
+   "inverter" que a pessoa digita no filtro, não "INV". */
+var COL_ATRIBUTOS = {
+  id:'atributos', rotulo:'Atributos', tipo:'numero', alinhar:'esq',
+  valor:function(e){
+    return EQUIP_ATRIBUTOS.reduce(function(n,k){ return n + (e[k]===true?1:0); }, 0) || null;
+  },
+  texto:function(e){
+    return EQUIP_ATRIBUTOS.filter(function(k){ return e[k]===true; })
+      .map(function(k){ return EQUIP_ROTULOS[k]; }).join(' ');
+  },
+  celula:function(e){
+    var siglas = {inverter:'INV', redundante:'RED', automacao:'AUT'};
+    return EQUIP_ATRIBUTOS.filter(function(k){ return e[k]===true; })
+      .map(function(k){ return '<span class="chip-atr" title="'+esc(EQUIP_ROTULOS[k])+'">'+siglas[k]+'</span>'; })
+      .join('') || '<span style="color:#BBB">—</span>';
+  }
+};
 
 var COLS_OS = [
   { id:'data', rotulo:'Data', tipo:'numero',
@@ -7881,6 +7987,18 @@ function tabDesenhar(tid, colunas, itens, aoAbrir){
     '</table>';
 }
 
+/* D-8yc-03: uma função, dois pontos de chamada (cabeçalho e corpo). O
+   alinhamento deixa de sair de `col.tipo`, que existe para ORDENAR — era
+   por isso que Criticidade e Próx. manutenção, que desenham pílula, saíam
+   encostadas à direita enquanto todo o texto ia à esquerda. Coluna que
+   não declara `alinhar` continua exatamente como hoje: número à direita,
+   resto à esquerda — o que mantém as outras cinco tabelas intactas. */
+var TAB_ALINHAR = {esq:' class="al-esq"', dir:' class="al-dir"', centro:' class="al-centro"'};
+function tabClasseAlinhamento(col){
+  if (col.alinhar && TAB_ALINHAR[col.alinhar]) return TAB_ALINHAR[col.alinhar];
+  return col.tipo==='numero' ? ' class="num"' : '';
+}
+
 function tabCabecalho(tid, colunas){
   var estado = TAB_ESTADO[tid];
   var linhaRotulos = '<tr>' + colunas.map(function(col){
@@ -7888,10 +8006,10 @@ function tabCabecalho(tid, colunas){
     var dir = ativo ? estado.ord.dir : null;
     var ariaSort = dir==='asc' ? 'ascending' : (dir==='desc' ? 'descending' : 'none');
     var seta = dir==='asc' ? '↑' : (dir==='desc' ? '↓' : '⇅');
-    var classeNum = col.tipo==='numero' ? ' class="num"' : '';
+    var classeNum = tabClasseAlinhamento(col);
     var filtroPreenchido = !!(estado.filtros && estado.filtros[col.id]);
     return '<th'+classeNum+' aria-sort="'+ariaSort+'">' +
-      '<button type="button" class="th-acao" onclick="tabOrdenarColuna(\''+tid+'\',\''+col.id+'\')" title="Ordenar por '+esc(col.rotulo)+'" aria-label="Ordenar por '+esc(col.rotulo)+'">'+esc(col.rotulo)+' '+seta+'</button>' +
+      '<button type="button" class="th-acao" onclick="tabOrdenarColuna(\''+tid+'\',\''+col.id+'\')" title="Ordenar por '+esc(col.rotulo)+'" aria-label="Ordenar por '+esc(col.rotulo)+'">'+esc(col.rotulo)+'<span class="th-seta" aria-hidden="true">'+seta+'</span></button>' +
       '<button type="button" class="th-acao" onclick="tabAlternarFiltros(\''+tid+'\',\''+col.id+'\')" title="Filtrar '+esc(col.rotulo)+'" aria-label="Filtrar '+esc(col.rotulo)+'"'+(filtroPreenchido?' style="color:#1351B4;font-weight:800"':'')+'>⌕</button>' +
       '</th>';
   }).join('') + '</tr>';
@@ -7900,10 +8018,40 @@ function tabCabecalho(tid, colunas){
   if(estado.aberto){
     linhaFiltros = '<tr>' + colunas.map(function(col){
       var valor = (estado.filtros && estado.filtros[col.id]) || '';
-      return '<th><input type="search" id="tabf-'+tid+'-'+col.id+'" aria-label="Filtrar '+esc(col.rotulo)+'" value="'+esc(valor)+'" oninput="tabAplicarFiltro(\''+tid+'\',\''+col.id+'\',this.value)"/></th>';
+      var idLista = 'tabdl-'+tid+'-'+col.id;
+      return '<th><input type="search" list="'+idLista+'" id="tabf-'+tid+'-'+col.id+'" placeholder="vários: a, b"'+
+        ' aria-label="Filtrar '+esc(col.rotulo)+' — separe vários valores por vírgula"'+
+        ' value="'+esc(valor)+'" oninput="tabAplicarFiltro(\''+tid+'\',\''+col.id+'\',this.value)"/>'+
+        tabSugestoes(tid, col, idLista)+'</th>';
     }).join('') + '</tr>';
   }
   return '<thead>'+linhaRotulos+linhaFiltros+'</thead>';
+}
+
+/* D-8yc-08: "selecionar mais de um" precisa de algo para selecionar. As
+   opções saem dos valores distintos da própria coluna, lidos da lista
+   INTEIRA em TAB_CACHE — nunca da lista já filtrada, senão escolher o
+   primeiro valor apagaria as opções do segundo. Teto de 200 para uma
+   coluna de texto livre não despejar o inventário inteiro no datalist;
+   acima disso a pessoa digita, que é o que ela já fazia. */
+var TAB_TETO_SUGESTOES = 200;
+function tabSugestoes(tid, col, idLista){
+  var cache = TAB_CACHE[tid];
+  if(!cache || !cache.itens) return '';
+  var vistos = {}, opcoes = [];
+  for(var i=0;i<cache.itens.length && opcoes.length<TAB_TETO_SUGESTOES;i++){
+    var t = col.texto(cache.itens[i]);
+    if(t===null || t===undefined) continue;
+    t = String(t).trim();
+    if(t==='' || t.indexOf(',')>=0 || vistos[t]) continue; // vírgula é o separador: um valor que a contém não é selecionável
+    vistos[t] = true;
+    opcoes.push(t);
+  }
+  if(!opcoes.length) return '';
+  opcoes.sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
+  return '<datalist id="'+idLista+'">' +
+    opcoes.map(function(o){ return '<option value="'+esc(o)+'"></option>'; }).join('') +
+    '</datalist>';
 }
 
 function tabCorpo(tid, colunas, itens, aoAbrir){
@@ -7913,7 +8061,8 @@ function tabCorpo(tid, colunas, itens, aoAbrir){
   return visiveis.map(function(item){
     var onclickLinha = aoAbrir+'('+resolverArg(item)+')';
     var celulas = colunas.map(function(col, idx){
-      var classeNum = col.tipo==='numero' ? ' class="num"' : '';
+      var classeNum = tabClasseAlinhamento(col);
+      if (col.id==='id') classeNum = classeNum ? classeNum.replace('"',' col-id "').replace(' "','"') : ' class="col-id"';
       var conteudo = col.celula ? col.celula(item) : esc(col.texto(item));
       if(idx===0){
         // D-8rz-22: a primeira célula é um <button> de verdade — caminho
