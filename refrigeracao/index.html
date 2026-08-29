@@ -3278,6 +3278,16 @@ var EQUIP_ROTULOS = {
   inverter:'Inverter', redundante:'Redundante', automacao:'Automação'
 };
 var EQUIP_CRITICIDADES = ['CRÍTICA','ALTA','MÉDIA','BAIXA'];
+
+/* Mesma ideia da linha de ajuda que "Idade aparente" já tem: a palavra
+   sozinha diria a coisa errada. Redundante NÃO é "esta é a reserva" —
+   nos paióis as duas máquinas se alternam em rodízio, sem principal
+   fixa, e no F21 o conjunto é o sistema central do prédio contra os
+   splits instalados depois. O que a marca afirma é que só um
+   equipamento do conjunto opera por vez. */
+var EQUIP_AJUDAS = {
+  redundante: 'Só um equipamento do conjunto opera por vez — rodízio entre as duas máquinas do paiol, ou o sistema central contra os splits. Marque todos os que participam do arranjo, não só a "reserva".'
+};
 var EQUIP_IDADES = ['NOVA','SEMI','VELHA'];
 
 /* Um campo por item de EQUIP_EDITAVEIS — três <select> de lista fechada
@@ -3301,7 +3311,10 @@ function campoEquipForm(chave, e){
       '<div style="font-size:10px;color:#999;margin-top:4px">A coluna se chama <code>estado</code> no banco por herança, mas guarda a idade aparente do aparelho — não o funcionamento, que vive em "Estado" acima.</div></div>';
   }
   if (EQUIP_BOOLEANOS.indexOf(chave)>=0) {
-    return '<label class="chk-item" style="margin-top:4px;align-self:end"><input type="checkbox" id="'+id+'"'+(e[chave]?' checked':'')+'/><span>'+esc(rot)+'</span></label>';
+    var caixa = '<label class="chk-item" style="margin-top:4px;align-self:end"><input type="checkbox" id="'+id+'"'+(e[chave]?' checked':'')+'/><span>'+esc(rot)+'</span></label>';
+    if (!EQUIP_AJUDAS[chave]) return caixa;
+    return '<div style="align-self:end">'+caixa.replace(';align-self:end','')+
+      '<div style="font-size:10px;color:#999;margin-top:4px">'+esc(EQUIP_AJUDAS[chave])+'</div></div>';
   }
   if (chave==='obs') {
     return '<div class="fg-full"><label class="fgl">'+esc(rot)+'</label><textarea class="fgt" id="'+id+'">'+esc(e.obs||'')+'</textarea></div>';

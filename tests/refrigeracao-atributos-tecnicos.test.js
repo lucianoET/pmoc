@@ -264,6 +264,18 @@ test('campoEquipForm devolve checkbox para os três, marcado conforme o valor', 
   assert.ok(!vazio.includes(' checked'), 'não avaliado não pode nascer marcado');
 });
 
+test('a caixa de Redundante carrega a linha de ajuda; as outras três não', () => {
+  const ctx = carregarSandbox(true);
+  const red = ctx.campoEquipForm('redundante', {});
+  assert.ok(/rod[íi]zio/i.test(red), 'sem explicar rodízio, a palavra "redundante" diria "esta é a reserva"');
+  assert.ok(red.includes('type="checkbox"'));
+  // As outras três continuam byte a byte como antes desta task.
+  for (const k of ['refrigPermanente', 'inverter', 'automacao']) {
+    const html = ctx.campoEquipForm(k, {});
+    assert.ok(html.startsWith('<label class="chk-item"'), `${k} ganhou embrulho que não devia`);
+  }
+});
+
 test('fichaAtributos: nada sem a sonda; três estados com ela', () => {
   const ctx = carregarSandbox(true);
   ctx.ATRIB_OK = false;

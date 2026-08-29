@@ -10,11 +10,15 @@
 --   inverter    — compressor de rotação variável. Muda a peça de
 --                 reposição (placa inverter x contatora/capacitor), o
 --                 procedimento de carga e a expectativa de consumo.
---   redundante  — unidade reserva do mesmo ambiente. É o que separa
---                 "sala parada" de "sala com meia capacidade": as 8
---                 duplas do PAIOL e a dupla do servidor do COMANDO
---                 existem justamente para isso, e hoje o cadastro não
---                 sabe distinguir uma delas de uma máquina solitária.
+--   redundante  — participa de um arranjo em que só um equipamento do
+--                 conjunto opera por vez. NÃO é "esta é a reserva": nos
+--                 paióis são duas máquinas por câmara em rodízio, sem
+--                 principal fixa, e no F21 o conjunto é o sistema
+--                 central do prédio contra os splits instalados depois
+--                 (ou os centrais ligam, ou os splits). É o que separa
+--                 "sala parada" de "sala com o outro equipamento
+--                 ligado", e hoje o cadastro não sabe distinguir um
+--                 desses arranjos de uma máquina solitária.
 --   automacao   — controlável por sistema de automação predial.
 --
 -- FORMA (D-500-01/02): três `boolean` independentes, nuláveis, SEM
@@ -26,11 +30,14 @@
 -- nenhum é inverter, o que seria dado inventado nascendo já errado.
 -- Mesma forma de `refrig_permanente` (migração 04), de propósito.
 --
--- `redundante` é MARCA, não par (D-500-03): qual unidade faz backup de
--- qual não é modelado aqui. As duplas já são legíveis por prédio+local,
--- e uma FK `redundante_de` exigiria eleger a principal em cada par —
--- decisão de campo, não de esquema. Se um dia for preciso, é coluna
--- nova, aditiva, sem desfazer esta.
+-- `redundante` é MARCA, não conjunto nomeado (D-500-03): a coluna diz
+-- que o equipamento participa de um arranjo, não com quem. Foi conferido
+-- que prédio+local NÃO serve de atalho para descobrir o conjunto — as 5
+-- máquinas do RANCHO/COZINHA e as 3 da PRAÇA D'ARMAS dividem o mesmo
+-- local e ligam JUNTAS (capacidade), enquanto o arranjo do F21 atravessa
+-- vários `local` (central do prédio × splits por sala). Nomear o
+-- conjunto exige uma coluna a mais (`grupo_redundancia`) e é decisão do
+-- usuário; quando vier, é aditiva e não desfaz esta.
 --
 -- ORDEM DE PUBLICAÇÃO (mesma de D-q57-06/D-uyz-24/D-cf8-25): o frontend
 -- vai a produção ANTES deste SQL. Até ele rodar, a sonda `ATRIB_OK` da

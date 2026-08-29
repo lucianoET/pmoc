@@ -2088,8 +2088,9 @@ publicado hoje), e a segunda, depois que o usuário aplicar a migração no SQL 
 ## Refrigeração — atributos técnicos: inverter, redundante, automação (29/08/2026)
 
 Quick task 260829-500 (D-500-01..08). O cadastro de `equipamentos` passa a marcar três fatos que
-decidem manutenção e obra: **inverter** (compressor de rotação variável), **redundante** (unidade
-reserva do mesmo ambiente) e **automação** (controlável por automação predial).
+decidem manutenção e obra: **inverter** (compressor de rotação variável), **redundante** (participa de
+arranjo em que só um equipamento do conjunto opera por vez — rodízio das duas máquinas do paiol,
+central do prédio × splits no F21) e **automação** (controlável por automação predial).
 **`supabase/45_refrigeracao_atributos_tecnicos.sql` é escrita, aditiva e ainda NÃO aplicada**, e
 `46_refrigeracao_atributos_seed.sql` transcreve as marcações que o usuário já levantou em campo
 (19 inverter, 8 redundante). O roteiro tem duas partes, na ordem de publicação de D-cf8-25: o
@@ -2113,12 +2114,21 @@ frontend vai ao ar antes do SQL.
       que o bloco "2 · Dados do equipamento" mostra `Inverter: Sim`.
 - [ ] **Três estados, não dois:** um equipamento nunca avaliado mostra `—` (travessão), não `Não`.
       Marcar e desmarcar deixa `Não`; é diferente de nunca ter sido avaliado.
-- [ ] **Seed conferido:** na página Parque, os 19 equipamentos do F21/EXOCET marcados como
-      inverter e os 8 redundantes (7 do PAIOL + o segundo split do servidor do COMANDO) aparecem
-      com o atributo na ficha.
-- [ ] **Três marcações que ficaram de fora:** marcar à mão o redundante das linhas do PAIOL **D-5**,
-      **K-6** e **R-7** — elas vieram sem id na planilha entregue e não foram adivinhadas
-      (D-500-08).
+- [ ] **Seed conferido:** 19 equipamentos marcados como inverter (F21/EXOCET) e **16** como
+      redundante — as **duas** máquinas de cada uma das 7 câmaras do PAIOL (G-5..G-8, U-6..U-8),
+      porque o rodízio não tem reserva fixa, mais a dupla de splits do servidor do COMANDO
+      (27 e 28).
+- [ ] **Linha de ajuda no campo:** abrir "Editar cadastro" — abaixo da caixa Redundante aparece a
+      explicação do arranjo (rodízio / central × splits), como "Idade aparente" já tinha.
+- [ ] **Quatro máquinas ausentes do cadastro:** as linhas sem id da planilha entregue não eram
+      ambiguidade — são máquinas que existem no chão e não existem no banco. Cadastrar pela tela:
+      a segunda do PAIOL **D-5**, a segunda do **K-6** e as **duas** do **R-7**; marcar redundante
+      nas quatro e também nas duas já cadastradas (ids 93 e 94), que hoje aparecem sozinhas.
+- [ ] **F21 — decidir o conjunto:** marcar redundante nas 6 centrais (132, 133, 134, 135, 136,
+      137) e nos splits que as substituem, conforme o arranjo real do prédio. Ficou fora do seed
+      porque a planilha entregue não marcou nenhum deles.
+- [ ] **Servidor do COMANDO:** conferir se os splits 27 e 28 realmente se alternam; se ligam
+      juntos por capacidade, desmarcar os dois.
 - [ ] **Planilha ganha as três colunas:** exportar o inventário — o CSV tem Inverter, Redundante e
       Automação no fim, com `SIM`/`NÃO`/vazio.
 - [ ] **Importar com `X`:** marcar `X` numa dessas colunas na planilha e reimportar — a tela de

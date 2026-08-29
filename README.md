@@ -228,6 +228,8 @@ O histórico do setup inicial, da recuperação dos dados do refrigeração e da
       frontend (mesma ordem de D-cf8-25). Até lá a tela publicada se comporta byte a byte como
       hoje (`ATRIB_OK` falso: sem os três campos no formulário, sem as três linhas na ficha, sem
       as três colunas na planilha). A 46 transcreve as marcações já levantadas em campo (19
-      inverter, 8 redundante); **três marcações do PAIOL — D-5, K-6 e R-7 — ficaram de fora** por
-      virem sem id na planilha entregue, e precisam ser marcadas na tela. `automacao` nasce
+      inverter, 16 redundante — as **duas** máquinas de cada câmara do PAIOL, porque o rodízio não
+      tem reserva fixa). As linhas sem id da planilha são **quatro máquinas ausentes do cadastro**
+      (PAIOL D-5 e K-6 têm uma cada, R-7 nenhuma) e entram por "Cadastrar novo equipamento". O F21
+      ficou fora do seed: quais das 6 centrais e dos 17 splits compõem o arranjo é decisão sua. `automacao` nasce
       inteira sem marcação: nenhum equipamento foi avaliado ainda. Roteiro em `TESTES.md`.
