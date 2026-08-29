@@ -2135,3 +2135,47 @@ frontend vai ao ar antes do SQL.
       conferência mostra a alteração e, ao confirmar, o equipamento fica marcado. Célula deixada
       **vazia continua "não avaliado"** e não vira `Não`.
 - [ ] **Ciclo fechado:** exportar e reimportar sem editar nada — zero alterações, como antes.
+
+## Refrigeração — tabela do Parque: alinhamento, layout e filtro multivalor (29/08/2026)
+
+Quick task 260829-8yc (D-8yc-01..08). Só afeta a **versão de computador** (>=1024px);
+o cartão de celular não muda. Sem migração nova — a coluna Atributos depende da 45,
+já aplicada.
+
+- [ ] **Cabeçalho gruda:** abrir Parque numa janela larga e rolar a lista — a linha de
+      rótulos fica visível no topo da tabela o tempo todo. Antes ela sumia.
+- [ ] **Filtro não cobre o rótulo:** abrir os filtros (⌕) e rolar — as duas linhas
+      ficam empilhadas e visíveis; o nome da coluna que se está filtrando continua legível.
+- [ ] **Pílulas alinhadas:** Estado, Criticidade e Próx. manutenção começam na mesma
+      margem esquerda das colunas de texto. `#`, BTU e Última inspeção ficam à direita,
+      com os dígitos alinhados uns sobre os outros.
+- [ ] **A coluna não pula ao ordenar:** clicar no cabeçalho várias vezes (⇅ → ↑ → ↓) —
+      a largura da coluna não muda.
+- [ ] **Coluna Atributos:** mostra INV / RED / AUT nos equipamentos marcados e `—` nos
+      não avaliados; ordenar por ela põe os marcados primeiro.
+- [ ] **Filtro com mais de um valor:** no filtro de Área digitar `AZUL, VERMELHA` — traz
+      as duas. Conferir que digitar só `AZUL,` (com a vírgula solta) **não** esvazia a
+      lista.
+- [ ] **Sugestões:** clicar no campo de filtro de uma coluna — aparece a lista dos
+      valores existentes daquela coluna, para escolher em vez de digitar. Escolher um
+      valor e continuar: as opções do segundo valor continuam todas lá.
+- [ ] **Filtros combinam:** Área `AZUL, VERMELHA` mais Prédio `F21` — só o que casa nas
+      duas condições (OU dentro da coluna, E entre colunas).
+- [ ] **Celular intacto:** em 375px o Parque continua em cartões, sem tabela.
+
+### Segunda rodada — caber na tela (mesma task)
+
+- [ ] **Sem rolagem horizontal:** abrir Parque em 1024px, 1440px e 1920px — a tabela
+      cabe inteira, sem barra de rolagem lateral.
+- [ ] **Inverter, Redundante e Automação depois de Criticidade:** três colunas
+      estreitas, com ✓ (marcado), – (não) e — (não avaliado). Passar o mouse mostra
+      de qual atributo se trata.
+- [ ] **Filtrar um atributo só:** abrir Filtros e digitar `Sim` em Inverter — 19
+      equipamentos. O mesmo em Redundante — 16.
+- [ ] **Texto cortado não some:** numa coluna estreita (Local, Prédio), passar o mouse
+      sobre um valor cortado — o texto completo aparece na dica.
+- [ ] **Filtros num botão só:** o ⌕ saiu do cabeçalho de cada coluna; agora é o botão
+      "Filtros" na barra acima da tabela, que abre a linha de campos.
+- [ ] **Cabeçalho em duas linhas:** "Próx. manutenção" e "Última inspeção" quebram em
+      duas linhas em vez de esticar a coluna.
+- [ ] **Celular intocado:** em 375px continua em cartões, sem rolagem lateral.
