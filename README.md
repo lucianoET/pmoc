@@ -222,3 +222,14 @@ O histórico do setup inicial, da recuperação dos dados do refrigeração e da
       voltar), entrada de recebimento, e o alerta "Estoque abaixo do mínimo" nas duas larguras —
       roteiro completo em `TESTES.md`. Limite conhecido: voltar de Em execução não estorna o
       estoque automaticamente; a correção é uma entrada registrada à mão.
+- [ ] `supabase/45_refrigeracao_atributos_tecnicos.sql` e `46_refrigeracao_atributos_seed.sql`
+      (atributos técnicos inverter/redundante/automação de `/refrigeracao`, quick-260829-500)
+      estão **escritas e conferidas, aguardando aplicação** pelo usuário — depois do deploy do
+      frontend (mesma ordem de D-cf8-25). Até lá a tela publicada se comporta byte a byte como
+      hoje (`ATRIB_OK` falso: sem os três campos no formulário, sem as três linhas na ficha, sem
+      as três colunas na planilha). A 46 transcreve as marcações já levantadas em campo (19
+      inverter, 16 redundante — as **duas** máquinas de cada câmara do PAIOL, porque o rodízio não
+      tem reserva fixa). As linhas sem id da planilha são **quatro máquinas ausentes do cadastro**
+      (PAIOL D-5 e K-6 têm uma cada, R-7 nenhuma) e entram por "Cadastrar novo equipamento". O F21
+      ficou fora do seed: quais das 6 centrais e dos 17 splits compõem o arranjo é decisão sua. `automacao` nasce
+      inteira sem marcação: nenhum equipamento foi avaliado ainda. Roteiro em `TESTES.md`.

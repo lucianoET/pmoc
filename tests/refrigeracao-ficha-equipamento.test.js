@@ -23,6 +23,10 @@ const SQL_41 = fs.readFileSync(path.join(RAIZ, 'supabase', '41_refrigeracao_fich
 // equipamentos — sem somá-la aqui este gate voltaria a afirmar que a união
 // das migrações é a verdade, quando não seria mais.
 const SQL_42 = fs.readFileSync(path.join(RAIZ, 'supabase', '42_refrigeracao_movimentacao.sql'), 'utf8');
+// 260829-500: a migração 45 acrescenta inverter/redundante/automacao —
+// mesma razão de somar a 42 acima: sem ela este gate afirmaria uma união
+// que deixou de ser a verdade, e reprovaria a ponte por estar certa.
+const SQL_45 = fs.readFileSync(path.join(RAIZ, 'supabase', '45_refrigeracao_atributos_tecnicos.sql'), 'utf8');
 
 // ── colunas reais de `equipamentos` (união das 4 migrações) ──────────────
 function colunasDaCreateTable() {
@@ -45,6 +49,7 @@ const COLUNAS_EQUIPAMENTOS = [
   ...colunasAddColumn(SQL_25, 'equipamentos'),
   ...colunasAddColumn(SQL_41, 'equipamentos'),
   ...colunasAddColumn(SQL_42, 'equipamentos'),
+  ...colunasAddColumn(SQL_45, 'equipamentos'),
 ];
 
 function carregarSandboxPonte() {
@@ -79,7 +84,7 @@ test('toda coluna criada pela migração 41 em equipamentos aparece como valor e
   }
 });
 
-test('todo valor de CAMPOS_EQUIP é coluna real de equipamentos (união das migrações 04+19+25+41)', () => {
+test('todo valor de CAMPOS_EQUIP é coluna real de equipamentos (união das migrações 04+19+25+41+42+45)', () => {
   const ctx = carregarSandboxPonte();
   for (const coluna of Object.values(ctx.CAMPOS_EQUIP)) {
     assert.ok(COLUNAS_EQUIPAMENTOS.includes(coluna), `CAMPOS_EQUIP aponta para "${coluna}", que não é coluna real de equipamentos`);
