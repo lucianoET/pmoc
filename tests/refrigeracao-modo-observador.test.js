@@ -119,6 +119,12 @@ function criarSupaFalso() {
         select() {
           return {
             order() { return Promise.resolve({ data: [], error: null }); },
+            // 260829-500: atribSondarEsquema() vem do recorte A — é código
+            // real, não stub — e termina em .limit(1). Devolver erro é o
+            // banco sem a migração 45, que é o estado que este gate
+            // descreve; sem este ramo a sonda lança dentro do try de
+            // acessoLivre() e o modo observador nunca chega a ligar.
+            limit() { return Promise.resolve({ data: null, error: { message: 'sem migração 45' } }); },
           };
         },
       };

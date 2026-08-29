@@ -387,6 +387,7 @@ var CAMPOS_EQUIP = {
   refrigPermanente: 'refrig_permanente', horasDia: 'horas_dia', diasSemana: 'dias_semana',
   criticidade: 'criticidade', tensao: 'tensao', correnteNominal: 'corrente_nominal',
   patrimonio: 'patrimonio', dataFabricacao: 'data_fabricacao', dataInstalacao: 'data_instalacao',
+  inverter: 'inverter', redundante: 'redundante', automacao: 'automacao',
   ultimaManutencao: 'ultima_manutencao', refrigerante: 'refrigerante',
   link: 'link', manualUrl: 'manual_url',
   areaM2: 'area_m2', peDireito: 'pe_direito', nPessoas: 'n_pessoas',
@@ -413,6 +414,40 @@ var EQUIP_EDITAVEIS = [
   'link', 'manualUrl', 'refrigPermanente', 'horasDia', 'diasSemana', 'obs'
 ];
 var EQUIP_NUMERICOS = ['btu', 'tensao', 'horasDia', 'diasSemana'];
+
+/* D-500-01/04/05: os três atributos técnicos da migração 45. Ficam em
+   CAMPOS_EQUIP sempre (a leitura de uma coluna que não existe devolve
+   `undefined`, não erro — `select('*')`), mas só entram em
+   EQUIP_EDITAVEIS quando a sonda passa: um `update` citando uma coluna
+   ausente derruba TODO salvamento de cadastro com "column does not
+   exist". Empurrar num ponto só é o que garante que formulário,
+   gravação e colunas da planilha (que derivam desta lista, D-5hy-06)
+   ligam juntos ou não ligam nenhum. */
+var EQUIP_ATRIBUTOS = ['inverter', 'redundante', 'automacao'];
+
+/* D-500-06: cinco pontos comparavam a chave literal 'refrigPermanente'
+   para decidir "isto é um booleano" (campoEquipForm, salvarEquip,
+   salvarEquipNovo, planilhaValor, celulaParaValor). Com três booleanos
+   novos seriam vinte comparações; com a lista, cinco ramos que não
+   mudam mais. */
+var EQUIP_BOOLEANOS = ['refrigPermanente'].concat(EQUIP_ATRIBUTOS);
+
+/* Sonda PRÓPRIA, separada de MAN_FLUXO_OK/MOV_OK/UNI_OK/EST_OK — mesma
+   lição de D-uyz-13/D-cf8-13/D-6wy-08: estender uma sonda existente
+   desligaria um fluxo inteiro num banco que tem as migrações anteriores
+   e não tem esta. Enquanto ATRIB_OK for falso a tela publicada se
+   comporta byte a byte como hoje: sem os três campos no formulário, sem
+   as três colunas na planilha, sem as três linhas na ficha. */
+var ATRIB_OK = false;
+
+async function atribSondarEsquema() {
+  var r = await supa.from('equipamentos').select('id,inverter,redundante,automacao').limit(1);
+  ATRIB_OK = !r.error;
+  if (ATRIB_OK && EQUIP_EDITAVEIS.indexOf('inverter') < 0) {
+    EQUIP_EDITAVEIS = EQUIP_EDITAVEIS.concat(EQUIP_ATRIBUTOS);
+  }
+  return ATRIB_OK;
+}
 
 /* Caminho inverso de dbToEquip: duas guardas (chave fora de CAMPOS_EQUIP OU
    fora de EQUIP_EDITAVEIS caem juntas), texto vazio vira null (um
@@ -2879,6 +2914,18 @@ function fichaBlocoLocal(e){
     blocoLocal + '</div>';
 }
 
+/* Os três atributos da migração 45, exibidos só com a sonda ligada
+   (D-500-04) — sem ela seriam três linhas dizendo "—" para sempre. Três
+   estados, não dois: sim, não e não avaliado, que é o que `null`
+   significa aqui. */
+function fichaAtributos(e){
+  if (!ATRIB_OK) return '';
+  return EQUIP_ATRIBUTOS.map(function(k){
+    var v = e[k] === true ? 'Sim' : (e[k] === false ? 'Não' : '—');
+    return '<div class="dfield"><label>'+esc(EQUIP_ROTULOS[k])+'</label><div class="dval">'+v+'</div></div>';
+  }).join('');
+}
+
 function fichaBlocoDados(e){
   var btuK = e.btu? (e.btu/1000).toFixed(0)+'K BTU' : '—';
   var kw = e.btu? (e.btu/3412).toFixed(2)+' kW' : '—';
@@ -2893,6 +2940,7 @@ function fichaBlocoDados(e){
     '<div class="dfield"><label>Tensão nominal</label><div class="dval">'+(e.tensao||'—')+'V</div></div>' +
     '<div class="dfield"><label>Corrente nominal</label><div class="dval">'+(e.correnteNominal||'—')+'A</div></div>' +
     '<div class="dfield"><label>Refrigerante</label><div class="dval">'+(e.refrigerante?esc(e.refrigerante):'—')+'</div></div>' +
+    fichaAtributos(e) +
     '<div class="dfield"><label>Data de fabricação</label><div class="dval">'+(e.dataFabricacao?fmtDate(e.dataFabricacao):'—')+'</div></div>' +
     '<div class="dfield"><label>Data de instalação</label><div class="dval">'+(e.dataInstalacao?fmtDate(e.dataInstalacao):'—')+'</div></div>' +
     campoLinkFicha('Link', e.link) +
@@ -3226,7 +3274,8 @@ var EQUIP_ROTULOS = {
   criticidade:'Criticidade', tensao:'Tensão nominal (V)', correnteNominal:'Corrente nominal (A)',
   patrimonio:'Patrimônio', dataFabricacao:'Data de fabricação', dataInstalacao:'Data de instalação',
   refrigerante:'Refrigerante', link:'Link', manualUrl:'Manual',
-  refrigPermanente:'Refrigeração permanente', horasDia:'Horas/dia', diasSemana:'Dias/semana', obs:'Observações'
+  refrigPermanente:'Refrigeração permanente', horasDia:'Horas/dia', diasSemana:'Dias/semana', obs:'Observações',
+  inverter:'Inverter', redundante:'Redundante', automacao:'Automação'
 };
 var EQUIP_CRITICIDADES = ['CRÍTICA','ALTA','MÉDIA','BAIXA'];
 var EQUIP_IDADES = ['NOVA','SEMI','VELHA'];
@@ -3251,8 +3300,8 @@ function campoEquipForm(chave, e){
     return '<div><label class="fgl">Idade aparente</label><select class="fgs" id="'+id+'">'+optsId+'</select>' +
       '<div style="font-size:10px;color:#999;margin-top:4px">A coluna se chama <code>estado</code> no banco por herança, mas guarda a idade aparente do aparelho — não o funcionamento, que vive em "Estado" acima.</div></div>';
   }
-  if (chave==='refrigPermanente') {
-    return '<label class="chk-item" style="margin-top:4px;align-self:end"><input type="checkbox" id="'+id+'"'+(e.refrigPermanente?' checked':'')+'/><span>'+esc(rot)+'</span></label>';
+  if (EQUIP_BOOLEANOS.indexOf(chave)>=0) {
+    return '<label class="chk-item" style="margin-top:4px;align-self:end"><input type="checkbox" id="'+id+'"'+(e[chave]?' checked':'')+'/><span>'+esc(rot)+'</span></label>';
   }
   if (chave==='obs') {
     return '<div class="fg-full"><label class="fgl">'+esc(rot)+'</label><textarea class="fgt" id="'+id+'">'+esc(e.obs||'')+'</textarea></div>';
@@ -3297,7 +3346,7 @@ async function salvarEquip(id){
   EQUIP_EDITAVEIS.forEach(function(k){
     var campo = el('equip-'+k);
     if (!campo) return;
-    patch[k] = (k==='refrigPermanente') ? campo.checked : campo.value;
+    patch[k] = (EQUIP_BOOLEANOS.indexOf(k)>=0) ? campo.checked : campo.value;
   });
   if (patch.link && !linkSeguro(patch.link)) { showToast('Link inválido — use http:// ou https://','error'); return; }
   if (patch.manualUrl && !linkSeguro(patch.manualUrl)) { showToast('Manual inválido — use http:// ou https://','error'); return; }
@@ -3345,7 +3394,7 @@ async function salvarEquipNovo(){
   EQUIP_EDITAVEIS.forEach(function(k){
     var campo = el('equip-'+k);
     if (!campo) return;
-    patch[k] = (k==='refrigPermanente') ? campo.checked : campo.value;
+    patch[k] = (EQUIP_BOOLEANOS.indexOf(k)>=0) ? campo.checked : campo.value;
   });
   if (patch.link && !linkSeguro(patch.link)) { showToast('Link inválido — use http:// ou https://','error'); return; }
   if (patch.manualUrl && !linkSeguro(patch.manualUrl)) { showToast('Manual inválido — use http:// ou https://','error'); return; }
@@ -5184,6 +5233,7 @@ async function acessoLivre() {
     await manSondarEsquema();
     await movSondarEsquema();
     await uniSondarEsquema();
+    await atribSondarEsquema();
     await estSondarEsquema();
     estInjectNav();
     osInjectChipsExecutor();
@@ -5224,6 +5274,7 @@ async function initAppOnce(){
   await manSondarEsquema();
   await movSondarEsquema();
   await uniSondarEsquema();
+  await atribSondarEsquema();
   await estSondarEsquema();
   estInjectNav();
   osInjectChipsExecutor();
@@ -6763,9 +6814,9 @@ function planilhaValor(chave, e){
   if (chave === 'situacao') return normalizarSituacaoEquip(e.situacao) || '';
   if (chave === 'ultimaManutencao') return e.ultimaManutencao || '';
   if (chave === 'funciona') return normalizarEstadoEquip(e.funciona) || '';
-  if (chave === 'refrigPermanente') {
-    if (e.refrigPermanente === true) return 'SIM';
-    if (e.refrigPermanente === false) return 'NÃO';
+  if (EQUIP_BOOLEANOS.indexOf(chave) >= 0) {
+    if (e[chave] === true) return 'SIM';
+    if (e[chave] === false) return 'NÃO';
     return '';
   }
   var v = e[chave];
@@ -6950,12 +7001,15 @@ function celulaParaCorrente(t){
    texto contra texto, nunca de valor tipado contra valor tipado. */
 function celulaParaValor(chave, texto){
   var t = texto === null || texto === undefined ? '' : String(texto);
-  if (chave === 'refrigPermanente'){
+  if (EQUIP_BOOLEANOS.indexOf(chave) >= 0){
     var up = t.trim().toUpperCase(); // D-5hy-19: normalização EXPLÍCITA, não implícita
     if (up === '') return {ok:true, valor:null};
-    if (up === 'SIM' || up === '1' || up === 'VERDADEIRO' || up === 'TRUE') return {ok:true, valor:true};
+    // D-500-07: `X` é como se marca numa planilha, e era erro antes —
+    // nada muda de significado, só passa a existir. Célula vazia
+    // continua null ("não avaliado"), nunca false ("não é").
+    if (up === 'SIM' || up === '1' || up === 'X' || up === 'VERDADEIRO' || up === 'TRUE') return {ok:true, valor:true};
     if (up === 'NÃO' || up === 'NAO' || up === '0' || up === 'FALSO' || up === 'FALSE') return {ok:true, valor:false};
-    return {ok:false, erro:'valor booleano não reconhecido — use SIM ou NÃO'};
+    return {ok:false, erro:'valor booleano não reconhecido — use SIM, NÃO ou X'};
   }
   if (chave === 'dataFabricacao' || chave === 'dataInstalacao'){
     if (t === '') return {ok:true, valor:null};

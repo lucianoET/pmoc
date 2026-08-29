@@ -80,6 +80,10 @@ const MARCADORES_REAIS = [
 
 const MARCADORES_FICHA = [
   'function fichaBlocoLocal(e){',
+  // 260829-500: fichaBlocoDados chama fichaAtributos, que devolve vazio
+  // enquanto ATRIB_OK for falso — é por isso que o fixture da gaveta
+  // continua byte a byte igual sem a migração 45.
+  'function fichaAtributos(e){',
   'function fichaBlocoDados(e){',
   'function fichaBlocoEstado(e, logs, crit, lastDate, ni, np){',
   'function fichaBlocoHistorico(id, logs){',
@@ -108,6 +112,10 @@ function mocksComuns() {
     blocoQrFicha: function (id) { return '<div class="qr-mock">' + id + '</div>'; },
     podeEditarCadastro: function () { return true; },
     MAN_FLUXO_OK: false,
+    // 260829-500: mesma ideia de MAN_FLUXO_OK — a sonda desligada é o
+    // estado da tela publicada antes da migração 45, e é sob ela que o
+    // fixture da gaveta tem de continuar byte a byte igual.
+    ATRIB_OK: false,
   };
 }
 
