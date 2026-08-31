@@ -2444,7 +2444,7 @@ oferece.
       principal justamente para isso.
 - [ ] **Demanda:** o KPI de homem-hora/ano bate com a tabela "De onde vem a demanda":
       Σ (visitas/ano × (tarefas × minutos por tarefa + setup)) × equipamentos.
-      Com o plano real (41 tarefas em 4 periodicidades) e os parâmetros semeados
+      Com o plano real (9 tarefas em 4 periodicidades) e os parâmetros semeados
       (10 min/tarefa, 15 min de setup), são **19 visitas/ano, 11,6 h/ano por
       equipamento, 2.027 h/ano** para 175 equipamentos.
 - [ ] **O setup é por VISITA, não por tarefa:** quem faz as duas tarefas mensais do
