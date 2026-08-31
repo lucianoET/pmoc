@@ -19,6 +19,7 @@ import {
   chaveData, semanaDe, moverSemana, rotuloSemana,
   horasDoTurno, formatarHora, tamanhoDaEquipe, capacidadeDaSemana,
   alocacoesPorCelula, normalizarDominios, rotuloDominios, proximaCor,
+  visitasDoPlano, demandaAnual, utilizacao, faixaUtilizacao, parametrosComoObjeto,
 } from './nucleo.js'
 
 let supa = null
@@ -34,6 +35,13 @@ let TURNOS = []
 let ALOCACOES = []
 let SEMANA_REF = new Date()
 let ARRASTANDO = null
+// Plano & capacidade — carregados fora do Promise.all principal, como os
+// outros módulos fazem com o que depende de migração mais nova: sem a 51
+// a aba Plano avisa e o resto do módulo se comporta como hoje.
+let PARAMS = {}
+let TAREFAS_PLANO = []
+let COBERTURA = null
+let PLANO_OK = false
 
 const el = id => document.getElementById(id)
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -83,6 +91,157 @@ async function carregarAlocacoes() {
     .gte('data', dias[0].chave).lte('data', dias[6].chave)
   if (r.error) throw r.error
   ALOCACOES = r.data || []
+}
+
+/** Fora do Promise.all principal, de propósito: sem a migração 51 (ou
+ *  sem permissão de leitura em `plano_tarefas`) o módulo inteiro
+ *  continua funcionando — só a aba Plano diz o que faltou. */
+async function carregarPlano() {
+  try {
+    const [par, tar, equip] = await Promise.all([
+      supa.from('cmasm_parametros').select('*'),
+      supa.from('plano_tarefas').select('id,periodicidade,descricao,ativo,aplica_a'),
+      supa.from('equipamentos').select('id', { count: 'exact', head: true }).eq('situacao', 'instalado'),
+    ])
+    if (par.error || tar.error || equip.error) throw (par.error || tar.error || equip.error)
+    PARAMS = parametrosComoObjeto(par.data)
+    TAREFAS_PLANO = tar.data || []
+    // Os ativos que o plano por CALENDÁRIO não cobre. Contados, nunca
+    // omitidos: sem isso a tela apresentaria 64% do parque como se fosse
+    // o parque inteiro.
+    const outros = await Promise.all(['maq_ativos', 'transp_ativos', 'elet_ativos', 'fono_ativos'].map(
+      t => supa.from(t).select('id', { count: 'exact', head: true })))
+    COBERTURA = {
+      cobertos: equip.count || 0,
+      naoCobertos: outros.reduce((s, r) => s + (r.error ? 0 : (r.count || 0)), 0),
+    }
+    PLANO_OK = true
+  } catch (_erro) {
+    PLANO_OK = false
+  }
+}
+
+// ── plano & capacidade ──────────────────────────────────────────────────
+function renderPlano() {
+  const host = el('view-plano')
+  if (!host) return
+
+  if (!PLANO_OK) {
+    host.innerHTML = `
+      <div class="view-head"><div><div class="view-title">Plano &amp; capacidade</div></div></div>
+      <div class="callout co-warn"><strong>Não foi possível montar o plano.</strong>
+        Falta ler <code>cmasm_parametros</code> (migração 51) ou <code>plano_tarefas</code>.
+        A escala e os cadastros continuam funcionando normalmente.</div>`
+    return
+  }
+
+  const plano = visitasDoPlano(TAREFAS_PLANO)
+  const dem = demandaAnual(plano, PARAMS, COBERTURA.cobertos, COBERTURA.naoCobertos)
+  const dias = semanaDe(SEMANA_REF)
+  const cap = capacidadeDaSemana(dias, ALOCACOES, TURNOS, MEMBROS, PESSOAS)
+  const u = utilizacao(dem.horasSemana, cap.horas)
+  const faixa = faixaUtilizacao(u)
+  const fmt = (n, d = 0) => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: d })
+
+  host.innerHTML = `
+    <div class="view-head">
+      <div><div class="view-title">Plano &amp; capacidade</div>
+        <div class="view-sub">O que o plano obriga, contra o que a escala oferece</div></div>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi kc-gold"><div class="kpi-n">${fmt(dem.horasAno)}</div><div class="kpi-l">homem-hora/ano de demanda</div></div>
+      <div class="kpi kc-blue"><div class="kpi-n">${fmt(dem.horasSemana, 1)}</div><div class="kpi-l">demanda média por semana</div></div>
+      <div class="kpi kc-accent"><div class="kpi-n">${fmt(cap.horas, 1)}</div><div class="kpi-l">capacidade escalada nesta semana</div></div>
+    </div>
+
+    ${u === null ? `<div class="callout co-warn">
+      <strong>Sem capacidade escalada nesta semana, não há utilização a calcular.</strong>
+      Escale alguma equipe na aba <em>Escala</em> — um número aqui, com a semana vazia,
+      seria lido como resposta.
+    </div>` : `<div class="callout" style="border-left-color:${faixa.tom}">
+      <strong style="color:${faixa.tom}">${esc(faixa.rotulo)} — ${fmt(u * 100)}%</strong>
+      da capacidade desta semana estaria comprometida com o plano preventivo
+      (${fmt(dem.horasSemana, 1)} h de plano contra ${fmt(cap.horas, 1)} h escaladas).
+      ${u > 0.85 ? ' Acima de 85% não sobra folga para corretiva, que numa oficina de manutenção é o mesmo que não caber.' : ''}
+    </div>`}
+
+    <div class="panel-card">
+      <div class="section-row"><strong>De onde vem a demanda</strong></div>
+      <div class="help">Do plano REAL no banco (<code>plano_tarefas</code>), não de uma cópia de constantes.
+        Mudar a periodicidade de uma tarefa lá muda este número aqui.</div>
+      <div class="tbl-wrap" style="margin-top:8px"><table class="tbl">
+        <thead><tr><th>Periodicidade</th><th>Tarefas</th><th>Visitas/ano</th><th>Min/visita</th></tr></thead>
+        <tbody>${plano.visitas.map(v => `<tr>
+          <td><strong>${esc(v.periodicidade)}</strong></td>
+          <td>${v.tarefas}</td>
+          <td>${v.porAno}</td>
+          <td>${fmt(v.tarefas * (PARAMS.minutos_por_tarefa || 0) + (PARAMS.minutos_setup || 0))} min</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div class="help" style="margin-top:8px">
+        <strong>${plano.visitasPorAno} visitas/ano</strong> por equipamento
+        (${plano.tarefasPorAno} execuções de tarefa) ·
+        <strong>${fmt(dem.horasPorEquipamentoAno, 1)} h/ano</strong> por equipamento ·
+        ${dem.equipamentos} equipamentos → ${fmt(dem.horasAno)} h/ano.
+      </div>
+      ${plano.semPeriodicidade ? `<div class="callout co-warn" style="margin-top:8px">
+        ${plano.semPeriodicidade} tarefa(s) com periodicidade que não sei converter em vezes por ano —
+        ficaram <strong>fora</strong> da conta, em vez de entrarem com um número suposto.</div>` : ''}
+    </div>
+
+    ${dem.naoCobertos ? `<div class="callout co-warn">
+      <strong>Esta conta cobre ${dem.equipamentos} de ${dem.equipamentos + dem.naoCobertos} ativos.</strong>
+      Os outros ${dem.naoCobertos} (máquinas, transportes, elétrica, fonoclama) planejam por
+      <em>horímetro</em>, não por calendário: a demanda deles depende de quanto o ativo roda,
+      que é outro mecanismo e não cabe nesta soma. Apresentar o total sem dizer isso mostraria
+      parte do parque como se fosse o todo.
+    </div>` : ''}
+
+    <div class="panel-card">
+      <div class="section-row"><strong>Calibração do tempo</strong>
+        ${podeCadastrar() ? '<button class="btn btn-s btn-sm" onclick="abrirParametros()">Ajustar</button>' : ''}</div>
+      <div class="help">Estes dois números são <strong>ponto de partida, não medição</strong> — vieram do app
+        antigo. Cronometre duas ou três manutenções reais e ajuste: a demanda inteira depende deles.</div>
+      <div class="tbl-wrap" style="margin-top:8px"><table class="tbl">
+        <thead><tr><th>Parâmetro</th><th>Valor</th></tr></thead>
+        <tbody>
+          <tr><td>Minutos por tarefa</td><td><strong>${fmt(PARAMS.minutos_por_tarefa, 1)} min</strong></td></tr>
+          <tr><td>Setup por visita</td><td><strong>${fmt(PARAMS.minutos_setup, 1)} min</strong></td></tr>
+        </tbody>
+      </table></div>
+      <div class="help" style="margin-top:8px">O setup é cobrado <strong>por visita, não por tarefa</strong>:
+        quem faz as duas tarefas mensais do mesmo aparelho se desloca uma vez só. Cobrar por tarefa
+        inflaria a demanda em cerca de metade (1.025 min contra 695, por equipamento/ano).</div>
+    </div>
+  `
+}
+
+function abrirParametros() {
+  if (!podeCadastrar()) return aviso('Sem permissão para calibrar')
+  abrirModal('Calibração do tempo de serviço', `
+    <div class="help">A demanda anual inteira sai destes dois números.</div>
+    <label style="margin-top:10px">Minutos por tarefa
+      <input id="f-min-tarefa" class="control-auto" type="number" min="0" step="0.5" value="${PARAMS.minutos_por_tarefa ?? 10}"/></label>
+    <label style="margin-top:10px">Setup por visita (min)
+      <input id="f-min-setup" class="control-auto" type="number" min="0" step="0.5" value="${PARAMS.minutos_setup ?? 15}"/></label>
+  `, async () => {
+    const vals = {
+      minutos_por_tarefa: parseFloat(el('f-min-tarefa').value),
+      minutos_setup: parseFloat(el('f-min-setup').value),
+    }
+    for (const [k, v] of Object.entries(vals)) {
+      // Mesma barreira do check do banco, na tela: tempo negativo
+      // encolheria a demanda em silêncio.
+      if (!Number.isFinite(v) || v < 0) return aviso('Os tempos precisam ser números não negativos')
+    }
+    for (const [chave, valor] of Object.entries(vals)) {
+      const r = await supa.from('cmasm_parametros').update({ valor, atualizado: new Date().toISOString() }).eq('chave', chave)
+      if (r.error) { aviso(`Erro: ${r.error.message}`); return false }
+      PARAMS[chave] = valor
+    }
+    renderPlano()
+  })
 }
 
 // ── escala semanal ──────────────────────────────────────────────────────
@@ -249,7 +408,7 @@ async function aoSoltar(ev, dataChave, turnoId) {
     .insert({ equipe_id: equipeId, data: dataChave, turno_id: turnoId }).select().single()
   if (r.error) return aviso(`Erro ao escalar: ${r.error.message}`)
   ALOCACOES.push(r.data)
-  renderEscala()
+  renderEscala(); renderPlano()
 }
 
 /** O mesmo destino do arrastar, alcançado por formulário: dia e turno
@@ -283,7 +442,7 @@ function escalarPorFormulario(equipeId) {
       .insert({ equipe_id: equipeId, data, turno_id: turnoId }).select().single()
     if (r.error) { aviso(`Erro ao escalar: ${r.error.message}`); return false }
     ALOCACOES.push(r.data)
-    renderEscala()
+    renderEscala(); renderPlano()
   })
 }
 
@@ -292,18 +451,18 @@ async function removerAlocacao(id) {
   const r = await supa.from('cmasm_alocacoes').delete().eq('id', id)
   if (r.error) return aviso(`Erro: ${r.error.message}`)
   ALOCACOES = ALOCACOES.filter(a => a.id !== id)
-  renderEscala()
+  renderEscala(); renderPlano()
 }
 
 async function navegarSemana(delta) {
   SEMANA_REF = moverSemana(SEMANA_REF, delta)
   await carregarAlocacoes()
-  renderEscala()
+  renderEscala(); renderPlano()
 }
 async function irParaHoje() {
   SEMANA_REF = new Date()
   await carregarAlocacoes()
-  renderEscala()
+  renderEscala(); renderPlano()
 }
 
 // ── pessoas ─────────────────────────────────────────────────────────────
@@ -622,7 +781,7 @@ function mostrarApp() {
   el('login-screen').style.display = 'none'
   el('app').style.display = 'flex'
   el('user-chip').textContent = USUARIO?.role || '—'
-  renderEscala(); renderPessoas(); renderEquipes(); renderOficios()
+  renderEscala(); renderPlano(); renderPessoas(); renderEquipes(); renderOficios()
 }
 
 function mostrarLogin() {
@@ -643,7 +802,7 @@ function exporNoWindow() {
   Object.assign(window, {
     trocarView, sair, fecharModal, confirmarModal,
     navegarSemana, irParaHoje, aoArrastar, aoSobrepor, aoSair, aoSoltar, aoSoltarFora,
-    removerAlocacao, escalarPorFormulario,
+    removerAlocacao, escalarPorFormulario, abrirParametros,
     abrirPessoa, abrirEquipe, abrirMembros, abrirEspecialidade, abrirTurno,
   })
 }
@@ -657,6 +816,7 @@ async function boot() {
     versao: '1.0',
     navItems: [
       { id: 'escala',  label: 'Escala',   icone: 'agenda',   ativo: true },
+      { id: 'plano',   label: 'Plano',    icone: 'plano' },
       { id: 'equipes', label: 'Equipes',  icone: 'empresa' },
       { id: 'pessoas', label: 'Pessoas',  icone: 'chave' },
       { id: 'oficios', label: 'Ofícios',  icone: 'plano' },
@@ -666,6 +826,7 @@ async function boot() {
   el('app').insertAdjacentHTML('beforeend', `
     <div class="main">
       <div class="view active" id="view-escala"></div>
+      <div class="view" id="view-plano"></div>
       <div class="view" id="view-equipes"></div>
       <div class="view" id="view-pessoas"></div>
       <div class="view" id="view-oficios"></div>
@@ -694,6 +855,7 @@ async function boot() {
     USUARIO = usuario
     try {
       await carregarTudo()
+      await carregarPlano()
     } catch (erro) {
       // Sem a migração 49 as tabelas não existem: a tela DIZ isso, em vez
       // de ficar vazia parecendo que a oficina não tem ninguém.

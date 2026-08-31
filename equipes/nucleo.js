@@ -198,6 +198,140 @@ export function equipesParaDominio(equipes, especialidades, dominio) {
     .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
 }
 
+// ══ plano & capacidade: a demanda ═══════════════════════════════════
+//
+// A capacidade já vem das alocações. A demanda é o outro lado: quanto
+// tempo o plano de manutenção OBRIGA por ano.
+//
+// Ela sai de `plano_tarefas`, que é o plano REAL da refrigeração já no
+// banco (9 tarefas da NBR 17037, cada uma com sua periodicidade) — NÃO
+// de uma cópia da tabela de intervalos que vive dentro do arquivo de
+// /refrigeracao. Duplicar aquelas constantes criaria duas fontes de
+// verdade para "de quanto em quanto tempo", e como /refrigeracao é
+// módulo congelado a cópia divergiria sem ninguém perceber.
+
+/** Quantas vezes por ano cada periodicidade acontece. Lista fechada:
+ *  uma periodicidade desconhecida devolve 0 e é CONTADA à parte, nunca
+ *  suposta como anual — supor faria uma tarefa nova aparecer na conta
+ *  com um número inventado. */
+export const OCORRENCIAS_ANO = {
+  MENSAL: 12,
+  BIMESTRAL: 6,
+  TRIMESTRAL: 4,
+  QUADRIMESTRAL: 3,
+  SEMESTRAL: 2,
+  ANUAL: 1,
+}
+
+export function ocorrenciasPorAno(periodicidade) {
+  const k = String(periodicidade ?? '').trim().toUpperCase()
+  return Object.prototype.hasOwnProperty.call(OCORRENCIAS_ANO, k) ? OCORRENCIAS_ANO[k] : 0
+}
+
+/** Agrupa as tarefas do plano por periodicidade. É esse agrupamento que
+ *  transforma "41 execuções de tarefa por ano" em "19 VISITAS por ano":
+ *  o técnico que faz as duas tarefas mensais do mesmo aparelho se
+ *  desloca uma vez só, e cobrar setup por tarefa inflaria a demanda em
+ *  quase o dobro. */
+export function visitasDoPlano(tarefas) {
+  const buckets = new Map()
+  let semPeriodicidade = 0
+  for (const t of tarefas || []) {
+    if (t && t.ativo === false) continue
+    const n = ocorrenciasPorAno(t && t.periodicidade)
+    if (!n) { semPeriodicidade++; continue }
+    const k = String(t.periodicidade).trim().toUpperCase()
+    if (!buckets.has(k)) buckets.set(k, { periodicidade: k, porAno: n, tarefas: 0 })
+    buckets.get(k).tarefas++
+  }
+  const visitas = [...buckets.values()].sort((a, b) => b.porAno - a.porAno)
+  return {
+    visitas,
+    semPeriodicidade,
+    visitasPorAno: visitas.reduce((s, v) => s + v.porAno, 0),
+    tarefasPorAno: visitas.reduce((s, v) => s + v.porAno * v.tarefas, 0),
+  }
+}
+
+/** Minutos que UM equipamento consome por ano.
+ *
+ *  Por visita: (tarefas da visita × minutos por tarefa) + setup. O setup
+ *  é por visita e não por tarefa — é deslocamento, montagem e registro,
+ *  e acontece uma vez por ida ao equipamento. */
+export function minutosPorEquipamentoAno(plano, params) {
+  const minTarefa = numeroOuZero(params && params.minutos_por_tarefa)
+  const setup = numeroOuZero(params && params.minutos_setup)
+  return (plano.visitas || []).reduce(
+    (s, v) => s + v.porAno * (v.tarefas * minTarefa + setup), 0)
+}
+
+function numeroOuZero(v) {
+  const n = parseFloat(v)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+}
+
+/** Demanda anual do plano, em homem-hora.
+ *
+ *  `nEquipamentos` é quantos ativos o plano cobre — e a função devolve
+ *  também `naoCobertos`, que é o que a tela precisa dizer em voz alta.
+ *  Hoje só a refrigeração tem plano por CALENDÁRIO: máquinas, elétrica e
+ *  fonoclama planejam por HORÍMETRO, que é outro mecanismo (a demanda
+ *  depende de quanto o ativo roda, não do calendário) e não cabe nesta
+ *  conta. Mostrar o total sem dizer isso apresentaria 64% do parque como
+ *  se fosse o parque inteiro. */
+export function demandaAnual(plano, params, nEquipamentos, naoCobertos) {
+  const porEquip = minutosPorEquipamentoAno(plano, params)
+  const n = Math.max(0, Math.floor(Number(nEquipamentos) || 0))
+  const minutos = porEquip * n
+  return {
+    horasAno: minutos / 60,
+    horasSemana: minutos / 60 / 52,
+    horasPorEquipamentoAno: porEquip / 60,
+    equipamentos: n,
+    naoCobertos: Math.max(0, Math.floor(Number(naoCobertos) || 0)),
+    visitasAno: (plano.visitasPorAno || 0) * n,
+  }
+}
+
+/** Utilização = demanda ÷ capacidade. Devolve null sem capacidade, em
+ *  vez de Infinity ou de um 0 que passaria por "folga": uma semana sem
+ *  ninguém escalado não tem utilização definida, e um número ali seria
+ *  lido como resposta. */
+export function utilizacao(horasDemanda, horasCapacidade) {
+  const d = Number(horasDemanda)
+  const c = Number(horasCapacidade)
+  if (!Number.isFinite(d) || !Number.isFinite(c) || c <= 0) return null
+  return d / c
+}
+
+/** Faixas de leitura da utilização. Acima de 100% o plano não cabe na
+ *  escala; entre 85 e 100 cabe sem folga nenhuma para corretiva, que
+ *  numa oficina de manutenção é o mesmo que não caber. */
+export const FAIXAS_UTILIZACAO = [
+  { ate: 0.70, chave: 'folga',   rotulo: 'Dentro da capacidade', tom: '#168821' },
+  { ate: 0.85, chave: 'apertado', rotulo: 'Apertado',            tom: '#B46800' },
+  { ate: 1.00, chave: 'limite',  rotulo: 'No limite',            tom: '#B46800' },
+  { ate: Infinity, chave: 'acima', rotulo: 'Acima da capacidade', tom: '#E52207' },
+]
+
+export function faixaUtilizacao(u) {
+  if (u === null || u === undefined || !Number.isFinite(u)) return null
+  return FAIXAS_UTILIZACAO.find(f => u <= f.ate) || FAIXAS_UTILIZACAO[FAIXAS_UTILIZACAO.length - 1]
+}
+
+/** Parâmetros vindos do banco (linhas chave/valor) viram um objeto. Uma
+ *  função, um formato — senão cada chamador reinventa o reduce e um
+ *  deles esquece o parseFloat. */
+export function parametrosComoObjeto(linhas) {
+  const out = {}
+  for (const l of linhas || []) {
+    if (!l || !l.chave) continue
+    const n = parseFloat(l.valor)
+    out[l.chave] = Number.isFinite(n) ? n : 0
+  }
+  return out
+}
+
 /** Cores de equipe. Fechada e com contraste conferido contra fundo
  *  claro e escuro — cor de equipe é o que separa dois retângulos na
  *  grade, então não pode sair de um gerador aleatório que um dia

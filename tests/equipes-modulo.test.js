@@ -32,6 +32,13 @@ function semComentarios(txt) {
   return txt.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
 }
 function semComentarioSql(txt) { return txt.replace(/^\s*--.*$/gm, ''); }
+// Além dos comentários `--`, remove os `comment on ... is '...'`: aquilo é
+// prosa explicativa dentro de um literal SQL, e uma checagem que procura
+// uma palavra proibida acharia justamente o texto que explica por que ela
+// é proibida. Os literais dos `check` ficam, senão a checagem cegaria.
+function semProsaSql(txt) {
+  return semComentarioSql(txt).replace(/comment on[\s\S]*?is\s*'(?:[^']|'')*'\s*;/gi, ' ');
+}
 
 let N; // núcleo puro, carregado uma vez
 test.before(async () => { N = await import(path.join(RAIZ, 'equipes', 'nucleo.js')); });
@@ -203,6 +210,147 @@ test('as cores de equipe são lista fechada e sem repetição — cor é o que s
   // nascerem iguais.
   assert.strictEqual(N.proximaCor([]), N.CORES_EQUIPE[0]);
   assert.strictEqual(N.proximaCor([{ cor: N.CORES_EQUIPE[0] }]), N.CORES_EQUIPE[1]);
+});
+
+// ═══════════ plano & capacidade: a demanda ═══════════
+
+// O plano REAL da refrigeração no banco, conferido em 31/08/2026:
+// 9 tarefas da NBR 17037, todas aplicando a TODOS.
+const PLANO_REAL = [
+  { periodicidade: 'MENSAL', ativo: true }, { periodicidade: 'MENSAL', ativo: true },
+  { periodicidade: 'TRIMESTRAL', ativo: true }, { periodicidade: 'TRIMESTRAL', ativo: true },
+  { periodicidade: 'SEMESTRAL', ativo: true }, { periodicidade: 'SEMESTRAL', ativo: true },
+  { periodicidade: 'SEMESTRAL', ativo: true }, { periodicidade: 'SEMESTRAL', ativo: true },
+  { periodicidade: 'ANUAL', ativo: true },
+];
+const PARAMS_SEED = { minutos_por_tarefa: 10, minutos_setup: 15 };
+
+test('periodicidade desconhecida vale 0 e é CONTADA à parte — nunca suposta como anual', () => {
+  assert.strictEqual(N.ocorrenciasPorAno('MENSAL'), 12);
+  assert.strictEqual(N.ocorrenciasPorAno('semestral'), 2);
+  assert.strictEqual(N.ocorrenciasPorAno(' ANUAL '), 1);
+  assert.strictEqual(N.ocorrenciasPorAno('QUINZENAL'), 0);
+  assert.strictEqual(N.ocorrenciasPorAno(null), 0);
+  // Supor faria uma tarefa nova entrar na conta com um número inventado.
+  const p = N.visitasDoPlano([...PLANO_REAL, { periodicidade: 'QUINZENAL', ativo: true }]);
+  assert.strictEqual(p.semPeriodicidade, 1);
+  assert.strictEqual(p.tarefasPorAno, 41, 'a tarefa desconhecida não pode ter entrado na soma');
+});
+
+test('as tarefas são agrupadas em VISITAS — 19 idas por ano, não 41', () => {
+  // O técnico que faz as duas tarefas mensais do mesmo aparelho se desloca
+  // UMA vez. Cobrar setup por tarefa quase dobraria a demanda.
+  const p = N.visitasDoPlano(PLANO_REAL);
+  assert.strictEqual(p.visitasPorAno, 19, '12 mensais + 4 trimestrais + 2 semestrais + 1 anual');
+  assert.strictEqual(p.tarefasPorAno, 41);
+  assert.deepStrictEqual(p.visitas.map(v => [v.periodicidade, v.porAno, v.tarefas]),
+    [['MENSAL', 12, 2], ['TRIMESTRAL', 4, 2], ['SEMESTRAL', 2, 4], ['ANUAL', 1, 1]]);
+});
+
+test('tarefa inativa sai do plano', () => {
+  const p = N.visitasDoPlano([...PLANO_REAL, { periodicidade: 'MENSAL', ativo: false }]);
+  assert.strictEqual(p.tarefasPorAno, 41);
+});
+
+test('o setup é cobrado por VISITA, não por tarefa — a diferença é de quase metade da demanda', () => {
+  const p = N.visitasDoPlano(PLANO_REAL);
+  const porVisita = N.minutosPorEquipamentoAno(p, PARAMS_SEED);
+  // Por visita: 12×(2×10+15) + 4×(2×10+15) + 2×(4×10+15) + 1×(1×10+15)
+  assert.strictEqual(porVisita, 12 * 35 + 4 * 35 + 2 * 55 + 1 * 25);
+  // Se o setup fosse por tarefa seriam 41 setups em vez de 19: 1025 min
+  // contra 695, um inchaço de ~47% — o técnico não desloca, abre o
+  // equipamento e fecha uma vez por tarefa, e sim uma vez por visita.
+  const seFosseTarefa = 41 * PARAMS_SEED.minutos_por_tarefa + 41 * PARAMS_SEED.minutos_setup;
+  assert.strictEqual(seFosseTarefa, 1025);
+  assert.ok(seFosseTarefa > porVisita * 1.4, 'a decisão de agrupar em visitas precisa importar de verdade');
+});
+
+test('a demanda anual bate com os números REAIS do banco (175 equipamentos)', () => {
+  const p = N.visitasDoPlano(PLANO_REAL);
+  const d = N.demandaAnual(p, PARAMS_SEED, 175, 99);
+  assert.strictEqual(Math.round(d.horasPorEquipamentoAno * 100) / 100, 11.58);
+  assert.strictEqual(Math.round(d.horasAno), 2027);
+  assert.strictEqual(Math.round(d.horasSemana * 10) / 10, 39);
+  assert.strictEqual(d.visitasAno, 19 * 175);
+});
+
+test('a cobertura é DECLARADA — 175 de 274, nunca o parcial apresentado como o todo', () => {
+  const p = N.visitasDoPlano(PLANO_REAL);
+  const d = N.demandaAnual(p, PARAMS_SEED, 175, 99);
+  assert.strictEqual(d.equipamentos, 175);
+  assert.strictEqual(d.naoCobertos, 99, 'máquinas, transportes, elétrica e fonoclama planejam por horímetro');
+  // E a tela precisa dizer isso, não só a função saber.
+  assert.match(APP, /cobre \$\{dem\.equipamentos\} de \$\{dem\.equipamentos \+ dem\.naoCobertos\} ativos/);
+  assert.match(APP, /hor[íi]metro/i);
+});
+
+test('parâmetro ausente ou inválido vale 0, nunca NaN — um NaN se propagaria pela demanda inteira', () => {
+  const p = N.visitasDoPlano(PLANO_REAL);
+  [{}, null, { minutos_por_tarefa: 'abc' }, { minutos_por_tarefa: -5 }].forEach((par) => {
+    const m = N.minutosPorEquipamentoAno(p, par);
+    assert.ok(Number.isFinite(m), `${JSON.stringify(par)} produziu NaN`);
+    assert.ok(m >= 0);
+  });
+});
+
+test('sem capacidade não há utilização — null, nunca Infinity nem um 0 que passaria por folga', () => {
+  assert.strictEqual(N.utilizacao(39, 0), null);
+  assert.strictEqual(N.utilizacao(39, null), null);
+  assert.strictEqual(N.utilizacao(39, -1), null);
+  assert.strictEqual(N.faixaUtilizacao(null), null);
+  // E a tela trata esse caso em vez de imprimir o null.
+  assert.match(APP, /Sem capacidade escalada nesta semana/);
+});
+
+test('as faixas de utilização separam folga, apertado, limite e acima', () => {
+  assert.strictEqual(N.faixaUtilizacao(N.utilizacao(39, 80)).chave, 'folga');   // 49%
+  assert.strictEqual(N.faixaUtilizacao(0.80).chave, 'apertado');
+  assert.strictEqual(N.faixaUtilizacao(0.95).chave, 'limite');
+  assert.strictEqual(N.faixaUtilizacao(N.utilizacao(39, 20)).chave, 'acima');   // 195%
+  // 85% é o limite entre apertado e limite: acima disso não sobra folga
+  // para corretiva, que numa oficina é o mesmo que não caber.
+  assert.strictEqual(N.faixaUtilizacao(0.85).chave, 'apertado');
+  assert.strictEqual(N.faixaUtilizacao(0.851).chave, 'limite');
+});
+
+test('parametrosComoObjeto converte as linhas chave/valor e não deixa NaN passar', () => {
+  const o = N.parametrosComoObjeto([
+    { chave: 'minutos_por_tarefa', valor: '10' },
+    { chave: 'minutos_setup', valor: 15 },
+    { chave: 'quebrado', valor: 'abc' },
+    null, { valor: 3 },
+  ]);
+  assert.strictEqual(o.minutos_por_tarefa, 10);
+  assert.strictEqual(o.minutos_setup, 15);
+  assert.strictEqual(o.quebrado, 0);
+});
+
+// ═══════════ D-eq-08: a demanda vem do plano REAL, não de uma cópia ═══════
+
+test('a demanda lê plano_tarefas — nenhuma cópia de intervalos de /refrigeracao', () => {
+  // Duplicar PMOC_INT aqui criaria duas fontes de verdade para "de quanto
+  // em quanto tempo", e /refrigeracao é módulo congelado: a cópia
+  // divergiria da original sem ninguém perceber.
+  assert.match(APP, /from\('plano_tarefas'\)/);
+  const nucleo = semComentarios(fs.readFileSync(path.join(RAIZ, 'equipes', 'nucleo.js'), 'utf8'));
+  assert.ok(!/PMOC_INT|inspecao\s*:\s*\d+|preventiva\s*:\s*\d+/.test(nucleo),
+    'intervalos por criticidade não podem ser copiados para cá');
+  // O que a migração 51 acrescenta é só o TEMPO, que é calibração de
+  // oficina e não norma.
+  const sql51 = fs.readFileSync(path.join(RAIZ, 'supabase', '51_equipes_parametros_plano.sql'), 'utf8');
+  assert.match(sql51, /create table if not exists cmasm_parametros/);
+  assert.ok(!/interval|periodicidade/i.test(semProsaSql(sql51)),
+    'a migração não pode duplicar periodicidade — ela vem de plano_tarefas');
+  assert.match(sql51, /check \(valor >= 0\)/, 'tempo negativo encolheria a demanda em silêncio');
+});
+
+test('o plano é carregado FORA do Promise.all principal — sem a 51 o módulo segue inteiro', () => {
+  assert.match(APP, /async function carregarPlano\(\)/);
+  const ini = APP.indexOf('async function carregarPlano()');
+  const fonte = APP.slice(ini, APP.indexOf('\n// ── plano & capacidade', ini));
+  assert.match(fonte, /catch/, 'a falha não pode derrubar a carga do módulo');
+  assert.match(fonte, /PLANO_OK = false/);
+  assert.match(APP, /Não foi possível montar o plano/);
 });
 
 // ═══════════ o esquema ═══════════

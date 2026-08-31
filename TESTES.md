@@ -2431,3 +2431,40 @@ nenhuma pessoa nem equipe (nome de militar é dado real da OM).
 - [ ] **Cargo:** como técnico, dá para escalar mas **não** dá para cadastrar pessoa nem
       equipe. Como observador (Livre), nada de arrastar nem botões de cadastro.
 - [ ] **Remover da escala:** o × tira a equipe do dia/turno e a capacidade cai.
+
+### Plano & capacidade (migração 51)
+
+A aba responde a pergunta que a escala sozinha não responde: **cabe?** — quantas
+homem-hora o plano preventivo obriga por ano contra quantas a escala desta semana
+oferece.
+
+- [ ] **Sem a migração 51:** a aba abre com o aviso "Não foi possível montar o plano"
+      e **as outras quatro abas continuam inteiras** — escala, equipes, pessoas e
+      ofícios funcionam normalmente. `carregarPlano()` fica fora do `Promise.all`
+      principal justamente para isso.
+- [ ] **Demanda:** o KPI de homem-hora/ano bate com a tabela "De onde vem a demanda":
+      Σ (visitas/ano × (tarefas × minutos por tarefa + setup)) × equipamentos.
+      Com o plano real (9 tarefas em 4 periodicidades) e os parâmetros semeados
+      (10 min/tarefa, 15 min de setup), são **19 visitas/ano, 11,6 h/ano por
+      equipamento, 2.027 h/ano** para 175 equipamentos.
+- [ ] **O setup é por VISITA, não por tarefa:** quem faz as duas tarefas mensais do
+      mesmo aparelho se desloca uma vez só. Cobrar por tarefa daria 1.025 min contra
+      695 por equipamento/ano — quase metade a mais.
+- [ ] **A cobertura é declarada:** a tela diz "cobre 175 de 274 ativos" e nomeia os
+      99 restantes (máquinas, transportes, elétrica, fonoclama) como planejados por
+      **horímetro**. Nunca apresentar o parcial como o todo.
+- [ ] **Utilização:** com a semana escalada, a faixa muda de cor conforme o percentual
+      (até 70% "Dentro da capacidade", até 85% "Apertado", até 100% "No limite",
+      acima "Acima da capacidade"). Acima de 85% a tela avisa que não sobra folga
+      para corretiva.
+- [ ] **Semana sem nenhuma equipe escalada:** o percentual **não** aparece — a tela diz
+      que sem capacidade escalada não há utilização a calcular. Um número ali, com a
+      semana vazia, seria lido como resposta.
+- [ ] **Calibração (admin/gestor):** "Ajustar" muda minutos por tarefa e setup; a
+      demanda inteira se move junto. Valor negativo é recusado na tela **e** pelo
+      `check (valor >= 0)` do banco.
+- [ ] **Como técnico ou observador:** o botão "Ajustar" não aparece.
+- [ ] **A periodicidade vem de `plano_tarefas`:** mudar a periodicidade de uma tarefa
+      no banco muda o número aqui. Não há cópia dos intervalos de `/refrigeracao`.
+- [ ] **Tarefa com periodicidade que não converte** fica **fora** da conta e é contada
+      num aviso — nunca entra com um número suposto.
