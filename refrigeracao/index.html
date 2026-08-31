@@ -1153,8 +1153,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <option value="criticidade">Ordenar: criticidade</option>
           <option value="vencimento">Ordenar: próxima manutenção</option>
         </select>
-        <button class="sec-etq" id="btn-planilha" title="Exportar ou importar a planilha do parque" aria-label="Exportar ou importar a planilha do parque" onclick="abrirPainelPlanilha()"><i class="fas fa-file-csv" aria-hidden="true"></i></button>
-        <button class="sec-etq" id="btn-etiquetas" title="Imprimir etiquetas dos equipamentos filtrados" aria-label="Imprimir etiquetas dos equipamentos filtrados" onclick="etiquetasDoInventario()"><i class="fas fa-tags" aria-hidden="true"></i></button>
+        <span style="display:flex;align-items:center;flex-shrink:0"><button class="sec-etq" id="btn-novo-equip" title="Cadastrar novo equipamento no parque" aria-label="Cadastrar novo equipamento no parque" onclick="openEquipNovo()"><i class="fas fa-plus" aria-hidden="true"></i></button><button class="sec-etq" id="btn-planilha" title="Exportar ou importar a planilha do parque" aria-label="Exportar ou importar a planilha do parque" onclick="abrirPainelPlanilha()"><i class="fas fa-file-csv" aria-hidden="true"></i></button><button class="sec-etq" id="btn-etiquetas" title="Imprimir etiquetas dos equipamentos filtrados" aria-label="Imprimir etiquetas dos equipamentos filtrados" onclick="etiquetasDoInventario()"><i class="fas fa-tags" aria-hidden="true"></i></button></span>
         <span class="sec-count" id="inv-cnt">171</span>
       </div>
       <div id="inv-list"></div>
@@ -2105,6 +2104,15 @@ function filtrarInventario(dados, busca, chip, filtrosColuna){
 }
 
 function renderInv(){
+  /* D-2mx-02: cadastrar equipamento é ato de registro (admin/gestor) — o
+     botão some para quem não pode, e openEquipNovo guarda a AÇÃO de novo
+     (guarda dupla, D-l7n-03). Ligado no desenho e não na carga porque o
+     cargo só é conhecido depois do login, e renderInv roda a cada troca
+     de página e a cada mudança de sessão. Fica ANTES de qualquer retorno
+     antecipado: o botão não pode depender de a lista ter linhas. */
+  var btnNovoEquip = el('btn-novo-equip');
+  if (btnNovoEquip) btnNovoEquip.style.display = podeEditarCadastro() ? '' : 'none';
+
   var busca = (el('inv-search')||{value:''}).value;
   var list = filtrarInventario(DATA, busca, invChip, TAB_ESTADO.inv.filtros).sort(cmpInv);
 
@@ -2950,7 +2958,39 @@ function fichaBlocoLocal(e){
       '</div></div>';
   return '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-map-marker-alt mr1" aria-hidden="true"></i>1 · Local</div>' +
-    blocoLocal + '</div>';
+    blocoLocal + fichaAcaoMovimentacao(e) + '</div>';
+}
+
+/* D-2mx-01: tirar uma máquina do parque (e devolver ao parque a que está
+   guardada) passa a ter caminho a partir da PRÓPRIA máquina. O que a ficha
+   ganha NÃO é uma gravação de `situacao`: essa continua exclusiva da
+   conferência da OS de movimentação (D-uyz-12), com a trava de admin da
+   baixa patrimonial (D-uyz-07) intacta e o checklist de partes onde
+   sempre esteve. O botão abre a MESMA OS de INSTALAÇÃO/REMOÇÃO de
+   sempre, já apontando para esta máquina — em vez de obrigar a achá-la
+   num <select> de 171 opções na página de OS. Um atalho de navegação,
+   nunca uma segunda porta de escrita.
+   Vive no bloco "1 · Local" de propósito, e não no rodapé de ações
+   (D-92t-07): remover é uma afirmação sobre ONDE a máquina está, e ao
+   lado de "Editar cadastro" a palavra "Remover" seria lida como apagar
+   o registro — que é justamente o que este projeto nunca faz.
+   Três guardas, nesta ordem: as duas sondas primeiro (sem a migração 42
+   o segmento Inst./Remoção nem existe, e um botão que abrisse um
+   formulário inexistente é pior que botão nenhum — com elas falsas a
+   ficha sai byte a byte como hoje), depois o cargo que salvarMovOS já
+   exige. Máquina baixada não oferece nada: a baixa é terminal
+   (D-uyz-05), e reinstalá-la seria desfazer um ato patrimonial por
+   clique. */
+function fichaAcaoMovimentacao(e){
+  if (!MAN_FLUXO_OK || !MOV_OK) return '';
+  if (!manPode('abrir')) return '';
+  if (equipBaixado(e)) return '';
+  var instalado = equipInstalado(e);
+  var tipo = instalado ? 'REMOÇÃO' : 'INSTALAÇÃO';
+  var rotulo = instalado ? 'Remover do local' : 'Instalar em um local';
+  var icone = instalado ? 'fa-dolly' : 'fa-truck-loading';
+  return '<button class="btn-secondary" style="margin-top:10px" onclick="openMovForm(&quot;'+tipo+'&quot;,'+e.id+')">' +
+    '<i class="fas '+icone+' mr1" aria-hidden="true"></i>'+rotulo+'</button>';
 }
 
 /* Os três atributos da migração 45, exibidos só com a sonda ligada
@@ -3832,7 +3872,7 @@ async function carregarLocais(){
 /* Uma gaveta, dois corpos (instalação/remoção), redesenhados ao trocar o
    <select> de tipo e, dentro de cada um, ao trocar equipamento/destino —
    é o que torna D-uyz-03 visível em vez de implícito. */
-async function openMovForm(tipoInicial){
+async function openMovForm(tipoInicial, equipId){
   if (!LOCAIS_CARREGADOS) await carregarLocais();
   el('dh-id').textContent = 'Nova OS · Instalação/Remoção';
   el('dh-local').textContent = 'Selecione o tipo e o equipamento';
@@ -3860,6 +3900,28 @@ async function openMovForm(tipoInicial){
     '<button class="btn-primary" id="mov-btn-salvar" onclick="salvarMovOS()"><i class="fas fa-save mr1" aria-hidden="true"></i>Abrir OS</button>';
   openDrawer();
   movMontarCorpo();
+  movPreSelecionarEquip(equipId);
+}
+
+/* D-2mx-03: quem escolhe o equipamento continua sendo o <select> do
+   formulário — o id vindo da ficha só o posiciona. Se o id não estiver
+   entre as opções (uma remoção pedida para máquina que outro usuário
+   acabou de remover, uma instalação pedida para máquina baixada), o
+   <select> fica onde estava e a tela DIZ o porquê, em vez de abrir em
+   silêncio uma OS sobre a primeira máquina da lista — que é a única
+   forma de esse atalho gravar sobre a máquina errada. */
+function movPreSelecionarEquip(equipId){
+  if (equipId === undefined || equipId === null) return false;
+  var sel = el('mov-equip-sel'); if (!sel) return false;
+  var alvo = String(equipId);
+  var achou = Array.prototype.some.call(sel.options, function(o){ return o.value === alvo; });
+  if (!achou) {
+    showToast('Equipamento #'+equipId+' não está disponível para este tipo de movimentação', 'error');
+    return false;
+  }
+  sel.value = alvo;
+  if (val('mov-tipo')==='REMOÇÃO') movOnChangeEquipRemocao(); else movOnChangeEquipInstalacao();
+  return true;
 }
 
 /* Salas ativas, rotuladas por rotuloLocalDestino (prédio no rótulo) —
