@@ -819,7 +819,7 @@ async function boot() {
       { id: 'plano',   label: 'Plano',    icone: 'plano' },
       { id: 'equipes', label: 'Equipes',  icone: 'empresa' },
       { id: 'pessoas', label: 'Pessoas',  icone: 'chave' },
-      { id: 'oficios', label: 'Ofícios',  icone: 'plano' },
+      { id: 'oficios', label: 'Ofícios',  icone: 'checklist' },
     ],
   })
 
