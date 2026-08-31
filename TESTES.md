@@ -2206,3 +2206,57 @@ Quick task 260829-a8u (D-a8u-01..09). Versão de computador; sem migração.
       nada para clicar.
 - [ ] **Busca sem resultado continua como era:** digitar algo inexistente no campo
       de busca ainda mostra o estado vazio — ali o campo continua na tela para desfazer.
+
+---
+
+## Refrigeração — adicionar e remover máquinas de ar-condicionado (31/08/2026)
+
+Quick task 260831-2mx (D-2mx-01..03). Sem migração nova — as migrações 40, 41 e 42
+já estão aplicadas em produção, então o botão de movimentação da ficha **já aparece**;
+não há fase de compatibilidade a conferir aqui. As duas ações já existiam no código;
+o que esta task acrescenta é caminho até elas.
+
+### Adicionar — cadastrar equipamento a partir do Parque
+
+- [ ] **O botão existe:** na barra "EQUIPAMENTOS" do Parque, o `+` aparece **antes**
+      dos botões de planilha (CSV) e de etiquetas.
+- [ ] **Cargo:** logado como gestor ou admin o `+` aparece; como técnico ou
+      observador ele **some** (não fica cinza — some).
+- [ ] **Cadastrar:** clicar no `+` abre "Cadastrar novo equipamento" com os mesmos
+      campos de "Editar cadastro". Preencher tipo, fabricante, prédio e local e
+      salvar — a ficha do equipamento novo abre em seguida.
+- [ ] **A situação nasce instalada, sem local formal:** o equipamento recém-cadastrado
+      aparece como *instalado*; o vínculo com `cmasm_locais` só é criado pela
+      conferência de uma OS de INSTALAÇÃO. Isso é o comportamento de sempre (D-uyz-08),
+      não uma regressão.
+- [ ] **Regressão:** o caminho antigo continua — na OS de Instalação, a opção
+      "➕ Cadastrar novo equipamento…" do `<select>` ainda abre o mesmo formulário e
+      volta com o equipamento novo já selecionado.
+
+### Remover — tirar a máquina do local a partir da própria ficha
+
+- [ ] **O botão existe:** abrir a ficha de um equipamento instalado — no bloco
+      "1 · Local", abaixo de Área/Prédio/Local/Patrimônio, há **"Remover do local"**.
+      Vale nas duas larguras (gaveta no celular, página no computador).
+- [ ] **Abre a OS certa, já apontada:** clicar abre "Nova OS · Instalação/Remoção"
+      com Tipo = REMOÇÃO e o `<select>` de equipamento **já naquela máquina** — sem
+      procurá-la entre as 171. Origem, destino e checklist de partes aparecem como
+      sempre.
+- [ ] **Nada foi gravado ainda:** fechar a gaveta sem salvar — a máquina continua
+      instalada. O botão abre uma OS, não remove.
+- [ ] **A remoção continua sendo o fluxo de sempre:** salvar a OS, executá-la e
+      **conferir** — só na conferência a situação vira *Removido* e o local é
+      esvaziado.
+- [ ] **Baixa continua exclusiva de admin:** logado como gestor, o destino
+      "Baixa patrimonial" **não** aparece no `<select>` da remoção. Logado como admin,
+      aparece, com o aviso de irreversível.
+- [ ] **Máquina guardada volta pelo mesmo lugar:** abrir a ficha de um equipamento
+      *Removido* — o botão agora diz **"Instalar em um local"** e abre a OS de
+      INSTALAÇÃO já apontada para ela.
+- [ ] **Baixado não oferece nada:** abrir a ficha de um equipamento *Baixado* — não
+      há botão nenhum no bloco "1 · Local". A baixa é terminal.
+- [ ] **Cargo:** como observador (somente leitura) o botão não aparece em ficha
+      nenhuma.
+- [ ] **O cadastro não ganhou atalho para a situação:** abrir "Editar cadastro" e
+      conferir que **não** existe campo de Situação / Data de remoção / Data de baixa.
+      Essas três só mudam por conferência de OS (D-uyz-12).

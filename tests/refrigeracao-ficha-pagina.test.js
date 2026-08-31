@@ -80,6 +80,10 @@ const MARCADORES_REAIS = [
 
 const MARCADORES_FICHA = [
   'function fichaBlocoLocal(e){',
+  // 260831-2mx: fichaBlocoLocal chama fichaAcaoMovimentacao, que devolve
+  // vazio enquanto MAN_FLUXO_OK/MOV_OK forem falsos — é por isso que o
+  // fixture da gaveta continua byte a byte igual sem a migração 42.
+  'function fichaAcaoMovimentacao(e){',
   // 260829-500: fichaBlocoDados chama fichaAtributos, que devolve vazio
   // enquanto ATRIB_OK for falso — é por isso que o fixture da gaveta
   // continua byte a byte igual sem a migração 45.
@@ -112,6 +116,11 @@ function mocksComuns() {
     blocoQrFicha: function (id) { return '<div class="qr-mock">' + id + '</div>'; },
     podeEditarCadastro: function () { return true; },
     MAN_FLUXO_OK: false,
+    // 260831-2mx: a segunda sonda do atalho de movimentação da ficha. Fica
+    // explícita mesmo sendo curto-circuitada por MAN_FLUXO_OK, para que
+    // reordenar a guarda um dia não faça o gate passar por acidente.
+    MOV_OK: false,
+    manPode: function () { return true; },
     // 260829-500: mesma ideia de MAN_FLUXO_OK — a sonda desligada é o
     // estado da tela publicada antes da migração 45, e é sob ela que o
     // fixture da gaveta tem de continuar byte a byte igual.
