@@ -2265,12 +2265,17 @@ o que esta task acrescenta é caminho até elas.
 
 ## Refrigeração — carga térmica, eficiência energética e inspeção (31/08/2026)
 
-Quick task 260831-2wq (D-2wq-01..07). **Duas migrações novas, escritas e conferidas,
-aguardando aplicação** — `47_refrigeracao_carga_termica.sql` e
-`48_refrigeracao_inspecao_qualidade.sql` — depois do deploy do frontend (mesma ordem
-de D-cf8-25). São independentes: aplicar uma sem a outra é estado válido.
+Quick task 260831-2wq (D-2wq-01..07). As duas migrações — `47_refrigeracao_carga_termica.sql`
+e `48_refrigeracao_inspecao_qualidade.sql` — **foram aplicadas em produção em 31/08/2026**,
+depois do merge e do deploy do frontend. Colunas e `check` conferidos um a um, travas
+exercidas e desfeitas, e as duas sondas testadas pela porta da frente com a `anon key`
+do HTML publicado.
 
-### Parte 1 — sem as migrações (compatibilidade, o estado publicado)
+> **A Parte 1 abaixo é histórica** — descreve o comportamento com as migrações ausentes,
+> que era o estado até 31/08. Continua valendo como prova de compatibilidade se alguém
+> restaurar um banco antigo; para conferir a tela hoje, vá direto às Partes 2 e 3.
+
+### Parte 1 — sem as migrações (compatibilidade, o estado publicado até 31/08)
 
 - [ ] **A ficha não ganhou bloco:** abrir qualquer equipamento — não existe
       "Carga térmica e eficiência". A ficha sai exatamente como hoje.
