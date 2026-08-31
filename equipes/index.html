@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#1a1a18"/>
+<script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t!=='claro'&&t!=='escuro'){t=(typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','escuro')}})()/* script classico de proposito: modulo ES e adiado, rodaria depois do primeiro desenho e reintroduziria a piscada de tema */</script>
+<title>PMOC Equipes</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
+<style>
+:root{--accent:#4a7fc9}
+
+/* ── grade semanal ──
+   Turnos nas linhas, dias nas colunas. Só existe a partir de 900px: em
+   tela estreita sete colunas dariam células de 45px, onde nome de
+   equipe nenhum cabe — ali a mesma informação vira lista por dia. */
+.ag-grade{display:none}
+.ag-lista{display:block}
+@media (min-width:900px){
+  .ag-grade{display:grid;grid-template-columns:88px repeat(7,1fr);gap:1px;
+    background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .ag-lista{display:none}
+}
+.ag-cab{background:var(--surface2,var(--surface));color:var(--text2);font-size:11px;font-weight:700;
+  text-align:center;padding:7px 2px;text-transform:uppercase;letter-spacing:.04em}
+.ag-cab.hoje{color:var(--accent)}
+.ag-turno{background:var(--surface2,var(--surface));color:var(--text2);font-size:11px;font-weight:700;
+  padding:8px 6px;display:flex;flex-direction:column;justify-content:center;gap:2px}
+.ag-turno small{font-weight:500;color:var(--text3);font-size:10px}
+.ag-cel{background:var(--surface);min-height:74px;padding:4px;display:flex;flex-direction:column;gap:3px;
+  transition:background .12s}
+.ag-cel.hoje{box-shadow:inset 0 0 0 2px var(--accent)}
+.ag-cel.alvo{background:color-mix(in srgb,var(--accent) 18%,var(--surface))}
+/* Célula que aceita soltar mas está vazia: um tracejado leve diz "cabe
+   algo aqui" sem competir com as células que têm equipe. */
+.ag-cel.solta:empty{border:1px dashed color-mix(in srgb,var(--border) 70%,transparent)}
+
+.ag-eq{display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:5px;font-size:11px;
+  font-weight:600;color:#fff;line-height:1.3;cursor:default}
+.ag-eq button{all:unset;cursor:pointer;margin-left:auto;opacity:.75;font-size:12px;line-height:1;padding:0 2px}
+.ag-eq button:hover{opacity:1}
+.ag-eq .ag-n{font-weight:400;opacity:.85;font-size:10px}
+
+/* Paleta de equipes que se arrasta para a grade. */
+.eq-paleta{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.eq-arrasta{display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:6px;
+  font-size:12px;font-weight:600;color:#fff;cursor:grab;user-select:none}
+.eq-arrasta:active{cursor:grabbing}
+.eq-arrasta:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* No celular nao ha arrastar: o chip vira botao e o texto diz isso. */
+@media (max-width:899px){.eq-arrasta{cursor:pointer}}
+.eq-arrasta.sem-gente{opacity:.5}
+
+.dia-bloco{border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--surface)}
+.dia-bloco.hoje{border-color:var(--accent)}
+.dia-cab{font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px}
+.dia-turno{font-size:11px;color:var(--text3);margin:6px 0 3px}
+</style>
+</head>
+<body>
+<div id="login-screen"></div>
+<div id="app"></div>
+<script type="module">
+// resolve app.js tanto em /equipes (rewrite do Vercel) quanto em /equipes/index.html
+const base = location.pathname.replace(/\/[^/]*\.[^/]*$/, '').replace(/\/$/, '')
+import(`${base}/app.js`)
+</script>
+</body>
+</html>

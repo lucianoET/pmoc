@@ -268,11 +268,28 @@ test('a guarda de cargo está na AÇÃO, não só no atributo draggable', () => 
 });
 
 test('não existe migração nova para o calendário — data_os já é a coluna', () => {
-  const arquivos = fs.readdirSync(path.join(RAIZ, 'supabase')).filter((f) => f.endsWith('.sql'));
-  const ultima = arquivos.map((f) => parseInt(f, 10)).filter((n) => !isNaN(n)).sort((a, b) => b - a)[0];
-  assert.strictEqual(ultima, 48, 'o calendário não pode ter acrescentado migração — remarcar é update em data_os');
+  // O que este caso protege é o calendário NÃO ter criado uma coluna de
+  // data própria — não o número da última migração do repositório, que
+  // sobe por trabalhos sem relação nenhuma com esta tela (foi o que
+  // aconteceu quando /equipes acrescentou a 49 e a 50). A invariante é
+  // `data_programada` não existir em lugar nenhum: ela seria a segunda
+  // fonte de verdade para "quando", divergindo da data_os no primeiro
+  // reagendamento feito pela tela antiga.
+  // Escopo: `logs_manutencao`, a tabela de OS de /refrigeracao. NÃO o
+  // repositório inteiro — `maq_operacoes.data_programada` existe desde a
+  // migração 12 e é do módulo Máquinas, onde a operação de corte é
+  // agendada por um eixo diferente da OS. A decisão registrada aqui vale
+  // para esta tela, não é uma regra universal da plataforma.
+  const sqls = fs.readdirSync(path.join(RAIZ, 'supabase')).filter((f) => f.endsWith('.sql'));
+  sqls.forEach((f) => {
+    const txt = fs.readFileSync(path.join(RAIZ, 'supabase', f), 'utf8');
+    const re = /alter\s+table\s+logs_manutencao[\s\S]{0,120}?data_programada/i;
+    assert.ok(!re.test(txt), `${f} não pode dar a logs_manutencao uma coluna de data programada`);
+  });
   const secao = semComentarios(recorte('/* ══ agenda: núcleo puro (sem migração) ══', '/* ══ carga térmica: núcleo puro (migração 47) ══'));
   assert.ok(!/data_programada/.test(secao), 'uma coluna de data programada seria segunda fonte de verdade');
+  // E o reagendamento continua sendo um update na coluna que já existia.
+  assert.match(bloco('async function agendaSoltar(ev, chave){'), /\{ date: chave \}/);
 });
 
 // ═══════════ a casa na tela ═══════════

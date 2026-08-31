@@ -1,0 +1,714 @@
+// PMOC Equipes — pessoas, ofícios, equipes, turnos e a escala semanal.
+//
+// A plataforma sabia o que precisa de manutenção (nove módulos de
+// ativos) e não sabia QUEM faz: toda OS registra o técnico como texto
+// livre. Este módulo é o cadastro que faltava, e a escala semanal é o
+// que transforma "temos três equipes" em "temos 96 homem-hora nesta
+// semana".
+//
+// Não usa shared/modulo-manutencao.js: aquilo é o esqueleto genérico de
+// manutenção de ativos (inventário, planos, OS, vencimentos) e aqui não
+// há ativo nenhum. Usa a base comum direto — Auth, shell e tema —, como
+// /mapa, que é o outro módulo que não é de ativos.
+
+import { Auth } from '../shared/auth.js'
+import { aplicarShell } from '../shared/shell.js'
+import { criarClienteSupabase } from '../shared/supabase-config.js'
+import {
+  DOMINIOS, CORES_EQUIPE,
+  chaveData, semanaDe, moverSemana, rotuloSemana,
+  horasDoTurno, formatarHora, tamanhoDaEquipe, capacidadeDaSemana,
+  alocacoesPorCelula, normalizarDominios, rotuloDominios, proximaCor,
+} from './nucleo.js'
+
+let supa = null
+let auth = null
+let USUARIO = null
+
+// Estado global em UPPER_CASE, o padrão dos outros módulos.
+let ESPECIALIDADES = []
+let PESSOAS = []
+let EQUIPES = []
+let MEMBROS = []
+let TURNOS = []
+let ALOCACOES = []
+let SEMANA_REF = new Date()
+let ARRASTANDO = null
+
+const el = id => document.getElementById(id)
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+// ── permissões ──────────────────────────────────────────────────────────
+// Duas listas diferentes, deliberadamente, espelhando 1:1 as policies da
+// migração 49 — não é preferência de interface: cadastrar pessoa é ato
+// de registro (admin/gestor); alocar equipe na escala é planejamento de
+// rotina e inclui o técnico. A mesma separação que /refrigeracao faz
+// entre podeEditarCadastro() e manPode('abrir').
+const podeCadastrar = () => ['admin', 'gestor'].includes(USUARIO?.role)
+const podeAlocar = () => ['admin', 'gestor', 'tecnico'].includes(USUARIO?.role)
+
+function aviso(msg, tom = 'erro') {
+  const t = document.createElement('div')
+  t.className = 'toast'
+  t.style.borderLeft = `3px solid ${tom === 'ok' ? '#168821' : '#E52207'}`
+  t.textContent = msg
+  document.body.appendChild(t)
+  setTimeout(() => t.remove(), 3200)
+}
+
+// ── carga ───────────────────────────────────────────────────────────────
+async function carregarTudo() {
+  const [esp, pes, eqp, mem, tur] = await Promise.all([
+    supa.from('cmasm_especialidades').select('*').order('nome'),
+    supa.from('cmasm_pessoas').select('*').order('nome'),
+    supa.from('cmasm_equipes').select('*').order('nome'),
+    supa.from('cmasm_equipe_membros').select('*'),
+    supa.from('cmasm_turnos').select('*').order('ordem'),
+  ])
+  const erro = [esp, pes, eqp, mem, tur].find(r => r.error)
+  if (erro) throw erro.error
+  ESPECIALIDADES = esp.data || []
+  PESSOAS = pes.data || []
+  EQUIPES = eqp.data || []
+  MEMBROS = mem.data || []
+  TURNOS = tur.data || []
+  await carregarAlocacoes()
+}
+
+/** Só a semana na tela — a tabela cresce sem limite ao longo dos anos e
+ *  carregar tudo ficaria mais lento a cada mês que passa. */
+async function carregarAlocacoes() {
+  const dias = semanaDe(SEMANA_REF)
+  const r = await supa.from('cmasm_alocacoes').select('*')
+    .gte('data', dias[0].chave).lte('data', dias[6].chave)
+  if (r.error) throw r.error
+  ALOCACOES = r.data || []
+}
+
+// ── escala semanal ──────────────────────────────────────────────────────
+function renderEscala() {
+  const dias = semanaDe(SEMANA_REF)
+  const hoje = chaveData(new Date())
+  const cap = capacidadeDaSemana(dias, ALOCACOES, TURNOS, MEMBROS, PESSOAS)
+  const porCelula = alocacoesPorCelula(dias, ALOCACOES)
+  const podeMover = podeAlocar()
+
+  const semTurnos = !TURNOS.filter(t => t.ativo !== false).length
+  const turnos = TURNOS.filter(t => t.ativo !== false)
+
+  el('view-escala').innerHTML = `
+    <div class="view-head">
+      <div>
+        <div class="view-title">Escala semanal</div>
+        <div class="view-sub">${esc(rotuloSemana(dias))}</div>
+      </div>
+      <div class="frow">
+        <button class="btn btn-s btn-sm" onclick="navegarSemana(-1)" aria-label="Semana anterior">‹</button>
+        <button class="btn btn-s btn-sm" onclick="irParaHoje()">Hoje</button>
+        <button class="btn btn-s btn-sm" onclick="navegarSemana(1)" aria-label="Próxima semana">›</button>
+      </div>
+    </div>
+
+    <div class="kpi-row">
+      <div class="kpi kc-accent"><div class="kpi-n">${cap.horas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</div><div class="kpi-l">homem-hora na semana</div></div>
+      <div class="kpi kc-blue"><div class="kpi-n">${cap.equipes}</div><div class="kpi-l">equipe(s) escalada(s)</div></div>
+      <div class="kpi kc-gold"><div class="kpi-n">${cap.alocacoes}</div><div class="kpi-l">alocaç(ões) na semana</div></div>
+    </div>
+
+    ${cap.alocacoesSemPessoal ? `<div class="callout co-warn">
+      <strong>${cap.alocacoesSemPessoal} alocação(ões) valem zero hora</strong> — a equipe escalada não tem nenhuma
+      pessoa ativa. Elas aparecem na grade, mas não somam capacidade: quase sempre é equipe cadastrada e ainda sem membros.
+    </div>` : ''}
+
+    ${semTurnos ? `<div class="callout co-warn">
+      <strong>Nenhum turno cadastrado.</strong> A grade precisa de pelo menos um turno para ter onde pôr equipe —
+      um turno tem hora de início e fim, e é daí que sai a duração usada na capacidade. Cadastre em <em>Turnos</em>.
+    </div>` : ''}
+
+    ${podeMover && !semTurnos ? renderPaleta() : ''}
+    ${semTurnos ? '' : renderGrade(dias, turnos, porCelula, hoje, podeMover)}
+    ${semTurnos ? '' : renderListaDias(dias, turnos, porCelula, hoje)}
+  `
+}
+
+/** As equipes ficam numa paleta acima da grade e são arrastadas de lá
+ *  para o dia/turno. Equipe sem pessoa ativa aparece esmaecida e com o
+ *  aviso no título: pode ser escalada (às vezes se monta a escala antes
+ *  de lotar a equipe), mas quem arrasta precisa saber que vale zero. */
+function renderPaleta() {
+  const ativas = EQUIPES.filter(e => e.ativo !== false)
+  if (!ativas.length) {
+    return `<div class="callout"><strong>Nenhuma equipe cadastrada.</strong>
+      Crie uma em <em>Equipes</em> para poder escalá-la aqui.</div>`
+  }
+  // Arrastar E clicar, nas duas larguras. O clique não é redundância:
+  // abaixo de 900px a grade não existe e o arrastar do HTML5 não dispara
+  // em toque nenhum — sem ele, o celular ficaria só de leitura, num
+  // aplicativo que é usado em campo. No computador o clique também
+  // serve, para quem prefere não arrastar.
+  return `<div class="help">Arraste uma equipe para o dia e turno — ou toque nela para escolher.</div>
+    <div class="eq-paleta">${ativas.map(eq => {
+      const n = tamanhoDaEquipe(eq.id, MEMBROS, PESSOAS)
+      return `<div class="eq-arrasta${n ? '' : ' sem-gente'}" draggable="true" role="button" tabindex="0"
+        style="background:${esc(eq.cor || CORES_EQUIPE[0])}"
+        ondragstart="aoArrastar(event,${eq.id})" ondragend="aoSoltarFora()"
+        onclick="escalarPorFormulario(${eq.id})"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();escalarPorFormulario(${eq.id})}"
+        title="${esc(eq.nome)} — ${n} pessoa(s) ativa(s)${n ? '' : '; sem pessoal, vale 0 h'}">
+        ${esc(eq.nome)} <span class="ag-n">${n}</span></div>`
+    }).join('')}</div>`
+}
+
+function renderGrade(dias, turnos, porCelula, hoje, podeMover) {
+  const cabs = dias.map(d =>
+    `<div class="ag-cab${d.chave === hoje ? ' hoje' : ''}">${d.rotulo}<br>${d.dia}</div>`).join('')
+
+  const linhas = turnos.map(t => {
+    const h = horasDoTurno(t)
+    const celulas = dias.map(d => {
+      const evs = porCelula[`${d.chave}|${t.id}`] || []
+      const solta = podeMover
+        ? ` ondragover="aoSobrepor(event)" ondragleave="aoSair(event)" ondrop="aoSoltar(event,'${d.chave}',${t.id})"`
+        : ''
+      return `<div class="ag-cel${d.chave === hoje ? ' hoje' : ''}${podeMover ? ' solta' : ''}"${solta}>
+        ${evs.map(a => chipEquipe(a, podeMover)).join('')}</div>`
+    }).join('')
+    return `<div class="ag-turno">${esc(t.nome)}<small>${formatarHora(t.hora_inicio)}–${formatarHora(t.hora_fim)}</small>
+      <small>${h.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h</small></div>${celulas}`
+  }).join('')
+
+  return `<div class="ag-grade"><div class="ag-cab"></div>${cabs}${linhas}</div>`
+}
+
+function chipEquipe(aloc, podeMover) {
+  const eq = EQUIPES.find(e => e.id === aloc.equipe_id)
+  const n = tamanhoDaEquipe(aloc.equipe_id, MEMBROS, PESSOAS)
+  const nome = eq ? eq.nome : `Equipe ${aloc.equipe_id}`
+  return `<div class="ag-eq" style="background:${esc(eq?.cor || CORES_EQUIPE[0])}" title="${esc(nome)} — ${n} pessoa(s)">
+    <span>${esc(nome)}</span><span class="ag-n">${n}</span>
+    ${podeMover ? `<button onclick="removerAlocacao(${aloc.id})" title="Tirar da escala" aria-label="Tirar ${esc(nome)} da escala">×</button>` : ''}
+  </div>`
+}
+
+/** Abaixo de 900px a grade some e esta lista aparece — só os dias que
+ *  têm alguém escalado. Sete colunas em tela de celular dariam células
+ *  de 45px, onde nome de equipe nenhum cabe.
+ *
+ *  Aqui não há arrastar: o arrastar do HTML5 não dispara em toque sem
+ *  polyfill, e polyfill é dependência nova num projeto zero-build. O
+ *  botão × continua funcionando, e escalar no celular é escolher pelo
+ *  formulário — o mesmo limite, e a mesma saída, do calendário de OS. */
+function renderListaDias(dias, turnos, porCelula, hoje) {
+  const comAlgo = dias.filter(d => turnos.some(t => (porCelula[`${d.chave}|${t.id}`] || []).length))
+  if (!comAlgo.length) {
+    return `<div class="ag-lista"><div class="empty"><div class="empty-ico">📅</div>
+      <div>Nenhuma equipe escalada nesta semana.</div></div></div>`
+  }
+  return `<div class="ag-lista">${comAlgo.map(d => `
+    <div class="dia-bloco${d.chave === hoje ? ' hoje' : ''}">
+      <div class="dia-cab">${d.rotulo}, ${d.dia}${d.chave === hoje ? ' · hoje' : ''}</div>
+      ${turnos.map(t => {
+        const evs = porCelula[`${d.chave}|${t.id}`] || []
+        if (!evs.length) return ''
+        return `<div class="dia-turno">${esc(t.nome)} · ${formatarHora(t.hora_inicio)}–${formatarHora(t.hora_fim)}</div>
+          ${evs.map(a => chipEquipe(a, podeAlocar())).join('')}`
+      }).join('')}
+    </div>`).join('')}</div>`
+}
+
+// ── arrastar e soltar ───────────────────────────────────────────────────
+function aoArrastar(ev, equipeId) {
+  ARRASTANDO = equipeId
+  try { ev.dataTransfer.setData('text/plain', String(equipeId)); ev.dataTransfer.effectAllowed = 'copy' } catch (_e) {}
+}
+function aoSoltarFora() { ARRASTANDO = null }
+function aoSobrepor(ev) {
+  if (ARRASTANDO === null) return
+  ev.preventDefault()
+  ev.dataTransfer.dropEffect = 'copy'
+  ev.currentTarget?.classList.add('alvo')
+}
+function aoSair(ev) { ev.currentTarget?.classList.remove('alvo') }
+
+async function aoSoltar(ev, dataChave, turnoId) {
+  ev.preventDefault()
+  ev.currentTarget?.classList.remove('alvo')
+  const equipeId = ARRASTANDO
+  ARRASTANDO = null
+  if (equipeId === null) return
+  // Guarda na AÇÃO, não só no atributo draggable: arrastar é affordance
+  // de tela e não protege gravação nenhuma.
+  if (!podeAlocar()) return aviso('Sem permissão para escalar equipe')
+
+  // Soltar de novo no mesmo lugar não pode criar linha nova — a trava
+  // única do banco recusaria, mas o usuário veria um erro por uma ação
+  // que deveria simplesmente não fazer nada.
+  if (ALOCACOES.some(a => a.equipe_id === equipeId && a.data === dataChave && a.turno_id === turnoId)) return
+
+  const r = await supa.from('cmasm_alocacoes')
+    .insert({ equipe_id: equipeId, data: dataChave, turno_id: turnoId }).select().single()
+  if (r.error) return aviso(`Erro ao escalar: ${r.error.message}`)
+  ALOCACOES.push(r.data)
+  renderEscala()
+}
+
+/** O mesmo destino do arrastar, alcançado por formulário: dia e turno
+ *  escolhidos numa lista. Passa pela MESMA gravação — nenhuma segunda
+ *  porta de escrita nasce por causa do celular. */
+function escalarPorFormulario(equipeId) {
+  if (!podeAlocar()) return aviso('Sem permissão para escalar equipe')
+  const eq = EQUIPES.find(e => e.id === equipeId)
+  const turnos = TURNOS.filter(t => t.ativo !== false)
+  if (!eq || !turnos.length) return
+  const dias = semanaDe(SEMANA_REF)
+  const hoje = chaveData(new Date())
+  abrirModal(`Escalar ${eq.nome}`, `
+    <label>Dia
+      <select id="f-dia" class="control-auto">
+        ${dias.map(d => `<option value="${d.chave}"${d.chave === hoje ? ' selected' : ''}>${d.rotulo}, ${d.dia}${d.chave === hoje ? ' · hoje' : ''}</option>`).join('')}
+      </select></label>
+    <label style="margin-top:10px">Turno
+      <select id="f-turno" class="control-auto">
+        ${turnos.map(t => `<option value="${t.id}">${esc(t.nome)} · ${formatarHora(t.hora_inicio)}–${formatarHora(t.hora_fim)}</option>`).join('')}
+      </select></label>
+  `, async () => {
+    const data = el('f-dia').value
+    const turnoId = Number(el('f-turno').value)
+    // Mesma guarda do arrastar: já escalada ali não vira linha nova.
+    if (ALOCACOES.some(a => a.equipe_id === equipeId && a.data === data && a.turno_id === turnoId)) {
+      aviso('Esta equipe já está escalada neste dia e turno', 'ok')
+      return
+    }
+    const r = await supa.from('cmasm_alocacoes')
+      .insert({ equipe_id: equipeId, data, turno_id: turnoId }).select().single()
+    if (r.error) { aviso(`Erro ao escalar: ${r.error.message}`); return false }
+    ALOCACOES.push(r.data)
+    renderEscala()
+  })
+}
+
+async function removerAlocacao(id) {
+  if (!podeAlocar()) return aviso('Sem permissão para alterar a escala')
+  const r = await supa.from('cmasm_alocacoes').delete().eq('id', id)
+  if (r.error) return aviso(`Erro: ${r.error.message}`)
+  ALOCACOES = ALOCACOES.filter(a => a.id !== id)
+  renderEscala()
+}
+
+async function navegarSemana(delta) {
+  SEMANA_REF = moverSemana(SEMANA_REF, delta)
+  await carregarAlocacoes()
+  renderEscala()
+}
+async function irParaHoje() {
+  SEMANA_REF = new Date()
+  await carregarAlocacoes()
+  renderEscala()
+}
+
+// ── pessoas ─────────────────────────────────────────────────────────────
+function renderPessoas() {
+  const porId = Object.fromEntries(ESPECIALIDADES.map(e => [e.id, e]))
+  const usuarios = PESSOAS.filter(p => p.is_usuario).length
+  const ativas = PESSOAS.filter(p => p.ativo !== false).length
+
+  el('view-pessoas').innerHTML = `
+    <div class="view-head">
+      <div><div class="view-title">Pessoas</div>
+        <div class="view-sub">${PESSOAS.length} cadastrada(s) · ${ativas} ativa(s) · ${usuarios} com login</div></div>
+      ${podeCadastrar() ? '<button class="btn btn-p btn-sm" onclick="abrirPessoa(null)">+ Pessoa</button>' : ''}
+    </div>
+    <div class="callout">
+      <strong>Pessoa não é usuário.</strong> A oficina tem gente que executa serviço e nunca abre o app —
+      marque <em>login</em> só para quem precisa entrar. Pessoa inativa continua no histórico mas sai da capacidade.
+    </div>
+    ${PESSOAS.length ? `<div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Nome</th><th>Posto/Grad.</th><th>Especialidade</th><th>Login</th><th>Ativo</th><th></th></tr></thead>
+      <tbody>${PESSOAS.map(p => `<tr>
+        <td><strong>${esc(p.nome)}</strong></td>
+        <td>${esc(p.posto || '—')}</td>
+        <td>${esc(porId[p.especialidade_id]?.nome || '—')}</td>
+        <td>${p.is_usuario ? '<span class="pilula pilula-ok">sim</span>' : '<span class="pilula pilula-neutro">não</span>'}</td>
+        <td>${p.ativo !== false ? '<span class="pilula pilula-ok">ativo</span>' : '<span class="pilula pilula-neutro">inativo</span>'}</td>
+        <td>${podeCadastrar() ? `<button class="btn btn-s btn-sm" onclick="abrirPessoa(${p.id})">Editar</button>` : ''}</td>
+      </tr>`).join('')}</tbody></table></div>`
+      : `<div class="empty"><div class="empty-ico">👷</div><div>Nenhuma pessoa cadastrada.</div>
+         <div class="vazio-dica">Nada foi semeado aqui de propósito: nome de militar é dado real da OM, e inventar
+         um para a tela não ficar vazia poria dado falso num cadastro que será lido como verdadeiro.</div></div>`}
+  `
+}
+
+function abrirPessoa(id) {
+  if (!podeCadastrar()) return aviso('Sem permissão para cadastrar pessoa')
+  const p = id === null ? { nome: '', posto: '', especialidade_id: null, is_usuario: false, ativo: true }
+    : PESSOAS.find(x => x.id === id)
+  if (!p) return
+  abrirModal(id === null ? 'Nova pessoa' : `Editar ${p.nome}`, `
+    <div class="fgrid">
+      <label>Nome<input id="f-nome" class="control-auto" value="${esc(p.nome)}"/></label>
+      <label>Posto / graduação<input id="f-posto" class="control-auto" value="${esc(p.posto || '')}"/></label>
+    </div>
+    <label>Especialidade
+      <select id="f-esp" class="control-auto">
+        <option value="">— sem especialidade —</option>
+        ${ESPECIALIDADES.map(e => `<option value="${e.id}"${p.especialidade_id === e.id ? ' selected' : ''}>${esc(e.nome)}</option>`).join('')}
+      </select></label>
+    <div class="help">A especialidade é o que decide quais serviços a pessoa atende.</div>
+    <div class="frow" style="margin-top:10px">
+      <label><input type="checkbox" id="f-user"${p.is_usuario ? ' checked' : ''}/> tem login no sistema</label>
+      <label><input type="checkbox" id="f-ativo"${p.ativo !== false ? ' checked' : ''}/> ativo</label>
+    </div>
+  `, async () => {
+    const nome = el('f-nome').value.trim()
+    if (!nome) return aviso('O nome não pode ficar vazio')
+    const dados = {
+      nome,
+      posto: el('f-posto').value.trim() || null,
+      especialidade_id: el('f-esp').value ? Number(el('f-esp').value) : null,
+      is_usuario: el('f-user').checked,
+      ativo: el('f-ativo').checked,
+    }
+    const r = id === null
+      ? await supa.from('cmasm_pessoas').insert(dados).select().single()
+      : await supa.from('cmasm_pessoas').update(dados).eq('id', id).select().single()
+    if (r.error) { aviso(`Erro: ${r.error.message}`); return false }
+    if (id === null) PESSOAS.push(r.data)
+    else PESSOAS = PESSOAS.map(x => (x.id === id ? r.data : x))
+    PESSOAS.sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
+    renderPessoas(); renderEquipes(); renderEscala()
+  })
+}
+
+// ── equipes ─────────────────────────────────────────────────────────────
+function renderEquipes() {
+  const porId = Object.fromEntries(ESPECIALIDADES.map(e => [e.id, e]))
+  el('view-equipes').innerHTML = `
+    <div class="view-head">
+      <div><div class="view-title">Equipes</div>
+        <div class="view-sub">${EQUIPES.length} cadastrada(s)</div></div>
+      ${podeCadastrar() ? '<button class="btn btn-p btn-sm" onclick="abrirEquipe(null)">+ Equipe</button>' : ''}
+    </div>
+    ${EQUIPES.length ? EQUIPES.map(eq => {
+      const membros = MEMBROS.filter(m => m.equipe_id === eq.id)
+        .map(m => PESSOAS.find(p => p.id === m.pessoa_id)).filter(Boolean)
+      const n = tamanhoDaEquipe(eq.id, MEMBROS, PESSOAS)
+      const esp = porId[eq.especialidade_id]
+      return `<div class="panel-card">
+        <div class="section-row">
+          <div class="frow">
+            <span style="width:12px;height:12px;border-radius:3px;background:${esc(eq.cor || CORES_EQUIPE[0])}"></span>
+            <strong>${esc(eq.nome)}</strong>
+            <span class="pilula pilula-neutro">${n} ativo(s)</span>
+            ${eq.ativo === false ? '<span class="pilula pilula-warn">inativa</span>' : ''}
+          </div>
+          ${podeCadastrar() ? `<button class="btn btn-s btn-sm" onclick="abrirEquipe(${eq.id})">Editar</button>` : ''}
+        </div>
+        <div class="help">${esp ? `${esc(esp.nome)} — atende ${esc(rotuloDominios(esp.dominios))}` : 'Sem especialidade: não fica habilitada para nenhum serviço.'}</div>
+        <div style="margin-top:8px">${membros.length
+          ? membros.map(p => `<span class="chip chip-n">${esc(p.nome)}${p.ativo === false ? ' (inativo)' : ''}</span>`).join(' ')
+          : '<span class="help">Sem membros — escalar esta equipe vale 0 h.</span>'}</div>
+        ${podeCadastrar() ? `<div style="margin-top:8px"><button class="btn btn-s btn-sm" onclick="abrirMembros(${eq.id})">Membros</button></div>` : ''}
+      </div>`
+    }).join('')
+      : `<div class="empty"><div class="empty-ico">🧰</div><div>Nenhuma equipe cadastrada.</div></div>`}
+  `
+}
+
+function abrirEquipe(id) {
+  if (!podeCadastrar()) return aviso('Sem permissão para cadastrar equipe')
+  const eq = id === null
+    ? { nome: '', especialidade_id: null, cor: proximaCor(EQUIPES), ativo: true }
+    : EQUIPES.find(x => x.id === id)
+  if (!eq) return
+  abrirModal(id === null ? 'Nova equipe' : `Editar ${eq.nome}`, `
+    <label>Nome<input id="f-nome" class="control-auto" value="${esc(eq.nome)}"/></label>
+    <label>Especialidade
+      <select id="f-esp" class="control-auto">
+        <option value="">— sem especialidade —</option>
+        ${ESPECIALIDADES.map(e => `<option value="${e.id}"${eq.especialidade_id === e.id ? ' selected' : ''}>${esc(e.nome)}</option>`).join('')}
+      </select></label>
+    <div class="help">É pela especialidade da equipe que ela fica habilitada para os serviços de um módulo.</div>
+    <label style="margin-top:10px">Cor na escala
+      <select id="f-cor" class="control-auto">
+        ${CORES_EQUIPE.map(c => `<option value="${c}"${eq.cor === c ? ' selected' : ''}>${c}</option>`).join('')}
+      </select></label>
+    <div class="frow" style="margin-top:10px">
+      <label><input type="checkbox" id="f-ativo"${eq.ativo !== false ? ' checked' : ''}/> ativa</label>
+    </div>
+  `, async () => {
+    const nome = el('f-nome').value.trim()
+    if (!nome) return aviso('O nome não pode ficar vazio')
+    const dados = {
+      nome,
+      especialidade_id: el('f-esp').value ? Number(el('f-esp').value) : null,
+      cor: el('f-cor').value,
+      ativo: el('f-ativo').checked,
+    }
+    const r = id === null
+      ? await supa.from('cmasm_equipes').insert(dados).select().single()
+      : await supa.from('cmasm_equipes').update(dados).eq('id', id).select().single()
+    if (r.error) { aviso(`Erro: ${r.error.message}`); return false }
+    if (id === null) EQUIPES.push(r.data)
+    else EQUIPES = EQUIPES.map(x => (x.id === id ? r.data : x))
+    EQUIPES.sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
+    renderEquipes(); renderEscala()
+  })
+}
+
+function abrirMembros(equipeId) {
+  if (!podeCadastrar()) return aviso('Sem permissão para alterar membros')
+  const eq = EQUIPES.find(e => e.id === equipeId)
+  if (!eq) return
+  const dentro = new Set(MEMBROS.filter(m => m.equipe_id === equipeId).map(m => m.pessoa_id))
+  abrirModal(`Membros de ${eq.nome}`, `
+    <div class="help">Uma pessoa pode estar em mais de uma equipe. Só as ativas contam na capacidade.</div>
+    <div class="stack" style="margin-top:8px;max-height:50vh;overflow:auto">
+      ${PESSOAS.length ? PESSOAS.map(p => `<label style="display:flex;gap:8px;align-items:center">
+        <input type="checkbox" data-pessoa="${p.id}"${dentro.has(p.id) ? ' checked' : ''}/>
+        <span>${esc(p.nome)}${p.posto ? ` · ${esc(p.posto)}` : ''}${p.ativo === false ? ' (inativo)' : ''}</span>
+      </label>`).join('') : '<div class="help">Nenhuma pessoa cadastrada ainda.</div>'}
+    </div>
+  `, async () => {
+    const marcados = new Set([...document.querySelectorAll('[data-pessoa]')]
+      .filter(c => c.checked).map(c => Number(c.dataset.pessoa)))
+    const inserir = [...marcados].filter(id => !dentro.has(id)).map(pessoa_id => ({ equipe_id: equipeId, pessoa_id }))
+    const remover = [...dentro].filter(id => !marcados.has(id))
+    if (inserir.length) {
+      const r = await supa.from('cmasm_equipe_membros').insert(inserir).select()
+      if (r.error) { aviso(`Erro: ${r.error.message}`); return false }
+      MEMBROS = MEMBROS.concat(r.data || [])
+    }
+    if (remover.length) {
+      const r = await supa.from('cmasm_equipe_membros').delete().eq('equipe_id', equipeId).in('pessoa_id', remover)
+      if (r.error) { aviso(`Erro: ${r.error.message}`); return false }
+      MEMBROS = MEMBROS.filter(m => !(m.equipe_id === equipeId && remover.includes(m.pessoa_id)))
+    }
+    renderEquipes(); renderEscala()
+  })
+}
+
+// ── ofícios e turnos ────────────────────────────────────────────────────
+function renderOficios() {
+  el('view-oficios').innerHTML = `
+    <div class="view-head">
+      <div><div class="view-title">Ofícios e turnos</div>
+        <div class="view-sub">${ESPECIALIDADES.length} especialidade(s) · ${TURNOS.length} turno(s)</div></div>
+    </div>
+
+    <div class="panel-card">
+      <div class="section-row"><strong>Especialidades</strong>
+        ${podeCadastrar() ? '<button class="btn btn-s btn-sm" onclick="abrirEspecialidade(null)">+ Especialidade</button>' : ''}</div>
+      <div class="help">O que cada ofício atende é o que responde “quem pode pegar esta OS”.
+        Especialidade sem nenhum domínio marcado não habilita ninguém — de propósito: lista vazia
+        significando “atende tudo” mandaria o carpinteiro para a OS de refrigeração.</div>
+      ${ESPECIALIDADES.length ? `<div class="tbl-wrap" style="margin-top:8px"><table class="tbl">
+        <thead><tr><th>Especialidade</th><th>Atende</th><th>Pessoas</th><th></th></tr></thead>
+        <tbody>${ESPECIALIDADES.map(e => `<tr>
+          <td><strong>${esc(e.nome)}</strong></td>
+          <td>${esc(rotuloDominios(e.dominios))}</td>
+          <td>${PESSOAS.filter(p => p.especialidade_id === e.id).length}</td>
+          <td>${podeCadastrar() ? `<button class="btn btn-s btn-sm" onclick="abrirEspecialidade(${e.id})">Editar</button>` : ''}</td>
+        </tr>`).join('')}</tbody></table></div>` : '<div class="help">Nenhuma cadastrada.</div>'}
+    </div>
+
+    <div class="panel-card">
+      <div class="section-row"><strong>Turnos</strong>
+        ${podeCadastrar() ? '<button class="btn btn-s btn-sm" onclick="abrirTurno(null)">+ Turno</button>' : ''}</div>
+      <div class="help">Hora de início e fim, não uma duração digitada: o par dá a posição na grade
+        <em>e</em> a duração da capacidade, e ninguém escreve “4h” por engano num turno de 08:00 às 13:00.</div>
+      ${TURNOS.length ? `<div class="tbl-wrap" style="margin-top:8px"><table class="tbl">
+        <thead><tr><th>Turno</th><th>Início</th><th>Fim</th><th>Duração</th><th></th></tr></thead>
+        <tbody>${TURNOS.map(t => `<tr>
+          <td><strong>${esc(t.nome)}</strong>${t.ativo === false ? ' <span class="pilula pilula-neutro">inativo</span>' : ''}</td>
+          <td>${formatarHora(t.hora_inicio)}</td><td>${formatarHora(t.hora_fim)}</td>
+          <td>${horasDoTurno(t).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h</td>
+          <td>${podeCadastrar() ? `<button class="btn btn-s btn-sm" onclick="abrirTurno(${t.id})">Editar</button>` : ''}</td>
+        </tr>`).join('')}</tbody></table></div>` : '<div class="help">Nenhum cadastrado.</div>'}
+    </div>
+  `
+}
+
+function abrirEspecialidade(id) {
+  if (!podeCadastrar()) return aviso('Sem permissão')
+  const e = id === null ? { nome: '', dominios: [], ativo: true } : ESPECIALIDADES.find(x => x.id === id)
+  if (!e) return
+  const atuais = new Set(normalizarDominios(e.dominios))
+  abrirModal(id === null ? 'Nova especialidade' : `Editar ${e.nome}`, `
+    <label>Nome<input id="f-nome" class="control-auto" value="${esc(e.nome)}"/></label>
+    <div class="help" style="margin-top:10px">Serviços que este ofício atende:</div>
+    <div class="stack">${DOMINIOS.map(d => `<label style="display:flex;gap:8px;align-items:center">
+      <input type="checkbox" data-dom="${d.chave}"${atuais.has(d.chave) ? ' checked' : ''}/>
+      <span>${esc(d.nome)}</span></label>`).join('')}</div>
+  `, async () => {
+    const nome = el('f-nome').value.trim()
+    if (!nome) return aviso('O nome não pode ficar vazio')
+    const dominios = [...document.querySelectorAll('[data-dom]')].filter(c => c.checked).map(c => c.dataset.dom)
+    const dados = { nome, dominios }
+    const r = id === null
+      ? await supa.from('cmasm_especialidades').insert(dados).select().single()
+      : await supa.from('cmasm_especialidades').update(dados).eq('id', id).select().single()
+    if (r.error) { aviso(`Erro: ${r.error.message}`); return false }
+    if (id === null) ESPECIALIDADES.push(r.data)
+    else ESPECIALIDADES = ESPECIALIDADES.map(x => (x.id === id ? r.data : x))
+    ESPECIALIDADES.sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'))
+    renderOficios(); renderPessoas(); renderEquipes()
+  })
+}
+
+function abrirTurno(id) {
+  if (!podeCadastrar()) return aviso('Sem permissão')
+  const t = id === null ? { nome: '', hora_inicio: '08:00', hora_fim: '12:00', ordem: TURNOS.length + 1, ativo: true }
+    : TURNOS.find(x => x.id === id)
+  if (!t) return
+  abrirModal(id === null ? 'Novo turno' : `Editar ${t.nome}`, `
+    <label>Nome<input id="f-nome" class="control-auto" value="${esc(t.nome)}"/></label>
+    <div class="fgrid">
+      <label>Início<input id="f-ini" class="control-auto" type="time" value="${esc(String(t.hora_inicio).slice(0, 5))}"/></label>
+      <label>Fim<input id="f-fim" class="control-auto" type="time" value="${esc(String(t.hora_fim).slice(0, 5))}"/></label>
+    </div>
+    <div class="frow" style="margin-top:10px">
+      <label><input type="checkbox" id="f-ativo"${t.ativo !== false ? ' checked' : ''}/> ativo</label>
+    </div>
+  `, async () => {
+    const nome = el('f-nome').value.trim()
+    const ini = el('f-ini').value
+    const fim = el('f-fim').value
+    if (!nome) return aviso('O nome não pode ficar vazio')
+    // Mesma barreira do check do banco, escrita na tela para o usuário
+    // ver o erro antes de mandar: turno que termina antes de começar
+    // daria duração negativa e subtrairia capacidade em silêncio.
+    if (!ini || !fim || fim <= ini) return aviso('O fim do turno precisa ser depois do início')
+    const dados = { nome, hora_inicio: ini, hora_fim: fim, ativo: el('f-ativo').checked }
+    const r = id === null
+      ? await supa.from('cmasm_turnos').insert({ ...dados, ordem: t.ordem }).select().single()
+      : await supa.from('cmasm_turnos').update(dados).eq('id', id).select().single()
+    if (r.error) { aviso(`Erro: ${r.error.message}`); return false }
+    if (id === null) TURNOS.push(r.data)
+    else TURNOS = TURNOS.map(x => (x.id === id ? r.data : x))
+    TURNOS.sort((a, b) => (a.ordem || 0) - (b.ordem || 0))
+    renderOficios(); renderEscala()
+  })
+}
+
+// ── modal ───────────────────────────────────────────────────────────────
+let _confirmar = null
+function abrirModal(titulo, corpo, aoConfirmar) {
+  _confirmar = aoConfirmar
+  el('modal-titulo').textContent = titulo
+  el('modal-corpo').innerHTML = corpo
+  el('overlay').classList.add('ativo')
+  el('overlay').style.display = 'flex'
+}
+function fecharModal() {
+  _confirmar = null
+  el('overlay').style.display = 'none'
+  el('overlay').classList.remove('ativo')
+}
+async function confirmarModal() {
+  if (!_confirmar) return fecharModal()
+  const r = await _confirmar()
+  if (r !== false) fecharModal()
+}
+
+// ── navegação ───────────────────────────────────────────────────────────
+function trocarView(id, botao) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'))
+  el(`view-${id}`)?.classList.add('active')
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'))
+  botao?.classList.add('active')
+}
+
+function mostrarApp() {
+  el('login-screen').style.display = 'none'
+  el('app').style.display = 'flex'
+  el('user-chip').textContent = USUARIO?.role || '—'
+  renderEscala(); renderPessoas(); renderEquipes(); renderOficios()
+}
+
+function mostrarLogin() {
+  el('login-screen').style.display = 'flex'
+  el('app').style.display = 'none'
+}
+
+async function sair() {
+  await supa.auth.signOut()
+  location.reload()
+}
+
+// Handlers em atributo inline (onclick/ondrop) resolvem pelo escopo
+// GLOBAL — um módulo ES tem escopo próprio, então sem esta exposição os
+// botões da tela não achariam função nenhuma. É o mesmo que mapa/app.js
+// faz em exporNoWindow().
+function exporNoWindow() {
+  Object.assign(window, {
+    trocarView, sair, fecharModal, confirmarModal,
+    navegarSemana, irParaHoje, aoArrastar, aoSobrepor, aoSair, aoSoltar, aoSoltarFora,
+    removerAlocacao, escalarPorFormulario,
+    abrirPessoa, abrirEquipe, abrirMembros, abrirEspecialidade, abrirTurno,
+  })
+}
+
+async function boot() {
+  exporNoWindow()
+
+  aplicarShell({
+    nome: 'Equipes',
+    accent: '#4a7fc9',
+    versao: '1.0',
+    navItems: [
+      { id: 'escala',  label: 'Escala',   icone: 'agenda',   ativo: true },
+      { id: 'equipes', label: 'Equipes',  icone: 'empresa' },
+      { id: 'pessoas', label: 'Pessoas',  icone: 'chave' },
+      { id: 'oficios', label: 'Ofícios',  icone: 'plano' },
+    ],
+  })
+
+  el('app').insertAdjacentHTML('beforeend', `
+    <div class="main">
+      <div class="view active" id="view-escala"></div>
+      <div class="view" id="view-equipes"></div>
+      <div class="view" id="view-pessoas"></div>
+      <div class="view" id="view-oficios"></div>
+    </div>
+    <div class="overlay" id="overlay" style="display:none">
+      <div class="modal">
+        <div class="modal-hd"><strong id="modal-titulo"></strong></div>
+        <div class="modal-body" id="modal-corpo"></div>
+        <div class="modal-ft">
+          <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+          <button class="btn btn-p btn-sm" onclick="confirmarModal()">Salvar</button>
+        </div>
+      </div>
+    </div>
+  `)
+
+  try {
+    supa = await criarClienteSupabase()
+  } catch (erro) {
+    el('app').innerHTML = `<div class="callout co-red">Não foi possível carregar a configuração: ${esc(erro.message)}</div>`
+    return
+  }
+
+  auth = new Auth(supa, { appNome: 'Equipes', appIcone: '👷' })
+  auth.onLogin(async usuario => {
+    USUARIO = usuario
+    try {
+      await carregarTudo()
+    } catch (erro) {
+      // Sem a migração 49 as tabelas não existem: a tela DIZ isso, em vez
+      // de ficar vazia parecendo que a oficina não tem ninguém.
+      el('app').insertAdjacentHTML('afterbegin',
+        `<div class="callout co-red"><strong>Não foi possível ler o cadastro de equipes.</strong>
+         ${esc(erro.message || '')} — se este módulo acabou de subir, a migração
+         <code>49_equipes_schema.sql</code> ainda não foi aplicada.</div>`)
+      return
+    }
+    mostrarApp()
+  })
+  auth.mount('#login-screen')
+
+  const { data: { session } } = await supa.auth.getSession()
+  if (!session) mostrarLogin()
+}
+
+boot()
