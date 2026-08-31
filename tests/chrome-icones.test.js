@@ -93,6 +93,7 @@ test('nenhum módulo declara aba com emoji, e todo nome usado existe no conjunto
     ['transportes/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
     ['predial/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
     ['shared/modulo-manutencao.js', /navItems: \[([\s\S]*?)\n {4}\]/],
+    ['equipes/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
   ]
   for (const [relativo, expressao] of arquivos) {
     const bloco = ler(path.join(RAIZ, relativo)).match(expressao)
@@ -111,6 +112,27 @@ test('nenhum módulo declara aba com emoji, e todo nome usado existe no conjunto
     assert.ok(existeIcone(achado[1]), `${relativo} declara iconeAba "${achado[1]}", que não existe`)
   }
 })
+
+test('duas abas da MESMA faixa nunca dividem o mesmo ícone', () => {
+  // O conjunto comum existe para o ícone distinguir a aba. Dois desenhos
+  // iguais lado a lado devolvem a faixa ao estado em que só o texto
+  // informa — que é o problema que os ícones vieram resolver. Aconteceu
+  // de verdade: a aba Plano de /equipes nasceu com o mesmo `plano` que
+  // Ofícios já usava, e nada no gate reclamou.
+  const faixas = [
+    'maquinas/app.js', 'transportes/app.js', 'predial/app.js',
+    'shared/modulo-manutencao.js', 'equipes/app.js',
+  ]
+  for (const relativo of faixas) {
+    const bloco = ler(path.join(RAIZ, relativo)).match(/navItems: \[([\s\S]*?)\n {4}\]/)
+    assert.ok(bloco, `navItems não encontrada em ${relativo}`)
+    const nomes = [...bloco[1].matchAll(/icone: '([^']+)'/g)].map((m) => m[1])
+    const repetidos = nomes.filter((nome, i) => nomes.indexOf(nome) !== i)
+    assert.deepStrictEqual(repetidos, [],
+      `${relativo} usa o mesmo ícone em mais de uma aba: ${[...new Set(repetidos)].join(', ')}`)
+  }
+})
+
 
 // ── 3. abas OS-Manutenção e OS-Corte ────────────────────────────────────
 test('OS virou OS-Manutenção e OS-Corte entrou logo depois, com view própria', () => {
