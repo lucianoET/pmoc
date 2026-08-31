@@ -235,7 +235,7 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
 #dh-predio{font-size:13px;color:#666}
 #drawer-body{overflow-y:auto;flex:1;padding:16px;-webkit-overflow-scrolling:touch}
 #drawer-body::-webkit-scrollbar{display:none}
-#drawer-footer{padding:12px 16px calc(12px + env(safe-area-inset-bottom,0));border-top:1px solid #F0F0F0;display:flex;gap:8px;flex-shrink:0}
+#drawer-footer{padding:12px 16px calc(12px + env(safe-area-inset-bottom,0));border-top:1px solid #F0F0F0;display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
 
 /* ═══════════════════════════════════════════
    DETAIL SECTIONS
@@ -282,6 +282,31 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
 .btn-danger{background:#FDECEA;color:#E52207;border:none;border-radius:10px;padding:13px 16px;font-size:14px;font-weight:700;cursor:pointer}
 .btn-success{background:#168821;color:#fff;border:none;border-radius:10px;padding:13px 16px;font-size:14px;font-weight:700;cursor:pointer}
 .btn-sm{padding:7px 12px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer}
+.btn-grow{flex:1}
+
+.med-box{display:grid;gap:6px;margin-top:8px}
+.med-note{font-size:11px;color:#666}
+.med-chip{font-size:11px;border-radius:8px;padding:7px 9px;line-height:1.35}
+.med-ok{background:#E6F4EA;color:#168821}
+.med-alerta{background:#FDECEA;color:#B71C1C}
+.med-neutro{background:#F3F4F6;color:#555}
+.med-preview{margin-top:8px}
+.hint{font-size:11px;color:#666;line-height:1.4}
+
+#dash-charts{display:grid;grid-template-columns:1fr;gap:10px}
+
+@media (max-width: 420px){
+  .dfields2,.fg2{grid-template-columns:1fr}
+  .sec-head{flex-wrap:wrap;gap:6px}
+  .sec-ordem{max-width:100%;width:100%;margin:0}
+  #drawer-body{padding:12px}
+  #drawer-hdr{padding:14px 12px 10px}
+  #drawer-footer{padding:12px}
+  #drawer-footer .btn-primary,#drawer-footer .btn-secondary{flex:1}
+}
+@media (min-width: 980px){
+  #dash-charts{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 
 /* ═══════════════════════════════════════════
    TOAST
@@ -356,143 +381,25 @@ const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 /* ── CONVERSORES ── */
 function dbToEquip(r) {
-  var o = {};
-  Object.keys(CAMPOS_EQUIP).forEach(function(k){ o[k] = r[CAMPOS_EQUIP[k]]; });
-  o.fabricante = o.fabricante || '';
-  o.btu = o.btu || 0;
-  o.obs = o.obs || '';
-  o.patrimonio = o.patrimonio || '';
-  o.dataInstalacao = o.dataInstalacao || '';
-  o.ultimaManutencao = o.ultimaManutencao || '';
-  o.correnteNominal = parseFloat(o.correnteNominal) || 0;
-  /* criticidadeManual: `equipamentos.criticidade_manual` NÃO EXISTE no banco
-     (conferido nas migrações 04+19+25+41) — pendência conhecida, não consertada
-     por este task (ponto 3 do briefing). autoCrit() devolve e.criticidade nos
-     três ramos independente deste valor; a linha fica de propósito FORA de
-     CAMPOS_EQUIP (D-q57-08) para o gate afirmar a ausência da coluna. */
-  o.criticidadeManual = r.criticidade_manual;
-  return o;
-}
-
-/* ── ponte de campos de equipamentos ── */
-/* Mesma ideia de CAMPOS_LOG (abaixo): chave camelCase do app → nome de coluna,
-   cobrindo a tabela inteira — um campo fora daqui é gravado como null sem erro
-   nenhum (lição paga em /calibracao e repetida em CAMPOS_LOG). `dbToEquip` lê
-   por aqui; `equipParaDb` grava por aqui, mas só o que estiver TAMBÉM em
-   EQUIP_EDITAVEIS (D-q57-08) — duas guardas, não uma. */
-var CAMPOS_EQUIP = {
-  id: 'id', area: 'area', predio: 'predio', local: 'local', tipo: 'tipo',
-  fabricante: 'fabricante', modelo: 'modelo', btu: 'btu',
-  funciona: 'funciona', estado: 'estado', obs: 'obs',
-  refrigPermanente: 'refrig_permanente', horasDia: 'horas_dia', diasSemana: 'dias_semana',
-  criticidade: 'criticidade', tensao: 'tensao', correnteNominal: 'corrente_nominal',
-  patrimonio: 'patrimonio', dataFabricacao: 'data_fabricacao', dataInstalacao: 'data_instalacao',
-  inverter: 'inverter', redundante: 'redundante', automacao: 'automacao',
-  ultimaManutencao: 'ultima_manutencao', refrigerante: 'refrigerante',
-  link: 'link', manualUrl: 'manual_url',
-  areaM2: 'area_m2', peDireito: 'pe_direito', nPessoas: 'n_pessoas',
-  dissipacaoW: 'dissipacao_w', fatorInsolacao: 'fator_insolacao',
-  localId: 'local_id', lat: 'lat', lon: 'lon',
-  situacao: 'situacao', dataRemocao: 'data_remocao', dataBaixa: 'data_baixa'
-};
-
-/* Lista fechada do que o formulário de cadastro GRAVA (D-q57-08). `lat`/`lon`/
-   `localId` ficam de fora porque posição é trabalho de campo do /mapa (D-03);
-   `ultimaManutencao` fica de fora porque é derivada da conferência da OS
-   (atualizarUltimaManutencao) — um formulário de cadastro que gravasse
-   qualquer um dos dois desfaria em silêncio o trabalho de outro módulo. `id`
-   fica de fora porque nunca se edita a própria chave. `situacao`/
-   `dataRemocao`/`dataBaixa` ficam de fora pelo MESMO motivo (D-uyz-12): elas
-   mudam só por conferência de OS de movimentação (aplicarInstalacao/
-   aplicarRemocao) — um <select> de situação no cadastro deixaria qualquer
-   gestor dar baixa numa máquina sem OS, sem checklist de partes, sem
-   assinatura e sem a trava de admin. */
-var EQUIP_EDITAVEIS = [
-  'area', 'predio', 'local', 'tipo', 'fabricante', 'modelo', 'btu',
-  'funciona', 'estado', 'criticidade', 'tensao', 'correnteNominal',
-  'patrimonio', 'dataFabricacao', 'dataInstalacao', 'refrigerante',
-  'link', 'manualUrl', 'refrigPermanente', 'horasDia', 'diasSemana', 'obs'
-];
-var EQUIP_NUMERICOS = ['btu', 'tensao', 'horasDia', 'diasSemana'];
-
-/* D-500-01/04/05: os três atributos técnicos da migração 45. Ficam em
-   CAMPOS_EQUIP sempre (a leitura de uma coluna que não existe devolve
-   `undefined`, não erro — `select('*')`), mas só entram em
-   EQUIP_EDITAVEIS quando a sonda passa: um `update` citando uma coluna
-   ausente derruba TODO salvamento de cadastro com "column does not
-   exist". Empurrar num ponto só é o que garante que formulário,
-   gravação e colunas da planilha (que derivam desta lista, D-5hy-06)
-   ligam juntos ou não ligam nenhum. */
-var EQUIP_ATRIBUTOS = ['inverter', 'redundante', 'automacao'];
-
-/* D-500-06: cinco pontos comparavam a chave literal 'refrigPermanente'
-   para decidir "isto é um booleano" (campoEquipForm, salvarEquip,
-   salvarEquipNovo, planilhaValor, celulaParaValor). Com três booleanos
-   novos seriam vinte comparações; com a lista, cinco ramos que não
-   mudam mais. */
-var EQUIP_BOOLEANOS = ['refrigPermanente'].concat(EQUIP_ATRIBUTOS);
-
-/* Sonda PRÓPRIA, separada de MAN_FLUXO_OK/MOV_OK/UNI_OK/EST_OK — mesma
-   lição de D-uyz-13/D-cf8-13/D-6wy-08: estender uma sonda existente
-   desligaria um fluxo inteiro num banco que tem as migrações anteriores
-   e não tem esta. Enquanto ATRIB_OK for falso a tela publicada se
-   comporta byte a byte como hoje: sem os três campos no formulário, sem
-   as três colunas na planilha, sem as três linhas na ficha. */
-var ATRIB_OK = false;
-
-async function atribSondarEsquema() {
-  var r = await supa.from('equipamentos').select('id,inverter,redundante,automacao').limit(1);
-  ATRIB_OK = !r.error;
-  if (ATRIB_OK && EQUIP_EDITAVEIS.indexOf('inverter') < 0) {
-    EQUIP_EDITAVEIS = EQUIP_EDITAVEIS.concat(EQUIP_ATRIBUTOS);
-    // D-8yc-07/12: as três colunas da tabela do Parque ligam no mesmo
-    // ponto — a tela ganha os três campos e as três colunas juntos, ou
-    // não ganha nenhum. Entram logo DEPOIS de Criticidade, onde o
-    // usuário pediu; se a coluna de referência sumir um dia, vão para o
-    // fim em vez de derrubar a tabela.
-    if (typeof COLS_INV !== 'undefined' && typeof colAtributoEquip === 'function') {
-      var apos = COLS_INV.map(function(c){ return c.id; }).indexOf('criticidade');
-      var posicao = apos < 0 ? COLS_INV.length : apos + 1;
-      var novas = EQUIP_ATRIBUTOS.map(colAtributoEquip);
-      COLS_INV = COLS_INV.slice(0, posicao).concat(novas, COLS_INV.slice(posicao));
-    }
-  }
-  return ATRIB_OK;
-}
-
-/* Caminho inverso de dbToEquip: duas guardas (chave fora de CAMPOS_EQUIP OU
-   fora de EQUIP_EDITAVEIS caem juntas), texto vazio vira null (um
-   data_fabricacao:'' é erro de cast no Postgres; um link:'' viola a trava de
-   esquema de URL por nada) — nunca texto vazio é gravado. */
-function equipParaDb(patch) {
-  var alvo = {};
-  Object.keys(patch || {}).forEach(function(k){
-    if (EQUIP_EDITAVEIS.indexOf(k) < 0 || !CAMPOS_EQUIP.hasOwnProperty(k)) return;
-    var coluna = CAMPOS_EQUIP[k];
-    var v = patch[k];
-    if (v === '' || v === undefined) { alvo[coluna] = null; return; }
-    if (k === 'correnteNominal') { var f = parseFloat(v); alvo[coluna] = isNaN(f) ? null : f; return; }
-    if (EQUIP_NUMERICOS.indexOf(k) >= 0) { var n = parseInt(v, 10); alvo[coluna] = isNaN(n) ? null : n; return; }
-    alvo[coluna] = v;
-  });
-  return alvo;
-}
-
-/* D-q57-09: mesma barreira do `check` do banco, escrita na tela para o
-   usuário ver o erro antes de mandar. Sem trim, sem normalização — o valor é
-   comparado como veio. */
-function linkSeguro(u) {
-  if (typeof u !== 'string') return '';
-  return /^https?:\/\//i.test(u) ? u : '';
-}
-
-/* Mesmo nome do helper equivalente em maquinas/app.js, de propósito — mesma
-   ideia, vale ser reconhecível. Uma lista, quatro pontos de chamada (botão da
-   ficha, abertura do formulário, gravação e o campo de estado no formulário). */
-function podeEditarCadastro() {
-  if (somenteLeitura()) return false;
-  var r = ctUser ? ctUser.role : '';
-  return r === 'admin' || r === 'gestor';
+  return {
+    id: r.id, area: r.area, predio: r.predio, local: r.local,
+    tipo: r.tipo, fabricante: r.fabricante || '', modelo: r.modelo || '',
+    btu: r.btu || 0,
+    funciona: r.funciona, estado: r.estado, obs: r.obs || '',
+    refrigPermanente: r.refrig_permanente,
+    horasDia: r.horas_dia, diasSemana: r.dias_semana,
+    criticidade: r.criticidade, criticidadeManual: r.criticidade_manual,
+    tensao: r.tensao, correnteNominal: parseFloat(r.corrente_nominal) || 0,
+    patrimonio: r.patrimonio || '',
+    dataInstalacao: r.data_instalacao || '',
+    ultimaManutencao: r.ultima_manutencao || '',
+    refrigerante: r.refrigerante || '',
+    areaM2: parseFloat(r.area_m2) || 0,
+    peDireito: parseFloat(r.pe_direito) || 0,
+    nPessoas: parseInt(r.n_pessoas, 10) || 0,
+    dissipacaoW: parseFloat(r.dissipacao_w) || 0,
+    fatorInsolacao: parseFloat(r.fator_insolacao) || 1
+  };
 }
 
 /* D-uyz-07: a baixa exige cargo admin, não gestor — desinstalar é ato de
@@ -565,21 +472,16 @@ var CAMPOS_LOG = {
 };
 
 function dbToLog(r) {
-  var o = {};
-  Object.keys(CAMPOS_LOG).forEach(function(k){ o[k] = r[CAMPOS_LOG[k]]; });
-  o.tecnico = o.tecnico || '';
-  o.desc = o.desc || '';
-  o.checklist = o.checklist || [];
-  o.fotos = o.fotos || [];
-  return o;
-}
-
-function logParaDb(patch) {
-  var alvo = {};
-  Object.keys(patch).forEach(function(k){
-    if (CAMPOS_LOG.hasOwnProperty(k)) alvo[CAMPOS_LOG[k]] = patch[k];
-  });
-  return alvo;
+  return {
+    id: r.id, date: r.data_os, tipo: r.tipo,
+    status: r.status, tecnico: r.tecnico || '',
+    desc: r.descricao || '', checklist: r.checklist || [],
+    tempInsuflamento: parseFloat(r.temp_insuflamento),
+    tempRetorno: parseFloat(r.temp_retorno),
+    deltaT: parseFloat(r.delta_t),
+    correnteMedida: parseFloat(r.corrente_medida),
+    pressaoSuccao: parseFloat(r.pressao_succao)
+  };
 }
 
 /* ── CAMADA DE DADOS SUPABASE ── */
@@ -696,305 +598,26 @@ async function delLogEntryAsync(equipId, logId) {
   } catch(e) { return false; }
 }
 
-/* ── fluxo da OS interna: porta de escrita ── */
-var MAN_FLUXO_OK = false;
-
-async function manSondarEsquema() {
-  var r = await supa.from('logs_manutencao').select('id,fotos,aprovador,conferente').limit(1);
-  MAN_FLUXO_OK = !r.error;
-  return MAN_FLUXO_OK;
-}
-
-async function manAtualizarOS(logId, equipId, patch, msg) {
-  // 260823-cf8: lido ANTES do update (senão a trilha sairia X → X, mesmo
-  // raciocínio de ctUpd/D-jpd-05) — direto do cache, sem depender de
-  // manEntrada (que vive noutra seção do arquivo).
-  var lista = _logCache[equipId];
-  var atual = lista ? lista.find(function(e){ return e.id === logId; }) : null;
-  var statusAnterior = atual ? atual.status : undefined;
-  var tipoAnterior = atual ? atual.tipoExecutor : undefined;
-  var r = await supa.from('logs_manutencao').update(logParaDb(patch)).eq('id', logId).select().single();
-  if(r.error){ showToast('Erro: '+r.error.message,'error'); return false; }
-  var novo = dbToLog(r.data);
-  if (lista) {
-    var i = lista.findIndex(function(e){ return e.id === logId; });
-    if (i >= 0) lista[i] = novo;
+async function saveEquipAsync(equipId, dados){
+  try {
+    var atual = DATA.find(function(r){ return r.id===equipId; }) || {};
+    var payload = Object.assign(dadosEdicaoEquip(atual), dados);
+    var { data, error } = await supa.from('equipamentos')
+      .update(montarPatchEquipamento(payload))
+      .eq('id', equipId)
+      .select()
+      .single();
+    if (error) throw error;
+    var idx = DATA.findIndex(function(r){ return r.id===equipId; });
+    var equip = dbToEquip(data);
+    if (idx>=0) DATA[idx] = equip;
+    else DATA.push(equip);
+    return equip;
+  } catch(e) {
+    console.error('save equipment', e);
+    showToast('Erro ao salvar equipamento', 'error');
+    return null;
   }
-  // D-cf8-15: cada transição de estado grava um comentário de
-  // origem='sistema' — um ponto só, para que nenhuma transição futura
-  // escape da trilha. Sem UNI_OK, os_comentarios não existe: nem tenta.
-  if (UNI_OK && patch && patch.status !== undefined) {
-    var f = osFluxoDe({tipoExecutor: tipoAnterior});
-    var detalhe = osDetalheEvento(f, statusAnterior, patch.status);
-    if (detalhe) await osRegistrarEvento(logId, detalhe);
-  }
-  // D-6wy-03: a baixa acontece SÓ na entrada em execução, nunca na
-  // abertura nem no delineamento — ponto único; qualquer caminho
-  // futuro que leve a OS à execução passa por aqui.
-  if (EST_OK && patch && patch.status === 'EM_EXECUCAO') {
-    await estBaixarItensDaOS(logId, novo);
-  }
-  if (msg) showToast(msg, 'ok');
-  return true;
-}
-
-/* D-uyz-13: sonda PRÓPRIA, separada de manSondarEsquema/MAN_FLUXO_OK.
-   Estender manSondarEsquema para pedir também as colunas da migração 42
-   desligaria o fluxo INTEIRO num banco com 40+41 e sem 42 — uma regressão
-   do que entrou hoje. São duas perguntas diferentes; são duas sondas. O
-   terceiro segmento exige MAN_FLUXO_OK && MOV_OK. */
-var MOV_OK = false;
-
-async function movSondarEsquema() {
-  var r = await supa.from('logs_manutencao').select('id,local_destino_id,destino_remocao').limit(1);
-  MOV_OK = !r.error;
-  return MOV_OK;
-}
-
-/* 260823-cf8 (D-cf8-13): sonda PRÓPRIA da OS unificada por tipo de
-   executor, com DUAS leituras e UMA pergunta — diferente de D-uyz-13
-   (duas migrações = duas perguntas), aqui é uma migração só (43) criando
-   dois objetos: logs_manutencao.tipo_executor e a tabela os_itens.
-   UNI_OK só fica verdadeiro quando as duas leituras passam. Estender
-   manSondarEsquema desligaria o fluxo inteiro num banco com 40+41+42 e
-   sem 43 — a regressão que D-uyz-13 já ensinou a evitar. */
-var UNI_OK = false;
-
-async function uniSondarEsquema() {
-  var r1 = await supa.from('logs_manutencao').select('id,tipo_executor').limit(1);
-  var r2 = await supa.from('os_itens').select('id').limit(1);
-  UNI_OK = !r1.error && !r2.error;
-  return UNI_OK;
-}
-
-/* 260823-cf8: ponte de campos de os_itens/os_comentarios — camelCase no
-   app, snake_case no banco, mesma ideia de CAMPOS_LOG (D-cf8-05/08). */
-function dbToItem(r){
-  return { id:r.id, osId:r.os_id, tipo:r.tipo, descricao:r.descricao, unidade:r.unidade,
-    quantidade:r.quantidade, valorUnitario:r.valor_unitario, total:r.total, ordem:r.ordem,
-    materialId:r.material_id /* D-6wy-11/12: campo a mais numa ponte que já existe, sem efeito quando a coluna não existe */ };
-}
-function dbToComentario(r){
-  return { id:r.id, osId:r.os_id, origem:r.origem, texto:r.texto, autor:r.autor,
-    cargo:r.cargo, criadoEm:r.criado_em };
-}
-
-/* D-cf8-27: mesmo padrão de carregarCatalogoReparos()/carregarItensOS()/
-   carregarCompras() em Máquinas — FORA do Promise.all principal, e
-   guardadas por UNI_OK: sem a migração 43 os dois mapas ficam vazios e
-   todo consumidor cai no ramo de lista vazia que já existe, sem erro. */
-var OS_ITENS = {};
-var OS_COMENTARIOS = {};
-
-async function carregarItensOS(){
-  if (!UNI_OK) { OS_ITENS = {}; return; }
-  try{
-    var r = await supa.from('os_itens').select('*').order('ordem');
-    if (r.error) throw r.error;
-    var mapa = {};
-    (r.data||[]).forEach(function(i){ (mapa[i.os_id]=mapa[i.os_id]||[]).push(dbToItem(i)); });
-    OS_ITENS = mapa;
-  }catch(e){ console.warn('carregarItensOS', e); }
-}
-
-async function carregarComentarios(){
-  if (!UNI_OK) { OS_COMENTARIOS = {}; return; }
-  try{
-    var r = await supa.from('os_comentarios').select('*').order('criado_em');
-    if (r.error) throw r.error;
-    var mapa = {};
-    (r.data||[]).forEach(function(c){ (mapa[c.os_id]=mapa[c.os_id]||[]).push(dbToComentario(c)); });
-    OS_COMENTARIOS = mapa;
-  }catch(e){ console.warn('carregarComentarios', e); }
-}
-
-/* D-cf8-15: os_comentarios é a MESMA tabela do comentário do usuário e do
-   evento de sistema, distinguidos por origem. osRegistrarEvento escreve
-   'sistema' (chamada só de dentro de manAtualizarOS); osAdicionarComentario
-   escreve 'usuario' (chamada da caixa de texto). */
-async function osRegistrarEvento(osId, texto){
-  try{
-    var nome = ctUser ? ctUser.nome : '';
-    var cargo = ctUser ? ctUser.role : '';
-    var r = await supa.from('os_comentarios').insert({os_id:osId, origem:'sistema', texto:texto, autor:nome||null, cargo:cargo||null}).select().single();
-    if (r.error) { console.warn('osRegistrarEvento', r.error); return false; }
-    (OS_COMENTARIOS[osId] = OS_COMENTARIOS[osId] || []).push(dbToComentario(r.data));
-    return true;
-  }catch(e){ console.warn('osRegistrarEvento', e); return false; }
-}
-
-async function osAdicionarComentario(osId, texto){
-  if (somenteLeitura()) { showToast('Modo somente leitura', ''); return false; }
-  var t = (texto||'').trim();
-  if (!t) { showToast('Escreva um comentário antes de enviar','error'); return false; }
-  var nome = ctUser ? ctUser.nome : '';
-  var cargo = ctUser ? ctUser.role : '';
-  var r = await supa.from('os_comentarios').insert({os_id:osId, origem:'usuario', texto:t, autor:nome||null, cargo:cargo||null}).select().single();
-  if (r.error) { showToast('Erro ao registrar comentário','error'); return false; }
-  (OS_COMENTARIOS[osId] = OS_COMENTARIOS[osId] || []).push(dbToComentario(r.data));
-  return true;
-}
-
-/* ── estoque: catálogo, movimentos e baixa ── */
-/* D-6wy-06/08: /refrigeracao é o único módulo da plataforma que faz
-   manutenção sem saber o que tem na prateleira — o item de OS hoje é
-   texto livre com valor digitado. Esta subseção traz o mesmo desenho
-   que os outros módulos já usam: catálogo (materiais), histórico
-   (estoque_movimentos) e baixa na entrada em execução.
-
-   EST_OK é sonda PRÓPRIA, separada de MAN_FLUXO_OK/MOV_OK/UNI_OK — a
-   lição de D-uyz-13 e D-cf8-13: estender uma sonda existente
-   desligaria um fluxo inteiro num banco que tem as migrações
-   anteriores e não tem esta. E mora AQUI, dentro do recorte
-   "── fluxo da OS interna: porta de escrita ──", de propósito
-   (D-6wy-08): os cinco gates que já carregam este recorte em seus
-   sandboxes (refrigeracao-os-pagina, refrigeracao-desktop,
-   refrigeracao-trilha-os, refrigeracao-fluxo-os-interna,
-   refrigeracao-os-unificada, refrigeracao-encerramento-os) recebem
-   EST_OK declarado e falso de graça — nenhum deles precisa de uma
-   linha mudada para continuar passando. Declarar em outro lugar
-   produziria ReferenceError em sandbox, falha de infraestrutura
-   fingindo de regressão. */
-var EST_OK = false;
-
-async function estSondarEsquema() {
-  var r = await supa.from('materiais').select('id').limit(1);
-  EST_OK = !r.error;
-  return EST_OK;
-}
-
-/* D-6wy-11: um campo fora deste mapa é gravado como null sem erro
-   nenhum — a lição já paga em /calibracao. O gate compara esta ponte
-   coluna a coluna com a migração 44. */
-var CAMPOS_MATERIAL = {
-  id: 'id', codigo: 'codigo', nome: 'nome', tipo: 'tipo', unidade: 'unidade',
-  aplicacao: 'aplicacao', preco: 'preco', estoqueAtual: 'estoque_atual',
-  estoqueMinimo: 'estoque_minimo', obs: 'obs', ativo: 'ativo'
-};
-function dbToMaterial(r){
-  var m = {};
-  Object.keys(CAMPOS_MATERIAL).forEach(function(k){ m[k] = r[CAMPOS_MATERIAL[k]]; });
-  return m;
-}
-function materialParaDb(m){
-  var db = {};
-  Object.keys(CAMPOS_MATERIAL).forEach(function(k){ if (m[k] !== undefined) db[CAMPOS_MATERIAL[k]] = m[k]; });
-  return db;
-}
-
-/* D-cf8-27: fora do Promise.all principal, mesmo padrão de
-   carregarItensOS()/carregarComposicaoArp() — sem a migração 44 o
-   catálogo fica vazio e todo consumidor cai no ramo que já existe. */
-var MATERIAIS = [];
-async function carregarMateriais(){
-  if (!EST_OK) { MATERIAIS = []; return; }
-  try{
-    var r = await supa.from('materiais').select('*').order('codigo');
-    if (r.error) throw r.error;
-    MATERIAIS = (r.data||[]).map(dbToMaterial);
-  }catch(e){ console.warn('carregarMateriais', e); }
-}
-
-/* ── núcleo puro: sem API de navegador nenhuma (é o que o gate roda em Node) ── */
-
-/* D-6wy-10: consolida por material — duas linhas de MATERIAL do mesmo
-   material na mesma OS produzem UM decremento e UMA linha de saída no
-   histórico. Sem isso a aritmética do saldo dependeria da ordem em
-   que as linhas foram lançadas. */
-function estItensParaBaixa(itens){
-  var mapa = {};
-  (itens||[]).forEach(function(i){
-    if (!i || i.tipo !== 'MATERIAL') return;
-    if (i.materialId === undefined || i.materialId === null || i.materialId === '') return;
-    var q = Number(i.quantidade);
-    if (!(q > 0)) return;
-    var chave = String(i.materialId);
-    if (!mapa[chave]) mapa[chave] = { materialId: i.materialId, quantidade: 0 };
-    mapa[chave].quantidade += q;
-  });
-  return Object.keys(mapa).map(function(k){ return mapa[k]; });
-}
-
-/* Mínimo zero nunca alerta: quem não declarou mínimo não pediu
-   vigilância. */
-function estAbaixoDoMinimo(materiais){
-  return (materiais||[]).filter(function(m){
-    if (!m || m.ativo !== true) return false;
-    var min = Number(m.estoqueMinimo) || 0;
-    if (!(min > 0)) return false;
-    var atual = Number(m.estoqueAtual) || 0;
-    return atual < min;
-  });
-}
-
-function estIdentCurto(id){
-  return id ? String(id).slice(0, 8) : '—';
-}
-function estMotivoDaOS(entry){
-  var n = (entry && entry.tipoExecutor === 'contrato' && entry.numero) ? entry.numero : estIdentCurto(entry && entry.id);
-  return 'OS ' + n + ' — material lançado na ordem';
-}
-
-/* Rótulo de uma opção do catálogo — puro e AUTOSSUFICIENTE de
-   propósito: esta subseção não chama fmtMoney (declarada bem mais
-   adiante no arquivo) para não depender, no núcleo puro testado em
-   node:vm, de um recorte que este não carrega — em produção o
-   hoisting resolveria, mas o gate do núcleo puro carregaria só esta
-   subseção. */
-function estFmtMoneyLocal(v){
-  var n = Number(v) || 0;
-  return 'R$ ' + n.toFixed(2).replace('.', ',');
-}
-function estRotuloMaterial(m){
-  if (!m) return '';
-  var rotulo = (m.codigo ? m.codigo + ' — ' : '') + (m.nome || '');
-  if (m.unidade) rotulo += ' (' + m.unidade + ')';
-  rotulo += ' · ' + estFmtMoneyLocal(m.preco);
-  return rotulo;
-}
-
-/* D-6wy-15: a resposta vem do REGISTRO DO PRÓPRIO ESTOQUE, nunca de
-   uma bandeira paralela que uma retentativa de rede dessincronizaria
-   (T-6wy-02). */
-async function estJaBaixadoDaOS(osId){
-  var r = await supa.from('estoque_movimentos').select('id').eq('os_id', osId).eq('tipo', 'saida').limit(1);
-  return !!(r.data && r.data.length);
-}
-
-/* D-6wy-13 — LIMITE CONHECIDO, registrado e não resolvido: voltar de
-   EM_EXECUCAO para trás NÃO estorna o estoque. A saída já aconteceu
-   no mundo (a peça saiu da prateleira quando a execução começou); um
-   estorno automático inventaria uma entrada que ninguém recebeu.
-   Correção manual: registrar uma ENTRADA na página Estoque, o
-   caminho que já existe. */
-async function estBaixarItensDaOS(osId, entry){
-  if (!EST_OK) return;
-  var pecas = estItensParaBaixa(OS_ITENS[osId] || []);
-  if (!pecas.length) return; // OS só de serviço, ou só texto livre: não pergunta nada ao estoque
-  if (await estJaBaixadoDaOS(osId)) return;
-  var motivo = estMotivoDaOS(entry);
-  for (var k = 0; k < pecas.length; k++) {
-    var p = pecas[k];
-    var mat = MATERIAIS.find(function(m){ return String(m.id) === String(p.materialId); });
-    if (!mat) continue;
-    var novoSaldo = Math.max(0, (Number(mat.estoqueAtual) || 0) - p.quantidade);
-    try {
-      var ru = await supa.from('materiais').update({ estoque_atual: novoSaldo }).eq('id', mat.id);
-      if (ru.error) throw ru.error;
-      var ri = await supa.from('estoque_movimentos').insert({ material_id: mat.id, os_id: osId, tipo: 'saida', quantidade: p.quantidade, motivo: motivo });
-      if (ri.error) throw ri.error;
-      mat.estoqueAtual = novoSaldo;
-    } catch(e) { console.warn('estBaixarItensDaOS', e); } // erro de escrita não derruba a transição já ocorrida
-  }
-}
-
-// carregarPerfil só é CHAMADA em initAppOnce, depois de todos os scripts terem rodado — por isso pode atribuir a ctUser mesmo estando num bloco <script> anterior ao que a declara.
-async function carregarPerfil() {
-  var s = await supa.auth.getSession();
-  var uid = s.data && s.data.session ? s.data.session.user.id : null;
-  if (!uid) return;
-  var r = await supa.from('usuarios').select('*').eq('auth_id', uid).maybeSingle();
-  ctUser = r.data || null;
 }
 
 /* ── REALTIME ── */
@@ -1124,13 +747,14 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="kpi-row" id="kpi-area"></div>
       <div id="dash-alerts-section"></div>
       <div id="dash-pmoc-section"></div>
+      <div id="dash-charts"></div>
     </div>
 
     <!-- ══ PAGE: INVENTÁRIO ══ -->
     <div class="page" id="page-inv">
       <div class="search-wrap">
         <i class="fas fa-search search-icon" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#aaa"></i>
-        <input class="search-box" id="inv-search" placeholder="Buscar local, prédio, fabricante…" oninput="renderInv()" autocomplete="off"/>
+        <input class="search-box" id="inv-search" placeholder="Buscar local, prédio, fabricante, modelo…" oninput="renderInv()" autocomplete="off"/>
       </div>
       <div class="chips" id="inv-chips">
         <button class="chip active" onclick="setChip(this,'todos')">Todos</button>
@@ -1348,6 +972,158 @@ function autoCrit(e){
   if(e.criticidadeManual) return e.criticidade;
   if(equipInoperante(e)) return e.criticidade;
   return e.criticidade;
+}
+
+/* ── EDIÇÃO + MEDIÇÕES ── */
+function normalizarTextoCampo(v){
+  var txt = String(v==null ? '' : v).trim();
+  return txt || null;
+}
+function normalizarNumero(v){
+  if(v==null || v==='') return null;
+  var n = parseFloat(String(v).replace(',','.'));
+  return Number.isFinite(n) ? n : null;
+}
+function normalizarInteiro(v){
+  if(v==null || v==='') return null;
+  var n = parseInt(String(v), 10);
+  return Number.isFinite(n) ? n : null;
+}
+function valorCriticidadeEquip(e){
+  return (e && e.criticidade) ? e.criticidade : 'BAIXA';
+}
+function optionsHtml(lista, atual, vazio){
+  var html = vazio ? '<option value="">'+esc(vazio)+'</option>' : '';
+  return html + lista.map(function(item){
+    var valor = typeof item === 'string' ? item : item.value;
+    var rotulo = typeof item === 'string' ? item : item.label;
+    return '<option value="'+esc(valor)+'"'+(String(atual||'')===String(valor)?' selected':'')+'>'+esc(rotulo)+'</option>';
+  }).join('');
+}
+function faixaPressaoReferencia(refrigerante){
+  var ref = String(refrigerante||'').toUpperCase();
+  if(ref.indexOf('410')>=0) return {min:110, max:130, rotulo:'110–130 psi (R410A)'};
+  if(ref.indexOf('22')>=0) return {min:60, max:70, rotulo:'60–70 psi (R22)'};
+  return null;
+}
+function analisarMedicoes(equip, medidas){
+  var tempIns = normalizarNumero(medidas && medidas.tempInsuflamento);
+  var tempRet = normalizarNumero(medidas && medidas.tempRetorno);
+  var deltaT = normalizarNumero(medidas && medidas.deltaT);
+  var corrente = normalizarNumero(medidas && medidas.correnteMedida);
+  var pressao = normalizarNumero(medidas && medidas.pressaoSuccao);
+  if(deltaT==null && tempIns!=null && tempRet!=null) deltaT = Number((tempRet - tempIns).toFixed(1));
+  var itens = [];
+  if(deltaT!=null){
+    itens.push({chave:'delta_t', rotulo:'ΔT', valor:deltaT, unidade:'°C', referencia:'10–14 °C', ok:deltaT>=10 && deltaT<=14});
+  }
+  if(corrente!=null){
+    var nominal = normalizarNumero(equip && equip.correnteNominal);
+    itens.push({
+      chave:'corrente', rotulo:'Corrente', valor:corrente, unidade:'A',
+      referencia: nominal!=null ? ('±10% de '+nominal+' A') : 'Comparar com a placa',
+      ok: nominal==null ? null : (corrente>=nominal*0.9 && corrente<=nominal*1.1)
+    });
+  }
+  if(pressao!=null){
+    var faixa = faixaPressaoReferencia(equip && equip.refrigerante);
+    itens.push({
+      chave:'pressao', rotulo:'Sucção', valor:pressao, unidade:'psi',
+      referencia: faixa ? faixa.rotulo : 'Conferir refrigerante/modelo',
+      ok: faixa ? (pressao>=faixa.min && pressao<=faixa.max) : null
+    });
+  }
+  return {tempInsuflamento:tempIns, tempRetorno:tempRet, deltaT:deltaT, correnteMedida:corrente, pressaoSuccao:pressao, itens:itens};
+}
+function renderAnaliseMedicoes(equip, medidas){
+  var analise = analisarMedicoes(equip, medidas);
+  if(!analise.itens.length && analise.tempInsuflamento==null && analise.tempRetorno==null) return '';
+  var chips = analise.itens.map(function(item){
+    var cls = item.ok===true ? 'med-ok' : item.ok===false ? 'med-alerta' : 'med-neutro';
+    var rotulo = item.ok===true ? 'OK' : item.ok===false ? 'Fora da ref.' : 'Sem ref.';
+    return '<div class="med-chip '+cls+'"><strong>'+esc(item.rotulo)+':</strong> '+esc(String(item.valor))+' '+esc(item.unidade)+' · '+esc(item.referencia)+' · '+rotulo+'</div>';
+  }).join('');
+  var temps = [];
+  if(analise.tempInsuflamento!=null) temps.push('Insuflamento '+analise.tempInsuflamento+' °C');
+  if(analise.tempRetorno!=null) temps.push('Retorno '+analise.tempRetorno+' °C');
+  return '<div class="med-box">' +
+    (temps.length?'<div class="med-note">'+temps.join(' · ')+'</div>':'') +
+    chips +
+    '</div>';
+}
+function dadosEdicaoEquip(e){
+  return {
+    area: e.area,
+    predio: e.predio,
+    local: e.local,
+    tipo: e.tipo,
+    fabricante: e.fabricante,
+    modelo: e.modelo,
+    btu: e.btu,
+    funciona: e.funciona,
+    estado: e.estado,
+    obs: e.obs,
+    refrigPermanente: e.refrigPermanente,
+    horasDia: e.horasDia,
+    diasSemana: e.diasSemana,
+    criticidade: e.criticidade,
+    criticidadeManual: e.criticidadeManual,
+    tensao: e.tensao,
+    correnteNominal: e.correnteNominal,
+    patrimonio: e.patrimonio,
+    dataInstalacao: e.dataInstalacao,
+    ultimaManutencao: e.ultimaManutencao,
+    refrigerante: e.refrigerante,
+    areaM2: e.areaM2,
+    peDireito: e.peDireito,
+    nPessoas: e.nPessoas,
+    dissipacaoW: e.dissipacaoW,
+    fatorInsolacao: e.fatorInsolacao
+  };
+}
+function montarPatchEquipamento(dados){
+  return {
+    area: normalizarTextoCampo(dados.area),
+    predio: normalizarTextoCampo(dados.predio),
+    local: normalizarTextoCampo(dados.local),
+    tipo: normalizarTextoCampo(dados.tipo),
+    fabricante: normalizarTextoCampo(dados.fabricante),
+    modelo: normalizarTextoCampo(dados.modelo),
+    btu: normalizarInteiro(dados.btu),
+    funciona: normalizarTextoCampo(dados.funciona),
+    estado: normalizarTextoCampo(dados.estado),
+    obs: normalizarTextoCampo(dados.obs),
+    refrig_permanente: !!dados.refrigPermanente,
+    horas_dia: normalizarInteiro(dados.horasDia),
+    dias_semana: normalizarInteiro(dados.diasSemana),
+    criticidade: normalizarTextoCampo(dados.criticidade),
+    criticidade_manual: dados.criticidadeManual !== false,
+    tensao: normalizarInteiro(dados.tensao),
+    corrente_nominal: normalizarNumero(dados.correnteNominal),
+    patrimonio: normalizarTextoCampo(dados.patrimonio),
+    data_instalacao: dados.dataInstalacao || null,
+    ultima_manutencao: dados.ultimaManutencao || null,
+    refrigerante: normalizarTextoCampo(dados.refrigerante),
+    area_m2: normalizarNumero(dados.areaM2),
+    pe_direito: normalizarNumero(dados.peDireito),
+    n_pessoas: normalizarInteiro(dados.nPessoas),
+    dissipacao_w: normalizarNumero(dados.dissipacaoW),
+    fator_insolacao: normalizarNumero(dados.fatorInsolacao)
+  };
+}
+function deveAtualizarEquipNaConclusao(entry){
+  return !!entry && entry.status==='CONCLUÍDA' && (entry.tipo==='PREVENTIVA' || entry.tipo==='CORRETIVA');
+}
+function montarPatchConclusaoManutencao(equip, form){
+  if(!deveAtualizarEquipNaConclusao(form)) return null;
+  return {
+    funciona: form.funciona || equip.funciona,
+    estado: form.estado || equip.estado,
+    criticidade: form.criticidade || valorCriticidadeEquip(equip),
+    criticidadeManual: true,
+    obs: form.obs,
+    ultimaManutencao: form.date || equip.ultimaManutencao
+  };
 }
 
 /* ── Persistência → delegada para camada Supabase (ver bloco SDK) ── */
@@ -2051,6 +1827,17 @@ function setChip(btn, val){
   renderInv();
 }
 
+function renderInv(){
+  var q = (el('inv-search')||{value:''}).value.toLowerCase().trim();
+  var list = DATA.filter(function(e){
+    if(q && !(e.local.toLowerCase().includes(q)||e.predio.toLowerCase().includes(q)||(e.fabricante||'').toLowerCase().includes(q)||(e.modelo||'').toLowerCase().includes(q))) return false;
+    if(invChip==='nok') return e.funciona==='NOK';
+    if(invChip==='ok') return e.funciona==='OK';
+    if(invChip==='ver') return e.obs && e.obs.toLowerCase().includes('verificar');
+    if(invChip==='critica') return autoCrit(e)==='CRÍTICA';
+    if(invChip==='vencidos') return isVencido(e);
+    if(invChip==='vermelha') return e.area==='VERMELHA';
+    if(invChip==='azul') return e.area==='AZUL';
 /* ── inventário: a seleção filtrada, com dois consumidores ── */
 /* Mesmo filter de sempre, movido sem mudança de regra — a única correção é
    ler local/predio com (e.local||''), como fabricante já era: um local nulo
@@ -2197,6 +1984,7 @@ function renderInv(){
       '<span><i class="fas fa-clock" aria-hidden="true"></i>'+(horas||'—')+'h/sem</span>' +
       '<span><i class="fas fa-calendar-check" aria-hidden="true"></i>'+dueBadgeHtml(proxManut(e))+'</span>' +
       (e.fabricante&&e.fabricante!=='-'?'<span><i class="fas fa-industry" aria-hidden="true"></i>'+esc(e.fabricante)+'</span>':'') +
+      (e.modelo?'<span><i class="fas fa-tag" aria-hidden="true"></i>'+esc(e.modelo)+'</span>':'') +
       (e.obs?'<span style="color:#E52207"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i>Obs.</span>':'')+
       '</div></div>';
   }).join('');
@@ -2600,6 +2388,99 @@ function atualizarBadgeAlertas(ag){
   el('alert-badge').style.display = ag.total>0?'block':'none';
 }
 
+function renderCamposEdicaoEquip(e){
+  return '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-edit mr1" aria-hidden="true"></i>Cadastro do Equipamento</div>' +
+    '<div class="fg2">' +
+    '<div><label class="fgl">Área</label><input class="fgi" id="eq-area" value="'+esc(e.area||'')+'"/></div>' +
+    '<div><label class="fgl">Prédio</label><input class="fgi" id="eq-predio" value="'+esc(e.predio||'')+'"/></div>' +
+    '<div class="fg-full"><label class="fgl">Local</label><input class="fgi" id="eq-local" value="'+esc(e.local||'')+'"/></div>' +
+    '<div><label class="fgl">Tipo</label><input class="fgi" id="eq-tipo" value="'+esc(e.tipo||'')+'"/></div>' +
+    '<div><label class="fgl">Fabricante</label><input class="fgi" id="eq-fabricante" value="'+esc(e.fabricante||'')+'"/></div>' +
+    '<div><label class="fgl">Modelo</label><input class="fgi" id="eq-modelo" value="'+esc(e.modelo||'')+'" placeholder="Modelo da máquina"/></div>' +
+    '<div><label class="fgl">Capacidade (BTU/h)</label><input class="fgi" id="eq-btu" type="number" min="0" value="'+esc(e.btu||'')+'"/></div>' +
+    '<div><label class="fgl">Tensão (V)</label><input class="fgi" id="eq-tensao" type="number" min="0" value="'+esc(e.tensao||'')+'"/></div>' +
+    '<div><label class="fgl">Corrente nominal (A)</label><input class="fgi" id="eq-corrente" type="number" step="0.1" min="0" value="'+esc(e.correnteNominal||'')+'"/></div>' +
+    '<div><label class="fgl">Refrigerante</label><input class="fgi" id="eq-refrigerante" value="'+esc(e.refrigerante||'')+'" placeholder="Ex.: R410A"/></div>' +
+    '<div><label class="fgl">Funciona</label><select class="fgs" id="eq-funciona">'+optionsHtml(['OK','NOK','VERIFICAR'], e.funciona, 'Selecione')+'</select></div>' +
+    '<div><label class="fgl">Estado</label><select class="fgs" id="eq-estado">'+optionsHtml(['NOVA','SEMI','VELHA'], e.estado, 'Selecione')+'</select></div>' +
+    '<div><label class="fgl">Criticidade</label><select class="fgs" id="eq-criticidade">'+optionsHtml(['CRÍTICA','ALTA','MÉDIA','BAIXA'], valorCriticidadeEquip(e))+'</select></div>' +
+    '<div><label class="fgl">Patrimônio</label><input class="fgi" id="eq-patrimonio" value="'+esc(e.patrimonio||'')+'"/></div>' +
+    '<div><label class="fgl">Data de instalação</label><input class="fgi" id="eq-instalacao" type="date" value="'+esc(e.dataInstalacao||'')+'"/></div>' +
+    '<div><label class="fgl">Última manutenção</label><input class="fgi" id="eq-ultima" type="date" value="'+esc(e.ultimaManutencao||'')+'"/></div>' +
+    '<div><label class="fgl">Horas por dia</label><input class="fgi" id="eq-horas-dia" type="number" min="0" value="'+esc(e.horasDia||'')+'"/></div>' +
+    '<div><label class="fgl">Dias por semana</label><input class="fgi" id="eq-dias-semana" type="number" min="0" max="7" value="'+esc(e.diasSemana||'')+'"/></div>' +
+    '<div class="fg-full"><label class="fgl"><input type="checkbox" id="eq-refrig-perm" '+(e.refrigPermanente?'checked':'')+' style="margin-right:8px"/>Refrigeração permanente</label></div>' +
+    '<div class="fg-full"><label class="fgl">Observações</label><textarea class="fgt" id="eq-obs" placeholder="Falhas, pendências, histórico relevante…">'+esc(e.obs||'')+'</textarea></div>' +
+    '</div></div>' +
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-calculator mr1" aria-hidden="true"></i>Parâmetros de cálculo</div>' +
+    '<div class="fg2">' +
+    '<div><label class="fgl">Área climatizada (m²)</label><input class="fgi" id="eq-area-m2" type="number" step="0.1" min="0" value="'+esc(e.areaM2||'')+'"/></div>' +
+    '<div><label class="fgl">Pé-direito (m)</label><input class="fgi" id="eq-pe-direito" type="number" step="0.1" min="0" value="'+esc(e.peDireito||'')+'"/></div>' +
+    '<div><label class="fgl">Pessoas</label><input class="fgi" id="eq-pessoas" type="number" min="0" value="'+esc(e.nPessoas||'')+'"/></div>' +
+    '<div><label class="fgl">Dissipação interna (W)</label><input class="fgi" id="eq-dissipacao" type="number" step="1" min="0" value="'+esc(e.dissipacaoW||'')+'"/></div>' +
+    '<div><label class="fgl">Fator de insolação</label><input class="fgi" id="eq-insolacao" type="number" step="0.1" min="0" value="'+esc(e.fatorInsolacao||1)+'"/></div>' +
+    '<div class="fg-full hint">Esses campos alimentam os cálculos térmico/elétrico já mostrados no dashboard e ficam vinculados ao equipamento.</div>' +
+    '</div></div>';
+}
+
+async function saveEquipForm(equipId){
+  if (window._modoObservador) { showToast('Modo somente leitura', ''); return; }
+  var salvo = await saveEquipAsync(equipId, {
+    area: val('eq-area'),
+    predio: val('eq-predio'),
+    local: val('eq-local'),
+    tipo: val('eq-tipo'),
+    fabricante: val('eq-fabricante'),
+    modelo: val('eq-modelo'),
+    btu: val('eq-btu'),
+    tensao: val('eq-tensao'),
+    correnteNominal: val('eq-corrente'),
+    refrigerante: val('eq-refrigerante'),
+    funciona: val('eq-funciona'),
+    estado: val('eq-estado'),
+    criticidade: val('eq-criticidade'),
+    criticidadeManual: true,
+    patrimonio: val('eq-patrimonio'),
+    dataInstalacao: val('eq-instalacao'),
+    ultimaManutencao: val('eq-ultima'),
+    horasDia: val('eq-horas-dia'),
+    diasSemana: val('eq-dias-semana'),
+    refrigPermanente: !!el('eq-refrig-perm').checked,
+    obs: val('eq-obs'),
+    areaM2: val('eq-area-m2'),
+    peDireito: val('eq-pe-direito'),
+    nPessoas: val('eq-pessoas'),
+    dissipacaoW: val('eq-dissipacao'),
+    fatorInsolacao: val('eq-insolacao')
+  });
+  if(!salvo) return;
+  showToast('Equipamento atualizado', 'ok');
+  renderDash(); renderInv(); renderOS(); renderPmoc(); renderAlerts();
+  openDetail(equipId);
+}
+
+function openEquipForm(id){
+  var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
+  el('dh-id').textContent = 'Editar equipamento · #'+id;
+  el('dh-local').textContent = e.local;
+  el('dh-predio').textContent = e.predio;
+  el('dh-pills').innerHTML = statusPill(e.funciona)+critPill(autoCrit(e));
+  el('drawer-body').innerHTML = renderCamposEdicaoEquip(e);
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary btn-grow" onclick="openDetail('+id+')">Cancelar</button>' +
+    '<button class="btn-primary btn-grow" onclick="saveEquipForm('+id+')"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar equipamento</button>';
+  openDrawer();
+}
+
+function openDetail(id){
+  var e = DATA.find(function(r){ return r.id===id; }); if(!e) return;
+  var logs = getEquipLog(id);
+  var lastDate = e.ultimaManutencao || getLatestLogDate(id);
+  var crit = autoCrit(e);
+  var horas = (e.horasDia||0)*(e.diasSemana||0);
+  var ni = nextPmoc(e,'inspecao'); var np = nextPmoc(e,'preventiva');
 /* ── ESTOQUE: página, navegação injetada, edição inline ── */
 /* D-6wy-07: o botão de Estoque é INJETADO em runtime — nunca escrito
    na marcação estática (page-estoque nasce vazia, ver a marcação
@@ -3059,6 +2940,7 @@ function fichaBlocoHistorico(id, logs){
         '</div>' +
         (entry.tecnico?'<div class="le-tec"><i class="fas fa-user mr1" aria-hidden="true"></i>'+esc(entry.tecnico)+'</div>':'') +
         (entry.desc?'<div class="le-desc">'+esc(entry.desc)+'</div>':'') +
+        renderAnaliseMedicoes(e, entry) +
         (tot?'<div class="le-chk"><i class="fas fa-tasks mr1" aria-hidden="true"></i>'+done+'/'+tot+' itens do checklist</div>':'') +
         (MAN_FLUXO_OK?'<button class="btn-sm" style="margin-top:4px;margin-right:6px;background:#E8ECF5;color:#1351B4" onclick="manAbrirOS(\''+esc(entry.id||'')+'\')"><i class="fas fa-clipboard-list mr1" aria-hidden="true"></i>Abrir OS</button>':'') +
         '<button class="le-del" onclick="delLog('+id+',\''+esc(entry.id||'')+'\')" style="margin-top:4px"><i class="fas fa-trash mr1" aria-hidden="true"></i>Excluir</button>' +
@@ -3067,6 +2949,36 @@ function fichaBlocoHistorico(id, logs){
     '</div>';
 }
 
+  el('drawer-body').innerHTML =
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-info-circle mr1" aria-hidden="true"></i>Dados do Equipamento</div>' +
+    '<div class="dfields2">' +
+    '<div class="dfield"><label>Tipo</label><div class="dval">'+esc(e.tipo)+'</div></div>' +
+    '<div class="dfield"><label>Fabricante</label><div class="dval">'+(e.fabricante&&e.fabricante!=='-'?esc(e.fabricante):'—')+'</div></div>' +
+    '<div class="dfield"><label>Modelo</label><div class="dval">'+(e.modelo?esc(e.modelo):'—')+'</div></div>' +
+    '<div class="dfield"><label>Capacidade</label><div class="dval">'+btuK+' / '+kw+'</div></div>' +
+    '<div class="dfield"><label>Tensão</label><div class="dval">'+(e.tensao||'—')+'V</div></div>' +
+    '<div class="dfield"><label>Corrente</label><div class="dval">'+(e.correnteNominal||'—')+'A</div></div>' +
+    '<div class="dfield"><label>h/semana</label><div class="dval">'+(horas||'—')+'h</div></div>' +
+    '</div>' +
+    (e.patrimonio?'<div class="dfield"><label>Patrimônio</label><div class="dval">'+esc(e.patrimonio)+'</div></div>':'') +
+    (e.refrigerante?'<div class="dfield"><label>Refrigerante</label><div class="dval">'+esc(e.refrigerante)+'</div></div>':'') +
+    (e.obs?'<div class="dfield" style="margin-top:4px"><label>Observações</label><div class="dval" style="color:#E52207;font-weight:600">'+esc(e.obs)+'</div></div>':'') +
+    '</div>' +
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-calendar-check mr1" aria-hidden="true"></i>Cronograma PMOC</div>' +
+    '<div class="dfields2">' +
+    '<div class="dfield"><label>Última manut.</label><div class="dval">'+(lastDate?fmtDate(lastDate):'—')+'</div></div>' +
+    '<div class="dfield"><label>Criticidade</label><div class="dval">'+crit+'</div></div>' +
+    '<div class="dfield"><label>Próx. Inspeção</label><div class="dval">'+dueBadgeHtml(ni)+'</div></div>' +
+    '<div class="dfield"><label>Próx. Preventiva</label><div class="dval">'+dueBadgeHtml(np)+'</div></div>' +
+    '</div></div>' +
+    logHtml;
+
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary btn-grow" onclick="closeDrawer()">Fechar</button>' +
+    (window._modoObservador ? '' : '<button class="btn-secondary btn-grow" onclick="openEquipForm('+id+')"><i class="fas fa-pen mr1" aria-hidden="true"></i>Editar equipamento</button>') +
+    '<button class="btn-primary btn-grow" onclick="openLogForm('+id+')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Registrar OS/Manutenção</button>';
 /* D-92t-02: cinco strings, nunca já concatenadas — a gaveta faz .join(''),
    a página (Task 2) distribui por FICHA_COLUNAS. crit/lastDate/ni/np são
    calculados uma vez só, aqui. */
@@ -3230,6 +3142,40 @@ function openDetail(id){
   return abrirFichaGaveta(id);
 }
 
+function atualizarAnaliseMedicoesForm(equipId){
+  var equip = DATA.find(function(r){ return r.id===equipId; });
+  var preview = el('log-medicoes-preview');
+  if(!equip || !preview) return;
+  var html = renderAnaliseMedicoes(equip, {
+    tempInsuflamento: val('log-temp-ins'),
+    tempRetorno: val('log-temp-ret'),
+    deltaT: val('log-delta-t'),
+    correnteMedida: val('log-corrente'),
+    pressaoSuccao: val('log-pressao')
+  });
+  var analise = analisarMedicoes(equip, {
+    tempInsuflamento: val('log-temp-ins'),
+    tempRetorno: val('log-temp-ret'),
+    deltaT: val('log-delta-t'),
+    correnteMedida: val('log-corrente'),
+    pressaoSuccao: val('log-pressao')
+  });
+  var delta = el('log-delta-t');
+  if(delta) delta.value = analise.deltaT==null ? '' : analise.deltaT;
+  preview.innerHTML = html || '<div class="hint">Sem medições informadas.</div>';
+}
+
+function atualizarCamposConclusaoForm(){
+  var ativa = deveAtualizarEquipNaConclusao({ tipo: val('log-tipo'), status: val('log-status') });
+  var wrap = el('log-equip-update');
+  var hint = el('log-conclusao-hint');
+  if(hint) hint.style.display = ativa ? 'none' : 'block';
+  if(!wrap) return;
+  wrap.querySelectorAll('select,textarea,input').forEach(function(campo){
+    campo.disabled = !ativa;
+  });
+}
+
 /* ═══════════════════════════════════════════════════════════
    LOG FORM (OS)
 ═══════════════════════════════════════════════════════════ */
@@ -3316,6 +3262,28 @@ function openLogForm(equipId){
     avisoFluxo +
     '</div>' +
     '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-thermometer-half mr1" aria-hidden="true"></i>Medições técnicas</div>' +
+    '<div class="fg2">' +
+    '<div><label class="fgl">Temperatura insuflada (°C)</label><input class="fgi" id="log-temp-ins" type="number" step="0.1" inputmode="decimal" placeholder="Opcional"/></div>' +
+    '<div><label class="fgl">Temperatura retorno (°C)</label><input class="fgi" id="log-temp-ret" type="number" step="0.1" inputmode="decimal" placeholder="Opcional"/></div>' +
+    '<div><label class="fgl">ΔT calculado (°C)</label><input class="fgi" id="log-delta-t" type="number" step="0.1" readonly placeholder="Automático"/></div>' +
+    '<div><label class="fgl">Corrente medida (A)</label><input class="fgi" id="log-corrente" type="number" step="0.1" inputmode="decimal" placeholder="Opcional"/></div>' +
+    '<div class="fg-full"><label class="fgl">Pressão de sucção (psi)</label><input class="fgi" id="log-pressao" type="number" step="0.1" inputmode="decimal" placeholder="Opcional"/></div>' +
+    '<div class="fg-full hint">Registre quando a OS exigir medição. O app compara ΔT com 10–14 °C, corrente com ±10% da nominal e, se o refrigerante estiver cadastrado, a sucção com a faixa típica do gás.</div>' +
+    '</div>' +
+    '<div id="log-medicoes-preview" class="med-preview"></div>' +
+    '</div>' +
+    '<div class="ds">' +
+    '<div class="ds-title"><i class="fas fa-sync-alt mr1" aria-hidden="true"></i>Atualizar equipamento ao concluir preventiva/corretiva</div>' +
+    '<div id="log-equip-update" class="fg2">' +
+    '<div><label class="fgl">Funciona</label><select class="fgs" id="log-equip-funciona">'+optionsHtml(['OK','NOK','VERIFICAR'], e.funciona, 'Selecione')+'</select></div>' +
+    '<div><label class="fgl">Estado</label><select class="fgs" id="log-equip-estado">'+optionsHtml(['NOVA','SEMI','VELHA'], e.estado, 'Selecione')+'</select></div>' +
+    '<div><label class="fgl">Criticidade</label><select class="fgs" id="log-equip-criticidade">'+optionsHtml(['CRÍTICA','ALTA','MÉDIA','BAIXA'], valorCriticidadeEquip(e))+'</select></div>' +
+    '<div class="fg-full"><label class="fgl">Observações atualizadas</label><textarea class="fgt" id="log-equip-obs" placeholder="Situação do equipamento após a intervenção">'+esc(e.obs||'')+'</textarea></div>' +
+    '</div>' +
+    '<div id="log-conclusao-hint" class="hint">Esses campos só são aplicados quando a OS for concluída e o tipo for PREVENTIVA ou CORRETIVA.</div>' +
+    '</div>' +
+    '<div class="ds">' +
     '<div class="ds-title"><i class="fas fa-tasks mr1" aria-hidden="true"></i>Checklist PMOC — '+esc(e.tipo)+'</div>' +
     chkHtml +
     '<div style="margin-top:8px;display:flex;align-items:center;justify-content:space-between">' +
@@ -3326,7 +3294,19 @@ function openLogForm(equipId){
   el('drawer-body').querySelectorAll('.chk-item input').forEach(function(chk){
     chk.addEventListener('change', updateChkCnt);
   });
+  ['log-temp-ins','log-temp-ret','log-corrente','log-pressao'].forEach(function(id){
+    var campo = el(id);
+    if(campo) campo.addEventListener('input', function(){ atualizarAnaliseMedicoesForm(equipId); });
+  });
+  ['log-tipo','log-status'].forEach(function(id){
+    var campo = el(id);
+    if(campo) campo.addEventListener('change', atualizarCamposConclusaoForm);
+  });
   el('drawer-footer').innerHTML =
+    '<button class="btn-secondary btn-grow" onclick="openDetail('+equipId+')">Cancelar</button>' +
+    '<button class="btn-primary btn-grow" onclick="saveLogEntry('+equipId+','+clist.length+')"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar</button>';
+  atualizarAnaliseMedicoesForm(equipId);
+  atualizarCamposConclusaoForm();
     '<button class="btn-secondary" onclick="openDetail('+equipId+')">Cancelar</button>' +
     '<button class="btn-primary" onclick="saveLogEntry('+equipId+','+clist.length+')"><i class="fas fa-save mr1" aria-hidden="true"></i>'+(MAN_FLUXO_OK?'Abrir OS':'Salvar')+'</button>';
 }
@@ -3689,12 +3669,39 @@ async function saveLogEntry(equipId, clistLen){
   if (somenteLeitura()) { showToast('Modo somente leitura', ''); return; }
   var date=val('log-date'), tipo=val('log-tipo');
   if(!date||!tipo){ showToast('Preencha data e tipo','error'); return; }
+  var equip = DATA.find(function(r){ return r.id===equipId; });
   var checklist=[];
   for(var i=0;i<clistLen;i++){
     var chk=el('chk-'+i);
     var lbl=el('drawer-body').querySelectorAll('.chk-item span')[i];
     if(chk&&lbl) checklist.push({i:i,label:lbl.textContent.trim(),done:chk.checked});
   }
+  var medicoes = analisarMedicoes(equip, {
+    tempInsuflamento: val('log-temp-ins'),
+    tempRetorno: val('log-temp-ret'),
+    deltaT: val('log-delta-t'),
+    correnteMedida: val('log-corrente'),
+    pressaoSuccao: val('log-pressao')
+  });
+  var logId = await addLogEntryAsync(equipId,{
+    date:date,tipo:tipo,status:status,tecnico:val('log-tec').trim(),desc:val('log-desc').trim(),checklist:checklist,
+    tempInsuflamento: medicoes.tempInsuflamento,
+    tempRetorno: medicoes.tempRetorno,
+    deltaT: medicoes.deltaT,
+    correnteMedida: medicoes.correnteMedida,
+    pressaoSuccao: medicoes.pressaoSuccao
+  });
+  if(!logId) return;
+  var patchConclusao = montarPatchConclusaoManutencao(equip || {}, {
+    date: date,
+    tipo: tipo,
+    status: status,
+    funciona: val('log-equip-funciona'),
+    estado: val('log-equip-estado'),
+    criticidade: val('log-equip-criticidade'),
+    obs: val('log-equip-obs')
+  });
+  if(patchConclusao) await saveEquipAsync(equipId, patchConclusao);
   if (MAN_FLUXO_OK) {
     // A OS nasce ABERTA — o status nunca é lido de campo (D-l7n-06/11).
     if (!manPode('abrir')) { showToast('Sem permissão para abrir OS', 'error'); return; }
@@ -5063,6 +5070,14 @@ async function osDelComp(osId, compId){
   manAbrirOS(osId);
 }
 
+function dvRenderCharts(){
+  var host = el('dash-charts');
+  if(!host){
+    var kpi = el('kpi-area');
+    if(!kpi) return;
+    host = document.createElement('div');
+    host.id = 'dash-charts';
+    kpi.insertAdjacentElement('afterend', host);
 /* Certificação — encerra a OS de contrato. Nenhuma linha nova em
    logs_manutencao: a OS já É a linha do histórico (D-cf8-16) — o espelho
    de ctEncerrarHistorico desaparece por construção. */
