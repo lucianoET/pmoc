@@ -2329,3 +2329,45 @@ de D-cf8-25). São independentes: aplicar uma sem a outra é estado válido.
       inteiro.
 - [ ] **Com placa:** cadastrar Corrente nominal num equipamento e conferir que o EER
       e a classe aparecem, e que mudam entre equipamentos diferentes.
+
+---
+
+## Refrigeração — calendário de OS e vencimentos (31/08/2026)
+
+Quick task 260831-cal (D-cal-01..04). **Sem migração** — remarcar é `update` em
+`data_os`, coluna que existe desde a migração 40. Vale em produção assim que
+o frontend publicar.
+
+- [ ] **Onde fica:** aba PMOC → segmento **Calendário** (ao lado de Lista). O
+      rodapé continua com cinco botões — não nasceu aba nova.
+- [ ] **Trocar de vista:** ao entrar no calendário os chips (Todos/Vencida/Sem
+      histórico/Crítica) **somem** — eles filtram a lista por equipamento e no
+      calendário não teriam o que filtrar. Voltar para Lista traz tudo de volta.
+- [ ] **Navegação:** ‹ e › andam de mês, "Hoje" volta ao mês corrente; a virada
+      de dezembro para janeiro funciona nos dois sentidos.
+- [ ] **Dia de hoje** aparece contornado de azul.
+- [ ] **As duas camadas:** OS reais em traço cheio, vencimentos projetados em
+      traço tracejado laranja. Clicar numa OS abre a gaveta da OS; clicar num
+      vencimento abre a ficha do equipamento.
+- [ ] **A nota do rodapé conta os sem histórico:** hoje deve dizer algo como
+      "169 equipamento(s) sem histórico não têm vencimento projetado". Se o
+      calendário parecer vazio, é isso — não é defeito.
+
+### Arrastar e soltar (computador, ≥1024px)
+
+- [ ] **Arrastar uma OS aberta** para outro dia: a célula de destino se destaca
+      ao passar por cima, e ao soltar aparece "OS reagendada para dd/mm/aaaa".
+- [ ] **Conferir que gravou:** ir para a aba OS e ver a data nova; recarregar a
+      página e conferir que persistiu.
+- [ ] **OS concluída/encerrada/cancelada NÃO arrasta** — o cursor não vira mão
+      de arrastar. É registro do que foi feito, não plano.
+- [ ] **Soltar no mesmo dia** não grava nada (nenhum toast, nenhuma escrita).
+- [ ] **Cargo:** logado como observador (somente leitura), nada arrasta.
+
+### Celular (375px)
+
+- [ ] **Lista por dia**, só os dias que têm algo, sem rolagem horizontal.
+- [ ] **Não há arrastar** no celular — para remarcar, tocar na OS e usar
+      "Corrigir", que já tem o campo de data. (O arrastar do HTML5 não funciona
+      em toque sem biblioteca nova.)
+- [ ] **Mês sem nada** mostra "Nada marcado neste mês", não uma grade vazia.

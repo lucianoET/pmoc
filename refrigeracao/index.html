@@ -1331,11 +1331,17 @@ document.addEventListener('DOMContentLoaded', function() {
         <button class="chip" onclick="setPmocChip(this,'sem-hist')">Sem histórico</button>
         <button class="chip" onclick="setPmocChip(this,'critica')">Crítica</button>
       </div>
-      <div class="sec-head">
+      <div class="seg-toggle" id="pmoc-seletor">
+        <button class="seg-btn active" id="seg-pmoc-lista" onclick="pmocSetVista('lista')" title="Lista por equipamento" aria-label="Lista por equipamento"><i class="fas fa-list mr1" aria-hidden="true"></i>Lista</button>
+        <button class="seg-btn" id="seg-pmoc-agenda" onclick="pmocSetVista('agenda')" title="Calendário de OS e vencimentos" aria-label="Calendário de OS e vencimentos"><i class="fas fa-calendar-alt mr1" aria-hidden="true"></i>Calendário</button>
+      </div>
+      <div class="sec-head" id="pmoc-sec-head">
         <span class="sec-title">Controle PMOC</span>
         <span class="sec-count" id="pmoc-cnt">0</span>
       </div>
       <div id="pmoc-list"></div>
+      <!-- Nasce vazia; só renderAgenda() a preenche (mesma ideia de page-estoque). -->
+      <div id="pmoc-agenda" style="display:none"></div>
     </div>
 
     <!-- ══ PAGE: ALERTAS ══ -->
@@ -2650,6 +2656,220 @@ function renderPmoc(){
   }).join('');
 }
 
+/* ── agenda: a tela ── */
+/* Vive dentro da página PMOC, atrás de um seg-toggle, e não numa sexta
+   aba: dois gates afirmam exatamente cinco `.nav-btn` em #bottom-nav, e
+   um calendário de manutenção programada É a página do PMOC vista por
+   outro eixo — o mesmo dado, ordenado por data em vez de por
+   equipamento. O componente seg-toggle já existe e já é usado na página
+   de OS (D-cf8-19); nenhuma classe nova entra na folha. */
+var PMOC_VISTA = 'lista';
+var AGENDA_ANO = null, AGENDA_MES = null;
+
+function pmocSetVista(v){
+  PMOC_VISTA = (v==='agenda') ? 'agenda' : 'lista';
+  var bl = el('seg-pmoc-lista'), ba = el('seg-pmoc-agenda');
+  if (bl) { bl.className = 'seg-btn'+(PMOC_VISTA==='lista'?' active':''); bl.setAttribute('aria-pressed', PMOC_VISTA==='lista'); }
+  if (ba) { ba.className = 'seg-btn'+(PMOC_VISTA==='agenda'?' active':''); ba.setAttribute('aria-pressed', PMOC_VISTA==='agenda'); }
+  var lista = el('pmoc-list'), agenda = el('pmoc-agenda'), chips = el('pmoc-chips'), head = el('pmoc-sec-head');
+  var naAgenda = (PMOC_VISTA==='agenda');
+  if (lista) lista.style.display = naAgenda ? 'none' : '';
+  if (agenda) agenda.style.display = naAgenda ? '' : 'none';
+  /* Os chips filtram a LISTA por equipamento; no calendário eles não
+     teriam o que filtrar (o eixo é a data) e ficariam mentindo sobre o
+     que está sendo mostrado. */
+  if (chips) chips.style.display = naAgenda ? 'none' : '';
+  if (head) head.style.display = naAgenda ? 'none' : '';
+  if (naAgenda) renderAgenda(); else renderPmoc();
+}
+
+function agendaHoje(){ var d = new Date(); return {ano:d.getFullYear(), mes:d.getMonth()}; }
+function agendaNavegar(delta){
+  if (AGENDA_ANO===null) { var h = agendaHoje(); AGENDA_ANO=h.ano; AGENDA_MES=h.mes; }
+  var m = agendaMover(AGENDA_ANO, AGENDA_MES, delta);
+  AGENDA_ANO = m.ano; AGENDA_MES = m.mes;
+  renderAgenda();
+}
+function agendaIrHoje(){ var h = agendaHoje(); AGENDA_ANO=h.ano; AGENDA_MES=h.mes; renderAgenda(); }
+
+/* Cor por estado da OS, reusando a paleta já validada do arquivo —
+   nenhum hexadecimal novo inventado. Vencimento projetado tem cor
+   própria e traço tracejado: precisa ser distinguível de OS de verdade
+   sem depender de ler o texto, porque é a diferença entre "está marcado"
+   e "deveria estar". */
+function agendaCorEvento(ev){
+  if (ev.tipo === 'venc') return '#B46800';
+  var st = ev.status || '';
+  if (st === 'CANCELADA') return '#999';
+  if (st === 'CONCLUIDA' || st === 'CONFERIDA' || st === 'ENCERRADA') return '#168821';
+  if (st === 'EM_EXECUCAO') return '#1351B4';
+  return '#5E85CB';
+}
+
+function agendaPodeReagendar(){
+  if (somenteLeitura()) return false;
+  // Mesmo cargo que abre OS: quem pode marcar uma data pode trocá-la.
+  return manPode('abrir');
+}
+
+function renderAgenda(){
+  var host = el('pmoc-agenda'); if (!host) return;
+  if (AGENDA_ANO===null) { var h = agendaHoje(); AGENDA_ANO=h.ano; AGENDA_MES=h.mes; }
+
+  var osEntries = (typeof getAllOSEntries === 'function') ? getAllOSEntries() : [];
+  var equipamentos = equipamentosOperacionais(DATA);
+  var ev = agendaEventos(osEntries, equipamentos, nextPmoc);
+  var celulas = agendaCelulas(AGENDA_ANO, AGENDA_MES);
+  var hojeChave = agendaChave(new Date());
+  var podeMover = agendaPodeReagendar();
+
+  /* D-2mx-04 de novo: a .sec-head distribui com space-between, então
+     controles soltos se espalham pela linha — os dois chevrons ficavam
+     longe do nome do mês que eles navegam. Os três viram UM item do
+     flex, com style inline e nenhuma regra nova na folha base. */
+  var barra =
+    '<div class="sec-head">' +
+    '<span style="display:flex;align-items:center;gap:2px;flex-shrink:0">' +
+      '<button class="sec-etq" onclick="agendaNavegar(-1)" title="Mês anterior" aria-label="Mês anterior"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>' +
+      '<span class="sec-title" id="agenda-rotulo" style="min-width:150px;text-align:center">'+esc(agendaRotulo(AGENDA_ANO, AGENDA_MES))+'</span>' +
+      '<button class="sec-etq" onclick="agendaNavegar(1)" title="Próximo mês" aria-label="Próximo mês"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>' +
+    '</span>' +
+    '<button class="sec-etq" onclick="agendaIrHoje()" title="Ir para hoje" aria-label="Ir para hoje" style="width:auto;padding:0 10px;font-size:11px;font-weight:700">Hoje</button>' +
+    '</div>';
+
+  /* Duas formas para as duas larguras. No computador, grade de 42
+     células com arrastar-e-soltar; no celular, lista dos dias que têm
+     algo — uma grade em 375px daria caixas de 50px onde nada cabe.
+
+     No celular NÃO há arrastar, e nem um controle de data próprio: o
+     arrastar do HTML5 não dispara em toque nenhum sem polyfill, e
+     polyfill é dependência nova num projeto zero-build. Remarcar ali
+     acontece abrindo a OS (um toque no evento) e usando "Corrigir", que
+     já existe e já tem o campo de data — um segundo controle de data no
+     calendário seria uma terceira forma de escrever a mesma coluna.
+     Consequência registrada: no computador reagendar exige manPode
+     ('abrir') (inclui técnico); pelo caminho da OS exige
+     podeEditarCadastro() (admin/gestor), porque aquele formulário
+     corrige muito mais que a data. */
+  var corpo = TELA_LARGA
+    ? agendaGrade(celulas, ev.porDia, hojeChave, podeMover)
+    : agendaListaMes(celulas, ev.porDia, hojeChave);
+
+  /* D-cal-04: dizer quantos ficaram sem projeção, em vez de deixar o
+     calendário parecer vazio. Sem data anterior nextPmoc não tem de onde
+     contar — hoje isso é quase todo o parque. */
+  var nota = ev.semHistorico
+    ? '<div class="chart-note" style="margin-top:10px"><i class="fas fa-circle-info mr1" aria-hidden="true"></i>' +
+      esc(String(ev.semHistorico))+' equipamento(s) sem histórico de manutenção não têm vencimento projetado — ' +
+      'sem uma data anterior não há de onde contar o intervalo. Eles aparecem no calendário assim que a primeira OS for concluída.</div>'
+    : '';
+
+  var legenda =
+    '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;font-size:11px;color:#666">' +
+    [['#5E85CB','OS aberta'],['#1351B4','Em execução'],['#168821','Concluída'],['#B46800','Vencimento projetado']]
+      .map(function(x){ return '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;' +
+        'margin-right:5px;vertical-align:-1px;background:'+x[0]+'"></span>'+x[1]+'</span>'; }).join('') +
+    '</div>';
+
+  host.innerHTML = barra + corpo + legenda + nota;
+}
+
+function agendaEventoHtml(ev, arrastavel){
+  var cor = agendaCorEvento(ev);
+  var alvo = ev.tipo==='os'
+    ? 'onclick="event.stopPropagation();'+(MAN_FLUXO_OK?'manAbrirOS(\''+esc(String(ev.logId))+'\')':'openDetail('+ev.equipId+')')+'"'
+    : 'onclick="event.stopPropagation();openDetail('+ev.equipId+')"';
+  var dnd = (arrastavel && ev.movel)
+    ? ' draggable="true" ondragstart="agendaArrastar(event,\''+esc(String(ev.logId))+'\','+ev.equipId+')"'
+    : '';
+  /* Estilo COMPLETO inline, de propósito: `tests/refrigeracao-desktop.test.js`
+     compara byte a byte a folha fora de @media com um fixture, e o calendário
+     aparece nas duas larguras — uma classe nova na folha base quebraria essa
+     garantia por uma feature que não é de desktop (mesmo caminho de D-2mx-04).
+     O refinamento de grade fica dentro do @media, onde CSS novo é permitido. */
+  var base = 'font-size:11px;padding:2px 5px;margin-top:2px;border-radius:4px;cursor:pointer;' +
+    'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.5';
+  var estilo = base + ';' + (ev.tipo==='venc'
+    ? 'border-left:3px dashed '+cor+';background:rgba(180,104,0,.08);color:#7a4600'
+    : 'border-left:3px solid '+cor+';background:rgba(19,81,180,.06);color:#1B1B1B');
+  return '<div class="ag-ev" style="'+estilo+'" title="'+esc(ev.titulo)+'"'+dnd+' '+alvo+'>'+esc(ev.titulo)+'</div>';
+}
+
+function agendaGrade(celulas, porDia, hojeChave, podeMover){
+  var cab = AGENDA_DOW.map(function(d){ return '<div class="ag-dow">'+d+'</div>'; }).join('');
+  var cels = celulas.map(function(c){
+    var evs = porDia[c.chave] || [];
+    var classes = 'ag-cel' + (c.doMes ? '' : ' fora') + (c.chave===hojeChave ? ' hoje' : '');
+    var solta = podeMover
+      ? ' ondragover="agendaSobre(event)" ondragleave="agendaSai(event)" ondrop="agendaSoltar(event,\''+c.chave+'\')"'
+      : '';
+    return '<div class="'+classes+'" data-dia="'+c.chave+'"'+solta+'>' +
+      '<div class="ag-num">'+c.dia+'</div>' +
+      evs.map(function(e){ return agendaEventoHtml(e, podeMover); }).join('') +
+      '</div>';
+  }).join('');
+  return '<div class="ag-grade">'+cab+cels+'</div>';
+}
+
+/* No celular: só os dias QUE TÊM algo, em lista. Uma grade de 42 células
+   em 375px daria caixas de 50px onde nada cabe. */
+function agendaListaMes(celulas, porDia, hojeChave){
+  var comAlgo = celulas.filter(function(c){ return c.doMes && (porDia[c.chave]||[]).length; });
+  if (!comAlgo.length) {
+    return '<div class="empty"><i class="fas fa-calendar-day" aria-hidden="true"></i>' +
+      '<p>Nada marcado neste mês.</p></div>';
+  }
+  /* Reusa .ds/.ds-title, que já existem na folha — nenhuma classe nova
+     (D-cf8-20). O destaque de "hoje" é inline pelo mesmo motivo. */
+  return comAlgo.map(function(c){
+    var evs = porDia[c.chave] || [];
+    var hoje = (c.chave===hojeChave);
+    return '<div class="ds"'+(hoje?' style="border-left:3px solid #1351B4"':'')+'>' +
+      '<div class="ds-title"><i class="fas fa-calendar-day mr1" aria-hidden="true"></i>' +
+      AGENDA_DOW[c.data.getDay()]+', '+c.dia+(hoje?' · hoje':'')+'</div>' +
+      evs.map(function(e){ return agendaEventoHtml(e, false); }).join('') +
+      '</div>';
+  }).join('');
+}
+
+/* ── arrastar e soltar: reusa a porta de escrita de sempre ──
+   D-cal-02: reagendar é um update em data_os por manAtualizarOS, a
+   MESMA função que a correção de OS já usa. Nenhuma segunda porta de
+   escrita nasce aqui — e por isso a trilha de eventos, o cache local e o
+   redesenho continuam funcionando sem uma linha a mais. */
+var AGENDA_ARRASTANDO = null;
+
+function agendaArrastar(ev, logId, equipId){
+  AGENDA_ARRASTANDO = { logId:logId, equipId:equipId };
+  try { ev.dataTransfer.setData('text/plain', logId); ev.dataTransfer.effectAllowed = 'move'; } catch(e){}
+}
+function agendaSobre(ev){
+  if (!AGENDA_ARRASTANDO) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+  if (ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.add('ag-alvo');
+}
+function agendaSai(ev){
+  if (ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('ag-alvo');
+}
+async function agendaSoltar(ev, chave){
+  ev.preventDefault();
+  if (ev.currentTarget && ev.currentTarget.classList) ev.currentTarget.classList.remove('ag-alvo');
+  var arr = AGENDA_ARRASTANDO; AGENDA_ARRASTANDO = null;
+  if (!arr) return;
+  // Guarda na AÇÃO, não só no atributo draggable (D-l7n-03): arrastar é
+  // uma affordance de tela e não protege gravação nenhuma.
+  if (!agendaPodeReagendar()) { showToast('Sem permissão para reagendar OS','error'); return; }
+  var achado = (typeof manEntrada === 'function') ? manEntrada(arr.logId) : null;
+  if (!achado) { showToast('OS não encontrada','error'); return; }
+  if (!agendaPodeMover(achado.entry)) { showToast('OS encerrada — a data é registro do que foi feito','error'); return; }
+  if (achado.entry.date === chave) return; // soltou no mesmo dia: nada a gravar
+  var ok = await manAtualizarOS(arr.logId, achado.equipId, { date: chave }, 'OS reagendada para '+fmtDate(chave));
+  if (!ok) return;
+  renderAgenda();
+  renderOS();
+}
+
 /* ═══════════════════════════════════════════════════════════
    ALERTS PAGE
 ═══════════════════════════════════════════════════════════ */
@@ -3079,6 +3299,150 @@ function fecharDetalhe(){
   if (paginaDetalheAtiva()) voltarDoDetalhe();
   else closeDrawer();
 }
+
+/* ══ agenda: núcleo puro (sem migração) ═══════════════════════════
+   O cronograma do PMOC v8.3 era uma LISTA de dias gerada uma vez, sem
+   memória: rodava o algoritmo de mobilização, imprimia, e no dia
+   seguinte imprimia outra coisa. O que o usuário pediu é um calendário
+   — algo que mostra o que está marcado e deixa remarcar.
+
+   NÃO cria coluna nem migração (D-cal-01). A data de uma OS já é
+   `logs_manutencao.data_os`, que a lista de OS mostra e o formulário
+   grava desde a migração 40; remarcar é um `update` nessa coluna, pela
+   MESMA porta de escrita de sempre (manAtualizarOS). Uma coluna
+   `data_programada` ao lado seria a sétima migração pendente e, pior,
+   uma segunda fonte de verdade para a pergunta "quando" — com as duas
+   divergindo no primeiro reagendamento feito pela tela antiga.
+
+   Duas camadas, e elas NÃO são a mesma coisa:
+     · OS reais      — existem em logs_manutencao, têm dono e estado.
+     · Vencimentos   — projeção de nextPmoc(), derivada da criticidade e
+                       da última manutenção. Não existe linha nenhuma.
+   A segunda é quase toda vazia hoje: nextPmoc devolve null sem data
+   anterior, e 169 dos 171 equipamentos não têm histórico. Por isso a
+   tela CONTA quantos ficaram de fora em vez de parecer um calendário
+   sem nada marcado (D-cal-04) — a mesma honestidade que o estado vazio
+   do chip "Vencidos" já pratica.
+
+   Sem browser API: testável em Node. */
+
+var AGENDA_DOW = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+var AGENDA_MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+/* Chave ISO local (aaaa-mm-dd). Deliberadamente NÃO usa toISOString():
+   ela converte para UTC, e em qualquer fuso a oeste de Greenwich — o
+   nosso — isso empurra tudo antes das 21h para o dia anterior. Uma OS
+   marcada para o dia 5 apareceria no dia 4 do calendário, e o defeito
+   só apareceria para quem abrisse a tela de manhã. */
+function agendaChave(d){
+  if (!d) return '';
+  var y = d.getFullYear(), m = d.getMonth()+1, dia = d.getDate();
+  return y + '-' + (m<10?'0':'') + m + '-' + (dia<10?'0':'') + dia;
+}
+
+/* Data local a partir da chave ISO — com T12:00:00, o mesmo cuidado que
+   fmtDate() já toma no arquivo: meia-noite mais fuso negativo cai no dia
+   anterior. */
+function agendaData(chave){
+  if (!chave || !/^\d{4}-\d{2}-\d{2}$/.test(chave)) return null;
+  var d = new Date(chave + 'T12:00:00');
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/* As 42 células da grade (6 semanas × 7 dias), começando no domingo —
+   convenção brasileira. Sempre 42, nunca 35: um mês de 31 dias começando
+   no sábado precisa de 6 linhas, e uma grade que muda de altura conforme
+   o mês faz o conteúdo pular ao navegar. */
+function agendaCelulas(ano, mes){
+  var primeiro = new Date(ano, mes, 1);
+  var inicio = new Date(ano, mes, 1 - primeiro.getDay());
+  var celulas = [];
+  for (var i=0; i<42; i++) {
+    var d = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate()+i);
+    celulas.push({ data:d, chave:agendaChave(d), dia:d.getDate(), doMes:(d.getMonth()===mes) });
+  }
+  return celulas;
+}
+
+/* Estados terminais: a data de uma OS concluída, encerrada ou cancelada
+   é FATO HISTÓRICO, não plano. Arrastá-la reescreveria quando o serviço
+   foi feito — que é exatamente o registro que a OS existe para guardar.
+   A lista é derivada dos fluxos declarados no arquivo, nunca escrita à
+   mão aqui: um fluxo novo com terminal novo passa a ser respeitado sem
+   ninguém lembrar de vir editar esta função. */
+function agendaTerminais(){
+  var out = { CANCELADA: true };
+  /* Referência direta com guarda `typeof`, nunca `globalThis[nome]`: os
+     três fluxos são `var` de topo do mesmo script, e a busca por
+     propriedade de objeto global só encontra isso no navegador — num
+     sandbox de teste ou dentro de um `eval` de função eles existem como
+     variáveis e não como propriedades, e a lista voltava só com
+     CANCELADA. O sintoma era silencioso e do pior tipo: uma OS concluída
+     ficava arrastável, e arrastá-la reescreveria a data do que já foi
+     feito. Achado renderizando a grade no navegador, não pelos testes. */
+  var fluxos = [
+    (typeof FLUXO_PROPRIO  !== 'undefined') ? FLUXO_PROPRIO  : null,
+    (typeof FLUXO_CONTRATO !== 'undefined') ? FLUXO_CONTRATO : null,
+    (typeof FLUXO_LEGADO   !== 'undefined') ? FLUXO_LEGADO   : null
+  ];
+  fluxos.forEach(function(fl){
+    if (!fl || !fl.length) return;
+    out[fl[fl.length-1].id] = true;
+  });
+  return out;
+}
+function agendaPodeMover(entry){
+  if (!entry || !entry.date) return false;
+  return !agendaTerminais()[entry.status || ''];
+}
+
+/* Agrupa por dia as DUAS camadas. Recebe as listas prontas — nada de ler
+   global aqui, que é o que deixa a função testável em Node. */
+function agendaEventos(osEntries, equipamentos, projetar){
+  var porDia = {};
+  function push(chave, ev){
+    if (!chave) return;
+    if (!porDia[chave]) porDia[chave] = [];
+    porDia[chave].push(ev);
+  }
+  (osEntries||[]).forEach(function(o){
+    push(o.entry.date, {
+      tipo:'os', logId:o.entry.id, equipId:o.equipId,
+      titulo:'#'+o.equipId+' · '+(o.entry.tipo||'OS'),
+      status:o.entry.status || '',
+      movel:agendaPodeMover(o.entry)
+    });
+  });
+  /* `projetar` é injetado (nextPmoc na tela, um stub no gate) — é o que
+     mantém este núcleo livre de globais. */
+  var semHistorico = 0;
+  if (typeof projetar === 'function') {
+    (equipamentos||[]).forEach(function(e){
+      var achou = false;
+      [['inspecao','Inspeção'], ['preventiva','Preventiva']].forEach(function(par){
+        var d = projetar(e, par[0]);
+        if (!d) return;
+        achou = true;
+        push(agendaChave(d), {
+          tipo:'venc', equipId:e.id,
+          titulo:'#'+e.id+' · '+par[1],
+          movel:false   // projeção não se arrasta: é recalculada, não guardada
+        });
+      });
+      if (!achou) semHistorico++;
+    });
+  }
+  return { porDia:porDia, semHistorico:semHistorico };
+}
+
+/* Navegação de mês sem Date aritmético espalhado pela tela: mes 12 vira
+   janeiro do ano seguinte, mes -1 vira dezembro do anterior. */
+function agendaMover(ano, mes, delta){
+  var d = new Date(ano, mes + delta, 1);
+  return { ano:d.getFullYear(), mes:d.getMonth() };
+}
+function agendaRotulo(ano, mes){ return AGENDA_MESES[mes] + ' de ' + ano; }
 
 /* ══ carga térmica: núcleo puro (migração 47) ══════════════════════
    Portado em FUNÇÃO do PMOC v8.3 do usuário (motor calcBTU), não em
@@ -6668,6 +7032,27 @@ async function doLoginRole(){
 .qr-ficha{text-align:center;margin:8px 0}
 .qr-ficha svg{width:100%;max-width:200px;height:auto}
 @media (min-width:1024px){
+/* -- calendario do PMOC (260831-cal) --
+   TODO o CSS do calendario mora AQUI dentro, e nao na folha base: a
+   folha de celular e comparada byte a byte com um fixture
+   (tests/refrigeracao-desktop.test.js), e o calendario nao e uma
+   mudanca de desktop -- e feature nova nas duas larguras. A aparencia
+   no celular vem de estilo inline e de classes que ja existiam
+   (.ds/.ds-title); a grade so existe no computador, entao e aqui que
+   ela pertence de qualquer forma. O texto deste comentario evita a
+   arroba-media de proposito: o gate conta essas ocorrencias para
+   afirmar que existe um bloco novo so, e um comentario que a cite
+   contaria como bloco. */
+.ag-grade{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#E0E0E0;border:1px solid #E0E0E0;border-radius:10px;overflow:hidden}
+.ag-dow{background:#E8ECF5;color:#1351B4;font-size:11px;font-weight:700;text-align:center;padding:6px 0}
+.ag-cel{background:#fff;min-height:96px;padding:4px;overflow:hidden;transition:background .12s}
+.ag-cel.fora{background:#FAFAFA}
+.ag-cel.fora .ag-num{color:#CCC}
+.ag-cel.hoje{box-shadow:inset 0 0 0 2px #1351B4}
+.ag-cel.ag-alvo{background:#E8F1FF}
+.ag-num{font-size:11px;font-weight:700;color:#666;margin-bottom:2px}
+.ag-ev[draggable="true"]{cursor:grab}
+.ag-ev[draggable="true"]:active{cursor:grabbing}
   /* ── layout de computador — quick-260822-8rz, D-8rz-01/19 ── */
   /* Todo o CSS novo do módulo mora dentro deste bloco único, e todo
      seletor de tabela é escopado em .lista-tabela — nunca um seletor de
