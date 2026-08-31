@@ -171,6 +171,16 @@ function carregarSandbox() {
     // inspSondarEsquema fica fora dos três recortes e precisa de stub.
     inspSondarEsquema() { return Promise.resolve(); },
     carregarMateriais() { return Promise.resolve(); },
+    // 260831-doc: acessoLivre() ganhou a sonda do acervo, a injeção de
+    // navegação e a carga dos documentos. As três vivem FORA dos três
+    // recortes (a seção DOCUMENTOS é sua própria seção, não pertence ao
+    // fluxo da OS), então entram como stub, exatamente como
+    // estSondarEsquema/estInjectNav/carregarMateriais já entravam — sem
+    // isso o corpo de acessoLivre lança ReferenceError dentro do próprio
+    // try e o modo observador nunca chega a ligar.
+    docSondarEsquema() { return Promise.resolve(); },
+    docInjectNav() {},
+    carregarDocumentos() { return Promise.resolve(); },
     renderDash() {},
     renderInv() {},
     aplicarAlvoFicha() {},
