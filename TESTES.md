@@ -2376,3 +2376,58 @@ o frontend publicar.
       "Corrigir", que já tem o campo de data. (O arrastar do HTML5 não funciona
       em toque sem biblioteca nova.)
 - [ ] **Mês sem nada** mostra "Nada marcado neste mês", não uma grade vazia.
+
+---
+
+## Módulo /equipes — pessoas, ofícios, equipes e escala semanal (31/08/2026)
+
+Módulo novo (D-eq-01..07). Migrações `49_equipes_schema.sql` e `50_equipes_seed.sql`
+**aplicadas em produção em 31/08/2026** — 8 especialidades e 2 turnos semeados,
+nenhuma pessoa nem equipe (nome de militar é dado real da OM).
+
+### Chegada
+
+- [ ] **Portal:** o card "Equipes" aparece e leva a `/equipes` (sem 404 — o rewrite
+      do Vercel foi acrescentado).
+- [ ] **Login:** a tela de login é a mesma dos outros módulos (cargo + senha), e o
+      tema segue o da plataforma sem piscar ao carregar.
+- [ ] **Estado inicial honesto:** Pessoas e Equipes começam vazios com o convite de
+      cadastrar; Ofícios já traz os 8 ofícios e os 2 turnos.
+
+### Ofícios e turnos
+
+- [ ] **Domínios:** cada ofício mostra o que atende (Eletricista → Elétrica · Predial).
+- [ ] **Editar ofício:** marcar/desmarcar domínios e salvar; conferir que a lista muda.
+- [ ] **Ofício sem domínio nenhum:** salvar um com todos desmarcados e conferir que ele
+      **não habilita** equipe nenhuma para serviço nenhum (é de propósito).
+- [ ] **Turno:** criar um turno; tentar salvar com fim **antes** do início — a tela
+      recusa antes de mandar, e o banco também tem a trava.
+- [ ] **Duração é derivada:** a coluna Duração muda sozinha ao mudar as horas — não há
+      campo de duração para digitar.
+
+### Pessoas e equipes
+
+- [ ] **Cadastrar pessoa** com posto e especialidade; marcar "tem login" só para quem
+      usa o app.
+- [ ] **Pessoa inativa:** desmarcar "ativo" e conferir que ela **sai da contagem** da
+      equipe e da capacidade, mas continua na lista.
+- [ ] **Criar equipe:** cada uma nasce com uma cor diferente sugerida.
+- [ ] **Membros:** abrir "Membros", marcar pessoas, salvar; a contagem no card muda.
+      A mesma pessoa pode estar em duas equipes.
+
+### Escala semanal
+
+- [ ] **Navegação:** ‹ e › andam de semana; "Hoje" volta; a semana que atravessa mês
+      ou ano mostra os dois lados no subtítulo.
+- [ ] **Arrastar (computador, ≥900px):** arrastar uma equipe da paleta para um dia/turno
+      — a célula se destaca ao passar por cima e a equipe fica lá.
+- [ ] **Soltar de novo no mesmo lugar** não cria nada e não mostra erro.
+- [ ] **Tocar (celular, <900px):** a grade vira lista por dia; tocar num chip da paleta
+      abre "Escalar", com dia e turno para escolher. Grava pela mesma porta do arrastar.
+- [ ] **Capacidade:** o KPI de homem-hora bate com Σ (horas do turno × pessoas ativas)
+      das alocações da semana. Escalar mais uma equipe aumenta; tirar diminui.
+- [ ] **Equipe sem membros:** escalá-la — ela aparece na grade, vale **0 h**, e um aviso
+      amarelo conta quantas alocações estão nessa situação. Não pode somar em silêncio.
+- [ ] **Cargo:** como técnico, dá para escalar mas **não** dá para cadastrar pessoa nem
+      equipe. Como observador (Livre), nada de arrastar nem botões de cadastro.
+- [ ] **Remover da escala:** o × tira a equipe do dia/turno e a capacidade cai.

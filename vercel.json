@@ -10,6 +10,7 @@
     { "source": "/predial",      "destination": "/predial/index.html" },
     { "source": "/reparos",      "destination": "/reparos/index.html" },
     { "source": "/mapa",         "destination": "/mapa/index.html" },
-    { "source": "/calibracao",   "destination": "/calibracao/index.html" }
+    { "source": "/calibracao",   "destination": "/calibracao/index.html" },
+    { "source": "/equipes",      "destination": "/equipes/index.html" }
   ]
 }
