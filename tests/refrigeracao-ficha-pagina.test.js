@@ -88,6 +88,11 @@ const MARCADORES_FICHA = [
   // enquanto ATRIB_OK for falso — é por isso que o fixture da gaveta
   // continua byte a byte igual sem a migração 45.
   'function fichaAtributos(e){',
+  // 260831-2wq: fichaBlocos passou a devolver SEIS blocos — o sexto é
+  // carga térmica e eficiência, e devolve vazio enquanto TERM_OK for
+  // falso. É sob a sonda desligada que o fixture da gaveta continua
+  // byte a byte igual, mesmo precedente de fichaAtributos/ATRIB_OK.
+  'function fichaBlocoTermico(e){',
   'function fichaBlocoDados(e){',
   'function fichaBlocoEstado(e, logs, crit, lastDate, ni, np){',
   'function fichaBlocoHistorico(id, logs){',
@@ -125,6 +130,7 @@ function mocksComuns() {
     // estado da tela publicada antes da migração 45, e é sob ela que o
     // fixture da gaveta tem de continuar byte a byte igual.
     ATRIB_OK: false,
+    TERM_OK: false,
   };
 }
 
@@ -161,10 +167,10 @@ test('os recortes de carregarSandboxFicha existem no HTML', () => {
 
 // ═══════════════ TAREFA 1 — fonte única, gaveta provada byte a byte ══════
 
-test('fichaBlocos(e, logs, id) devolve array de 5 strings, e .join(\'\') é byte a byte igual ao fixture da gaveta (D-92t-02/14)', () => {
+test('fichaBlocos(e, logs, id) devolve array de 6 strings, e .join(\'\') é byte a byte igual ao fixture da gaveta (D-92t-02/14)', () => {
   const ctx = carregarSandboxFicha();
   const blocos = ctx.fichaBlocos(EQUIP_FIXO, LOGS_FIXOS, EQUIP_FIXO.id);
-  assert.equal(blocos.length, 5);
+  assert.equal(blocos.length, 6);
   blocos.forEach((b) => assert.equal(typeof b, 'string'));
   assert.strictEqual(blocos.join(''), FIXTURE.corpo);
 });
@@ -197,10 +203,15 @@ test('equipamento removido/baixado produz a linha honesta do bloco 1 em vez de p
   assert.doesNotMatch(b1b, /<label>Local<\/label>/);
 });
 
-test('FICHA_COLUNAS achatada é permutação exata de [0,1,2,3,4] — nenhum bloco some, nenhum duplica', () => {
+test('FICHA_COLUNAS achatada é permutação exata de [0,1,2,3,4,5] — nenhum bloco some, nenhum duplica', () => {
   const ctx = carregarSandboxFicha();
   const achatada = [].concat.apply([], ctx.FICHA_COLUNAS).slice().sort();
-  assert.deepStrictEqual(achatada, [0, 1, 2, 3, 4]);
+  // 260831-2wq: seis blocos desde a carga térmica. A checagem continua sendo
+  // permutação EXATA e não "contém": um bloco fora de FICHA_COLUNAS some da
+  // ficha-página sem erro nenhum, que é o defeito que este caso existe para
+  // pegar — o sexto bloco precisava ser distribuído, não só criado.
+  assert.deepStrictEqual(achatada, [0, 1, 2, 3, 4, 5]);
+  assert.strictEqual(ctx.fichaBlocos(EQUIP_FIXO, LOGS_FIXOS, EQUIP_FIXO.id).length, achatada.length);
 });
 
 test('rotuloVolta devolve texto para as cinco abas e \'Voltar\' para chave desconhecida, nunca contendo undefined', () => {

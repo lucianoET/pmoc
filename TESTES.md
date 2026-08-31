@@ -2260,3 +2260,114 @@ o que esta task acrescenta é caminho até elas.
 - [ ] **O cadastro não ganhou atalho para a situação:** abrir "Editar cadastro" e
       conferir que **não** existe campo de Situação / Data de remoção / Data de baixa.
       Essas três só mudam por conferência de OS (D-uyz-12).
+
+---
+
+## Refrigeração — carga térmica, eficiência energética e inspeção (31/08/2026)
+
+Quick task 260831-2wq (D-2wq-01..07). **Duas migrações novas, escritas e conferidas,
+aguardando aplicação** — `47_refrigeracao_carga_termica.sql` e
+`48_refrigeracao_inspecao_qualidade.sql` — depois do deploy do frontend (mesma ordem
+de D-cf8-25). São independentes: aplicar uma sem a outra é estado válido.
+
+### Parte 1 — sem as migrações (compatibilidade, o estado publicado)
+
+- [ ] **A ficha não ganhou bloco:** abrir qualquer equipamento — não existe
+      "Carga térmica e eficiência". A ficha sai exatamente como hoje.
+- [ ] **A OS não ganhou campos:** executar uma OS — o formulário de evidência tem
+      as sete medições de sempre, sem Ruído nem os quatro selects de inspeção.
+- [ ] **Mas o cadastro JÁ ganhou os cinco campos de ambiente**, que não dependem de
+      migração: abrir "Editar cadastro" e conferir Área do ambiente, Pé-direito,
+      Ocupação, Dissipação e Insolação. Preencher e salvar — **é isto que pode ser
+      levantado em campo enquanto as migrações não são aplicadas**.
+- [ ] **Planilha:** exportar e reimportar o mesmo arquivo sem editar — 0 alterações.
+      As cinco colunas novas aparecem no CSV.
+
+### Parte 2 — depois de aplicar a migração 47 (carga térmica)
+
+- [ ] **Campos novos:** "Editar cadastro" ganha Tipo de uso do ambiente e Janelas
+      insoladas.
+- [ ] **Cálculo:** num equipamento com área e tipo de uso preenchidos, a ficha mostra
+      Carga necessária, Capacidade instalada e o veredito de dimensionamento.
+- [ ] **As parcelas fecham com o total:** somar Ambiente + Ocupação + Janelas +
+      Iluminação + Equipamentos e conferir contra a Carga necessária (com os fatores
+      aplicados). Não pode faltar nem sobrar BTU.
+- [ ] **O que falta é nomeado:** num equipamento sem área, a ficha diz "Não calculável
+      — falta área do ambiente", **nunca 0 BTU**.
+- [ ] **O que foi suposto é declarado:** num equipamento sem pé-direito, aparece
+      "Suposto: pé-direito 2,7 m".
+- [ ] **Veredito:** cadastrar área grande num equipamento de 9.000 BTU e conferir
+      "Subdimensionado"; área pequena num de 30.000 e conferir "Superdimensionado".
+- [ ] **Insolação grava número:** escolher "Muito alta — face oeste/poente", salvar,
+      reabrir — a opção continua selecionada (a coluna é `numeric`, o rótulo é de tela).
+- [ ] **Planilha:** as duas colunas novas entram no CSV; importar `sala_tecnica`
+      numa linha e conferir na ficha.
+
+### Parte 3 — depois de aplicar a migração 48 (inspeção)
+
+- [ ] **Campos novos na execução:** Ruído (dB) e os quatro selects (Qualidade do ar,
+      Aspecto geral, Dreno, Suporte/fixação), cada um com "— não avaliado —".
+- [ ] **Inspeção conta como evidência:** registrar SÓ dreno = Ruim, sem nenhuma medição
+      elétrica e sem foto — tem de aceitar. Antes recusaria com "registre ao menos
+      uma medição".
+- [ ] **Leitura da OS:** os quatro aparecem em linha própria e coloridos
+      (verde/laranja/vermelho), não misturados aos números.
+- [ ] **Ruído na série histórica:** registrar ruído em duas OS do mesmo equipamento e
+      conferir a curva no bloco de medições da ficha.
+- [ ] **Correção:** "Corrigir" numa OS já registrada reabre os cinco com os valores
+      gravados, e salvar não apaga o que não foi tocado.
+- [ ] **Três estados, não dois:** deixar Suporte em "— não avaliado —" e conferir que
+      a OS **não** passa a parecer aprovada por isso.
+
+### Eficiência energética (não depende de migração)
+
+- [ ] **Potência estimada é rotulada:** num equipamento sem corrente de placa (hoje,
+      todos), a ficha mostra a potência com o rótulo "estimada".
+- [ ] **EER não é inventado:** sem corrente de placa, a linha Eficiência (EER) diz
+      "exige corrente de placa" em vez de mostrar uma classe. **Este é o defeito que a
+      renderização pegou:** a estimativa por BTU daria 10,2 / Classe B para o parque
+      inteiro.
+- [ ] **Com placa:** cadastrar Corrente nominal num equipamento e conferir que o EER
+      e a classe aparecem, e que mudam entre equipamentos diferentes.
+
+---
+
+## Refrigeração — calendário de OS e vencimentos (31/08/2026)
+
+Quick task 260831-cal (D-cal-01..04). **Sem migração** — remarcar é `update` em
+`data_os`, coluna que existe desde a migração 40. Vale em produção assim que
+o frontend publicar.
+
+- [ ] **Onde fica:** aba PMOC → segmento **Calendário** (ao lado de Lista). O
+      rodapé continua com cinco botões — não nasceu aba nova.
+- [ ] **Trocar de vista:** ao entrar no calendário os chips (Todos/Vencida/Sem
+      histórico/Crítica) **somem** — eles filtram a lista por equipamento e no
+      calendário não teriam o que filtrar. Voltar para Lista traz tudo de volta.
+- [ ] **Navegação:** ‹ e › andam de mês, "Hoje" volta ao mês corrente; a virada
+      de dezembro para janeiro funciona nos dois sentidos.
+- [ ] **Dia de hoje** aparece contornado de azul.
+- [ ] **As duas camadas:** OS reais em traço cheio, vencimentos projetados em
+      traço tracejado laranja. Clicar numa OS abre a gaveta da OS; clicar num
+      vencimento abre a ficha do equipamento.
+- [ ] **A nota do rodapé conta os sem histórico:** hoje deve dizer algo como
+      "169 equipamento(s) sem histórico não têm vencimento projetado". Se o
+      calendário parecer vazio, é isso — não é defeito.
+
+### Arrastar e soltar (computador, ≥1024px)
+
+- [ ] **Arrastar uma OS aberta** para outro dia: a célula de destino se destaca
+      ao passar por cima, e ao soltar aparece "OS reagendada para dd/mm/aaaa".
+- [ ] **Conferir que gravou:** ir para a aba OS e ver a data nova; recarregar a
+      página e conferir que persistiu.
+- [ ] **OS concluída/encerrada/cancelada NÃO arrasta** — o cursor não vira mão
+      de arrastar. É registro do que foi feito, não plano.
+- [ ] **Soltar no mesmo dia** não grava nada (nenhum toast, nenhuma escrita).
+- [ ] **Cargo:** logado como observador (somente leitura), nada arrasta.
+
+### Celular (375px)
+
+- [ ] **Lista por dia**, só os dias que têm algo, sem rolagem horizontal.
+- [ ] **Não há arrastar** no celular — para remarcar, tocar na OS e usar
+      "Corrigir", que já tem o campo de data. (O arrastar do HTML5 não funciona
+      em toque sem biblioteca nova.)
+- [ ] **Mês sem nada** mostra "Nada marcado neste mês", não uma grade vazia.

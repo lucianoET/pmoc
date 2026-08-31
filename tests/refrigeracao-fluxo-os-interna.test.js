@@ -27,6 +27,9 @@ const SQL_42 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '42_refrig
 // para a 42: sem somá-la aqui este gate voltaria a afirmar que a união das
 // migrações é a verdade, quando não seria mais.
 const SQL_43 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '43_refrigeracao_os_unificada.sql'), 'utf8');
+// 260831-2wq: a migração 48 acrescenta os cinco parâmetros de inspeção
+// (ruído, qualidade do ar, aspecto, dreno, suporte) em logs_manutencao.
+const SQL_48 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '48_refrigeracao_inspecao_qualidade.sql'), 'utf8');
 
 function recorte(marcadorIni, marcadorFim) {
   const ini = HTML.indexOf(marcadorIni);
@@ -99,6 +102,16 @@ function colunasNovasMigracao43() {
   return nomes;
 }
 
+// 260831-2wq: helper genérico — as funções acima são uma por migração
+// (herança), esta serve qualquer SQL passado por parâmetro.
+function colunasAddColumnLog(sql) {
+  const re = /alter table logs_manutencao add column if not exists (\w+)/g;
+  const nomes = [];
+  let m;
+  while ((m = re.exec(sql))) nomes.push(m[1]);
+  return nomes;
+}
+
 // ── ponte de campos ── (CAMPOS_LOG / dbToLog / logParaDb)
 function carregarPonte() {
   const ctx = {};
@@ -117,9 +130,9 @@ test('toda coluna criada pela migração 40 aparece como valor em CAMPOS_LOG (D-
   });
 });
 
-test('todo valor de CAMPOS_LOG é uma coluna real (união das colunas da migração 04 com as da 40, 41, 42 e 43)', () => {
+test('todo valor de CAMPOS_LOG é uma coluna real (união das colunas da migração 04 com as da 40, 41, 42, 43 e 48)', () => {
   const ctx = carregarPonte();
-  const colunasReais = colunasLogsManutencao04().concat(colunasNovasMigracao40(), colunasNovasMigracao41(), colunasNovasMigracao42(), colunasNovasMigracao43());
+  const colunasReais = colunasLogsManutencao04().concat(colunasNovasMigracao40(), colunasNovasMigracao41(), colunasNovasMigracao42(), colunasNovasMigracao43(), colunasAddColumnLog(SQL_48));
   Object.keys(ctx.CAMPOS_LOG).forEach((k) => {
     const col = ctx.CAMPOS_LOG[k];
     assert.ok(colunasReais.includes(col), `CAMPOS_LOG.${k} = "${col}" não é coluna real de logs_manutencao`);

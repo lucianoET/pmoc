@@ -328,9 +328,14 @@ test('manAbrirOS(logId) delega para osAbrirGaveta — mesmo resultado, sem monta
   assert.ok(s.nodes['drawer'].classList.contains('open'));
 });
 
-test('os 25 pontos de chamada de manAbrirOS seguem intocados — grep -c bate com 26 (25 chamadas + a declaração)', () => {
+test('os pontos de chamada de manAbrirOS seguem contados — grep -c bate com 27 (26 chamadas + a declaração)', () => {
+  // 260831-cal: era 26 (25 chamadas). O calendário do PMOC acrescentou a
+  // 26ª — clicar num evento de OS na grade abre a MESMA gaveta de sempre,
+  // em vez de inventar uma segunda tela de OS. O caso continua sendo uma
+  // contagem exata de propósito: é ela que faz aparecer, na revisão, todo
+  // ponto novo que passa a abrir OS.
   const qtd = (HTML.match(/manAbrirOS\(/g) || []).length;
-  assert.equal(qtd, 26);
+  assert.equal(qtd, 27);
 });
 
 test('os quatro grep do PLAT-15 continuam em 0 — refrigeração segue congelada e standalone', () => {

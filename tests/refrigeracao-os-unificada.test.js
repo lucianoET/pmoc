@@ -19,6 +19,9 @@ const SQL_40 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '40_refrig
 const SQL_41 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '41_refrigeracao_ficha_estado.sql'), 'utf8');
 const SQL_42 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '42_refrigeracao_movimentacao.sql'), 'utf8');
 const SQL_43 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '43_refrigeracao_os_unificada.sql'), 'utf8');
+// 260831-2wq: a migração 48 acrescenta os cinco parâmetros de inspeção
+// (ruído, qualidade do ar, aspecto, dreno, suporte) em logs_manutencao.
+const SQL_48 = fs.readFileSync(path.join(__dirname, '..', 'supabase', '48_refrigeracao_inspecao_qualidade.sql'), 'utf8');
 
 function recorte(marcadorIni, marcadorFim) {
   const ini = HTML.indexOf(marcadorIni);
@@ -265,10 +268,10 @@ test('osRotuloExecutor devolve o rótulo em português do tipo, e cai em interna
 // CAMPOS_LOG — cobertura exata da união 04+40+41+42+43
 // ══════════════════════════════════════════════════════════════════
 
-test('CAMPOS_LOG cobre exatamente as colunas de logs_manutencao da união das migrações 04+40+41+42+43, sem sobra e sem falta (exceto campanha_id)', () => {
+test('CAMPOS_LOG cobre exatamente as colunas de logs_manutencao da união das migrações 04+40+41+42+43+48, sem sobra e sem falta (exceto campanha_id)', () => {
   const ctx = carregarPonte();
   const uniao = colunasLogsManutencao04()
-    .concat(colunasNovasDe(SQL_40), colunasNovasDe(SQL_41), colunasNovasDe(SQL_42), colunasNovasDe(SQL_43))
+    .concat(colunasNovasDe(SQL_40), colunasNovasDe(SQL_41), colunasNovasDe(SQL_42), colunasNovasDe(SQL_43), colunasNovasDe(SQL_48))
     .filter((c) => c !== 'campanha_id');
   const valores = Object.keys(ctx.CAMPOS_LOG).map((k) => ctx.CAMPOS_LOG[k]);
 
