@@ -87,10 +87,15 @@ test('os assets da refrigeração saíram do HTML e nenhum data URI base64 sobro
   for (const arq of ['icone-192.png', 'icone-512.png', 'icone-apple-180.png', 'qr-brand.png', 'manifest.json', 'qrcode.js']) {
     assert.ok(fs.existsSync(path.join(__dirname, '..', 'refrigeracao', arq)), `refrigeracao/${arq} não existe`);
   }
-  // CT_LOGO_URI/CT_QR_BRAND vão parar dentro de um document.write() de janela
-  // about:blank — precisam ser URL absoluta resolvida em runtime, não caminho relativo.
-  assert.match(HTML, /var CT_LOGO_URI = new URL\('icone-192\.png', location\.href\)\.href;/);
-  assert.match(HTML, /var CT_QR_BRAND = new URL\('qr-brand\.png', location\.href\)\.href;/);
+  // CT_LOGO_URI vai parar dentro de um document.write() de janela about:blank
+  // — precisa ser URL absoluta resolvida em runtime, não caminho relativo. O
+  // primeiro argumento passou a caminho absoluto de raiz (260821-td4,
+  // D-td4-01/02): a rota sem barra final do vercel.json resolve relativo
+  // simples contra a raiz do site, não contra /refrigeracao.
+  assert.match(HTML, /var CT_LOGO_URI = new URL\('\/refrigeracao\/icone-192\.png', location\.href\)\.href;/);
+  // CT_QR_BRAND deixou de existir (D-td4-03): o atalho de PNG estático em
+  // qrRender saiu, o QR passa a ser sempre gerado a partir da URL viva.
+  assert.strictEqual(HTML.includes('CT_QR_BRAND'), false);
 });
 
 test('o viewport não bloqueia o zoom de pinça', () => {

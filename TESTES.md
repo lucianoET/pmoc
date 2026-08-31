@@ -1496,3 +1496,767 @@ Sem migração. Conferido com dado real (16 áreas, **todas com contorno desenha
 - [ ] Numa área com contorno: o campo "Área (m²)" está **travado**, com a nota "Calculada do
       contorno desenhado no mapa". Salvar e conferir no /mapa que a dimensão não mudou.
 - [ ] Como **técnico**: conferir que o ⚙ não aparece (o banco recusaria de qualquer forma).
+
+---
+
+## Refrigeração — encerramento de OS e trilha (21/08/2026)
+
+Sem migração — `equipamentos.ultima_manutencao`, `logs_manutencao.*` e `os_eventos` já
+existem em produção. Roteiro manual do que nenhum gate alcança (rede real, sessão real).
+
+- [ ] Logado com um usuário autenticado (não "Visualizar sem login"), avançar uma OS de
+      contratação de ponta a ponta: solicitar → orçar → aprovar → executar → fiscalizar →
+      certificar. A cada passo, abrir o drawer da OS e conferir que "Histórico / Auditoria"
+      ganhou uma linha nova com o rótulo do passo anterior e do novo, e que a linha traz o
+      nome (e o cargo, entre parênteses) de quem fez a ação.
+- [ ] Imprimir a OS (ícone de impressora no rodapé do drawer) e conferir que a tabela
+      "Histórico (auditoria)" mostra a mesma trilha, na coluna **Detalhe** (não mais
+      "De → Para").
+- [ ] Certificar a OS (informar NF e itens da composição) e, na ficha do equipamento
+      (`openDetail`), conferir que ele saiu de "Nenhum registro de manutenção" — o histórico
+      ganhou uma linha começando com "Contratação <número da OS>" e o campo "Última manut."
+      deixou de estar vazio.
+- [ ] Repetir a certificação da mesma OS (ou recarregar a página e certificar de novo, se o
+      fluxo permitir reabrir) e conferir que **não** nasceu uma segunda linha de histórico
+      para essa contratação.
+- [ ] Registrar uma OS interna concluída (Registrar OS/Manutenção → Status CONCLUÍDA) num
+      equipamento sem `ultima_manutencao` e conferir que o campo "Última manut." da ficha
+      passa a mostrar a data da OS.
+- [ ] Entrar em "Visualizar sem login" (acesso Livre) e conferir que o histórico de
+      manutenção aparece nos equipamentos que têm log — não "Sem hist." nos 171.
+
+---
+
+## Refrigeração — OS interna com fluxo de aprovação pelo gestor (21/08/2026)
+
+Quick task 260821-l7n. Fluxo: `ABERTA` → `DELINEAMENTO` → `APROVACAO` → `EM_EXECUCAO` →
+`EXECUTADA` → `CONFERIDA` (mais `CANCELADA` de qualquer etapa aberta). Como em todas as
+outras migrações do projeto, o caminho de escrita só está fechado depois deste roteiro
+rodar contra o banco de verdade — até lá, `MAN_FLUXO_OK` continua podendo ser `false` numa
+sessão sem a migração.
+
+### Migração 40 — escrita, ainda não aplicada
+
+- [ ] Rodar `supabase/40_refrigeracao_os_fluxo.sql` no SQL editor do Supabase.
+- [ ] Colar aqui o resultado do bloco de conferência do próprio arquivo: 9 colunas novas em
+      `logs_manutencao`, a trava `logs_manutencao_status_check` com os 10 valores (7 do
+      fluxo + `PENDENTE`/`PARCIAL`/`CONCLUÍDA`), o índice `logs_manutencao_equip_id_idx`, e
+      as 10 linhas antigas continuando válidas, agrupadas por status — nenhuma reescrita.
+
+### Antes de aplicar a migração — prova de D-l7n-06
+
+- [ ] Com o frontend já publicado e a migração **ainda não aplicada**, abrir `/refrigeracao`,
+      criar uma OS e conferir que a tela é exatamente a de hoje (select de status visível,
+      sem régua, sem botão de gestor) e que o console do navegador não mostra erro nenhum.
+
+### Depois de aplicar a migração, logado com cargo de escrita
+
+- [ ] Entrar como **técnico** e abrir uma OS nova (Registrar OS/Manutenção). Conferir que:
+      não há select de status, o rodapé diz "Abrir OS", e a OS nasce em `ABERTA` — abrir o
+      drawer da própria OS e ver a régua no passo 1, sem nenhum botão de aprovar/conferir.
+- [ ] Ainda como técnico, "Iniciar delineamento" e depois preencher o diagnóstico e "Enviar
+      para aprovação" — a OS deve ir para `APROVACAO` e sumir os botões do técnico.
+- [ ] Sair e entrar como **gestor**. Abrir a mesma OS, conferir que aparecem os botões
+      "Aprovar" e "Devolver". Aprovar — a OS vai para `EM_EXECUCAO`, `aprovador`/
+      `data_aprovacao` aparecem na seção 2.
+- [ ] Voltar como **técnico**. Na seção "3 · Execução", preencher as quatro medições
+      (insuflamento, retorno, corrente, pressão) e uma foto tirada no celular; conferir que
+      o ΔT aparece calculado na tela (retorno − insuflamento) e que a foto aparece na grade
+      depois de "Registrar evidência".
+- [ ] Tentar "Concluir execução" **antes** de registrar qualquer evidência — conferir que o
+      botão não aparece; e que chamar a ação sem evidência (ex.: via um clique perdido)
+      seria recusada com toast, não silenciosamente aceita.
+- [ ] Com evidência registrada, "Concluir execução" — a OS vai para `EXECUTADA`.
+- [ ] Voltar como **gestor**. Na seção "4 · Conferência", "Conferir e encerrar" — a OS vai
+      para `CONFERIDA`, `conferente`/`data_conferencia` aparecem. Na ficha do equipamento
+      (`openDetail`), conferir que "Última manut." passou a mostrar a **data da OS** (não a
+      data de hoje em que a conferência foi feita).
+- [ ] Caminho negativo 1: repetir o registro de uma OS até `EXECUTADA` e, como gestor,
+      "Devolver" **sem** preencher o parecer — conferir que a ação é recusada com toast.
+      Preencher o parecer e devolver — a OS volta para `EM_EXECUCAO` com a evidência
+      (fotos e medições) intacta.
+- [ ] Caminho negativo 2: como técnico, tentar abrir a mesma OS que outro cargo já moveu de
+      estado (ex.: recarregar a página no meio do fluxo) e conferir que os botões oferecidos
+      correspondem sempre ao estado atual da OS, nunca ao estado da tela antes de recarregar.
+- [ ] Conferir que as 10 linhas de OS anteriores à migração continuam aparecendo no histórico
+      do equipamento, com a pílula da própria palavra delas (PENDENTE/PARCIAL/CONCLUÍDA),
+      sem régua e sem nenhum botão de ação — só a frase "Registro direto — não percorreu as
+      etapas de aprovação".
+
+---
+
+## Refrigeração — ficha do equipamento em quatro blocos, cadastro editável, estado OP/INOP/OR (21/08/2026)
+
+Quick task 260821-q57. **Ordem de publicação (D-q57-06): o frontend vai a produção antes
+deste SQL.** Antes de rodar a migração 41 a tela lê `OK`/`NOK` normalmente (equivalência
+`EQUIP_EQUIVALENCIA`); depois de rodar, passa a ler/gravar `OP`/`INOP`/`OR`.
+
+### Antes de aplicar a migração 41 — prova de D-q57-06
+
+- [ ] Com o frontend já publicado e a migração **ainda não aplicada**, abrir `/refrigeracao` e
+      `/mapa` e conferir que nada mudou na tela — as 171 climatizações continuam coloridas e
+      as pílulas continuam OK/NOK traduzidas para Operante/Inoperante, sem erro no console.
+
+### Migração 41 — escrita, ainda não aplicada
+
+- [ ] Rodar `supabase/41_refrigeracao_ficha_estado.sql` no SQL editor do Supabase.
+- [ ] Colar aqui o resultado do bloco de conferência do próprio arquivo: `funciona` = `OP` 136
+      / `INOP` 35 (nenhum `OK`, nenhum `NOK`, total 171); as 7 colunas novas
+      (`modelo`, `data_fabricacao`, `link`, `manual_url`, `capacitor_marcha`,
+      `capacitor_partida`, `tensao_medida`); as duas travas (`equipamentos_link_url_chk`,
+      `equipamentos_funciona_chk`); e `0` na contagem de `link`/`manual_url` preenchidos.
+
+### Depois de aplicar a migração, logado como gestor
+
+- [ ] Abrir um equipamento e conferir os quatro blocos, nesta ordem: **1 · Local** (Área,
+      Prédio, Local, Patrimônio), **2 · Dados do equipamento** (Tipo, Fabricante, Modelo,
+      Capacidade, Tensão/Corrente nominais, Refrigerante, datas, Link, Manual), **3 · Estado e
+      PMOC** (pílula OP/INOP/OR, Criticidade, **Idade aparente** — nunca "Estado" — h/semana,
+      última manutenção, próximas inspeção/preventiva, Medições acompanhadas), **4 · Histórico
+      de OS/manutenções**.
+- [ ] "Editar cadastro" (rodapé do drawer): editar Modelo + Data de fabricação + Link, salvar,
+      reabrir a ficha e ver os três valores gravados. Testar um link `javascript:alert(1)` e
+      conferir a recusa (toast) antes de enviar.
+- [ ] "Imprimir ficha": conferir que a folha sai com o mesmo cabeçalho institucional (logo +
+      linha CMASM/UASG/ARP) da OS de contratação, os quatro blocos como tabelas, as últimas
+      10 OS, e assinaturas "Responsável técnico"/"Chefe da DME" em branco.
+- [ ] Entrar como **técnico** e conferir que o botão "Editar cadastro" não aparece na ficha nem
+      no rodapé — e que abrir `openEquipForm` direto (via console) recusa com toast.
+- [ ] Numa OS em execução, registrar evidência informando **só** o capacitor de marcha (sem
+      foto, sem as outras medições) e conferir que o botão "Concluir execução" aparece — a
+      evidência de capacitor conta sozinha (D-q57-12).
+- [ ] Conferir essa OS como gestor, escolhendo um estado diferente do atual no seletor "Estado
+      do equipamento após a manutenção" (ex.: INOP → OP). Conferir que, juntos: a pílula da
+      ficha muda, o chip "Com restrições"/"Operante"/"Inoperante" do inventário muda, e a **cor
+      do marcador da climatização no `/mapa`** muda também (pode exigir recarregar o mapa).
+- [ ] Abrir a ficha de um equipamento sem nenhuma medição registrada e conferir que a subseção
+      "Medições acompanhadas" diz "Nenhuma medição registrada ainda…" sem desenhar gráfico
+      vazio nenhum — o estado de todos os 171 equipamentos hoje.
+- [ ] Registrar uma segunda leitura de qualquer medição (ex.: corrente) numa OS futura do mesmo
+      equipamento e conferir que a ficha passa a mostrar o sparkline com a tendência (seta +
+      variação) para essa medição.
+
+## Refrigeração — acesso à ficha por QR code e por tag NFC, e etiquetas (21/08/2026)
+
+Quick task 260821-s3h. Sem migração — só frontend (D-s3h-13).
+
+- [ ] Imprimir uma folha de etiquetas do filtro atual: no inventário, aplicar um filtro (ex.:
+      "Área Vermelha"), tocar no botão de etiquetas (ícone ao lado do contador) e conferir que a
+      folha A4 sai com exatamente aquela quantidade de equipamentos, três por linha, corte
+      tracejado, e que o QR de cada etiqueta lê de verdade com a câmera a uns 10cm.
+- [ ] Escanear um QR de equipamento com a câmera do celular **sem sessão aberta** (a tela de
+      login aparece primeiro): digitar a senha e confirmar que a ficha do equipamento certo abre
+      logo em seguida, já dentro do app.
+- [ ] Repetir o escaneio entrando por "Visualizar sem login" (modo observador) e confirmar que a
+      ficha do mesmo equipamento abre igual.
+- [ ] Com a ficha aberta pelo QR, dar F5 na página e confirmar que ela **não** reabre a gaveta —
+      a URL já voltou a ser a do app.
+- [ ] Abrir uma URL com `?equip=99999` (id que não existe) e confirmar que aparece a frase
+      nomeando o número "não encontrado", sem gaveta nenhuma abrindo.
+- [ ] Gravar uma tag NFC pelo Chrome do Android, em https: abrir a ficha de um equipamento,
+      tocar em "Gravar tag NFC", encostar uma tag regravável, e depois — com o app fechado —
+      aproximar o celular da tag e confirmar que o navegador abre sozinho na ficha daquele
+      equipamento.
+- [ ] Num iPhone (ou no Firefox), abrir a mesma ficha e confirmar que o botão "Gravar tag NFC"
+      **não** aparece, e que no lugar dele está a instrução de gravar a URL com um app de NFC
+      (ex.: NFC Tools), com a URL completa visível acima.
+
+## Refrigeração — caminhos de asset absolutos de raiz (21/08/2026)
+
+Quick task 260821-td4. Conserto de bug reportado pelo usuário em produção ("o qr nao esta
+carregando"): o `vercel.json` reescreve `/refrigeracao` **sem barra final**, e nessa URL o
+navegador resolvia caminho relativo simples contra a raiz do site — `qrcode.js` (e mais 6
+referências) em 404. A mesma conferência **com barra final** (`/refrigeracao/`) já passava
+antes deste conserto e por isso **não prova nada**: é a rota sem barra, a que o usuário de
+fato visitou, que reproduzia o defeito.
+
+- [ ] Abrir `https://pmoc-orcin.vercel.app/refrigeracao` **sem barra final** (não deixar o
+      navegador completar sozinho) e conferir que o logo da topbar desenha — antes aparecia
+      como quadro de imagem quebrada, exatamente como no screenshot que o usuário mandou.
+- [ ] Na mesma URL, conferir o favicon na aba do navegador.
+- [ ] Ainda na mesma URL, abrir o modal de QR do app (ícone `#qr-mini` na tela inicial) e
+      conferir que ele desenha um **SVG gerado na hora** — não uma imagem estática — apontando
+      para `https://pmoc-orcin.vercel.app/refrigeracao`.
+- [ ] Abrir a ficha de um equipamento, "Imprimir ficha" (ou qualquer impressão de OS) e conferir
+      que o cabeçalho sai com o logo — o documento impresso é uma janela `about:blank` sem base,
+      então só prova algo se o logo aparecer ali, não só na tela.
+
+## Refrigeração — QR da ficha com largura limitada e gaveta que não fecha ao rolar (21/08/2026)
+
+Quick task 260821-tyx. Dois defeitos de interface relatados pelo usuário em produção, o gate
+prova a regra (CSS e a função pura do gesto) e não a fiação do toque — o roteiro abaixo é o que
+confirma na tela de verdade.
+
+- [ ] No desktop, abrir a ficha de qualquer equipamento e conferir que o QR do bloco 5 é um
+      quadrado de ~200px — não mais esticado pela largura da janela — e que os botões "Copiar
+      link" e "Imprimir etiqueta" ficam visíveis sem precisar rolar a tela na horizontal.
+- [ ] No celular, abrir a mesma ficha e conferir que o QR está do mesmo tamanho de sempre — o
+      teto de 200px não muda nada ali, a gaveta já tem menos que isso de largura.
+- [ ] No celular, rolar a ficha inteira para baixo até chegar ao bloco 5 (QR/NFC) e conferir que
+      a gaveta **não** fecha durante a rolagem — esse era o defeito relatado.
+- [ ] No celular, arrastar a **alça** (a barrinha no topo da gaveta) para baixo e conferir que
+      fecha nas duas posições: com a ficha no topo, e com a ficha rolada até o fim.
+
+## Refrigeração — OS de Instalação e de Remoção, com baixa patrimonial (21/08/2026)
+
+Quick task 260821-uyz. `supabase/42_refrigeracao_movimentacao.sql` escrita, aditiva, **ainda
+não aplicada** — rodar no SQL editor do Supabase, colar aqui o resultado do bloco de
+conferência do rodapé do próprio arquivo, e só então seguir o roteiro abaixo com sessão
+autenticada real. Até a migração ser aplicada, `MOV_OK` fica falso, o terceiro segmento da aba
+OS não aparece, e a tela é a de hoje (D-uyz-24) — o roteiro pressupõe a migração já aplicada.
+
+**Conferência pós-aplicação da migração 42 (colar aqui o resultado real):**
+
+```text
+(pendente — rodar depois de aplicar 42_refrigeracao_movimentacao.sql)
+```
+
+- [ ] Como técnico, na aba OS entrar no terceiro segmento **"Inst./Remoção"**, abrir uma OS de
+      **Remoção** de uma máquina instalada, marcar as partes do checklist, avançar até a
+      execução e o gestor conferir → a máquina some do mapa, do inventário padrão (chip
+      "Todos"), dos KPIs do dashboard e dos seletores de equipamento das duas OS (manutenção e
+      contratação), e passa a aparecer só no chip **"Removidos"** do inventário.
+- [ ] Abrir uma OS de **Instalação** dessa mesma máquina removida, em **outra sala** → o rótulo
+      do caso muda sozinho para "Novo local"; escolher uma sala que já tem outra máquina
+      instalada → o rótulo muda para "Mais uma máquina no mesmo local" — sem digitar nada, só
+      trocando o destino no `<select>`.
+- [ ] Instalar uma máquina com **substituição** de uma máquina que ainda está instalada → ao
+      conferir, a tela recusa e nomeia a OS de remoção que falta abrir primeiro.
+- [ ] Abrir uma OS de Remoção com destino **Baixa patrimonial**: confirmar que um usuário
+      **gestor** não consegue conferir (a ação é recusada com mensagem clara) e que um usuário
+      **admin** consegue — a máquina passa para o chip **"Baixados"** e o `<select>` de
+      equipamento da instalação deixa de oferecê-la.
+- [ ] No formulário de Instalação, usar **"➕ Cadastrar novo equipamento…"** para cadastrar uma
+      máquina na hora e confirmar que ela volta selecionada no `<select>`, pronta para escolher
+      o destino.
+- [ ] Conferir a mesma OS duas vezes (recarregando a página inteira entre as duas tentativas) →
+      confirmar que o cadastro do equipamento não muda na segunda vez (mesmo `local_id`,
+      `predio`, `local`, `situacao`) e que a OS continua com um único registro de conferência.
+- [ ] Abrir a tela em **375px** de largura e conferir que os três segmentos
+      ("Manutenção"/"Contratações"/"Inst./Remoção") cabem na barra sem cortar nenhum rótulo.
+
+**Pendência de RLS (D-uyz-23, sem eufemismo):** as policies de `equipamentos` e
+`logs_manutencao` continuam `to authenticated using (true)`, sem distinção de cargo — um
+técnico autenticado poderia gravar `situacao='baixado'` por uma chamada REST montada à mão. A
+tela não oferece o caminho (inclusive o da baixa, gateado a `admin`) e cada passo grava quem
+assinou, mas fechar de verdade exige uma migração de policy, fora deste escopo.
+
+## Refrigeração — modo observador não gruda mais (22/08/2026)
+
+Quick task 260822-48m. Frontend puro, nenhuma migração. Roteiro na mesma aba, **sem recarregar
+a página** entre os passos — o ponto do conserto é justamente não precisar de F5.
+
+- [ ] Abrir `/refrigeracao` deslogado, clicar em **"Visualizar sem login"** → confirmar a tarja
+      amarela "Modo visualização — somente leitura" no topo, e que abrir um equipamento não
+      mostra o botão "Editar cadastro" (ou que clicar nele avisa "Modo somente leitura").
+- [ ] **Sem recarregar**, sair do modo observador (voltar à tela de login) e entrar como
+      **Gestor** com senha real → a tarja deve sumir sozinha, e "Editar cadastro" na ficha do
+      equipamento deve funcionar normalmente.
+- [ ] Ainda como Gestor, clicar em **Sair** → a tela de login volta **sem** a tarja por cima
+      (ela também não pode reaparecer sozinha).
+- [ ] Clicar de novo em **"Visualizar sem login"**, confirmar a tarja de volta, sair do
+      observador e entrar como **Técnico** → confirmar que as permissões são as do **Técnico**
+      (não as do Gestor da sessão anterior) — por exemplo, abrir uma OS de manutenção e
+      confirmar que as ações restritas a Gestor/Admin não aparecem.
+
+## Refrigeração — planilha do inventário: exportar e importar (22/08/2026)
+
+Quick task 260822-5hy. **O usuário escolheu deliberadamente o modo de importação mais
+perigoso** (atualiza + cria + arquiva por ausência), depois de eu recomendar contra — este
+roteiro existe para confirmar, com dados reais, que as guardas escritas no gate (escopo
+derivado do conteúdo, guarda de escala, conferência nominal) seguram na tela de verdade, não só
+no `node --test`. Nenhuma migração; o botão fica no ícone `#btn-planilha` da faixa do
+Inventário, antes de `#btn-etiquetas`.
+
+- [ ] Como Gestor ou Admin, no Inventário, clicar no ícone da planilha (`#btn-planilha`) com o
+      chip **"Todos"** e a busca vazia → o painel diz **"Escopo: completo (171 de 171
+      instalados) — este arquivo poderá arquivar por ausência"**.
+- [ ] Exportar o CSV, **sem editar nada**, e reimportar o mesmo arquivo → a tela de conferência
+      mostra **0 atualizar · 0 criar · 0 arquivar**, sem erros nem ignorados, e o botão Aplicar
+      vem desabilitado (nada a fazer) — é a prova de que exportar e importar falam a mesma
+      língua (D-5hy-04).
+- [ ] Abrir o CSV exportado no Excel, editar **uma célula** de um equipamento (por exemplo,
+      Observações) e reimportar → a conferência mostra **1 atualizar**, nomeando só o campo que
+      mudou naquele equipamento, e nenhum outro.
+- [ ] Filtrar o inventário por um chip (por exemplo, "Área Vermelha"), abrir o painel → o texto
+      muda para **"Escopo: parcial (N de 171) — este arquivo nunca arquivará"**. Exportar esse
+      arquivo filtrado e reimportá-lo (sem editar) → a conferência mostra **0 arquivar**, com o
+      bloqueio "escopo parcial declarado no arquivo" — mesmo que centenas de equipamentos
+      estejam ausentes do arquivo.
+- [ ] Pegar um CSV **completo** exportado, abrir num editor de texto e apagar as linhas de **20**
+      equipamentos (mais do que o teto de 18, que é `max(5, 10% de 171)`) → reimportar mostra o
+      bloqueio "excede o teto de 18", com o caminho alternativo (reduzir o arquivo ou usar a OS
+      de movimentação) escrito na tela — e **0 arquivar**.
+- [ ] No mesmo arquivo completo, apagar as linhas de **10** equipamentos (dentro do teto) →
+      reimportar mostra a **lista nominal** dos 10 (`#id · prédio · local`), sem corte, antes de
+      qualquer gravação; clicar **Aplicar** e conferir que esses 10 equipamentos somem do chip
+      "Todos" e passem a aparecer só no chip **"Removidos"** — nunca "Baixados" (D-5hy-02: a
+      baixa patrimonial continua exclusiva da OS de movimentação, cargo admin).
+- [ ] Editar uma célula de uma coluna somente-leitura (**Situação** ou **Última manutenção**) no
+      arquivo antes de reimportar → a conferência reporta a célula como **ignorada**, nomeando a
+      coluna, e não altera nada no cadastro.
+- [ ] Renomear uma coluna do cabeçalho para algo inventado (por exemplo, trocar "Fabricante" por
+      "Marca") e reimportar → a conferência lista essa coluna em **Ignorados**, pelo nome, e o
+      campo Fabricante não muda em nenhum equipamento (coluna ausente é legítimo).
+- [ ] Como **observador** (sem login), abrir o painel da planilha → só o bloco Exportar aparece;
+      o bloco Importar mostra a frase de que exige cargo de gestor ou admin, sem `<input
+      type=file>` nenhum.
+- [ ] Digitar uma linha nova no arquivo com `id` vazio, com prédio/local/tipo preenchidos →
+      reimportar mostra **1 criar**; Aplicar e conferir que o equipamento novo aparece no
+      inventário com a situação **Instalado** (default do banco, nunca escolhida pela
+      planilha).
+
+## Refrigeração — versão de computador: tabelas, navegação lateral, gaveta em painel (22/08/2026)
+
+Quick task 260822-8rz. Camada de apresentação pura — nenhum dado, fluxo ou regra de negócio
+muda. Todo o CSS novo mora dentro de um único `@media (min-width:1024px)`, e o `node --test`
+prova por comparação byte-a-byte (`tests/fixtures/refrigeracao-css-mobile.css`) que nada fora
+dessa faixa de largura foi alterado — mas ninguém, nem o agente, exercitou isto num navegador
+de verdade: sem Playwright nem credenciais neste ambiente, a conferência abaixo fica pendente
+para o usuário, como já registrado no PLAT-15/16 da Fase 5.
+
+- [ ] Abrir `/refrigeracao` numa janela de **1440px** (ou redimensionar o navegador para além de
+      1024px): a navegação passa da barra inferior de 5 ícones para uma **coluna à esquerda**,
+      com o item ativo marcado por barra colorida + fundo tingido + negrito (não só uma borda).
+- [ ] Nas seis listas — **Inventário, OS-Manutenção, Inst./Remoção, PMOC, Alertas,
+      Contratações** — confirmar que cada uma virou uma **tabela de verdade** (cabeçalho,
+      linhas zebradas, sem cartão nenhum).
+- [ ] Em cada tabela: clicar no ícone `⇅`/`↑`/`↓` de uma coluna ordena por ela; clicar de novo
+      inverte; um terceiro clique devolve ao "sem ordem" e o **seletor "Ordenar: …" de sempre
+      volta a mandar** no Inventário (D-8rz-07) — a tela deve mostrar qual dos dois está valendo
+      (botão "Limpar ordenação" aceso quando o cabeçalho está no comando).
+- [ ] Clicar no ícone `⌕` de uma coluna abre um campo de busca **por aquela coluna só**; digitar
+      **não deve tirar o foco do campo a cada letra** (D-8rz-15); fechar o filtro (clicar de novo
+      no `⌕`) limpa o texto digitado.
+- [ ] Clicar em qualquer linha (fora do texto) e também **tabular até a primeira célula e
+      apertar Enter** — os dois caminhos precisam abrir **a mesma ficha/gaveta** que o cartão
+      abre no celular.
+- [ ] A gaveta abre como **painel lateral pela direita** (não mais de baixo para cima); arrastar
+      o conteúdo da gaveta com o mouse/touch **não fecha** mais; apertar **Esc** fecha.
+- [ ] Redimensionar a janela de **1440px para 900px e de volta**, com um chip selecionado, texto
+      digitado na busca e a gaveta aberta: nada disso deve se perder ao cruzar o limiar de
+      1024px (D-8rz-24).
+- [ ] Reduzir para **375px** (celular): a tela deve ficar **idêntica à de hoje** — cartões, barra
+      inferior de 5 ícones, gaveta subindo de baixo. Nenhuma tabela deve aparecer.
+
+## Refrigeração — barra do topo limpa, navegação dentro dela, Painel/Parque, doze colunas (23/08/2026)
+
+Quick task 260823-3a6. Quatro ajustes de apresentação, todos pedidos textualmente pelo usuário —
+nenhum dado, fluxo ou regra de negócio muda. `node --test` prova por comparação byte-a-byte que o
+fixture de CSS de celular não mudou; a conferência visual abaixo fica pendente para o usuário,
+mesma pendência de PLAT-15/16 e de 260822-8rz (sem Playwright nem navegador neste ambiente).
+
+- [ ] **1440px:** a barra do topo mostra ícone, `PMOC.Refrigeração` (sem a segunda linha da
+      inscrição institucional), as cinco abas **Painel/Parque/OS/PMOC/Alertas** e, à direita,
+      Buscar e Sair; a aba ativa se distingue por sublinhado + fundo + negrito + cor clara; os
+      distintivos de OS/PMOC/Alertas ficam colados aos rótulos; não há coluna lateral; a área de
+      conteúdo é clara e a faixa do topo escura; a tabela do Parque mostra as **doze colunas** na
+      ordem `#, Área, Prédio, Local, Tipo, BTU, Marca, Modelo, Estado, Criticidade, Próx.
+      manutenção, Última inspeção`; ordenar e filtrar por Área e por Marca funciona; a coluna
+      Modelo aparece vazia (0 de 171 preenchidos — é o esperado, D-3a6-21); a gaveta da planilha
+      abre com o título "Planilha do parque" e ainda entra pela direita.
+- [ ] **1024px exatos (a faixa apertada):** a tabela do Parque rola na horizontal **dentro da
+      própria caixa**; a página **não** rola na horizontal e nenhuma coluna fica cortada; rolando
+      as 171 linhas, o cabeçalho continua grudado no topo da tabela. As cinco abas cabem entre a
+      marca e as ações; se não couberem, rolam na horizontal — nunca se amassam nem empurram Sair
+      para fora.
+- [ ] **Coluna "Última inspeção", em qualquer largura:** num equipamento com inspeção registrada,
+      a data mostrada é a da inspeção mais recente — mesmo havendo uma corretiva posterior; num
+      equipamento sem inspeção nenhuma, "Sem hist.", ainda que "Próx. manutenção" traga data ao
+      lado (é a discordância esperada de D-3a6-22b — as duas colunas não fecham conta uma com a
+      outra por construção; não conferir subtração entre elas).
+- [ ] **375px (celular):** idêntico a hoje, com a barra inferior de cinco botões; a única
+      diferença visível é a marca sem a segunda linha (a inscrição institucional) e os dois
+      rótulos renomeados (Painel, Parque).
+
+## Refrigeração — a ficha do equipamento como página inteira no computador (23/08/2026)
+
+Quick task 260823-92t. Em `>=1024px` a ficha deixa de ser painel lateral e vira **página
+inteira**, ocupando largura e altura da viewport, com três colunas que rolam por dentro
+enquanto a página não rola. Abaixo de 1024px nada muda — provado por fixture byte a byte
+(`tests/fixtures/refrigeracao-ficha-gaveta.json`), não afirmado. Camada de apresentação pura —
+nenhum dado, fluxo ou regra de negócio muda. `node --test` cobre a lógica em Node (`node:vm`,
+sem DOM real); a conferência visual abaixo fica pendente para o usuário, mesma pendência de
+PLAT-15/16, 260822-8rz e 260823-3a6 (sem Playwright nem navegador neste ambiente).
+
+- [ ] **1440px, abrindo pelo Parque:** clicar numa linha da tabela do Parque abre a ficha como
+      **página inteira** — faixa de cabeçalho no topo (botão "Voltar ao Parque", identificação,
+      pílulas de estado/criticidade/situação, e à direita "Imprimir ficha" / "Editar cadastro" /
+      "Registrar OS-Manutenção") e, abaixo, **três colunas**: a primeira com Local e Dados do
+      equipamento, a do meio (mais larga) com Estado e PMOC, a terceira com Histórico e
+      Etiqueta/QR/NFC. A **página não rola** — só as colunas rolam, cada uma por dentro, e o
+      cabeçalho da faixa fica sempre visível.
+- [ ] **Voltar:** clicar em "Voltar ao Parque" (ou apertar Esc) devolve exatamente à tela de
+      onde a ficha foi aberta, com a lista/filtro intactos.
+- [ ] **Abrindo pelos Alertas e pelo PMOC:** repetir a abertura a partir de uma linha de Alertas
+      e de uma linha do PMOC — o botão de voltar deve nomear o destino certo ("Voltar aos
+      Alertas", "Voltar ao PMOC") e o clique deve realmente voltar para lá, não para o Parque.
+- [ ] **Link profundo (`?equip=`) em tela larga:** abrir uma URL com `?equip=<id>` numa janela
+      já em >=1024px — a ficha deve abrir como página, com a origem sendo o Parque (é a lista
+      que contém todo equipamento) e a URL deve voltar a `/refrigeracao` limpa (sem o
+      `?equip=`) depois de abrir.
+- [ ] **Cruzar o limiar, página → gaveta:** com a ficha aberta como página em 1440px, estreitar
+      a janela para menos de 1024px (ou girar um tablet) — a página deve dar lugar à gaveta de
+      sempre, **com o mesmo equipamento**, e a tela de baixo (Parque/Alertas/PMOC, conforme a
+      origem) deve estar lá por baixo, intacta.
+- [ ] **Cruzar o limiar, gaveta → página:** abrir a ficha em menos de 1024px (gaveta subindo de
+      baixo) e alargar a janela para 1440px — a gaveta deve fechar e a mesma ficha deve abrir
+      como página inteira.
+- [ ] **Formulário sobrevive ao redimensionamento:** com a ficha aberta como página, clicar em
+      "Registrar OS-Manutenção" (ou "Editar cadastro") — o formulário abre na gaveta clássica,
+      por cima da página. Digitar algo num campo e então estreitar a janela: o texto digitado
+      deve **continuar lá**, o formulário não pode ser descartado nem trocado pela ficha.
+- [ ] **1024px exatos (a faixa apertada):** os pares de campo (Área/Prédio, Tipo/Fabricante,
+      etc.) devem colapsar para **um por linha** dentro de cada coluna, e nada deve rolar na
+      página — só as colunas.
+- [ ] **375px (celular), com a ficha aberta:** deve ser **idêntica à de hoje** — gaveta subindo
+      de baixo, mesmo conteúdo, mesmos botões (Fechar/Imprimir/Editar cadastro/Registrar
+      OS/Manutenção).
+
+## Refrigeração — OS unificada por tipo de executor (23/08/2026)
+
+Quick task 260823-cf8 (D-cf8-01..30). `logs_manutencao` passa a ser o tronco único de OS,
+com `tipo_executor` (`interna` | `externa` | `contrato`), itens de serviço/material e
+comentários datados e assinados em toda OS. A OS de contratação deixa de ser um segundo
+aplicativo dentro do módulo. **`supabase/43_refrigeracao_os_unificada.sql` é escrita, aditiva
+e ainda NÃO aplicada** — o roteiro abaixo tem duas partes: a primeira, sem a migração 43
+(o estado publicado hoje), e a segunda, depois que o usuário aplicar a migração no SQL editor
+do Supabase.
+
+### Parte 1 — sem a migração 43 (compatibilidade, o estado publicado)
+
+- [ ] **Dois segmentos na aba OS:** abrir `/refrigeracao`, aba OS — o topo mostra **dois**
+      segmentos, "OS" e "Inst./Remoção" (o segmento "Contratações" não existe mais). O
+      segmento "Inst./Remoção" só aparece se a instalação já tiver as migrações 40 e 42
+      aplicadas (já aplicadas em produção desde 21/08/2026).
+- [ ] **Fluxo legado intacto:** abrir uma OS qualquer — a régua mostra os seis passos de
+      sempre (Abertura, Delineamento, Aprovação, Execução, Executada, Conclusão), **sem**
+      seletor de executor, **sem** bloco de itens, **sem** bloco de registro/comentários. O
+      formulário de abertura é idêntico ao de hoje.
+- [ ] **Sem erro no console:** navegar pelas abas OS, Painel e Parque sem nenhum erro no
+      console do navegador — o app deve se comportar exatamente como antes desta tarefa.
+- [ ] **Chip "Saldo Atas":** na aba OS, o chip "Saldo Atas" (agora na mesma linha dos outros
+      chips) continua abrindo o relatório de saldo das duas NEs (WINS/RLP) normalmente — ele
+      não depende da migração 43.
+
+### Parte 2 — depois de aplicar a migração 43 (frontend já publicado primeiro, D-cf8-25)
+
+- [ ] **Seletor de executor aparece:** abrir uma OS nova — o formulário mostra o bloco
+      "Executor" com três opções (Interna, Externa, Contrato). Escolher cada uma troca os
+      campos abaixo (Setor+Pessoa(s) / Organização / Empresa+CNPJ+Instrumento+Processo+NE)
+      sem apagar o que já foi digitado no resto do formulário.
+- [ ] **OS interna do abrir ao concluir:** abrir uma OS interna, percorrer Delineamento →
+      Aprovação → Execução (registrar ao menos uma evidência) → **Concluir OS** — a régua tem
+      cinco passos, termina em "Conclusão", e **não existe** bloco de Conferência. Conferir
+      que `equipamentos.ultima_manutencao` e o estado do equipamento foram gravados.
+- [ ] **OS de contrato do abrir ao encerrar:** abrir uma OS de contrato (empresa, CNPJ,
+      instrumento, processo, NE) — a régua tem sete passos. Percorrer Delineamento →
+      Aprovação → Execução → Fiscalização → NF/Composição da ata → Certificar. Conferir que o
+      número (`OSC NNN/ano`) foi gerado sozinho, nunca digitado, e que abrir duas OS de
+      contrato no mesmo ano gera números sequenciais.
+- [ ] **Itens em toda OS:** em qualquer OS (interna, externa ou contrato), adicionar um item de
+      serviço e um de material — o total deve somar automaticamente (nunca digitado). Remover
+      um item antes do encerramento funciona; depois do encerramento, o botão de remover some.
+- [ ] **Registro (comentários):** escrever um comentário em qualquer OS — ele aparece na lista
+      junto com os eventos de sistema (mudança de estado), em ordem cronológica, cada um com
+      autor/cargo/data. Tentar enviar um comentário em branco deve ser recusado.
+- [ ] **Histórico do equipamento, uma vez só:** encerrar uma OS de contrato e abrir a ficha do
+      equipamento — a OS de contrato encerrada aparece **uma única vez** no histórico (ela já
+      É a linha, não existe mais espelho).
+- [ ] **Chips de executor:** na aba OS, os três chips de executor (Interna/Externa/Contrato)
+      filtram a lista corretamente; uma OS sem `tipo_executor` (linha antiga, se houver) cai no
+      chip "Interna".
+- [ ] **Coluna Executor na tabela de computador:** em `>=1024px`, a tabela de OS ganha a coluna
+      "Executor", ordenável e filtrável como as demais.
+
+## Refrigeração — a OS como página inteira no computador (23/08/2026)
+
+Quick task 260823-jar (D-jar-01..20). Em `>=1024px` a OS deixa de ser painel lateral (~380px) e
+vira **página inteira** (`#page-os-detalhe`), com faixa de cabeçalho carregando a régua de
+passos permanentemente visível e um corpo de duas zonas (contexto/trabalho) que rolam por
+dentro enquanto a página não rola — irmã gêmea da ficha-página de 260823-92t, mesmo mecanismo
+compartilhado (`DETALHE_ABERTO`/`DETALHE_ORIGEM`/`voltarDoDetalhe`/`reAlojarDetalhe`).
+Instalação/Remoção entra junto, por construção. Abaixo de 1024px a OS é byte a byte a de hoje,
+provado por fixture (`tests/fixtures/refrigeracao-os-gaveta.json`) em cinco cenários, não
+afirmado. `node --test` cobre a lógica em Node (`node:vm`, sem DOM real); a conferência visual
+abaixo fica pendente para o usuário, mesma pendência de PLAT-15/16, 260822-8rz, 260823-3a6 e
+260823-92t (sem Playwright nem navegador neste ambiente).
+
+- [ ] **1440px, abrindo pela lista de OS:** na aba OS, clicar numa linha abre a OS como
+      **página inteira** — faixa de cabeçalho no topo (botão "Voltar às OS", identificação,
+      pílulas, a régua de passos e, à direita, as ações — "Imprimir OS" só em OS de contrato,
+      "Cancelar OS" quando a transição é permitida) e, abaixo, **duas zonas**: a estreita
+      (~360px) com "1 · Abertura" e Executor/Movimentação, a larga com Delineamento/Execução/
+      Conferência (ou Fiscalização+Composição da ata em OS de contrato), Itens e Registro.
+- [ ] **Abrindo pela lista de Inst./Remoção:** repetir a partir de uma linha do segmento
+      "Inst./Remoção" — abre como página igual, com o painel de Movimentação (origem, destino,
+      caso, máquina substituída, checklist de partes) na zona estreita.
+- [ ] **Abrindo pelo botão "Abrir OS" da ficha:** na ficha do equipamento (histórico), clicar
+      "Abrir OS" numa linha com fluxo — abre a OS como página, e o "Voltar" deve nomear e
+      alcançar a **ficha**, não a lista de origem de antes dela.
+- [ ] **Encadeamento Alertas → ficha → OS → volta:** triar um alerta, abrir a ficha do
+      equipamento por ele, e dali abrir uma OS — o "Voltar" da OS deve nomear e voltar para os
+      **Alertas** (a origem original), não para o Parque nem para a ficha.
+- [ ] **A página não rola:** com a OS aberta como página, a barra de rolagem do navegador não
+      se move — só a zona estreita e a zona larga rolam por dentro, cada uma com sua própria
+      barra, e o cabeçalho (régua incluída) fica sempre visível.
+- [ ] **Largura dos campos de texto:** medir os campos de parecer (conferência/fiscalização),
+      delineamento e comentário — devem ocupar **~985px** de largura na zona de trabalho em
+      1440px (contra os ~330px úteis do painel lateral de hoje), e ter pelo menos **140px** de
+      altura (contra os ~80px de hoje).
+- [ ] **Correção de dados vira coluna única:** clicar "Corrigir" no bloco 1 · Abertura — a
+      página deve reorganizar para **uma coluna centralizada de ~900px**, com o formulário de
+      correção (treze campos, incluindo o textarea de descrição) na largura toda; a zona de
+      trabalho deve desaparecer (não ficar vazia ao lado).
+- [ ] **OS legada sem fluxo, sem coluna vazia:** abrir uma OS antiga sem fluxo (nota "Registro
+      direto") — a página deve mostrar **uma coluna só**, nunca uma coluna vazia ao lado da
+      outra.
+- [ ] **Texto não salvo sobrevive ao redimensionamento:** com a OS aberta como página, digitar
+      algo num parecer (sem salvar) e arrastar a janela de 1440px para menos de 1024px — a
+      gaveta deve abrir com a **mesma OS**, e o texto digitado deve **continuar lá**. Alargar de
+      volta para 1440px deve reabrir a **mesma OS** como página, com o mesmo texto.
+- [ ] **A rolagem não pula ao registrar algo:** numa OS de contrato longa (com itens e
+      comentários), rolar a zona de trabalho até o fim e lançar um novo item — a zona não deve
+      voltar ao topo depois do re-render.
+- [ ] **Cancelar pela página:** cancelar uma OS a partir da página (botão "Cancelar OS" na
+      faixa) — deve voltar para a lista de origem, não deixar a OS cancelada na tela.
+- [ ] **375px (celular), com a OS aberta:** percorrer uma OS de cada tipo (interna, contrato,
+      movimentação, legada) — deve ser **idêntica à de hoje**, gaveta subindo de baixo, mesmo
+      conteúdo, mesmos botões.
+
+## Refrigeração — fallback de potência por BTU e seletor de fotos livre (26/08/2026)
+
+Quick task 260826-3v8. Provado por `node --test` (`tests/refrigeracao-energia-fotos.test.js`);
+os dois itens abaixo são conferência visual, o que o Node não prova.
+
+- [ ] No celular, abrir uma OS em execução, tocar em **Fotos** e confirmar que o seletor
+      oferece **câmera, fototeca e arquivos** (antes abria a câmera direto). Anexar uma foto da
+      galeria e confirmar que o upload conclui.
+- [ ] Na visão geral, conferir que o card **Energia Elétrica — Estimativa** deixou de mostrar
+      0 kW / 0 kWh / R$ 0,00, que as duas barras por área têm valor, e que a nota explica de
+      onde veio o número.
+
+## Refrigeração — estoque de peças e materiais (26/08/2026)
+
+Quick task 260826-6wy (D-6wy-01..15). `/refrigeracao` ganha catálogo (`materiais`), histórico
+(`estoque_movimentos`) e `os_itens.material_id`, com baixa idempotente na entrada em execução
+e alerta abaixo do mínimo. **`supabase/44_refrigeracao_estoque.sql` é escrita, aditiva e ainda
+NÃO aplicada** — o roteiro abaixo tem duas partes: a primeira, sem a migração 44 (o estado
+publicado hoje), e a segunda, depois que o usuário aplicar a migração no SQL editor do Supabase,
+**depois do deploy do frontend** (mesma ordem de D-cf8-25).
+
+### Parte 1 — sem a migração 44 (compatibilidade, o estado publicado)
+
+- [ ] **Sem botão de Estoque:** abrir `/refrigeracao` — a barra de navegação continua com os
+      cinco botões de sempre (Painel, Parque, OS, PMOC, Alertas), sem um sexto.
+- [ ] **Item de OS sem catálogo:** abrir uma OS e lançar um item de MATERIAL — o formulário é
+      idêntico ao de hoje, sem seletor de material do catálogo.
+- [ ] **Alertas sem seção de estoque:** abrir a página de Alertas (celular e computador) — não
+      existe a seção "Estoque abaixo do mínimo".
+- [ ] **Sem erro no console:** navegar pelas abas sem nenhum erro — o app se comporta
+      exatamente como antes desta tarefa.
+
+### Parte 2 — depois de aplicar a migração 44 (frontend já publicado primeiro)
+
+- [ ] **Botão de Estoque aparece:** a barra de navegação ganha um sexto botão, "Estoque".
+- [ ] **Cadastrar material:** na página Estoque, cadastrar um material novo com estoque mínimo
+      maior que zero (botão "+ Material", gaveta) — ele aparece na lista, com código, nome,
+      tipo, aplicação, unidade, estoque atual e mínimo.
+- [ ] **Item de OS pelo catálogo:** lançar um item de MATERIAL numa OS escolhendo o material
+      recém-cadastrado no seletor — descrição, unidade e valor unitário vêm preenchidos
+      automaticamente a partir do catálogo (e continuam editáveis antes de salvar). Escolher
+      "Texto livre" continua funcionando como hoje.
+- [ ] **Baixa única ao entrar em execução:** mover a OS para "Em execução" — o saldo do
+      material cai exatamente a quantidade lançada. Conferir na página Estoque.
+- [ ] **Idempotência (não baixa de novo):** mover a mesma OS de volta para um status anterior e
+      de novo para "Em execução" — o saldo **não** cai uma segunda vez.
+- [ ] **Movimento de saída na tabela:** no Supabase, consultar `estoque_movimentos` e conferir
+      a linha `saida` com o `os_id` da OS e o motivo ("OS ... — material lançado na ordem").
+- [ ] **Registrar entrada:** na página Estoque, registrar uma entrada de recebimento para um
+      material (quantidade + motivo) — o saldo sobe pela quantidade informada.
+- [ ] **Edição inline do saldo:** editar diretamente atual/mínimo/preço de um material na lista
+      — salvar atualiza só aquela linha (sem redesenhar a lista inteira, sem perder o foco de
+      quem estiver editando outra linha ao mesmo tempo).
+- [ ] **Alerta abaixo do mínimo:** com um material com saldo menor que o mínimo, abrir Alertas
+      — a seção "Estoque abaixo do mínimo" aparece **nas duas larguras** (celular e computador,
+      >=1024px), e clicar numa linha leva à página Estoque. O distintivo de alertas (badge) não
+      muda por causa disso — ele continua contando equipamento, não peça.
+- [ ] **Limite conhecido — sem estorno automático:** com uma OS em execução que já baixou
+      estoque, voltar o status para trás (ex.: Aprovação) — o saldo **não** volta sozinho. A
+      correção é registrar manualmente uma entrada na página Estoque com o motivo do estorno.
+
+## Refrigeração — atributos técnicos: inverter, redundante, automação (29/08/2026)
+
+Quick task 260829-500 (D-500-01..08). O cadastro de `equipamentos` passa a marcar três fatos que
+decidem manutenção e obra: **inverter** (compressor de rotação variável), **redundante** (participa de
+arranjo em que só um equipamento do conjunto opera por vez — rodízio das duas máquinas do paiol,
+central do prédio × splits no F21) e **automação** (controlável por automação predial).
+**`supabase/45_refrigeracao_atributos_tecnicos.sql` é escrita, aditiva e ainda NÃO aplicada**, e
+`46_refrigeracao_atributos_seed.sql` transcreve as marcações que o usuário já levantou em campo
+(19 inverter, 16 redundante). O roteiro tem duas partes, na ordem de publicação de D-cf8-25: o
+frontend vai ao ar antes do SQL.
+
+### Parte 1 — sem a migração 45 (compatibilidade, o estado publicado)
+
+- [ ] **Formulário idêntico:** abrir a ficha de um equipamento → "Editar cadastro" — os 22 campos
+      de sempre, sem Inverter, sem Redundante, sem Automação.
+- [ ] **Ficha idêntica:** o bloco "2 · Dados do equipamento" não ganha nenhuma linha nova.
+- [ ] **Salvar cadastro continua funcionando:** editar qualquer campo e salvar — sem erro
+      "column does not exist" (é a regressão que a sonda existe para impedir).
+- [ ] **Planilha idêntica:** exportar o inventário — o CSV tem exatamente as mesmas 25 colunas de
+      hoje; reimportar o arquivo sem editar continua fechando em zero mudança.
+
+### Parte 2 — depois de aplicar as migrações 45 e 46 (frontend já publicado primeiro)
+
+- [ ] **Três checkboxes no cadastro:** "Editar cadastro" mostra Inverter, Redundante e Automação
+      como caixas de marcar, no fim do formulário.
+- [ ] **Marcar e salvar:** marcar Inverter num equipamento e salvar — reabrir a ficha e conferir
+      que o bloco "2 · Dados do equipamento" mostra `Inverter: Sim`.
+- [ ] **Três estados, não dois:** um equipamento nunca avaliado mostra `—` (travessão), não `Não`.
+      Marcar e desmarcar deixa `Não`; é diferente de nunca ter sido avaliado.
+- [ ] **Seed conferido:** 19 equipamentos marcados como inverter (F21/EXOCET) e **16** como
+      redundante — as **duas** máquinas de cada uma das 7 câmaras do PAIOL (G-5..G-8, U-6..U-8),
+      porque o rodízio não tem reserva fixa, mais a dupla de splits do servidor do COMANDO
+      (27 e 28).
+- [ ] **Linha de ajuda no campo:** abrir "Editar cadastro" — abaixo da caixa Redundante aparece a
+      explicação do arranjo (rodízio / central × splits), como "Idade aparente" já tinha.
+- [ ] **Quatro máquinas ausentes do cadastro:** as linhas sem id da planilha entregue não eram
+      ambiguidade — são máquinas que existem no chão e não existem no banco. Cadastrar pela tela:
+      a segunda do PAIOL **D-5**, a segunda do **K-6** e as **duas** do **R-7**; marcar redundante
+      nas quatro e também nas duas já cadastradas (ids 93 e 94), que hoje aparecem sozinhas.
+- [ ] **F21 — decidir o conjunto:** marcar redundante nas 6 centrais (132, 133, 134, 135, 136,
+      137) e nos splits que as substituem, conforme o arranjo real do prédio. Ficou fora do seed
+      porque a planilha entregue não marcou nenhum deles.
+- [ ] **Servidor do COMANDO:** conferir se os splits 27 e 28 realmente se alternam; se ligam
+      juntos por capacidade, desmarcar os dois.
+- [ ] **Planilha ganha as três colunas:** exportar o inventário — o CSV tem Inverter, Redundante e
+      Automação no fim, com `SIM`/`NÃO`/vazio.
+- [ ] **Importar com `X`:** marcar `X` numa dessas colunas na planilha e reimportar — a tela de
+      conferência mostra a alteração e, ao confirmar, o equipamento fica marcado. Célula deixada
+      **vazia continua "não avaliado"** e não vira `Não`.
+- [ ] **Ciclo fechado:** exportar e reimportar sem editar nada — zero alterações, como antes.
+
+## Refrigeração — tabela do Parque: alinhamento, layout e filtro multivalor (29/08/2026)
+
+Quick task 260829-8yc (D-8yc-01..08). Só afeta a **versão de computador** (>=1024px);
+o cartão de celular não muda. Sem migração nova — a coluna Atributos depende da 45,
+já aplicada.
+
+- [ ] **Cabeçalho gruda:** abrir Parque numa janela larga e rolar a lista — a linha de
+      rótulos fica visível no topo da tabela o tempo todo. Antes ela sumia.
+- [ ] **Filtro não cobre o rótulo:** abrir os filtros (⌕) e rolar — as duas linhas
+      ficam empilhadas e visíveis; o nome da coluna que se está filtrando continua legível.
+- [ ] **Pílulas alinhadas:** Estado, Criticidade e Próx. manutenção começam na mesma
+      margem esquerda das colunas de texto. `#`, BTU e Última inspeção ficam à direita,
+      com os dígitos alinhados uns sobre os outros.
+- [ ] **A coluna não pula ao ordenar:** clicar no cabeçalho várias vezes (⇅ → ↑ → ↓) —
+      a largura da coluna não muda.
+- [ ] **Coluna Atributos:** mostra INV / RED / AUT nos equipamentos marcados e `—` nos
+      não avaliados; ordenar por ela põe os marcados primeiro.
+- [ ] **Filtro com mais de um valor:** no filtro de Área digitar `AZUL, VERMELHA` — traz
+      as duas. Conferir que digitar só `AZUL,` (com a vírgula solta) **não** esvazia a
+      lista.
+- [ ] **Sugestões:** clicar no campo de filtro de uma coluna — aparece a lista dos
+      valores existentes daquela coluna, para escolher em vez de digitar. Escolher um
+      valor e continuar: as opções do segundo valor continuam todas lá.
+- [ ] **Filtros combinam:** Área `AZUL, VERMELHA` mais Prédio `F21` — só o que casa nas
+      duas condições (OU dentro da coluna, E entre colunas).
+- [ ] **Celular intacto:** em 375px o Parque continua em cartões, sem tabela.
+
+### Segunda rodada — caber na tela (mesma task)
+
+- [ ] **Sem rolagem horizontal:** abrir Parque em 1024px, 1440px e 1920px — a tabela
+      cabe inteira, sem barra de rolagem lateral.
+- [ ] **Inverter, Redundante e Automação depois de Criticidade:** três colunas
+      estreitas, com ✓ (marcado), – (não) e — (não avaliado). Passar o mouse mostra
+      de qual atributo se trata.
+- [ ] **Filtrar um atributo só:** abrir Filtros e digitar `Sim` em Inverter — 19
+      equipamentos. O mesmo em Redundante — 16.
+- [ ] **Texto cortado não some:** numa coluna estreita (Local, Prédio), passar o mouse
+      sobre um valor cortado — o texto completo aparece na dica.
+- [ ] **Filtros num botão só:** o ⌕ saiu do cabeçalho de cada coluna; agora é o botão
+      "Filtros" na barra acima da tabela, que abre a linha de campos.
+- [ ] **Cabeçalho em duas linhas:** "Próx. manutenção" e "Última inspeção" quebram em
+      duas linhas em vez de esticar a coluna.
+- [ ] **Celular intocado:** em 375px continua em cartões, sem rolagem lateral.
+
+## Refrigeração — menu de coluna estilo Excel (29/08/2026)
+
+Quick task 260829-a8u (D-a8u-01..09). Versão de computador; sem migração.
+
+- [ ] **Abrir o menu:** clicar na seta ao lado do nome de qualquer coluna — abre um
+      painel com ordenação, busca e a lista de marcar.
+- [ ] **Ordenar pelo menu:** "Ordenar crescente"/"decrescente" ordenam a coluna;
+      "Limpar ordenação" só aparece quando há ordem ativa.
+- [ ] **Marcar e desmarcar:** desmarcar um valor tira aquelas linhas; remarcar
+      devolve. "Limpar" esvazia a tabela; "Marcar todos" traz tudo de volta.
+- [ ] **Busca dentro do menu:** na coluna Local (125 valores), digitar "sala de"
+      reduz a lista de valores — sem filtrar a tabela ainda.
+- [ ] **Funil no cabeçalho:** coluna com filtro mostra um funil no lugar da seta.
+- [ ] **Fechar:** Esc, clique fora e um segundo clique na mesma seta fecham o painel.
+- [ ] **Combina com o filtro de texto:** marcar VERMELHA no menu de Área e digitar
+      F21 no filtro de Prédio — 23 equipamentos.
+- [ ] **Regressão que este trabalho corrigiu:** com um filtro multivalor ativo
+      (ex.: Área = AZUL + VERMELHA), abrir a ficha de um equipamento e voltar para
+      o Parque — a lista **não** pode ficar vazia. Antes ficava.
+- [ ] **Não dá para ficar preso:** no menu de qualquer coluna, clicar em "Limpar"
+      (desmarca todos) e fechar o painel — a tabela fica vazia **mas continua na
+      tela**, com cabeçalho e a barra dizendo `0 de 175`; clicar em "Limpar filtros"
+      traz tudo de volta. Antes, a tela virava "Nenhum equipamento encontrado" sem
+      nada para clicar.
+- [ ] **Busca sem resultado continua como era:** digitar algo inexistente no campo
+      de busca ainda mostra o estado vazio — ali o campo continua na tela para desfazer.
+
+---
+
+## Refrigeração — adicionar e remover máquinas de ar-condicionado (31/08/2026)
+
+Quick task 260831-2mx (D-2mx-01..03). Sem migração nova — as migrações 40, 41 e 42
+já estão aplicadas em produção, então o botão de movimentação da ficha **já aparece**;
+não há fase de compatibilidade a conferir aqui. As duas ações já existiam no código;
+o que esta task acrescenta é caminho até elas.
+
+### Adicionar — cadastrar equipamento a partir do Parque
+
+- [ ] **O botão existe:** na barra "EQUIPAMENTOS" do Parque, o `+` aparece **antes**
+      dos botões de planilha (CSV) e de etiquetas.
+- [ ] **Cargo:** logado como gestor ou admin o `+` aparece; como técnico ou
+      observador ele **some** (não fica cinza — some).
+- [ ] **Cadastrar:** clicar no `+` abre "Cadastrar novo equipamento" com os mesmos
+      campos de "Editar cadastro". Preencher tipo, fabricante, prédio e local e
+      salvar — a ficha do equipamento novo abre em seguida.
+- [ ] **A situação nasce instalada, sem local formal:** o equipamento recém-cadastrado
+      aparece como *instalado*; o vínculo com `cmasm_locais` só é criado pela
+      conferência de uma OS de INSTALAÇÃO. Isso é o comportamento de sempre (D-uyz-08),
+      não uma regressão.
+- [ ] **Regressão:** o caminho antigo continua — na OS de Instalação, a opção
+      "➕ Cadastrar novo equipamento…" do `<select>` ainda abre o mesmo formulário e
+      volta com o equipamento novo já selecionado.
+
+### Remover — tirar a máquina do local a partir da própria ficha
+
+- [ ] **O botão existe:** abrir a ficha de um equipamento instalado — no bloco
+      "1 · Local", abaixo de Área/Prédio/Local/Patrimônio, há **"Remover do local"**.
+      Vale nas duas larguras (gaveta no celular, página no computador).
+- [ ] **Abre a OS certa, já apontada:** clicar abre "Nova OS · Instalação/Remoção"
+      com Tipo = REMOÇÃO e o `<select>` de equipamento **já naquela máquina** — sem
+      procurá-la entre as 171. Origem, destino e checklist de partes aparecem como
+      sempre.
+- [ ] **Nada foi gravado ainda:** fechar a gaveta sem salvar — a máquina continua
+      instalada. O botão abre uma OS, não remove.
+- [ ] **A remoção continua sendo o fluxo de sempre:** salvar a OS, executá-la e
+      **conferir** — só na conferência a situação vira *Removido* e o local é
+      esvaziado.
+- [ ] **Baixa continua exclusiva de admin:** logado como gestor, o destino
+      "Baixa patrimonial" **não** aparece no `<select>` da remoção. Logado como admin,
+      aparece, com o aviso de irreversível.
+- [ ] **Máquina guardada volta pelo mesmo lugar:** abrir a ficha de um equipamento
+      *Removido* — o botão agora diz **"Instalar em um local"** e abre a OS de
+      INSTALAÇÃO já apontada para ela.
+- [ ] **Baixado não oferece nada:** abrir a ficha de um equipamento *Baixado* — não
+      há botão nenhum no bloco "1 · Local". A baixa é terminal.
+- [ ] **Cargo:** como observador (somente leitura) o botão não aparece em ficha
+      nenhuma.
+- [ ] **O cadastro não ganhou atalho para a situação:** abrir "Editar cadastro" e
+      conferir que **não** existe campo de Situação / Data de remoção / Data de baixa.
+      Essas três só mudam por conferência de OS (D-uyz-12).

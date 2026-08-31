@@ -199,6 +199,37 @@ test('normalizarEstado traduz o vocabulário real de cada tabela para a lista fe
   )
 })
 
+// ── 7b. climatizacao (260821-q57): cinco valores, não dois ──────────────
+// A migração 41 amplia equipamentos.funciona de OK/NOK para OP/INOP/OR
+// (D-q57-01), e ESTADO_POR_MODULO.climatizacao guarda os CINCO valores de
+// propósito (D-q57-15) — as duas entradas antigas não somem no dia em que
+// o frontend publica, só quando alguém confirmar que o banco não tem mais
+// linha nenhuma em OK/NOK.
+test('normalizarEstado(climatizacao, …) entende os cinco valores — os dois do legado e os três da migração 41', async () => {
+  const { normalizarEstado } = await import('../mapa/mapa-geometria.js')
+  assert.equal(normalizarEstado('climatizacao', 'OK'), 'operante')
+  assert.equal(normalizarEstado('climatizacao', 'NOK'), 'inoperante')
+  assert.equal(normalizarEstado('climatizacao', 'OP'), 'operante')
+  assert.equal(normalizarEstado('climatizacao', 'INOP'), 'inoperante')
+  assert.equal(normalizarEstado('climatizacao', 'OR'), 'restricao')
+  assert.equal(normalizarEstado('climatizacao', 'inventado'), null)
+})
+
+test('ESTADOS.restricao existe, com rótulo não vazio e cor distinta das outras cinco', async () => {
+  const { ESTADOS } = await import('../mapa/mapa-geometria.js')
+  assert.ok(ESTADOS.restricao, 'ESTADOS.restricao não existe')
+  assert.ok(ESTADOS.restricao.rotulo && ESTADOS.restricao.rotulo.length > 0, 'rótulo de restricao vazio')
+  const cores = Object.entries(ESTADOS).filter(([k]) => k !== 'restricao').map(([, v]) => v.cor)
+  assert.ok(!cores.includes(ESTADOS.restricao.cor), 'a cor de restricao colide com a de outro estado')
+})
+
+test('corDoEstado(restricao) não é a cor de desconhecido nem a de operante; classeDoEstado(restricao) não é vazia', async () => {
+  const { corDoEstado, classeDoEstado, ESTADOS, COR_ESTADO_DESCONHECIDO } = await import('../mapa/mapa-geometria.js')
+  assert.notEqual(corDoEstado('restricao'), COR_ESTADO_DESCONHECIDO)
+  assert.notEqual(corDoEstado('restricao'), ESTADOS.operante.cor)
+  assert.ok(classeDoEstado('restricao'), 'classeDoEstado(restricao) deveria devolver classe não vazia')
+})
+
 test('sobreaviso (transp_ativos) tem estado próprio — não é dobrado em operante nem em manutenção', async () => {
   const { normalizarEstado } = await import('../mapa/mapa-geometria.js')
   const estado = normalizarEstado('transportes', 'sobreaviso')
@@ -310,4 +341,75 @@ test('a legenda é desenhada a partir de ESTADOS e mapa/index.html não ganhou c
   const hex = (html.match(/#[0-9a-fA-F]{6}\b/g) || []).filter((c) => c.toLowerCase() !== '#1a1a18')
   assert.deepEqual(hex, [], `mapa/index.html declarou cor em hex: ${hex.join(', ')}`)
   assert.ok(!/#[0-9a-fA-F]{6}/.test(ler(GEOMETRIA).split('Bloco 8')[0]), 'apareceu cor antes do bloco de estado do núcleo puro')
+})
+
+// ══════════════════════════════════════════════════════════════════
+// Quick 260821-uyz — situação patrimonial no /mapa (Task 1).
+// ══════════════════════════════════════════════════════════════════
+
+// ── 14. só climatizacao declara colunaSituacao ──────────────────────────
+test('só climatizacao declara colunaSituacao — as outras quatro famílias não ganham nada', () => {
+  const dados = ler(DADOS)
+  for (const modulo of Object.keys(MODULOS_ESPERADOS)) {
+    const bloco = blocoDoModulo(dados, modulo)
+    if (modulo === 'climatizacao') {
+      assert.match(bloco, /colunaSituacao:\s*'situacao'/, 'climatizacao deveria declarar colunaSituacao')
+      assert.match(bloco, /situacaoVisivel:\s*'instalado'/, 'climatizacao deveria declarar situacaoVisivel')
+      assert.match(bloco, /colunaAtivo:\s*null/, 'climatizacao continua sem colunaAtivo — situação não é arquivamento')
+    } else {
+      assert.doesNotMatch(bloco, /colunaSituacao/, `${modulo} não deveria declarar colunaSituacao`)
+    }
+  }
+})
+
+// Fake chainable supabase client: conta quantas vezes `.from(` inicia uma
+// consulta nova (o que uma retentativa faz) e devolve a resposta da fila.
+function criarSupaFalso(respostas) {
+  let chamadas = 0
+  const supa = {
+    from() {
+      const idx = Math.min(chamadas, respostas.length - 1)
+      chamadas++
+      const builder = {
+        select() { return builder },
+        eq() { return builder },
+        order() { return Promise.resolve(respostas[idx]) },
+      }
+      return builder
+    },
+  }
+  return { supa, contarChamadas: () => chamadas }
+}
+
+// ── 15. carregarAtivosDoModulo recua uma vez sem a coluna de situação ───
+test('carregarAtivosDoModulo repete a consulta sem situacao uma única vez quando a primeira erra, e devolve as linhas da segunda', async () => {
+  const { definirCliente, carregarAtivosDoModulo } = await import('../mapa/mapa-dados.js')
+  const linhas = [{ id: 1, tipo: 'SPLIT' }]
+  const { supa, contarChamadas } = criarSupaFalso([
+    { data: null, error: { message: 'column equipamentos.situacao does not exist' } },
+    { data: linhas, error: null },
+  ])
+  definirCliente(supa)
+  const resultado = await carregarAtivosDoModulo('climatizacao')
+  assert.equal(contarChamadas(), 2, 'deveria ter tentado exatamente duas vezes')
+  assert.deepEqual(resultado, linhas)
+})
+
+test('carregarAtivosDoModulo não repete quando a primeira consulta funciona', async () => {
+  const { definirCliente, carregarAtivosDoModulo } = await import('../mapa/mapa-dados.js')
+  const linhas = [{ id: 1, tipo: 'SPLIT', situacao: 'instalado' }]
+  const { supa, contarChamadas } = criarSupaFalso([{ data: linhas, error: null }])
+  definirCliente(supa)
+  const resultado = await carregarAtivosDoModulo('climatizacao')
+  assert.equal(contarChamadas(), 1, 'não deveria ter repetido a consulta')
+  assert.deepEqual(resultado, linhas)
+})
+
+test('carregarAtivosDoModulo de um módulo sem colunaSituacao não recua no erro — devolve lista vazia direto', async () => {
+  const { definirCliente, carregarAtivosDoModulo } = await import('../mapa/mapa-dados.js')
+  const { supa, contarChamadas } = criarSupaFalso([{ data: null, error: { message: 'falha qualquer' } }])
+  definirCliente(supa)
+  const resultado = await carregarAtivosDoModulo('maquinas')
+  assert.equal(contarChamadas(), 1, 'módulo sem colunaSituacao não deveria tentar duas vezes')
+  assert.deepEqual(resultado, [])
 })

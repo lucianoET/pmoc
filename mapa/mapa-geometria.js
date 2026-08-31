@@ -375,12 +375,18 @@ export function linkDoModulo(modulo, id) {
 // em `operante` ou `manutencao`: um veículo de sobreaviso não está livre
 // nem parado, e achatar os dois casos apagaria da tela justamente a
 // distinção que o despachante procura.
+// `restricao` entrou em 260821-q57 (quick task): OR de equipamentos (Refrigeração) é
+// um aparelho FUNCIONANDO com defeito pendente — não é o mesmo caso de `manutencao`
+// (alguém trabalhando nele agora) nem de `operante` (sem restrição nenhuma). Cor
+// distinta das cinco existentes por LUMINOSIDADE (o eixo que sobrevive à daltonia),
+// mesma regra que já separou `standby` de `operante`/`manutencao` para `sobreaviso`.
 export const ESTADOS = {
-  operante:   { rotulo: 'Operante',      cor: '#22c55e' },
-  standby:    { rotulo: 'Sobreaviso',    cor: '#38bdf8' },
-  manutencao: { rotulo: 'Em manutenção', cor: '#f59e0b' },
-  inoperante: { rotulo: 'Inoperante',    cor: '#ef4444' },
-  baixado:    { rotulo: 'Baixado',       cor: '#4a6785' },
+  operante:   { rotulo: 'Operante',        cor: '#22c55e' },
+  standby:    { rotulo: 'Sobreaviso',      cor: '#38bdf8' },
+  manutencao: { rotulo: 'Em manutenção',   cor: '#f59e0b' },
+  restricao:  { rotulo: 'Com restrições',  cor: '#facc15' },
+  inoperante: { rotulo: 'Inoperante',      cor: '#ef4444' },
+  baixado:    { rotulo: 'Baixado',         cor: '#4a6785' },
 }
 
 // Cor de quem não casou com a lista fechada — nunca a cor de "operante",
@@ -390,14 +396,19 @@ export const COR_ESTADO_DESCONHECIDO = '#8fa8c8'
 // Um dicionário por módulo, cada um com os valores REAIS da coluna que
 // aquela tabela usa (verificados no banco de produção em 18/08/2026):
 // status em maq_ativos/elet_ativos/fono_ativos, status em transp_ativos
-// (outro vocabulário) e `funciona` em equipamentos (OK/NOK — a tabela de
-// refrigeração é anterior ao padrão e não tem coluna `status`).
+// (outro vocabulário) e `funciona` em equipamentos — que NÃO é mais só
+// OK/NOK: a migração 41 (260821-q57) amplia o vocabulário para
+// OP/INOP/OR, e as duas entradas antigas ficam de propósito (D-q57-15) —
+// entre publicar o frontend e o usuário rodar a migração, o banco ainda
+// responde OK/NOK, e apagá-las apagaria a cor de 171 marcadores exatamente
+// nessa janela. Saem só quando alguém confirmar que não sobrou linha
+// nenhuma nas duas palavras antigas.
 const ESTADO_POR_MODULO = {
   maquinas:     { operante: 'operante', manutencao: 'manutencao', inoperante: 'inoperante', baixado: 'baixado' },
   eletrica:     { operante: 'operante', manutencao: 'manutencao', inoperante: 'inoperante', baixado: 'baixado' },
   fonoclama:    { operante: 'operante', manutencao: 'manutencao', inoperante: 'inoperante', baixado: 'baixado' },
   transportes:  { disponivel: 'operante', sobreaviso: 'standby', manutencao: 'manutencao', indisponivel: 'inoperante', baixado: 'baixado' },
-  climatizacao: { OK: 'operante', NOK: 'inoperante' },
+  climatizacao: { OK: 'operante', NOK: 'inoperante', OP: 'operante', INOP: 'inoperante', OR: 'restricao' },
 }
 
 // Mesma técnica de normalizarFlora acima: comparação contra lista fechada,
@@ -426,6 +437,7 @@ const CLASSE_POR_ESTADO = {
   operante: 'ok',
   standby: 'info',
   manutencao: 'warn',
+  restricao: 'warn',
   inoperante: 'error',
   baixado: '',
 }
