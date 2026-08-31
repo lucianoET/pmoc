@@ -27,6 +27,9 @@ const SQL_42 = fs.readFileSync(path.join(RAIZ, 'supabase', '42_refrigeracao_movi
 // mesma razão de somar a 42 acima: sem ela este gate afirmaria uma união
 // que deixou de ser a verdade, e reprovaria a ponte por estar certa.
 const SQL_45 = fs.readFileSync(path.join(RAIZ, 'supabase', '45_refrigeracao_atributos_tecnicos.sql'), 'utf8');
+// 260831-2wq: a migração 47 acrescenta tipo_uso e janelas — as duas
+// entradas que faltavam ao cálculo de carga térmica.
+const SQL_47 = fs.readFileSync(path.join(RAIZ, 'supabase', '47_refrigeracao_carga_termica.sql'), 'utf8');
 
 // ── colunas reais de `equipamentos` (união das 4 migrações) ──────────────
 function colunasDaCreateTable() {
@@ -50,6 +53,7 @@ const COLUNAS_EQUIPAMENTOS = [
   ...colunasAddColumn(SQL_41, 'equipamentos'),
   ...colunasAddColumn(SQL_42, 'equipamentos'),
   ...colunasAddColumn(SQL_45, 'equipamentos'),
+  ...colunasAddColumn(SQL_47, 'equipamentos'),
 ];
 
 function carregarSandboxPonte() {

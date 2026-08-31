@@ -164,6 +164,12 @@ function carregarSandbox() {
     // apagado).
     estSondarEsquema() { return Promise.resolve(); },
     estInjectNav() {},
+    // 260831-2wq: acessoLivre() ganhou as duas sondas da carga térmica e da
+    // inspeção. termSondarEsquema NÃO entra aqui de propósito — ela vive no
+    // recorte A (logo depois de atribSondarEsquema), então é código real
+    // rodando contra o supa falso, como a sonda da migração 45. Só
+    // inspSondarEsquema fica fora dos três recortes e precisa de stub.
+    inspSondarEsquema() { return Promise.resolve(); },
     carregarMateriais() { return Promise.resolve(); },
     renderDash() {},
     renderInv() {},

@@ -393,6 +393,7 @@ var CAMPOS_EQUIP = {
   areaM2: 'area_m2', peDireito: 'pe_direito', nPessoas: 'n_pessoas',
   dissipacaoW: 'dissipacao_w', fatorInsolacao: 'fator_insolacao',
   localId: 'local_id', lat: 'lat', lon: 'lon',
+  tipoUso: 'tipo_uso', janelas: 'janelas',
   situacao: 'situacao', dataRemocao: 'data_remocao', dataBaixa: 'data_baixa'
 };
 
@@ -407,13 +408,30 @@ var CAMPOS_EQUIP = {
    aplicarRemocao) — um <select> de situação no cadastro deixaria qualquer
    gestor dar baixa numa máquina sem OS, sem checklist de partes, sem
    assinatura e sem a trava de admin. */
+/* 260831-2wq: as CINCO colunas de ambiente entram aqui sem sonda e sem
+   migração — `area_m2`, `pe_direito`, `n_pessoas`, `dissipacao_w` e
+   `fator_insolacao` existem desde a migração 04 e estavam fora desta
+   lista, o que as tornava impossíveis de preencher pela tela. Eram
+   colunas nulas em 175 linhas por falta de formulário, não por falta de
+   banco — e são exatamente as entradas do cálculo de carga térmica, que
+   por isso nunca teve de onde tirar número. As duas da migração 47
+   (tipoUso, janelas) NÃO entram aqui: dependem de sonda, logo abaixo. */
 var EQUIP_EDITAVEIS = [
   'area', 'predio', 'local', 'tipo', 'fabricante', 'modelo', 'btu',
   'funciona', 'estado', 'criticidade', 'tensao', 'correnteNominal',
   'patrimonio', 'dataFabricacao', 'dataInstalacao', 'refrigerante',
-  'link', 'manualUrl', 'refrigPermanente', 'horasDia', 'diasSemana', 'obs'
+  'link', 'manualUrl', 'refrigPermanente', 'horasDia', 'diasSemana',
+  'areaM2', 'peDireito', 'nPessoas', 'dissipacaoW', 'fatorInsolacao', 'obs'
 ];
-var EQUIP_NUMERICOS = ['btu', 'tensao', 'horasDia', 'diasSemana'];
+/* `obs` fica por último de propósito: é textarea de largura cheia e
+   qualquer campo depois dela quebraria a grade de duas colunas. */
+var EQUIP_NUMERICOS = ['btu', 'tensao', 'horasDia', 'diasSemana', 'nPessoas', 'janelas'];
+
+/* D-2wq-05: `correnteNominal` era comparada como literal em
+   campoEquipForm e em equipParaDb para decidir "isto aceita decimal".
+   Com quatro campos decimais seriam oito comparações; com a lista, dois
+   ramos que não mudam mais — mesma lição de D-500-06. */
+var EQUIP_DECIMAIS = ['correnteNominal', 'areaM2', 'peDireito', 'dissipacaoW'];
 
 /* D-500-01/04/05: os três atributos técnicos da migração 45. Ficam em
    CAMPOS_EQUIP sempre (a leitura de uma coluna que não existe devolve
@@ -460,6 +478,32 @@ async function atribSondarEsquema() {
   return ATRIB_OK;
 }
 
+/* Sonda PRÓPRIA da migração 47, a sexta (MAN_FLUXO_OK/MOV_OK/UNI_OK/
+   EST_OK/ATRIB_OK) — mesma lição de D-uyz-13/D-cf8-13/D-6wy-08/D-500-04.
+   Duas colunas, uma migração, uma pergunta.
+
+   O que ela liga é só o PAR tipo_uso/janelas: as cinco colunas de
+   ambiente da migração 04 entram em EQUIP_EDITAVEIS incondicionalmente,
+   porque existem desde sempre. É o que faz o cálculo térmico já valer
+   alguma coisa num banco sem a 47 — sem tipo de uso ele não roda (a
+   carga base por m² depende dele), mas a área e a ocupação já podem ser
+   levantadas em campo enquanto a migração não é aplicada. */
+var TERM_OK = false;
+
+async function termSondarEsquema() {
+  var r = await supa.from('equipamentos').select('id,tipo_uso,janelas').limit(1);
+  TERM_OK = !r.error;
+  if (TERM_OK && EQUIP_EDITAVEIS.indexOf('tipoUso') < 0) {
+    /* Entram ANTES de `obs` pelo motivo registrado na lista: obs é
+       textarea de largura cheia e empurraria os dois para fora da grade. */
+    var iObs = EQUIP_EDITAVEIS.indexOf('obs');
+    var pos = iObs < 0 ? EQUIP_EDITAVEIS.length : iObs;
+    EQUIP_EDITAVEIS = EQUIP_EDITAVEIS.slice(0, pos)
+      .concat(['tipoUso', 'janelas'], EQUIP_EDITAVEIS.slice(pos));
+  }
+  return TERM_OK;
+}
+
 /* Caminho inverso de dbToEquip: duas guardas (chave fora de CAMPOS_EQUIP OU
    fora de EQUIP_EDITAVEIS caem juntas), texto vazio vira null (um
    data_fabricacao:'' é erro de cast no Postgres; um link:'' viola a trava de
@@ -471,7 +515,7 @@ function equipParaDb(patch) {
     var coluna = CAMPOS_EQUIP[k];
     var v = patch[k];
     if (v === '' || v === undefined) { alvo[coluna] = null; return; }
-    if (k === 'correnteNominal') { var f = parseFloat(v); alvo[coluna] = isNaN(f) ? null : f; return; }
+    if (EQUIP_DECIMAIS.indexOf(k) >= 0) { var f = parseFloat(v); alvo[coluna] = isNaN(f) ? null : f; return; }
     if (EQUIP_NUMERICOS.indexOf(k) >= 0) { var n = parseInt(v, 10); alvo[coluna] = isNaN(n) ? null : n; return; }
     alvo[coluna] = v;
   });
@@ -530,6 +574,11 @@ var CAMPOS_LOG = {
   capMarcha: 'capacitor_marcha',
   capPartida: 'capacitor_partida',
   tensaoMedida: 'tensao_medida',
+  ruidoDb: 'ruido_db',
+  qualidadeAr: 'qualidade_ar',
+  aspecto: 'aspecto',
+  dreno: 'dreno',
+  suporte: 'suporte',
   delineadoPor: 'delineado_por',
   delineadoEm: 'delineado_em',
   aprovador: 'aprovador',
@@ -861,6 +910,104 @@ async function estSondarEsquema() {
   var r = await supa.from('materiais').select('id').limit(1);
   EST_OK = !r.error;
   return EST_OK;
+}
+
+/* D-2wq-06: INSP_OK e o vocabulário de inspeção moram AQUI pelo mesmo
+   motivo que EST_OK, e é a segunda vez que a lição se paga (D-6wy-08):
+   dentro do recorte "── fluxo da OS interna: porta de escrita ──" os
+   gates que já o carregam recebem a sonda declarada e falsa de graça,
+   sem uma linha mudada. Declarar noutro lugar produz ReferenceError em
+   sandbox — falha de infraestrutura fingindo de regressão. E é também
+   onde o assunto pertence: inspecionar é parte da execução da OS, não
+   da ficha do equipamento.
+
+   Sonda separada da 47 de propósito: são duas migrações independentes
+   (uma mexe em `equipamentos`, a outra em `logs_manutencao`), e estender
+   uma desligaria a outra num banco que tem só uma das duas. */
+var INSP_OK = false;
+
+async function inspSondarEsquema() {
+  var r = await supa.from('logs_manutencao').select('id,ruido_db,qualidade_ar,aspecto,dreno,suporte').limit(1);
+  INSP_OK = !r.error;
+  return INSP_OK;
+}
+
+/* ══ parâmetros de inspeção (migração 48) ══════════════════════════
+   Cinco perguntas que as sete medições elétricas/termodinâmicas de hoje
+   não respondem, e que são o que o usuário da sala reclama: o ar sai
+   limpo? virou um barulho? está pingando? o suporte segura?
+
+   `ruidoDb` é numérico e entra na série histórica da ficha ao lado das
+   outras medições — ruído que sobe ao longo das OS é rolamento ou
+   ventilador saindo de balanceamento, e isso só aparece na curva. As
+   outras quatro são a MESMA escala verbal de três estados, numa lista
+   só: três porque "regular" é o achado que gera a próxima preventiva
+   sem gerar corretiva agora, e uma escala de dois obrigaria a chamar de
+   "bom" o dreno que está começando a acumular. */
+var INSP_ESTADOS = ['bom','regular','ruim'];
+var INSP_ESTADO_INFO = {
+  bom:     {rotulo:'Bom',     tom:'#168821'},
+  regular: {rotulo:'Regular', tom:'#B46800'},
+  ruim:    {rotulo:'Ruim',    tom:'#E52207'}
+};
+/* Uma lista, um ponto: formulário de execução, formulário de correção,
+   leitura da OS e a ficha derivam todos daqui. */
+var INSP_CAMPOS = [
+  {chave:'qualidadeAr', id:'qar',     rotulo:'Qualidade do ar'},
+  {chave:'aspecto',     id:'aspecto', rotulo:'Aspecto geral'},
+  {chave:'dreno',       id:'dreno',   rotulo:'Dreno'},
+  {chave:'suporte',     id:'suporte', rotulo:'Suporte / fixação'}
+];
+function inspNormalizar(v){
+  var t = String(v===null||v===undefined?'':v).trim().toLowerCase();
+  return INSP_ESTADOS.indexOf(t) >= 0 ? t : null;
+}
+function inspRotulo(v){
+  var k = inspNormalizar(v);
+  return k ? INSP_ESTADO_INFO[k].rotulo : '—';
+}
+function inspTom(v){
+  var k = inspNormalizar(v);
+  return k ? INSP_ESTADO_INFO[k].tom : '#999';
+}
+/* Pior estado entre os quatro — é o que a ficha mostra de relance.
+   Desconhecido NÃO conta como bom: uma OS que não inspecionou dreno não
+   pode fazer a máquina parecer aprovada. */
+function inspPior(entry){
+  var pior = null;
+  INSP_CAMPOS.forEach(function(c){
+    var k = inspNormalizar(entry && entry[c.chave]);
+    if (!k) return;
+    if (pior === null || INSP_ESTADOS.indexOf(k) > INSP_ESTADOS.indexOf(pior)) pior = k;
+  });
+  return pior;
+}
+/* Um <select> por campo, a partir da lista — nunca quatro cópias. */
+function inspCampoHtml(prefixo, entry){
+  if (!INSP_OK) return '';
+  return '<label class="fgl" style="margin-top:10px;display:block">Inspeção</label>' +
+    '<div class="fg2">' +
+    '<div><label class="fgl">Ruído (dB)</label><input class="fgi" id="'+prefixo+'-ruido" type="number" step="1" min="0" max="130" value="'+
+      (entry ? manValCampo(entry.ruidoDb) : '')+'"/></div>' +
+    INSP_CAMPOS.map(function(c){
+      var atual = entry ? inspNormalizar(entry[c.chave]) : null;
+      var opts = '<option value="">— não avaliado —</option>' + INSP_ESTADOS.map(function(k){
+        return '<option value="'+k+'"'+(atual===k?' selected':'')+'>'+esc(INSP_ESTADO_INFO[k].rotulo)+'</option>'; }).join('');
+      return '<div><label class="fgl">'+esc(c.rotulo)+'</label><select class="fgs" id="'+prefixo+'-'+c.id+'">'+opts+'</select></div>';
+    }).join('') +
+    '</div>';
+}
+/* Lê os cinco campos de um formulário para um patch. Devolve objeto
+   vazio com a sonda desligada — o patch nunca cita coluna inexistente,
+   que é o que derrubaria a gravação inteira (lição de D-500-05). */
+function inspLerForm(prefixo){
+  if (!INSP_OK) return {};
+  var patch = { ruidoDb: manNumOuNull(prefixo+'-ruido') };
+  INSP_CAMPOS.forEach(function(c){
+    var campo = el(prefixo+'-'+c.id);
+    patch[c.chave] = campo ? inspNormalizar(campo.value) : null;
+  });
+  return patch;
 }
 
 /* D-6wy-11: um campo fora deste mapa é gravado como null sem erro
@@ -2933,6 +3080,227 @@ function fecharDetalhe(){
   else closeDrawer();
 }
 
+/* ══ carga térmica: núcleo puro (migração 47) ══════════════════════
+   Portado em FUNÇÃO do PMOC v8.3 do usuário (motor calcBTU), não em
+   código: lá o cálculo lia um formulário e guardava o resultado no
+   localStorage, com as entradas digitadas de novo a cada uso. Aqui as
+   entradas são as colunas que a migração 04 criou em 2026 e que nunca
+   foram usadas para calcular nada — area_m2, pe_direito, n_pessoas,
+   dissipacao_w, fator_insolacao — mais as duas da migração 47
+   (tipo_uso, janelas). O ambiente já está cadastrado; digitá-lo de novo
+   seria uma segunda fonte de verdade para o mesmo fato.
+
+   Sem browser API, testável em Node — o mesmo corte entre núcleo puro
+   e aplicador de DOM que os outros módulos da plataforma usam (o nome
+   dos arquivos não é citado aqui: PLAT-15 exige que este módulo não
+   mencione a base comum, e o gate confere por grep). Referências:
+   NBR 5858, NBR 16401, ASHRAE (1 W sensível = 3,412 BTU/h). */
+
+/* Carga base por m², densidade de iluminação e calor por pessoa. Os
+   números vêm do motor do v8.3 sem alteração — calibrá-los é decisão
+   de engenharia do usuário, não desta portabilidade. */
+var TERM_TIPOS_USO = {
+  escritorio:   {rotulo:'Escritório',        ilumWm2:12, pessoaBtu:600, baseBtuM2:600},
+  sala_reuniao: {rotulo:'Sala de reunião',   ilumWm2:15, pessoaBtu:700, baseBtuM2:650},
+  sala_tecnica: {rotulo:'Sala técnica / TI', ilumWm2:20, pessoaBtu:600, baseBtuM2:700},
+  dormitorio:   {rotulo:'Dormitório',        ilumWm2:8,  pessoaBtu:500, baseBtuM2:600},
+  refeitorio:   {rotulo:'Refeitório',        ilumWm2:14, pessoaBtu:800, baseBtuM2:650},
+  corredor:     {rotulo:'Corredor / hall',   ilumWm2:5,  pessoaBtu:600, baseBtuM2:500},
+  almoxarifado: {rotulo:'Almoxarifado',      ilumWm2:6,  pessoaBtu:600, baseBtuM2:550},
+  enfermaria:   {rotulo:'Enfermaria',        ilumWm2:16, pessoaBtu:700, baseBtuM2:650},
+  garagem:      {rotulo:'Garagem / oficina', ilumWm2:8,  pessoaBtu:600, baseBtuM2:700},
+  outro:        {rotulo:'Outro',             ilumWm2:10, pessoaBtu:600, baseBtuM2:600}
+};
+var TERM_TIPOS_ORDEM = ['escritorio','sala_reuniao','sala_tecnica','dormitorio','refeitorio','corredor','almoxarifado','enfermaria','garagem','outro'];
+
+/* `fator_insolacao` é numeric default 1.0 desde a migração 04 e é
+   exatamente a forma que o cálculo consome. A tela oferece rótulo e
+   grava número — nenhuma coluna de texto ao lado (D-2wq-02). */
+var TERM_INSOLACAO = [
+  {fator:1.00, rotulo:'Baixa — sem sol direto'},
+  {fator:1.10, rotulo:'Média — sol ocasional'},
+  {fator:1.15, rotulo:'Alta — sol direto'},
+  {fator:1.25, rotulo:'Muito alta — face oeste / poente'}
+];
+var TERM_BTU_POR_JANELA = 800;
+var TERM_BTU_POR_W = 3.412;      // ASHRAE: 1 W sensível
+var TERM_ALTURA_PADRAO = 2.7;
+
+/* Rótulo do fator de insolação: casa pelo mais próximo em vez de exigir
+   igualdade, porque a coluna é numeric livre e um 1.2 vindo de
+   importação não pode virar "—". */
+function termRotuloInsolacao(f){
+  var v = parseFloat(f);
+  if (isNaN(v)) return '—';
+  var melhor = TERM_INSOLACAO[0], dist = Math.abs(v - melhor.fator);
+  TERM_INSOLACAO.forEach(function(o){
+    var d = Math.abs(v - o.fator);
+    if (d < dist) { dist = d; melhor = o; }
+  });
+  return melhor.rotulo;
+}
+
+function termNum(v){
+  if (v === null || v === undefined || v === '') return null;
+  var n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+/* Correção de volume da NBR 16401 para pé-direito acima de 2,8 m —
+   degraus, como no motor de origem. */
+function termFatorAltura(altura){
+  var h = termNum(altura);
+  if (h === null || h <= 2.8) return 1.0;
+  if (h > 4.0) return 1.30;
+  if (h > 3.5) return 1.20;
+  if (h > 3.0) return 1.10;
+  return 1.05;
+}
+
+/* O que falta para calcular, nomeado um a um. É isto que separa "não
+   calculável" de "0 BTU": a segunda forma é um número, e um número na
+   tela é lido como resposta. A área é a única entrada sem a qual não há
+   conta nenhuma; as outras têm padrão honesto e entram como suposição
+   declarada, nunca como silêncio. */
+function termFaltantes(e){
+  var faltam = [];
+  if (termNum(e && e.areaM2) === null || termNum(e && e.areaM2) <= 0) faltam.push('área do ambiente');
+  if (!e || !e.tipoUso) faltam.push('tipo de uso');
+  return faltam;
+}
+
+/* Três níveis, como no motor de origem, porque respondem a três
+   perguntas diferentes: o nível 1 é o que se pode dizer sabendo só a
+   área; o 2 acrescenta o que a sala tem dentro; o 3 acrescenta o que
+   foi efetivamente medido em watts. Devolver os três, e não só o
+   escolhido, é o que deixa a tela mostrar de onde veio a diferença. */
+function termCalcular(e){
+  if (!e) return null;
+  var area = termNum(e.areaM2);
+  if (area === null || area <= 0) return null;
+  var cfg = TERM_TIPOS_USO[e.tipoUso] || TERM_TIPOS_USO.outro;
+
+  var altura   = termNum(e.peDireito);
+  var pessoas  = termNum(e.nPessoas);
+  var janelas  = termNum(e.janelas);
+  var equipW   = termNum(e.dissipacaoW);
+  var fSolar   = termNum(e.fatorInsolacao);
+
+  /* Arredondadas AQUI, e é a partir destas que os níveis somam — não a
+     partir dos valores brutos. A tela mostra as parcelas e o total lado
+     a lado; somar bruto e exibir arredondado faz as cinco linhas não
+     fecharem com o total por 1 ou 2 BTU, que é o tipo de detalhe que
+     leva um técnico a desconfiar do número inteiro. A precisão perdida
+     é menor que 1 BTU numa carga de dezenas de milhares. */
+  var qBase   = Math.round(area * cfg.baseBtuM2);
+  var qPess   = Math.round((pessoas === null ? 0 : pessoas) * cfg.pessoaBtu);
+  var qJanela = Math.round((janelas === null ? 0 : janelas) * TERM_BTU_POR_JANELA);
+  /* Iluminação não tem coluna própria: é estimada pela densidade do
+     tipo de uso. Medir W de luminária por sala seria um levantamento
+     que ninguém fez, e supor 0 seria pior — lâmpada acesa aquece. */
+  var qIlum   = Math.round(area * cfg.ilumWm2 * TERM_BTU_POR_W);
+  var qEquip  = Math.round((equipW === null ? 0 : equipW) * TERM_BTU_POR_W);
+
+  var fAlt  = termFatorAltura(altura);
+  var fSol  = (fSolar === null || fSolar <= 0) ? 1.0 : fSolar;
+  /* Operação contínua reusa refrig_permanente (migração 04) — o campo
+     que já diz que a máquina não desliga. */
+  var fCont = e.refrigPermanente ? 1.10 : 1.0;
+  var fTot  = fSol * fAlt * fCont;
+
+  var n1 = Math.round(qBase * fTot);
+  var n2 = Math.round((qBase + qPess + qJanela) * fTot);
+  var n3 = Math.round((qBase + qPess + qJanela + qIlum + qEquip) * fTot);
+
+  return {
+    qBase:qBase, qPess:qPess, qJanela:qJanela, qIlum:qIlum, qEquip:qEquip,
+    fSolar:fSol, fAltura:fAlt, fContinuo:fCont,
+    nivel1:n1, nivel2:n2, nivel3:n3,
+    /* O nível entregue é o mais completo que os dados sustentam — nunca
+       uma escolha do usuário numa aba. Sem pessoas nem janelas
+       cadastradas o nível 2 seria idêntico ao 1 fingindo refinamento. */
+    total: (equipW !== null) ? n3 : ((pessoas !== null || janelas !== null) ? n2 : n1),
+    nivel: (equipW !== null) ? 3 : ((pessoas !== null || janelas !== null) ? 2 : 1),
+    suposicoes: [].concat(
+      altura  === null ? ['pé-direito ' + TERM_ALTURA_PADRAO + ' m'] : [],
+      fSolar  === null ? ['insolação baixa'] : [],
+      pessoas === null ? ['ocupação não cadastrada'] : []
+    )
+  };
+}
+
+/* Veredito de dimensionamento. As faixas são de engenharia corrente:
+   abaixo de 90% da carga a máquina não dá conta; acima de 130% ela liga
+   e desliga sem desumidificar. A faixa do meio é larga de propósito —
+   capacidade comercial é escalonada (9.000, 12.000, 18.000...), e
+   exigir casamento fino apontaria "inadequado" para escolha correta. */
+var TERM_ADEQUACAO = {
+  sub:     {rotulo:'Subdimensionado', tom:'#E52207'},
+  ok:      {rotulo:'Adequado',        tom:'#168821'},
+  suave:   {rotulo:'Folga',           tom:'#B46800'},
+  super:   {rotulo:'Superdimensionado', tom:'#E52207'}
+};
+function termAdequacao(btuInstalado, btuNecessario){
+  var inst = termNum(btuInstalado), nec = termNum(btuNecessario);
+  if (inst === null || inst <= 0 || nec === null || nec <= 0) return null;
+  var razao = inst / nec;
+  var chave = razao < 0.90 ? 'sub' : razao <= 1.15 ? 'ok' : razao <= 1.30 ? 'suave' : 'super';
+  return {razao:razao, chave:chave, rotulo:TERM_ADEQUACAO[chave].rotulo, tom:TERM_ADEQUACAO[chave].tom};
+}
+
+/* ── eficiência energética, por equipamento ──
+   O painel já estima o consumo do PARQUE (dvRenderCharts). O que não
+   existia era a mesma conta para UMA máquina, que é onde a decisão de
+   troca acontece. Reusa dvPotenciaW — a mesma regra de potência, um
+   ponto só: placa vence estimativa, e sem placa a capacidade estima. */
+var TERM_FATOR_CICLO = 0.7;
+function termEficiencia(e, tarifa){
+  if (!e) return null;
+  var w = (typeof dvPotenciaW === 'function') ? dvPotenciaW(e) : 0;
+  if (!w) return null;
+  var btu = termNum(e.btu) || 0;
+  var horasMes = (termNum(e.horasDia) || 0) * (termNum(e.diasSemana) || 0) * 4.345;
+  var kwhMes = w / 1000 * horasMes * TERM_FATOR_CICLO;
+  var t = termNum(tarifa);
+  /* D-2wq-07: a potência só é DADO quando existe corrente de placa; sem
+     ela dvPotenciaW estima a partir do próprio BTU. Isso importa para o
+     EER e só para ele: dividir o BTU por uma potência derivada do BTU dá
+     sempre a mesma constante (3412 × COP ÷ 1000 = 10,2), para qualquer
+     máquina do parque. Publicar isso como "Classe B" seria inventar uma
+     etiqueta de eficiência a partir de nenhuma medição — e as 175 linhas
+     do banco têm corrente_nominal nula, então seria o parque inteiro
+     recebendo a mesma nota falsa. O consumo em kWh continua valendo
+     (é a mesma estimativa que o painel já publica, e está declarada
+     como estimativa); o EER, não. */
+  var dePlaca = (parseFloat(e.correnteNominal) || 0) > 0;
+  return {
+    w: w,
+    kw: w / 1000,
+    potenciaDePlaca: dePlaca,
+    /* BTU/h por watt elétrico. Só com potência de placa E capacidade
+       cadastrada — sem BTU a divisão seria por zero disfarçada. */
+    eer: (dePlaca && btu > 0) ? (btu / w) : null,
+    kwhMes: kwhMes,
+    custoMes: (t === null ? null : kwhMes * t),
+    horasMes: horasMes
+  };
+}
+
+/* Classificação do EER na régua do Inmetro para split (BTU/h por W).
+   Devolve null sem EER — nunca uma letra inventada. */
+var TERM_FAIXAS_EER = [
+  {min:11.0, letra:'A'}, {min:10.0, letra:'B'}, {min:9.0, letra:'C'},
+  {min:8.0,  letra:'D'}, {min:7.0,  letra:'E'}, {min:0,   letra:'F'}
+];
+function termClasseEER(eer){
+  var v = termNum(eer);
+  if (v === null || v <= 0) return null;
+  for (var i=0; i<TERM_FAIXAS_EER.length; i++) {
+    if (v >= TERM_FAIXAS_EER[i].min) return TERM_FAIXAS_EER[i].letra;
+  }
+  return 'F';
+}
+
 /* -- ficha: uma fonte, dois continentes -- */
 /* D-92t-17: todo o código novo dos dois continentes mora nesta seção só,
    imediatamente antes de openDetail(id). D-92t-02: os cinco blocos saem de
@@ -3003,6 +3371,104 @@ function fichaAtributos(e){
     var v = e[k] === true ? 'Sim' : (e[k] === false ? 'Não' : '—');
     return '<div class="dfield"><label>'+esc(EQUIP_ROTULOS[k])+'</label><div class="dval">'+v+'</div></div>';
   }).join('');
+}
+
+/* ══ ficha: carga térmica e eficiência (migração 47) ══
+   Bloco NOVO, o sexto — e não um pedaço de "Dados do equipamento",
+   porque não descreve a máquina: responde se ela é a máquina certa
+   para aquela sala, que é a pergunta que decide troca. Carga térmica e
+   eficiência vêm juntas de propósito: são as duas metades da mesma
+   decisão (dá conta? e quanto custa?), e separá-las criaria um terceiro
+   lugar na tela mostrando potência.
+
+   Gated por TERM_OK inteiro, como todo bloco novo deste arquivo desde
+   D-uyz-13: sem a migração 47 não existe `tipo_uso`, e sem tipo de uso
+   o cálculo teria de supor "outro" para o parque todo — produzindo um
+   veredito de dimensionamento plausível e errado, que é pior que
+   veredito nenhum. Com a sonda desligada a ficha sai byte a byte como
+   hoje. */
+function fichaBlocoTermico(e){
+  if (!TERM_OK) return '';
+
+  var titulo = '<div class="ds-title"><i class="fas fa-temperature-half mr1" aria-hidden="true"></i>Carga térmica e eficiência</div>';
+  var falta = termFaltantes(e);
+  var calc = termCalcular(e);
+
+  /* Sem as entradas, a tela NOMEIA o que falta e oferece o caminho —
+     nunca mostra 0 BTU, que seria lido como resposta (mesma lição do
+     card de energia, que mostrava 0 kW para o parque inteiro). */
+  if (!calc || falta.length) {
+    var comoPreencher = podeEditarCadastro()
+      ? ' Preencha em <strong>Editar cadastro</strong>.'
+      : '';
+    return '<div class="ds">' + titulo +
+      '<div class="dfield"><div class="dval" style="color:#B46800;font-weight:600">' +
+      'Não calculável — falta ' + esc(falta.join(' e ')) + '.</div>' +
+      '<div style="font-size:11px;color:#888;margin-top:4px">' +
+      'A carga térmica dimensiona o aparelho para a sala.' + comoPreencher + '</div></div></div>';
+  }
+
+  var btuInst = termNum(e.btu);
+  var ad = termAdequacao(btuInst, calc.total);
+
+  var veredito = ad
+    ? '<div class="dfield"><label>Dimensionamento</label><div class="dval">' +
+      '<span class="pill" style="background:'+ad.tom+';color:#fff">'+esc(ad.rotulo)+'</span> ' +
+      '<span style="color:#888;font-size:11px">'+Math.round(ad.razao*100)+'% da carga</span></div></div>'
+    : '<div class="dfield"><label>Dimensionamento</label><div class="dval" style="color:#888">' +
+      'sem capacidade (BTU) cadastrada</div></div>';
+
+  var ef = termEficiencia(e, dvGetTarifa());
+  var classe = ef ? termClasseEER(ef.eer) : null;
+  var linhasEf = ef
+    ? '<div class="dfield"><label>Potência elétrica</label><div class="dval">'+dvFmt(ef.kw,2)+' kW' +
+        (ef.potenciaDePlaca?'':' <span style="font-size:10px;color:#B46800">estimada</span>')+'</div></div>' +
+      '<div class="dfield"><label>Consumo estimado</label><div class="dval">'+dvFmt(ef.kwhMes)+' kWh/mês' +
+        (ef.custoMes===null?'':' · R$ '+dvFmt(ef.custoMes,2))+'</div></div>' +
+      (ef.eer
+        ? '<div class="dfield"><label>Eficiência (EER)</label><div class="dval">'+dvFmt(ef.eer,1)+' BTU/h·W' +
+          (classe?' <span class="pill" style="background:#1351B4;color:#fff">Classe '+classe+'</span>':'')+'</div></div>'
+        : '<div class="dfield"><label>Eficiência (EER)</label><div class="dval" style="color:#888;font-size:12px">' +
+          'exige corrente de placa — a potência acima é estimada pela capacidade</div></div>')
+    : '<div class="dfield"><label>Eficiência</label><div class="dval" style="color:#888">sem potência estimável</div></div>';
+
+  /* As parcelas explicam de onde veio o número. Sem elas o bloco seria
+     um veredito sem prova, e o técnico não teria como discordar. */
+  var parcelas = [
+    {rot:'Ambiente ('+esc((TERM_TIPOS_USO[e.tipoUso]||TERM_TIPOS_USO.outro).rotulo)+')', v:calc.qBase},
+    {rot:'Ocupação', v:calc.qPess},
+    {rot:'Janelas insoladas', v:calc.qJanela},
+    {rot:'Iluminação (estimada)', v:calc.qIlum},
+    {rot:'Equipamentos', v:calc.qEquip}
+  ].filter(function(x){ return x.v > 0; });
+
+  var linhasParc = parcelas.map(function(x){
+    return '<div style="display:flex;justify-content:space-between;font-size:11px;color:#666;padding:2px 0">' +
+      '<span>'+x.rot+'</span><span style="font-variant-numeric:tabular-nums">'+dvFmt(x.v)+'</span></div>';
+  }).join('');
+
+  var fatores = [];
+  if (calc.fSolar    !== 1) fatores.push('insolação ×'+calc.fSolar);
+  if (calc.fAltura   !== 1) fatores.push('pé-direito ×'+calc.fAltura);
+  if (calc.fContinuo !== 1) fatores.push('operação contínua ×'+calc.fContinuo);
+
+  var nota = calc.suposicoes.length
+    ? '<div style="font-size:10px;color:#B46800;margin-top:6px"><i class="fas fa-circle-info mr1" aria-hidden="true"></i>' +
+      'Suposto: '+esc(calc.suposicoes.join(' · '))+'.</div>'
+    : '';
+
+  return '<div class="ds">' + titulo +
+    '<div class="dfields2">' +
+      '<div class="dfield"><label>Carga necessária</label><div class="dval" style="font-weight:700">'+dvFmt(calc.total)+' BTU/h</div></div>' +
+      '<div class="dfield"><label>Capacidade instalada</label><div class="dval">'+(btuInst?dvFmt(btuInst)+' BTU/h':'—')+'</div></div>' +
+    '</div>' +
+    veredito +
+    '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border,#E0E0E0)">' + linhasParc +
+      (fatores.length?'<div style="font-size:10px;color:#999;margin-top:4px">Fatores: '+esc(fatores.join(' · '))+'</div>':'') +
+      nota +
+    '</div>' +
+    '<div class="dfields2" style="margin-top:8px">' + linhasEf + '</div>' +
+    '</div>';
 }
 
 function fichaBlocoDados(e){
@@ -3079,7 +3545,8 @@ function fichaBlocos(e, logs, id){
     fichaBlocoDados(e),
     fichaBlocoEstado(e, logs, crit, lastDate, ni, np),
     fichaBlocoHistorico(id, logs),
-    blocoQrFicha(id)
+    blocoQrFicha(id),
+    fichaBlocoTermico(e)
   ];
 }
 
@@ -3111,7 +3578,7 @@ function fichaAcoes(id, alvo){
 /* D-92t-09: distribuição fechada das colunas da ficha-página — coluna 1 =
    Local+Dados, coluna 2 = Estado e PMOC (o bloco mais denso), coluna 3 =
    Histórico+QR. Achatada é permutação de [0,1,2,3,4] (gate). */
-var FICHA_COLUNAS = [[0,1],[2],[3,4]];
+var FICHA_COLUNAS = [[0,1,5],[2],[3,4]];
 
 /* D-92t-01/03/05/06/07/09/10/11: abre a ficha como PÁGINA — mesma fonte de
    dados de abrirFichaGaveta, continente diferente. D-jar-01: origem,
@@ -3354,7 +3821,10 @@ var EQUIP_ROTULOS = {
   patrimonio:'Patrimônio', dataFabricacao:'Data de fabricação', dataInstalacao:'Data de instalação',
   refrigerante:'Refrigerante', link:'Link', manualUrl:'Manual',
   refrigPermanente:'Refrigeração permanente', horasDia:'Horas/dia', diasSemana:'Dias/semana', obs:'Observações',
-  inverter:'Inverter', redundante:'Redundante', automacao:'Automação'
+  inverter:'Inverter', redundante:'Redundante', automacao:'Automação',
+  areaM2:'Área do ambiente (m²)', peDireito:'Pé-direito (m)', nPessoas:'Ocupação (pessoas)',
+  dissipacaoW:'Dissipação de equipamentos (W)', fatorInsolacao:'Insolação',
+  tipoUso:'Tipo de uso do ambiente', janelas:'Janelas insoladas'
 };
 var EQUIP_CRITICIDADES = ['CRÍTICA','ALTA','MÉDIA','BAIXA'];
 
@@ -3404,8 +3874,24 @@ function campoEquipForm(chave, e){
   if (chave==='link' || chave==='manualUrl') {
     return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="url" placeholder="https://…" value="'+esc(e[chave]||'')+'"/></div>';
   }
-  if (chave==='correnteNominal') {
-    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="number" step="0.1" value="'+(e[chave]||'')+'"/></div>';
+  if (chave==='tipoUso') {
+    var optsTu = '<option value="">— não avaliado —</option>' + TERM_TIPOS_ORDEM.map(function(k){
+      return '<option value="'+k+'"'+(e.tipoUso===k?' selected':'')+'>'+esc(TERM_TIPOS_USO[k].rotulo)+'</option>'; }).join('');
+    return '<div><label class="fgl">'+esc(rot)+'</label><select class="fgs" id="'+id+'">'+optsTu+'</select>' +
+      '<div style="font-size:10px;color:#999;margin-top:4px">Decide a carga base por m², a densidade de iluminação e o calor por pessoa no cálculo térmico.</div></div>';
+  }
+  if (chave==='fatorInsolacao') {
+    /* Lista fechada por rótulo, número gravado — a coluna é numeric
+       desde a migração 04 (D-2wq-02). Casa pelo mais próximo para um
+       valor vindo de importação não virar seleção vazia. */
+    var atualIns = termNum(e.fatorInsolacao);
+    var rotIns = atualIns===null ? '' : termRotuloInsolacao(atualIns);
+    var optsIns = '<option value="">— não avaliado —</option>' + TERM_INSOLACAO.map(function(o){
+      return '<option value="'+o.fator+'"'+(rotIns===o.rotulo?' selected':'')+'>'+esc(o.rotulo)+'</option>'; }).join('');
+    return '<div><label class="fgl">'+esc(rot)+'</label><select class="fgs" id="'+id+'">'+optsIns+'</select></div>';
+  }
+  if (EQUIP_DECIMAIS.indexOf(chave)>=0) {
+    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="number" step="0.1" min="0" value="'+(e[chave]===null||e[chave]===undefined?'':e[chave])+'"/></div>';
   }
   if (EQUIP_NUMERICOS.indexOf(chave)>=0) {
     return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="number" step="1" value="'+(e[chave]||'')+'"/></div>';
@@ -3516,7 +4002,11 @@ var MEDICOES_FICHA = [
   {chave:'tensaoMedida', rotulo:'Tensão medida',        unidade:'V',  cor:'#1565C0'},
   {chave:'pressao',      rotulo:'Pressão de sucção',    unidade:'psi',cor:'#33691E'},
   {chave:'capMarcha',    rotulo:'Capacitor de marcha',  unidade:'µF', cor:'#5E85CB'},
-  {chave:'capPartida',   rotulo:'Capacitor de partida', unidade:'µF', cor:'#B8CBEA'}
+  {chave:'capPartida',   rotulo:'Capacitor de partida', unidade:'µF', cor:'#B8CBEA'},
+  /* Migração 48: a única das cinco de inspeção que se mede com aparelho
+     — ruído que sobe ao longo das OS é rolamento ou ventilador saindo de
+     balanceamento, e isso só aparece na curva. */
+  {chave:'ruidoDb',      rotulo:'Ruído',                unidade:'dB', cor:'#6A1B9A'}
 ];
 
 /* Do mais antigo ao mais novo — _logCache vem ordenado ao contrário (mais
@@ -4231,6 +4721,7 @@ function manFormDados(entry, logId){
     '<div><label class="fgl">Cap. marcha (µF)</label><input class="fgi" id="man-ed-cap-marcha" type="number" step="0.1" value="'+manValCampo(entry.capMarcha)+'"/></div>' +
     '<div><label class="fgl">Cap. partida (µF)</label><input class="fgi" id="man-ed-cap-partida" type="number" step="0.1" value="'+manValCampo(entry.capPartida)+'"/></div>' +
     '<div><label class="fgl">Tensão (V)</label><input class="fgi" id="man-ed-tensao" type="number" step="0.1" value="'+manValCampo(entry.tensaoMedida)+'"/></div></div>' +
+    inspCampoHtml('man-ed', entry) +
     '<div class="ct-btn-row" style="margin-top:10px">' +
     '<button class="btn-success" onclick="manSalvarDados(\''+esc(logId)+'\')"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar correção</button>' +
     '<button class="btn-secondary" onclick="manCancelarEdicao(\''+esc(logId)+'\')"><i class="fas fa-times mr1" aria-hidden="true"></i>Cancelar</button></div>' +
@@ -4257,6 +4748,8 @@ async function manSalvarDados(logId){
     capPartida: manNumOuNull('man-ed-cap-partida'),
     tensaoMedida: manNumOuNull('man-ed-tensao')
   };
+  // Espalha os cinco da migração 48 — objeto vazio com a sonda desligada.
+  Object.assign(patch, inspLerForm('man-ed'));
   var campoTipo = el('man-ed-tipo'); // ausente em OS de movimentação: o tipo fica como está
   if (campoTipo) patch.tipo = campoTipo.value;
   var ok = await manAtualizarOS(logId, achado.equipId, patch, 'Dados corrigidos');
@@ -4425,6 +4918,7 @@ function manMontarOS(logId){
         '<div><label class="fgl">Capacitor de marcha (µF)</label><input class="fgi" id="man-ex-cap-marcha" type="number" step="0.1"/></div>' +
         '<div><label class="fgl">Capacitor de partida (µF)</label><input class="fgi" id="man-ex-cap-partida" type="number" step="0.1"/></div>' +
         '<div><label class="fgl">Tensão medida (V)</label><input class="fgi" id="man-ex-tensao" type="number" step="0.1"/></div></div>' +
+        inspCampoHtml('man-ex', null) +
         '<label class="fgl" style="margin-top:8px">Fotos</label>' +
         '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" multiple/>' +
         '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="manRegistrarEvidencia(\''+esc(logId)+'\')"><i class="fas fa-camera mr1" aria-hidden="true"></i>Registrar evidência</button></div>';
@@ -4664,6 +5158,7 @@ var OS_CAMPOS_VOLATEIS = [
   'man-delin-desc',
   'man-ex-ti', 'man-ex-tr', 'man-ex-corr', 'man-ex-press',
   'man-ex-cap-marcha', 'man-ex-cap-partida', 'man-ex-tensao',
+  'man-ex-ruido', 'man-ex-qar', 'man-ex-aspecto', 'man-ex-dreno', 'man-ex-suporte',
   'man-conf-estado', 'man-conf-parecer',
   'man-fis-parecer',
   'oi-un-tipo', 'oi-un-qtd', 'oi-un-desc', 'oi-un-vu',
@@ -4758,7 +5253,7 @@ function manTemEvidencia(entry){
   }
   // D-q57-12: as três medições novas contam como evidência — são leitura de
   // instrumento igual às cinco de hoje.
-  return !!((entry.fotos && entry.fotos.length) || entry.insuflamento || entry.retorno || entry.corrente || entry.pressao || entry.capMarcha || entry.capPartida || entry.tensaoMedida);
+  return !!((entry.fotos && entry.fotos.length) || entry.insuflamento || entry.retorno || entry.corrente || entry.pressao || entry.capMarcha || entry.capPartida || entry.tensaoMedida || entry.ruidoDb || inspPior(entry));
 }
 
 function manRenderEvidencia(entry){
@@ -4771,12 +5266,20 @@ function manRenderEvidencia(entry){
   if (entry.capMarcha!==undefined && entry.capMarcha!==null && entry.capMarcha!=='') medTxt.push('Cap. marcha: '+entry.capMarcha+'µF');
   if (entry.capPartida!==undefined && entry.capPartida!==null && entry.capPartida!=='') medTxt.push('Cap. partida: '+entry.capPartida+'µF');
   if (entry.tensaoMedida!==undefined && entry.tensaoMedida!==null && entry.tensaoMedida!=='') medTxt.push('Tensão: '+entry.tensaoMedida+'V');
+  if (entry.ruidoDb!==undefined && entry.ruidoDb!==null && entry.ruidoDb!=='') medTxt.push('Ruído: '+entry.ruidoDb+' dB');
   var fotos = (entry.fotos||[]).map(function(p){
     var u = supa.storage.from('os-fotos').getPublicUrl(p).data.publicUrl;
     return '<a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'" loading="lazy"/></a>';
   }).join('');
   var h = '';
   if (medTxt.length) h += '<div class="le-chk"><i class="fas fa-thermometer-half mr1" aria-hidden="true"></i>'+medTxt.join(' · ')+'</div>';
+  /* Os quatro verbais em linha própria, coloridos pelo estado: numa
+     lista de medições numéricas eles virariam texto entre números e
+     ninguém veria um "Dreno: Ruim". */
+  var inspTxt = INSP_CAMPOS.filter(function(x){ return inspNormalizar(entry[x.chave]); }).map(function(x){
+    return '<span style="color:'+inspTom(entry[x.chave])+';font-weight:700">'+esc(x.rotulo)+': '+esc(inspRotulo(entry[x.chave]))+'</span>';
+  });
+  if (inspTxt.length) h += '<div class="le-chk"><i class="fas fa-clipboard-check mr1" aria-hidden="true"></i>'+inspTxt.join(' · ')+'</div>';
   if (fotos) h += '<div class="foto-grid">'+fotos+'</div>';
   return h;
 }
@@ -4792,7 +5295,12 @@ async function manRegistrarEvidencia(logId){
   var ti = val('man-ex-ti'), tr = val('man-ex-tr'), corr = val('man-ex-corr'), press = val('man-ex-press');
   var capM = val('man-ex-cap-marcha'), capP = val('man-ex-cap-partida'), tensaoM = val('man-ex-tensao');
   var files = (el('man-ex-fotos')||{files:[]}).files;
-  if (ti==='' && tr==='' && corr==='' && press==='' && capM==='' && capP==='' && tensaoM==='' && !files.length) { showToast('Registre ao menos uma medição ou uma foto','error'); return; }
+  // Migração 48: inspeção conta como evidência. Sem isso uma OS que
+  // registrou dreno e suporte — e nenhuma medição elétrica — seria
+  // recusada por "não registrou nada", que é falso.
+  var insp = inspLerForm('man-ex');
+  var temInsp = Object.keys(insp).some(function(k){ return insp[k] !== null && insp[k] !== undefined; });
+  if (ti==='' && tr==='' && corr==='' && press==='' && capM==='' && capP==='' && tensaoM==='' && !temInsp && !files.length) { showToast('Registre ao menos uma medição, uma inspeção ou uma foto','error'); return; }
   showToast('Enviando evidência…', '');
   var novos = [];
   var limite = Math.min(files.length, LIMITE_FOTOS_EVIDENCIA);
@@ -4816,6 +5324,9 @@ async function manRegistrarEvidencia(logId){
   if (capP !== '') patch.capPartida = parseFloat(capP);
   if (tensaoM !== '') patch.tensaoMedida = parseFloat(tensaoM);
   if (ti !== '' || tr !== '') patch.deltaT = manDeltaT(ti, tr); // ΔT é sempre derivado, nunca digitado
+  // Só as chaves efetivamente preenchidas — um null aqui apagaria a
+  // inspeção de uma OS que já a tinha, numa segunda gravação de fotos.
+  Object.keys(insp).forEach(function(k){ if (insp[k] !== null && insp[k] !== undefined) patch[k] = insp[k]; });
   var ok = await manAtualizarOS(logId, achado.equipId, patch, 'Evidência registrada');
   if (ok) manAbrirOS(logId);
 }
@@ -5348,6 +5859,8 @@ async function acessoLivre() {
     await movSondarEsquema();
     await uniSondarEsquema();
     await atribSondarEsquema();
+    await termSondarEsquema();
+    await inspSondarEsquema();
     await estSondarEsquema();
     estInjectNav();
     osInjectChipsExecutor();
@@ -5389,6 +5902,8 @@ async function initAppOnce(){
   await movSondarEsquema();
   await uniSondarEsquema();
   await atribSondarEsquema();
+  await termSondarEsquema();
+  await inspSondarEsquema();
   await estSondarEsquema();
   estInjectNav();
   osInjectChipsExecutor();

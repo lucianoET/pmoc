@@ -26,6 +26,9 @@ const SQL_42 = fs.readFileSync(path.join(RAIZ, 'supabase', '42_refrigeracao_movi
 // voltaria a afirmar que a união das migrações é a verdade, quando não
 // seria mais (mesmo raciocínio já registrado para a 42 em 260821-uyz).
 const SQL_43 = fs.readFileSync(path.join(RAIZ, 'supabase', '43_refrigeracao_os_unificada.sql'), 'utf8');
+// 260831-2wq: a migração 48 acrescenta os cinco parâmetros de inspeção
+// (ruído, qualidade do ar, aspecto, dreno, suporte) em logs_manutencao.
+const SQL_48 = fs.readFileSync(path.join(RAIZ, 'supabase', '48_refrigeracao_inspecao_qualidade.sql'), 'utf8');
 
 function recorte(marcadorIni, marcadorFim) {
   const ini = HTML.indexOf(marcadorIni);
@@ -279,13 +282,14 @@ test('toda coluna criada pela migração 42 em logs_manutencao aparece como valo
   novas42.forEach((col) => assert.ok(valores.includes(col), `${col} (migração 42) não está em CAMPOS_LOG`));
 });
 
-test('todo valor de CAMPOS_LOG é coluna real de logs_manutencao (união 04+40+41+42+43)', () => {
+test('todo valor de CAMPOS_LOG é coluna real de logs_manutencao (união 04+40+41+42+43+48)', () => {
   const ctx = carregarPonteLog();
   const reais = colunasCreateTable04('logs_manutencao')
     .concat(colunasAddColumn(SQL_40, 'logs_manutencao'))
     .concat(colunasAddColumn(SQL_41, 'logs_manutencao'))
     .concat(colunasAddColumn(SQL_42, 'logs_manutencao'))
-    .concat(colunasAddColumn(SQL_43, 'logs_manutencao'));
+    .concat(colunasAddColumn(SQL_43, 'logs_manutencao'))
+    .concat(colunasAddColumn(SQL_48, 'logs_manutencao'));
   Object.entries(ctx.CAMPOS_LOG).forEach(([k, col]) => {
     assert.ok(reais.includes(col), `CAMPOS_LOG.${k} = "${col}" não é coluna real de logs_manutencao`);
   });
