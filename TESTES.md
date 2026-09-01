@@ -2507,3 +2507,42 @@ refrigeração 6, geral 3, elétrica 2) e 18 linhas em `cmasm_documentos`
 - [ ] **Achado de cadastro a resolver:** a tarefa semestral de QAI em `plano_tarefas`
       ainda cita **RE 09/2003 da ANVISA**, substituída pela **NBR 17037:2023**.
       Corrigir a citação é trabalho de cadastro, não de código.
+
+## Fluxo de plano — serviço padrão, material e regra por tipo (01/09/2026)
+
+Migrações `54_refrigeracao_plano_servicos.sql` e `55_refrigeracao_plano_servicos_seed.sql`,
+**aplicadas em produção em 01/09/2026** e conferidas: 9 serviços derivados das 9 tarefas
+da NBR, as 9 tarefas ligadas (`servico_id`), 0 linhas em `servico_materiais`, `aplica_a`
+ainda 'TODOS' nas 9.
+
+- [ ] **Sem a migração 54:** o terceiro segmento não aparece, e o checklist da OS
+      continua exatamente como está hoje — **inclusive o defeito**: uma OS de CENTRAL
+      abre com o checklist do split. É o comportamento publicado, preservado de propósito.
+- [ ] **Com a migração:** PMOC ganha o segmento **Plano** (Lista · Calendário · Plano).
+      Trocar de segmento esconde os chips (eles filtram a lista por equipamento).
+- [ ] **O conserto principal:** abrir OS de manutenção numa máquina **CENTRAL** ou
+      **CHILLER** — o checklist agora traz as 9 tarefas da NBR, não mais "limpeza dos
+      filtros da evaporadora" de um split.
+- [ ] **Cobertura por tipo:** a tabela mostra os 6 tipos com quantos equipamentos e
+      quantas regras alcançam cada um. Hoje: todos com 9 regras, nenhuma própria.
+      **Nenhum aviso vermelho** — o estado saudável não dispara alarme.
+- [ ] **Criar regra por tipo:** "Regra" → escolher SELF CONTAINED no escopo. A lista passa
+      a mostrar o alcance real (32) e a cobertura daquele tipo sobe para 10.
+- [ ] **Criar regra por modelo:** escolher CENTRAL + um modelo que ninguém tem. A regra
+      aparece com **"sem alcance"** e alcance 0 — nunca some da lista.
+- [ ] **Serviço padrão:** "Serviço" cria; reabrir mostra a seção de material. Tempo padrão
+      0 ou negativo é recusado na tela **e** pelo `check` do banco.
+- [ ] **Material por serviço:** com o catálogo vazio (estado de hoje), a seção explica que
+      é preciso cadastrar em Estoque primeiro. Depois de cadastrar um material, ele pode
+      ser ligado ao serviço com quantidade.
+- [ ] **Puxar material do plano na OS:** com material ligado, o botão lança os itens pela
+      **mesma porta** de sempre; o mesmo material em dois serviços vira **uma** linha com
+      a quantidade somada, nunca duas.
+- [ ] **Como técnico ou observador:** nenhum botão de Regra/Serviço e nenhum `⚙`; a
+      consulta do plano continua inteira.
+- [ ] **Rótulos:** a etiqueta de periodicidade diz MENSAL/TRIM./SEM./ANUAL — nunca
+      "TRIMES" ou "SEMEST". As linhas de cobertura não têm etiqueta (tipo é dado do
+      usuário e não tem rótulo curto que caiba).
+- [ ] **Consequência a acompanhar:** criar a primeira regra por tipo faz o cálculo de
+      demanda de `/equipes` contar essa regra para os 175 equipamentos, e não só para o
+      tipo — aquele módulo ainda não olha `aplica_a`. Correção de outro módulo, registrada.
