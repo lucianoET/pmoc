@@ -2468,3 +2468,42 @@ oferece.
       no banco muda o número aqui. Não há cópia dos intervalos de `/refrigeracao`.
 - [ ] **Tarefa com periodicidade que não converte** fica **fora** da conta e é contada
       num aviso — nunca entra com um número suposto.
+
+## Acervo de documentos — normas, manuais, formulários e conceitos (31/08/2026)
+
+Migrações `52_documentos_acervo.sql` e `53_documentos_seed.sql`, **aplicadas em
+produção em 31/08/2026** e conferidas: 20 normas em `pred_normas` (predial 9,
+refrigeração 6, geral 3, elétrica 2) e 18 linhas em `cmasm_documentos`
+(13 conceitos, 5 formulários, 0 manuais).
+
+- [ ] **Sem a migração 52:** o botão "Documentos" **não existe** na barra — não é
+      escondido por CSS, é injetado em runtime e a injeção não acontece. O resto do
+      módulo funciona igual.
+- [ ] **Com as migrações:** o botão aparece como sexto item da barra; a página abre
+      com quatro contadores (Normas, Manuais, Formulários, Conceitos).
+- [ ] **Chips:** "Tudo" mostra tudo agrupado por categoria, com cabeçalho e contagem;
+      clicar num chip filtra e **some com os cabeçalhos** (o chip aceso já diz a
+      categoria).
+- [ ] **Busca:** digitar `17037` acha a NBR sem o prefixo; `climatizados` acha com e
+      sem acento; `abnt` acha pelo órgão; `refrigeracao` acha pelo módulo. O foco e o
+      cursor do campo **não se perdem** ao digitar — só o corpo da lista é redesenhado.
+- [ ] **Três estados de link:** NR-10 e NR-35 abrem (`abrir`, verde, conferidos em
+      31/08/2026); as duas leis mostram `abrir · não conferido`; as NBR mostram
+      `sem link`. Norma ABNT é paga e não tem endereço oficial gratuito — o verbete
+      "Onde se consulta uma norma ABNT" explica e linka o catálogo.
+- [ ] **Manuais vazio:** o chip Manuais mostra 0 e a tela explica que manual é do
+      fabricante e do modelo, que o cadastro tem `manual_url` por equipamento
+      (1 preenchido em 175) e como anexar um manual de modelo.
+- [ ] **Cadastro (admin/gestor):** o botão "Documento" abre a gaveta; a categoria
+      oferece **apenas** manual, formulário e conceito — norma não se cadastra aqui.
+      Um link que não comece com `http://` ou `https://` é recusado na tela.
+- [ ] **"Link conferido agora"** só grava data se houver link. Marcar sem endereço
+      não pode gravar uma data sobre um endereço que não existe.
+- [ ] **Como técnico ou observador:** nenhum botão de cadastro e nenhum `⚙` nas linhas;
+      a consulta continua inteira (a leitura é aberta, como no resto da plataforma).
+- [ ] **Norma não se edita por esta tela:** as linhas de norma não têm `⚙`. A tabela é
+      a mesma que `/predial` lê, e uma segunda porta de escrita sobre ela é o que se
+      evita aqui.
+- [ ] **Achado de cadastro a resolver:** a tarefa semestral de QAI em `plano_tarefas`
+      ainda cita **RE 09/2003 da ANVISA**, substituída pela **NBR 17037:2023**.
+      Corrigir a citação é trabalho de cadastro, não de código.

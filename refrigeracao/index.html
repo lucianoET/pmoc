@@ -1357,6 +1357,16 @@ document.addEventListener('DOMContentLoaded', function() {
          como page-ficha e page-os-detalhe já são. -->
     <div class="page" id="page-estoque"></div>
 
+    <!-- ══ PAGE: DOCUMENTOS (acervo: normas, manuais, formulários, conceitos) ══ -->
+    <!-- Nasce vazia, como page-estoque: só é preenchida por
+         renderDocumentos(). Nenhuma classe nova e nenhum CSS próprio —
+         reusa .kpi-row/.sec-head/.orc-item/.ds, que já existem
+         (D-8rz-04/D-cf8-20). O botão de navegação NÃO é escrito na
+         marcação: é injetado em runtime por docInjectNav(), como o do
+         Estoque (D-6wy-07), de modo que sem a migração 52 não existe
+         botão nenhum — estrutural, não escondido por CSS. -->
+    <div class="page" id="page-documentos"></div>
+
     <!-- ══ PAGE: FICHA — página inteira em >=1024px (quick-260823-92t) ══ -->
     <!-- D-92t-03: sexta .page, irmã das outras, nunca um segundo HTML.
          D-92t-04: identificadores fh-*/ficha-* — nenhum dh-* é duplicado.
@@ -2053,6 +2063,7 @@ function navTo(page, btn){
   if(page==='alert') renderAlerts();
   if(page==='dash') renderDash();
   if(page==='estoque') renderEstoque();
+  if(page==='documentos') renderDocumentos();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -3190,6 +3201,364 @@ function estAlertaHtml(){
 ═══════════════════════════════════════════════════════════ */
 function openDrawer(){ el('drawer').classList.add('open'); document.body.style.overflow='hidden'; }
 function closeDrawer(){ MAN_EDIT_ID = null; DETALHE_ABERTO = null; el('drawer').classList.remove('open'); document.body.style.overflow=''; }
+
+/* ══════════════════════════════════════════════════════════════════
+   DOCUMENTOS — acervo de normas, manuais, formulários e conceitos
+   (migrações 52 e 53)
+
+   A plataforma APLICA norma o tempo todo e não tinha onde consultá-la:
+   `plano_tarefas.norma_ref` guarda "NBR 17037" como texto solto, e o
+   código sozinho não diz o título, não diz o órgão e não abre em lugar
+   nenhum.
+
+   DUAS TABELAS, UMA FONTE POR TIPO DE COISA. Norma vem de `pred_normas`,
+   que já existia com 10 linhas desde a migração 18 — criar uma segunda
+   lista de normas aqui produziria duas fontes de verdade para "que norma
+   se aplica", e as duas divergiriam no primeiro código atualizado só de
+   um lado. Manual, formulário e conceito são objetos novos e vêm de
+   `cmasm_documentos`, cujo `check` de categoria não aceita 'norma' — o
+   Postgres impede a gravação no lugar errado, não a disciplina de quem
+   escreve.
+
+   SONDA PRÓPRIA (DOC_OK), a oitava, pela lição já paga em
+   D-uyz-13/D-cf8-13/D-6wy-08/D-500-04/D-2wq-06. Ao contrário de EST_OK e
+   INSP_OK, esta NÃO mora dentro do recorte "fluxo da OS interna": nada
+   lá dentro referencia DOC_OK, então declará-la aqui não produz
+   ReferenceError em sandbox nenhum. O acervo também não tem nada a ver
+   com o fluxo da OS.
+
+   Sem as migrações a tela se comporta byte a byte como antes: sem botão,
+   sem página, sem consulta. Só a sonda roda, e ela é uma leitura só.
+══════════════════════════════════════════════════════════════════ */
+var DOC_OK = false;      // cmasm_documentos existe (migração 52)
+var DOC_NORMAS_OK = false; // pred_normas tem a coluna `modulo` (migração 52)
+var DOCUMENTOS = [];
+var DOC_NORMAS = [];
+var DOC_FILTRO = 'tudo';
+var DOC_BUSCA = '';
+var DOC_EDIT_ID = null;
+
+/* Duas leituras, duas perguntas — e não uma sonda só. As duas tabelas
+   chegam pela MESMA migração, mas `pred_normas` existe desde a 17 em
+   qualquer banco: se um dia a 52 rodar pela metade, a página ainda
+   mostra as normas que já estavam lá em vez de sumir inteira. */
+async function docSondarEsquema(){
+  var a = await supa.from('cmasm_documentos').select('id').limit(1);
+  DOC_OK = !a.error;
+  var b = await supa.from('pred_normas').select('id,modulo').limit(1);
+  DOC_NORMAS_OK = !b.error;
+  return DOC_OK || DOC_NORMAS_OK;
+}
+
+/* D-6wy-07: injetado em runtime, nunca escrito na marcação — dois gates
+   afirmam exatamente cinco .nav-btn em #bottom-nav, e "sem migração, sem
+   botão" tem de ser estrutural. */
+function docInjectNav(){
+  if (!DOC_OK && !DOC_NORMAS_OK) return;
+  if (el('nav-documentos')) return;
+  var nav = el('bottom-nav'); if (!nav) return;
+  var btn = document.createElement('button');
+  btn.className = 'nav-btn';
+  btn.id = 'nav-documentos';
+  btn.innerHTML = '<i class="fas fa-book" aria-hidden="true"></i>Documentos';
+  btn.onclick = function(){ navTo('documentos', btn); };
+  nav.appendChild(btn);
+}
+
+async function carregarDocumentos(){
+  if (DOC_OK) {
+    try{
+      var r = await supa.from('cmasm_documentos').select('*').eq('ativo', true).order('categoria').order('ordem').order('titulo');
+      if (r.error) throw r.error;
+      DOCUMENTOS = r.data || [];
+    }catch(e){ console.warn('carregarDocumentos', e); }
+  }
+  if (DOC_NORMAS_OK) {
+    try{
+      var n = await supa.from('pred_normas').select('*').eq('ativo', true).order('codigo');
+      if (n.error) throw n.error;
+      DOC_NORMAS = n.data || [];
+    }catch(e){ console.warn('carregarNormas', e); }
+  }
+}
+
+/* ── núcleo puro: sem API de navegador nenhuma ── */
+
+/* Uma norma e um documento são linhas de tabelas diferentes, com colunas
+   diferentes. Esta função é a ÚNICA tradução das duas para a forma que a
+   tela desenha — sem ela, cada seção da página teria de saber de qual
+   tabela veio cada campo, e a busca teria de ser escrita duas vezes. */
+function docNormalizar(linha, categoria){
+  var ehNorma = categoria === 'norma';
+  return {
+    id: linha.id,
+    categoria: categoria,
+    codigo: ehNorma ? (linha.codigo || '') : '',
+    titulo: linha.titulo || '',
+    fonte: ehNorma ? (linha.orgao || '') : (linha.fonte || ''),
+    ano: ehNorma ? (linha.ano || null) : null,
+    modulo: linha.modulo || '',
+    url: linha.url || '',
+    urlConferido: linha.url_conferido || '',
+    onde: ehNorma ? '' : (linha.onde || ''),
+    resumo: (ehNorma ? linha.descricao : linha.resumo) || ''
+  };
+}
+
+function docAcervo(documentos, normas){
+  var out = (normas||[]).map(function(n){ return docNormalizar(n, 'norma'); });
+  (documentos||[]).forEach(function(d){ out.push(docNormalizar(d, d.categoria)); });
+  return out;
+}
+
+/* `curto` é escrito, não derivado: cortar o rótulo em N letras produz
+   palavra quebrada ("FORMUL", "CONCEI") e, pior, deixa a etiqueta de UMA
+   norma dizendo "NORMAS" no plural. Quatro palavras escritas custam menos
+   que um slice que erra as quatro. */
+var DOC_CATEGORIAS = [
+  { id: 'norma',      rotulo: 'Normas',      curto: 'NORMA' },
+  { id: 'manual',     rotulo: 'Manuais',     curto: 'MANUAL' },
+  { id: 'formulario', rotulo: 'Formulários', curto: 'FORM.' },
+  { id: 'conceito',   rotulo: 'Conceitos',   curto: 'CONC.' }
+];
+
+function docCurtoCategoria(id){
+  var c = DOC_CATEGORIAS.find(function(x){ return x.id === id; });
+  return c ? c.curto : String(id || '').toUpperCase();
+}
+
+function docRotuloCategoria(id){
+  var c = DOC_CATEGORIAS.find(function(x){ return x.id === id; });
+  return c ? c.rotulo : id;
+}
+
+/* Busca sobre TODOS os campos de texto do item, sem acento e sem caixa —
+   quem procura "climatizacao" tem de achar "climatização", e quem digita
+   "17037" tem de achar a norma pelo número sem saber o prefixo. */
+function docCasaBusca(item, termo){
+  var t = tabNormalizar(termo || '');
+  if (!t) return true;
+  var alvo = [item.codigo, item.titulo, item.fonte, item.modulo, item.onde, item.resumo,
+              docRotuloCategoria(item.categoria), item.ano].join(' ');
+  return tabNormalizar(alvo).indexOf(t) >= 0;
+}
+
+function docFiltrar(acervo, categoria, termo){
+  return (acervo||[]).filter(function(i){
+    if (categoria && categoria !== 'tudo' && i.categoria !== categoria) return false;
+    return docCasaBusca(i, termo);
+  });
+}
+
+function docContarPorCategoria(acervo){
+  var m = {};
+  DOC_CATEGORIAS.forEach(function(c){ m[c.id] = 0; });
+  (acervo||[]).forEach(function(i){ if (m[i.categoria] !== undefined) m[i.categoria]++; });
+  return m;
+}
+
+/* Três estados, não dois: link conferido, link nunca conferido e sem
+   link. O do meio existe porque um link de norma apodrece em silêncio —
+   o órgão reorganiza o portal e a página passa a dizer "não encontrado"
+   sem que nada no sistema perceba. Dizer "conferido em 31/08/2026" é
+   diferente de dizer "funciona", e é o que dá para afirmar. */
+function docEstadoLink(item){
+  if (!item.url) return 'sem';
+  return item.urlConferido ? 'conferido' : 'nao-conferido';
+}
+
+/* ── desenho ── */
+
+function renderDocumentos(){
+  var acervo = docAcervo(DOCUMENTOS, DOC_NORMAS);
+  var contagem = docContarPorCategoria(acervo);
+  var lista = docFiltrar(acervo, DOC_FILTRO, DOC_BUSCA);
+  var html = '';
+
+  if (!DOC_OK && !DOC_NORMAS_OK) {
+    el('page-documentos').innerHTML =
+      '<div class="empty"><i class="fas fa-book"></i><p>Acervo indisponível.</p>' +
+      '<p style="font-size:12px;opacity:.8">Falta aplicar a migração 52 (<code>cmasm_documentos</code>). ' +
+      'O resto do módulo continua funcionando normalmente.</p></div>';
+    return;
+  }
+
+  html += '<div class="kpi-row">' +
+    DOC_CATEGORIAS.map(function(c){
+      return '<div class="kpi-card"><div class="kpi-label">'+c.rotulo+'</div>' +
+             '<div class="kpi-val">'+contagem[c.id]+'</div></div>';
+    }).join('') + '</div>';
+
+  html += '<div class="sec-head"><span class="sec-title">Documentos</span>' +
+    '<span class="sec-count">'+lista.length+'</span>' +
+    (podeEditarCadastro() ? '<button class="btn-sm" onclick="docAbrirForm()"><i class="fas fa-plus mr1" aria-hidden="true"></i>Documento</button>' : '') +
+    '</div>';
+
+  html += '<div class="chips" id="doc-chips">' +
+    docChipHtml('tudo', 'Tudo', acervo.length) +
+    DOC_CATEGORIAS.map(function(c){ return docChipHtml(c.id, c.rotulo, contagem[c.id]); }).join('') +
+    '</div>';
+
+  html += '<div class="ds"><input class="fgi" id="doc-busca" placeholder="Buscar por código, título, órgão, módulo ou texto…" ' +
+    'value="'+esc(DOC_BUSCA)+'" oninput="docAoBuscar(this.value)"/></div>';
+
+  if (!lista.length) {
+    html += '<div class="empty"><i class="fas fa-search"></i><p>Nada encontrado.</p>' +
+      (DOC_FILTRO === 'manual' && !DOC_BUSCA
+        ? '<p style="font-size:12px;opacity:.8">Nenhum manual no acervo. Manual é do fabricante e do modelo — ' +
+          'o cadastro tem o campo <code>manual_url</code> por equipamento, hoje preenchido em 1 dos 175. ' +
+          'Anexe um manual de modelo aqui pelo botão Documento.</p>'
+        : '') +
+      '</div>';
+  } else {
+    html += '<div id="doc-lista">' + docListaHtml(lista) + '</div>';
+  }
+  el('page-documentos').innerHTML = html;
+}
+
+/* O número entra no próprio rótulo, não numa classe nova: .chip-n não
+   existe nesta folha e criar classe aqui quebraria a comparação byte a
+   byte do CSS de celular (D-cf8-20). */
+/* Em "Tudo" a lista ganha um cabeçalho por categoria: sem ele, 20 itens
+   de quatro naturezas diferentes viram uma parede única e a fronteira
+   entre norma e conceito só aparece quando o leitor repara na etiqueta.
+   Filtrada numa categoria só, o cabeçalho seria redundante com o chip
+   aceso — então não aparece. Reusa .sec-head/.sec-title, nada novo. */
+function docListaHtml(lista){
+  if (DOC_FILTRO !== 'tudo') return lista.map(docItemHtml).join('');
+  var out = '';
+  DOC_CATEGORIAS.forEach(function(c){
+    var doGrupo = lista.filter(function(i){ return i.categoria === c.id; });
+    if (!doGrupo.length) return;
+    out += '<div class="sec-head"><span class="sec-title">'+esc(c.rotulo)+'</span>' +
+           '<span class="sec-count">'+doGrupo.length+'</span></div>' +
+           doGrupo.map(docItemHtml).join('');
+  });
+  return out;
+}
+
+function docChipHtml(id, rotulo, n){
+  return '<button class="chip'+(DOC_FILTRO===id?' active':'')+'" onclick="docFiltrarPor(\'' + id + '\')">' +
+    esc(rotulo)+' ('+n+')</button>';
+}
+
+function docItemHtml(i){
+  var estado = docEstadoLink(i);
+  // Reusa .orc-tipo, as duas classes de cor que já existem: SERVICO para
+  // o que se lê (norma, conceito), MATERIAL para o que se usa em campo
+  // (manual, formulário). Nenhuma classe nova (D-cf8-20).
+  var classeTipo = (i.categoria==='norma' || i.categoria==='conceito') ? 'SERVICO' : 'MATERIAL';
+  var titulo = i.codigo ? (i.codigo + ' — ' + i.titulo) : i.titulo;
+  var meta = [];
+  if (i.fonte) meta.push(esc(i.fonte));
+  if (i.ano) meta.push(String(i.ano));
+  if (i.modulo) meta.push(esc(i.modulo));
+  if (i.onde) meta.push('<em>'+esc(i.onde)+'</em>');
+
+  var seguro = linkSeguro(i.url); // D-q57-09: url gravada que não passe vira texto, nunca âncora
+  var link = '';
+  if (seguro && estado === 'conferido') {
+    link = '<a href="'+esc(seguro)+'" target="_blank" rel="noopener" class="pill pill-ok">abrir</a>';
+  } else if (seguro) {
+    link = '<a href="'+esc(seguro)+'" target="_blank" rel="noopener" class="pill">abrir · não conferido</a>';
+  } else if (i.categoria === 'norma') {
+    link = '<span class="pill">sem link</span>';
+  }
+
+  return '<div class="orc-item" id="doc-row-'+i.categoria+'-'+i.id+'">' +
+    '<span class="orc-tipo '+classeTipo+'">'+esc(docCurtoCategoria(i.categoria))+'</span>' +
+    '<div class="orc-desc"><strong>'+esc(titulo)+'</strong>' +
+    (meta.length ? '<div style="font-size:11px;opacity:.75;margin-top:2px">'+meta.join(' · ')+'</div>' : '') +
+    (i.resumo ? '<div style="font-size:12px;opacity:.9;margin-top:4px">'+esc(i.resumo)+'</div>' : '') +
+    '</div>' +
+    '<span class="orc-val">'+link+'</span>' +
+    (i.categoria !== 'norma' && podeEditarCadastro()
+      ? '<button class="btn-sm" onclick="docAbrirForm('+i.id+')" title="Editar" aria-label="Editar"><i class="fas fa-cog" aria-hidden="true"></i></button>'
+      : '') +
+    '</div>';
+}
+
+/* Redesenhar a página inteira a cada tecla mataria o foco e o cursor do
+   campo de busca — a lição que Máquinas pagou ao partir renderMateriais()
+   em cabeçalho e corpo. Aqui só o corpo da lista é reescrito. */
+function docAoBuscar(v){
+  DOC_BUSCA = v;
+  var alvo = el('doc-lista');
+  var lista = docFiltrar(docAcervo(DOCUMENTOS, DOC_NORMAS), DOC_FILTRO, DOC_BUSCA);
+  if (!alvo) { renderDocumentos(); var c = el('doc-busca'); if (c) { c.focus(); c.setSelectionRange(v.length, v.length); } return; }
+  alvo.innerHTML = docListaHtml(lista);
+  var cont = document.querySelector('#page-documentos .sec-count');
+  if (cont) cont.textContent = lista.length;
+}
+
+function docFiltrarPor(cat){
+  DOC_FILTRO = cat;
+  renderDocumentos();
+}
+
+/* ── cadastro (admin/gestor) ──
+   Só `cmasm_documentos` é escrita por esta tela. Norma NÃO se edita
+   aqui: é a fonte que /predial também lê, e uma segunda porta de escrita
+   sobre a mesma tabela é exatamente o que este projeto evita. */
+function docAbrirForm(id){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar documento','error'); return; }
+  var d = id ? DOCUMENTOS.find(function(x){ return x.id===id; }) : null;
+  DOC_EDIT_ID = id || null;
+  el('dh-id').textContent = id ? 'Editar documento · #'+id : 'Novo documento';
+  el('dh-local').textContent = '';
+  el('dh-predio').textContent = '';
+  el('dh-pills').innerHTML = '';
+  var cats = DOC_CATEGORIAS.filter(function(c){ return c.id !== 'norma'; });
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-book mr1" aria-hidden="true"></i>Documento</div><div class="fg2">' +
+    '<div><label class="fgl">Categoria</label><select class="fgs" id="doc-categoria">' +
+      cats.map(function(c){ return '<option value="'+c.id+'"'+(d&&d.categoria===c.id?' selected':'')+'>'+c.rotulo+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div><label class="fgl">Título</label><input class="fgi" id="doc-titulo" value="'+esc(d?d.titulo:'')+'"/></div>' +
+    '<div><label class="fgl">Fonte / fabricante</label><input class="fgi" id="doc-fonte" value="'+esc(d&&d.fonte?d.fonte:'')+'"/></div>' +
+    '<div><label class="fgl">Módulo</label><input class="fgi" id="doc-modulo" value="'+esc(d&&d.modulo?d.modulo:'')+'" placeholder="refrigeracao, eletrica, geral…"/></div>' +
+    '<div><label class="fgl">Link (http/https)</label><input class="fgi" id="doc-url" value="'+esc(d&&d.url?d.url:'')+'"/></div>' +
+    '<div><label class="fgl">Onde encontrar (sem link)</label><input class="fgi" id="doc-onde" value="'+esc(d&&d.onde?d.onde:'')+'"/></div>' +
+    '<div class="fg-full"><label class="fgt">Resumo</label><textarea class="fgi" id="doc-resumo">'+esc(d&&d.resumo?d.resumo:'')+'</textarea></div>' +
+    '</div>' +
+    '<div class="chart-note">Marcar o link como conferido grava a data de hoje. Só marque depois de abrir o endereço e ver a página responder — um link marcado sem conferência mente com a autoridade de uma data.</div>' +
+    '<div><label class="fgl"><input type="checkbox" id="doc-conferido"'+(d&&d.url_conferido?' checked':'')+'/> Link conferido agora</label></div>' +
+    '</div>';
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
+    '<button class="btn-primary" onclick="docSalvar()"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar</button>';
+  openDrawer();
+}
+
+async function docSalvar(){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar documento','error'); return; } // guarda na ação, não só no botão (D-l7n-03)
+  var titulo = (val('doc-titulo')||'').trim();
+  if (!titulo) { showToast('Informe o título','error'); return; }
+  var url = (val('doc-url')||'').trim();
+  if (url && !linkSeguro(url)) { showToast('O link precisa começar com http:// ou https://','error'); return; }
+  var marcado = el('doc-conferido') && el('doc-conferido').checked;
+  var patch = {
+    categoria: val('doc-categoria'),
+    titulo: titulo,
+    fonte: (val('doc-fonte')||'').trim() || null,
+    modulo: (val('doc-modulo')||'').trim() || null,
+    url: url || null,
+    onde: (val('doc-onde')||'').trim() || null,
+    resumo: (val('doc-resumo')||'').trim() || null,
+    // Sem link não há o que conferir: a data seria uma afirmação sobre
+    // um endereço que não existe.
+    url_conferido: (url && marcado) ? today() : null
+  };
+  var r = DOC_EDIT_ID
+    ? await supa.from('cmasm_documentos').update(patch).eq('id', DOC_EDIT_ID)
+    : await supa.from('cmasm_documentos').insert(patch);
+  if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
+  DOC_EDIT_ID = null;
+  closeDrawer();
+  await carregarDocumentos();
+  renderDocumentos();
+  showToast('Documento salvo','ok');
+}
 
 /* Um campo de link vira âncora SÓ quando linkSeguro devolver algo — valor
    gravado que não passe (ex: javascript:, ou herança de um cadastro antigo)
@@ -6227,12 +6596,15 @@ async function acessoLivre() {
     await inspSondarEsquema();
     await estSondarEsquema();
     estInjectNav();
+    await docSondarEsquema();
+    docInjectNav();
     osInjectChipsExecutor();
     await carregarItensOS();
     await carregarComentarios();
     await carregarArp();
     await carregarComposicaoArp();
     await carregarMateriais();
+    await carregarDocumentos();
     // Remove tela de login
     var lw = document.getElementById('login-mobile');
     if (lw) lw.remove();
@@ -6270,12 +6642,15 @@ async function initAppOnce(){
   await inspSondarEsquema();
   await estSondarEsquema();
   estInjectNav();
+  await docSondarEsquema();
+  docInjectNav();
   osInjectChipsExecutor();
   await carregarItensOS();
   await carregarComentarios();
   await carregarArp();
   await carregarComposicaoArp();
   await carregarMateriais();
+  await carregarDocumentos();
   await carregarPerfil();
   setupRealtime();
   renderDash();
