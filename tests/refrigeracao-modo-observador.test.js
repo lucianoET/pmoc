@@ -179,6 +179,12 @@ function carregarSandbox() {
     // isso o corpo de acessoLivre lança ReferenceError dentro do próprio
     // try e o modo observador nunca chega a ligar.
     docSondarEsquema() { return Promise.resolve(); },
+    // 260901-plano: acessoLivre() ganhou a sonda e a carga do plano de
+    // manutenção. PLAN_OK NÃO entra aqui de propósito — ela é declarada
+    // ao lado de checklistDaOS, dentro do recorte A, logo já chega
+    // declarada e falsa; só as duas assíncronas ficam fora dos recortes.
+    planoSondarEsquema() { return Promise.resolve(); },
+    planoCarregar() { return Promise.resolve(); },
     docInjectNav() {},
     carregarDocumentos() { return Promise.resolve(); },
     renderDash() {},

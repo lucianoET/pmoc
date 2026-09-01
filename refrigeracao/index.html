@@ -1331,9 +1331,16 @@ document.addEventListener('DOMContentLoaded', function() {
         <button class="chip" onclick="setPmocChip(this,'sem-hist')">Sem histórico</button>
         <button class="chip" onclick="setPmocChip(this,'critica')">Crítica</button>
       </div>
-      <div class="seg-toggle" id="pmoc-seletor">
+      <!-- Três segmentos: a classe `tres` já existia na folha desde a OS
+           unificada e tinha ficado sem consumidor (D-cf8-21) — usá-la aqui
+           não acrescenta uma linha de CSS. Plano é a terceira leitura do
+           MESMO dado: por equipamento (lista), por data (calendário) e por
+           regra (plano). Não é uma sétima aba porque dois gates afirmam
+           exatamente cinco .nav-btn, e porque o plano É o PMOC. -->
+      <div class="seg-toggle tres" id="pmoc-seletor">
         <button class="seg-btn active" id="seg-pmoc-lista" onclick="pmocSetVista('lista')" title="Lista por equipamento" aria-label="Lista por equipamento"><i class="fas fa-list mr1" aria-hidden="true"></i>Lista</button>
         <button class="seg-btn" id="seg-pmoc-agenda" onclick="pmocSetVista('agenda')" title="Calendário de OS e vencimentos" aria-label="Calendário de OS e vencimentos"><i class="fas fa-calendar-alt mr1" aria-hidden="true"></i>Calendário</button>
+        <button class="seg-btn" id="seg-pmoc-plano" onclick="pmocSetVista('plano')" title="Regras do plano e serviços padrão" aria-label="Regras do plano e serviços padrão"><i class="fas fa-clipboard-list mr1" aria-hidden="true"></i>Plano</button>
       </div>
       <div class="sec-head" id="pmoc-sec-head">
         <span class="sec-title">Controle PMOC</span>
@@ -1342,6 +1349,8 @@ document.addEventListener('DOMContentLoaded', function() {
       <div id="pmoc-list"></div>
       <!-- Nasce vazia; só renderAgenda() a preenche (mesma ideia de page-estoque). -->
       <div id="pmoc-agenda" style="display:none"></div>
+      <!-- Idem: só renderPlanoManutencao() a preenche. -->
+      <div id="pmoc-plano" style="display:none"></div>
     </div>
 
     <!-- ══ PAGE: ALERTAS ══ -->
@@ -2677,21 +2686,30 @@ function renderPmoc(){
 var PMOC_VISTA = 'lista';
 var AGENDA_ANO = null, AGENDA_MES = null;
 
+var PMOC_VISTAS = ['lista', 'agenda', 'plano'];
 function pmocSetVista(v){
-  PMOC_VISTA = (v==='agenda') ? 'agenda' : 'lista';
-  var bl = el('seg-pmoc-lista'), ba = el('seg-pmoc-agenda');
-  if (bl) { bl.className = 'seg-btn'+(PMOC_VISTA==='lista'?' active':''); bl.setAttribute('aria-pressed', PMOC_VISTA==='lista'); }
-  if (ba) { ba.className = 'seg-btn'+(PMOC_VISTA==='agenda'?' active':''); ba.setAttribute('aria-pressed', PMOC_VISTA==='agenda'); }
-  var lista = el('pmoc-list'), agenda = el('pmoc-agenda'), chips = el('pmoc-chips'), head = el('pmoc-sec-head');
-  var naAgenda = (PMOC_VISTA==='agenda');
-  if (lista) lista.style.display = naAgenda ? 'none' : '';
-  if (agenda) agenda.style.display = naAgenda ? '' : 'none';
-  /* Os chips filtram a LISTA por equipamento; no calendário eles não
-     teriam o que filtrar (o eixo é a data) e ficariam mentindo sobre o
-     que está sendo mostrado. */
-  if (chips) chips.style.display = naAgenda ? 'none' : '';
-  if (head) head.style.display = naAgenda ? 'none' : '';
-  if (naAgenda) renderAgenda(); else renderPmoc();
+  PMOC_VISTA = PMOC_VISTAS.indexOf(v) >= 0 ? v : 'lista';
+  /* Três botões e três painéis pela MESMA lista: com dois era um par de
+     ifs, com três seriam seis, e o quarto segmento traria o primeiro
+     esquecido. */
+  PMOC_VISTAS.forEach(function(nome){
+    var btn = el('seg-pmoc-'+nome);
+    if (btn) { btn.className = 'seg-btn'+(PMOC_VISTA===nome?' active':''); btn.setAttribute('aria-pressed', PMOC_VISTA===nome); }
+  });
+  var painel = { lista: el('pmoc-list'), agenda: el('pmoc-agenda'), plano: el('pmoc-plano') };
+  PMOC_VISTAS.forEach(function(nome){
+    if (painel[nome]) painel[nome].style.display = (PMOC_VISTA===nome) ? '' : 'none';
+  });
+  /* Os chips filtram a LISTA por equipamento; no calendário e no plano
+     eles não teriam o que filtrar (o eixo é a data e a regra) e ficariam
+     mentindo sobre o que está sendo mostrado. */
+  var chips = el('pmoc-chips'), head = el('pmoc-sec-head');
+  var naLista = (PMOC_VISTA==='lista');
+  if (chips) chips.style.display = naLista ? '' : 'none';
+  if (head) head.style.display = naLista ? '' : 'none';
+  if (PMOC_VISTA==='agenda') renderAgenda();
+  else if (PMOC_VISTA==='plano') renderPlanoManutencao();
+  else renderPmoc();
 }
 
 function agendaHoje(){ var d = new Date(); return {ano:d.getFullYear(), mes:d.getMonth()}; }
@@ -3201,6 +3219,545 @@ function estAlertaHtml(){
 ═══════════════════════════════════════════════════════════ */
 function openDrawer(){ el('drawer').classList.add('open'); document.body.style.overflow='hidden'; }
 function closeDrawer(){ MAN_EDIT_ID = null; DETALHE_ABERTO = null; el('drawer').classList.remove('open'); document.body.style.overflow=''; }
+
+/* ══════════════════════════════════════════════════════════════════
+   PLANO DE MANUTENÇÃO — serviço padrão, material por serviço e regra
+   por tipo de equipamento (migrações 54 e 55)
+
+   O DEFEITO QUE ISTO CONSERTA: `checklistDaOS` termina em
+   `tabela[tipoEquip] || tabela['SPLIT']`, e `CHECKLIST` tem quatro
+   chaves para um parque de SEIS tipos — CENTRAL (6 máquinas, entre elas
+   as centrais do F21) e CHILLER (1) não recebem checklist vazio, recebem
+   O CHECKLIST DO SPLIT, em silêncio. Ao mesmo tempo `plano_tarefas` — o
+   plano REAL, 9 tarefas da NBR 17037, no banco desde a migração 04 —
+   não era lido por nenhuma tela deste módulo. O plano de verdade estava
+   no banco e a tela usava uma constante.
+
+   UMA SONDA SÓ (PLAN_OK), a nona, e ela pede as COLUNAS NOVAS
+   (`servico_id`, `aplica_modelo`): `plano_tarefas` existe em qualquer
+   banco desde a 04, então perguntar pela tabela não distinguiria nada —
+   é a coluna que a migração 54 acrescenta. `servicos` vem da mesma
+   migração, por isso não precisa de sonda própria, ao contrário do par
+   DOC_OK/DOC_NORMAS_OK, onde as duas tabelas nasceram em migrações
+   diferentes.
+
+   SEM A MIGRAÇÃO A TELA É BYTE A BYTE A DE HOJE: sem o terceiro
+   segmento, sem página de plano, e `checklistDaOS` continua caindo no
+   `|| tabela['SPLIT']`. Corrigir esse fallback com a sonda desligada
+   mudaria o comportamento publicado antes da migração, que é
+   exatamente o que estas sondas existem para impedir (D-cf8-25).
+══════════════════════════════════════════════════════════════════ */
+var PLANO_TAREFAS = [];
+var SERVICOS = [];
+var SERVICO_MATERIAIS = [];
+var PLANO_TAREFA_EDIT_ID = null;
+var PLANO_SERVICO_EDIT_ID = null;
+
+async function planoSondarEsquema(){
+  var r = await supa.from('plano_tarefas').select('id,servico_id,aplica_modelo').limit(1);
+  PLAN_OK = !r.error;
+  return PLAN_OK;
+}
+
+async function planoCarregar(){
+  if (!PLAN_OK) { PLANO_TAREFAS = []; SERVICOS = []; SERVICO_MATERIAIS = []; return; }
+  try{
+    var t = await supa.from('plano_tarefas').select('*').eq('ativo', true).order('ordem');
+    if (t.error) throw t.error;
+    PLANO_TAREFAS = t.data || [];
+    var s = await supa.from('servicos').select('*').eq('ativo', true).order('ordem');
+    if (s.error) throw s.error;
+    SERVICOS = s.data || [];
+    var m = await supa.from('servico_materiais').select('*');
+    if (m.error) throw m.error;
+    SERVICO_MATERIAIS = m.data || [];
+  }catch(e){ console.warn('planoCarregar', e); }
+}
+
+/* ── núcleo puro: sem API de navegador nenhuma ── */
+
+var PLANO_TODOS = 'TODOS';
+
+/* A regra de escopo, num ponto só. Três consumidores — o checklist da
+   OS, a contagem de alcance da tela e a lista de tipos sem regra —, e a
+   razão de ela existir uma vez é que uma cópia divergente aqui faria a
+   tela contar um alcance que a OS não usa. */
+function planoAplicaAoEquip(tarefa, equip){
+  if (!tarefa || !equip) return false;
+  var escopo = String(tarefa.aplica_a || PLANO_TODOS).trim().toUpperCase();
+  if (escopo !== PLANO_TODOS) {
+    if (String(equip.tipo || '').trim().toUpperCase() !== escopo) return false;
+  }
+  // Modelo é refinamento: nulo/vazio não restringe. Comparado só quando
+  // a regra pede — o parque tem modelo em um terço das linhas, e exigir
+  // igualdade com nulo tiraria a regra de todo o resto.
+  var modelo = String(tarefa.aplica_modelo || '').trim();
+  if (!modelo) return true;
+  return String(equip.modelo || '').trim().toUpperCase() === modelo.toUpperCase();
+}
+
+function planoParaEquip(tarefas, equip){
+  return (tarefas || []).filter(function(t){ return planoAplicaAoEquip(t, equip); });
+}
+
+/* Quantos equipamentos a regra alcança HOJE. É o que impede uma regra
+   por modelo de parecer mais do que é: alcance zero aparece como zero.
+   Conta só instalado — máquina removida ou baixada não recebe plano. */
+function planoAlcance(tarefa, equipamentos){
+  return (equipamentos || []).filter(function(e){
+    return equipInstalado(e) && planoAplicaAoEquip(tarefa, e);
+  }).length;
+}
+
+function planoRotuloEscopo(tarefa){
+  var escopo = String((tarefa && tarefa.aplica_a) || PLANO_TODOS).trim();
+  var modelo = String((tarefa && tarefa.aplica_modelo) || '').trim();
+  if (modelo) return escopo + ' · ' + modelo;
+  return escopo;
+}
+
+/* Cobertura por tipo: quantos equipamentos e quantas regras alcançam
+   cada tipo do parque.
+
+   A primeira versão disto avisava "tipos SEM REGRA PRÓPRIA", e a
+   renderização mostrou que era um alarme falso: com o plano em pé,
+   NENHUM tipo tem regra própria — os seis seguem as 9 regras TODOS, que
+   é exatamente o certo para a NBR 17037. O aviso disparava sempre,
+   listando SPLIT (103 máquinas, perfeitamente cobertas) ao lado de
+   CHILLER, e um alarme que dispara no estado saudável ensina a ignorar
+   alarme.
+
+   O que responde a pergunta de verdade — "a central tem plano?" — é a
+   CONTAGEM de regras aplicáveis por tipo. Zero regra é a única situação
+   que merece aviso, e essa é real: aquele tipo sai da OS sem checklist
+   nenhum. */
+function planoCoberturaPorTipo(tarefas, equipamentos){
+  var porTipo = {};
+  (equipamentos || []).forEach(function(e){
+    if (!equipInstalado(e)) return;
+    var tipo = String(e.tipo || '').trim();
+    if (!tipo) return;
+    if (!porTipo[tipo]) porTipo[tipo] = { tipo: tipo, equipamentos: 0, exemplo: e };
+    porTipo[tipo].equipamentos++;
+  });
+  return Object.keys(porTipo).sort().map(function(k){
+    var linha = porTipo[k];
+    // Conta sobre um equipamento REAL daquele tipo, não sobre um objeto
+    // montado aqui: é o mesmo caminho que a OS vai percorrer, incluindo
+    // o refinamento por modelo.
+    var proprias = (tarefas || []).filter(function(t){
+      return String(t.aplica_a || PLANO_TODOS).trim().toUpperCase() !== PLANO_TODOS
+          && planoAplicaAoEquip(t, linha.exemplo);
+    }).length;
+    return { tipo: linha.tipo, equipamentos: linha.equipamentos,
+             regras: planoParaEquip(tarefas, linha.exemplo).length, proprias: proprias };
+  });
+}
+
+/* Escrito, não cortado. Ontem o acervo de documentos entregou
+   "FORMUL"/"CONCEI" por um `.slice(0,6)`, e aqui o mesmo atalho
+   produzia "TRIMES" e "SEMEST" — palavra quebrada na etiqueta que
+   deveria dizer de quanto em quanto tempo. Quatro palavras escritas
+   custam menos que um corte que erra três das quatro. */
+var PLANO_PERIOD_CURTO = {
+  'MENSAL': 'MENSAL', 'BIMESTRAL': 'BIMES.', 'TRIMESTRAL': 'TRIM.',
+  'QUADRIMESTRAL': 'QUADR.', 'SEMESTRAL': 'SEM.', 'ANUAL': 'ANUAL'
+};
+function planoPeriodCurto(p){
+  var k = String(p || '').trim().toUpperCase();
+  return PLANO_PERIOD_CURTO[k] || k;
+}
+
+function planoServicoDe(tarefa, servicos){
+  if (!tarefa || !tarefa.servico_id) return null;
+  return (servicos || []).find(function(s){ return s.id === tarefa.servico_id; }) || null;
+}
+
+/* O texto de uma linha do checklist: o nome do serviço quando a tarefa
+   aponta para um, senão a própria descrição — que é o que as 9 tarefas
+   originais têm. Nunca vazio. */
+function planoRotuloTarefa(tarefa, servicos){
+  var s = planoServicoDe(tarefa, servicos);
+  return (s && s.nome) || (tarefa && tarefa.descricao) || '';
+}
+
+/* O checklist da OS de manutenção, derivado do plano REAL. Sem
+   duplicata: duas tarefas de periodicidades diferentes que executam o
+   MESMO serviço viram uma linha só — quem está com a máquina aberta
+   limpa o filtro uma vez, não uma vez por periodicidade. */
+function planoChecklistDe(tarefas, servicos, equip){
+  var vistos = {};
+  var out = [];
+  planoParaEquip(tarefas, equip).forEach(function(t){
+    var rotulo = planoRotuloTarefa(t, servicos);
+    if (!rotulo || vistos[rotulo]) return;
+    vistos[rotulo] = true;
+    out.push(rotulo);
+  });
+  return out;
+}
+
+function planoMateriaisDoServico(servicoId, servicoMateriais, materiais){
+  return (servicoMateriais || [])
+    .filter(function(sm){ return sm.servico_id === servicoId; })
+    .map(function(sm){
+      var m = (materiais || []).find(function(x){ return x.id === sm.material_id; });
+      return { id: sm.id, materialId: sm.material_id, quantidade: sm.quantidade,
+               nome: (m && m.nome) || ('material #' + sm.material_id),
+               unidade: (m && m.unidade) || '', preco: (m && m.preco) || null };
+    });
+}
+
+/* Os materiais que uma OS de manutenção deste equipamento consome pelo
+   plano, consolidados por material — duas tarefas que pedem o mesmo
+   filtro somam a quantidade, e não geram duas linhas que a porta de
+   escrita de `os_itens` teria de resolver depois. */
+function planoMateriaisParaEquip(tarefas, servicos, servicoMateriais, materiais, equip){
+  var soma = {};
+  planoParaEquip(tarefas, equip).forEach(function(t){
+    if (!t.servico_id) return;
+    planoMateriaisDoServico(t.servico_id, servicoMateriais, materiais).forEach(function(m){
+      if (!soma[m.materialId]) soma[m.materialId] = { materialId: m.materialId, nome: m.nome,
+                                                      unidade: m.unidade, preco: m.preco, quantidade: 0 };
+      soma[m.materialId].quantidade += Number(m.quantidade) || 0;
+    });
+  });
+  return Object.keys(soma).map(function(k){ return soma[k]; });
+}
+
+/* ── desenho ── */
+
+function renderPlanoManutencao(){
+  var host = el('pmoc-plano');
+  if (!host) return;
+  if (!PLAN_OK) {
+    host.innerHTML = '<div class="empty"><i class="fas fa-clipboard-list"></i><p>Plano indisponível.</p>' +
+      '<p style="font-size:12px;opacity:.8">Falta aplicar a migração 54. O restante do PMOC continua funcionando ' +
+      'normalmente, e o checklist da OS segue como está hoje.</p></div>';
+    return;
+  }
+
+  var instalados = DATA.filter(equipInstalado);
+  var cobertura = planoCoberturaPorTipo(PLANO_TAREFAS, DATA);
+  var descobertos = cobertura.filter(function(c){ return c.regras === 0; });
+  var html = '';
+
+  html += '<div class="kpi-row">' +
+    '<div class="kpi-card"><div class="kpi-label">Regras do plano</div><div class="kpi-val">'+PLANO_TAREFAS.length+'</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Serviços padrão</div><div class="kpi-val">'+SERVICOS.length+'</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Equipamentos no plano</div><div class="kpi-val">'+instalados.length+'</div></div>' +
+    '</div>';
+
+  if (descobertos.length) {
+    html += '<div class="alert-card" style="border-left-color:#E52207">' +
+      '<div class="alert-icon"><i class="fas fa-times-circle" style="color:#E52207"></i></div>' +
+      '<div class="alert-body"><div class="alert-title">' + descobertos.length + ' tipo(s) sem NENHUMA regra aplicável</div>' +
+      '<div class="alert-sub">' + descobertos.map(function(c){ return esc(c.tipo)+' ('+c.equipamentos+')'; }).join(', ') +
+      ' — a OS desses equipamentos abre com o checklist vazio. Crie uma regra TODOS ou uma com esse tipo no escopo.</div>' +
+      '</div></div>';
+  }
+
+  html += '<div class="sec-head"><span class="sec-title">Cobertura por tipo</span>' +
+    '<span class="sec-count">'+cobertura.length+'</span></div>';
+  // Linha por tipo com o mesmo `.orc-item` do resto da página, e não uma
+  // tabela. As classes de tabela da folha comum da plataforma não
+  // existem aqui — este módulo é standalone e congelado (PLAT-15/D-04),
+  // e a única tabela desta folha (`.lista-tabela`) só existe dentro do
+  // arroba-media de computador, o que deixaria o celular sem estilo
+  // nenhum. Escrever o nome daquele arquivo, ainda que num comentário,
+  // derruba os quinze gates do PLAT-15 — foi o que aconteceu aqui.
+  html += '<div id="plano-cobertura">' + cobertura.map(function(c){
+    // SEM etiqueta `.orc-tipo` aqui, de propósito. O tipo é dado do
+    // usuário — não dá para escrever um rótulo curto como se fez com
+    // periodicidade —, e cortá-lo em seis letras entrega "CENTRA",
+    // "CHILLE", "SELF C": a terceira vez em dois dias que a truncagem
+    // produz palavra quebrada nesta plataforma. Numa lista em que TODA
+    // linha é um tipo, a etiqueta também não classifica nada: o nome já
+    // está em negrito ao lado e a coluna da direita já diz se há plano.
+    return '<div class="orc-item">' +
+      '<div class="orc-desc"><strong>'+esc(c.tipo)+'</strong>' +
+      '<div style="font-size:11px;opacity:.75;margin-top:2px">'+c.equipamentos+' equipamento(s) · ' +
+        (c.proprias ? c.proprias+' regra(s) própria(s)' : 'sem regra própria, segue as TODOS') + '</div></div>' +
+      '<span class="orc-val">' + (c.regras
+        ? c.regras+' regra(s)'
+        : '<span class="pill pill-nok">sem plano</span>') + '</span>' +
+      '</div>';
+  }).join('') + '</div>';
+
+  html += '<div class="sec-head"><span class="sec-title">Regras do plano</span>' +
+    '<span class="sec-count">'+PLANO_TAREFAS.length+'</span>' +
+    (podeEditarCadastro() ? '<span style="display:flex;align-items:center;flex-shrink:0">' +
+      '<button class="btn-sm" onclick="planoAbrirTarefa()"><i class="fas fa-plus mr1" aria-hidden="true"></i>Regra</button>' +
+      '<button class="btn-sm" onclick="planoAbrirServico()"><i class="fas fa-tools mr1" aria-hidden="true"></i>Serviço</button>' +
+      '</span>' : '') +
+    '</div>';
+
+  if (!PLANO_TAREFAS.length) {
+    html += '<div class="empty"><i class="fas fa-clipboard-list"></i><p>Nenhuma regra ativa no plano.</p></div>';
+  } else {
+    html += '<div id="plano-lista">' + PLANO_TAREFAS.map(planoLinhaHtml).join('') + '</div>';
+  }
+
+  html += '<div class="sec-head" style="margin-top:16px"><span class="sec-title">Serviços padrão</span>' +
+    '<span class="sec-count">'+SERVICOS.length+'</span></div>';
+  html += SERVICOS.length
+    ? '<div id="plano-servicos">' + SERVICOS.map(planoServicoHtml).join('') + '</div>'
+    : '<div class="empty"><i class="fas fa-tools"></i><p>Nenhum serviço cadastrado.</p></div>';
+
+  if (!MATERIAIS.length) {
+    html += '<div class="chart-note" style="margin-top:10px"><strong>O catálogo de materiais está vazio.</strong> ' +
+      'Enquanto não houver material cadastrado na página Estoque, nenhum serviço pode declarar o que consome — ' +
+      'e a OS não tem de onde puxar peça. Cadastre os materiais primeiro; a ligação serviço → material é feita aqui depois.</div>';
+  }
+
+  host.innerHTML = html;
+}
+
+function planoLinhaHtml(t){
+  var alcance = planoAlcance(t, DATA);
+  var s = planoServicoDe(t, SERVICOS);
+  var mats = s ? planoMateriaisDoServico(s.id, SERVICO_MATERIAIS, MATERIAIS) : [];
+  // Reusa .orc-tipo: SERVICO para a regra que vale para todo o parque,
+  // MATERIAL para a que é de um tipo/modelo — a distinção que se lê de
+  // longe. Nenhuma classe nova (D-cf8-20).
+  var escopoTodos = String(t.aplica_a || PLANO_TODOS).trim().toUpperCase() === PLANO_TODOS;
+  return '<div class="orc-item" id="plano-row-'+t.id+'">' +
+    '<span class="orc-tipo '+(escopoTodos?'SERVICO':'MATERIAL')+'">'+esc(planoPeriodCurto(t.periodicidade))+'</span>' +
+    '<div class="orc-desc"><strong>'+esc(planoRotuloTarefa(t, SERVICOS))+'</strong>' +
+    '<div style="font-size:11px;opacity:.75;margin-top:2px">'+esc(planoRotuloEscopo(t))+
+      (t.norma_ref ? ' · '+esc(t.norma_ref) : '') +
+      ' · alcança <strong>'+alcance+'</strong> equipamento(s)</div>' +
+    (mats.length ? '<div style="font-size:11px;opacity:.9;margin-top:3px">Material: ' +
+        mats.map(function(m){ return esc(m.nome)+' ('+m.quantidade+(m.unidade?' '+esc(m.unidade):'')+')'; }).join(' · ') +
+      '</div>' : '') +
+    '</div>' +
+    '<span class="orc-val">'+(alcance ? '' : '<span class="pill">sem alcance</span>')+'</span>' +
+    (podeEditarCadastro() ? '<button class="btn-sm" onclick="planoAbrirTarefa('+t.id+')" title="Editar regra" aria-label="Editar regra"><i class="fas fa-cog" aria-hidden="true"></i></button>' : '') +
+    '</div>';
+}
+
+function planoServicoHtml(s){
+  var mats = planoMateriaisDoServico(s.id, SERVICO_MATERIAIS, MATERIAIS);
+  return '<div class="orc-item" id="plano-srv-'+s.id+'">' +
+    '<span class="orc-tipo SERVICO">'+esc(s.codigo || 'SRV')+'</span>' +
+    '<div class="orc-desc"><strong>'+esc(s.nome)+'</strong>' +
+    '<div style="font-size:11px;opacity:.75;margin-top:2px">' +
+      (s.tempo_padrao_min ? s.tempo_padrao_min+' min' : 'tempo não medido') +
+      (s.norma_ref ? ' · '+esc(s.norma_ref) : '') +
+      ' · '+mats.length+' material(is)</div>' +
+    '</div>' +
+    '<span class="orc-val"></span>' +
+    (podeEditarCadastro() ? '<button class="btn-sm" onclick="planoAbrirServico('+s.id+')" title="Editar serviço" aria-label="Editar serviço"><i class="fas fa-cog" aria-hidden="true"></i></button>' : '') +
+    '</div>';
+}
+
+/* ── cadastro (admin/gestor) ── */
+
+function planoAbrirTarefa(id){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para editar o plano','error'); return; }
+  var t = id ? PLANO_TAREFAS.find(function(x){ return x.id===id; }) : null;
+  PLANO_TAREFA_EDIT_ID = id || null;
+  el('dh-id').textContent = id ? 'Editar regra do plano · #'+id : 'Nova regra do plano';
+  el('dh-local').textContent = ''; el('dh-predio').textContent = ''; el('dh-pills').innerHTML = '';
+  // Os tipos vêm do PARQUE, não de uma lista escrita aqui: um tipo novo
+  // cadastrado no equipamento aparece sozinho, e um tipo que ninguém
+  // usa mais some sem ninguém editar código.
+  var tipos = planoTiposDoParque(DATA);
+  var escopoAtual = String((t && t.aplica_a) || PLANO_TODOS).trim().toUpperCase();
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-clipboard-list mr1" aria-hidden="true"></i>Regra</div><div class="fg2">' +
+    '<div><label class="fgl">Serviço</label><select class="fgs" id="pl-servico">' +
+      '<option value="">— usar a descrição —</option>' +
+      SERVICOS.map(function(s){ return '<option value="'+s.id+'"'+(t&&t.servico_id===s.id?' selected':'')+'>'+esc(s.nome)+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div><label class="fgl">Periodicidade</label><select class="fgs" id="pl-period">' +
+      ['MENSAL','TRIMESTRAL','SEMESTRAL','ANUAL'].map(function(p){
+        return '<option value="'+p+'"'+(t&&t.periodicidade===p?' selected':'')+'>'+p+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div><label class="fgl">Aplica a (tipo)</label><select class="fgs" id="pl-aplica">' +
+      '<option value="TODOS"'+(escopoAtual===PLANO_TODOS?' selected':'')+'>TODOS</option>' +
+      tipos.map(function(tp){ return '<option value="'+esc(tp)+'"'+(escopoAtual===tp.toUpperCase()?' selected':'')+'>'+esc(tp)+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div><label class="fgl">Modelo (opcional)</label><input class="fgi" id="pl-modelo" value="'+esc((t&&t.aplica_modelo)||'')+'"/></div>' +
+    '<div class="fg-full"><label class="fgl">Descrição</label><input class="fgi" id="pl-desc" value="'+esc((t&&t.descricao)||'')+'"/></div>' +
+    '<div class="fg-full"><label class="fgl">Norma de referência</label><input class="fgi" id="pl-norma" value="'+esc((t&&t.norma_ref)||'')+'"/></div>' +
+    '</div>' +
+    '<div class="chart-note">O escopo por modelo alcança pouco: 117 dos 175 equipamentos não têm modelo cadastrado. ' +
+    'A contagem de alcance na lista mostra quantos cada regra atinge de verdade.</div>' +
+    '</div>';
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
+    '<button class="btn-primary" onclick="planoSalvarTarefa()"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar</button>';
+  openDrawer();
+}
+
+/* Tipos distintos do parque instalado, ordenados. Lista derivada, nunca
+   escrita — mesmo motivo do datalist da tabela do Parque. */
+function planoTiposDoParque(equipamentos){
+  var vistos = {};
+  (equipamentos || []).forEach(function(e){
+    if (!equipInstalado(e)) return;
+    var t = String(e.tipo || '').trim();
+    if (t) vistos[t] = true;
+  });
+  return Object.keys(vistos).sort();
+}
+
+async function planoSalvarTarefa(){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para editar o plano','error'); return; } // guarda na ação (D-l7n-03)
+  var servicoId = val('pl-servico');
+  var desc = (val('pl-desc')||'').trim();
+  // Uma regra precisa de NOME: serviço escolhido ou descrição escrita.
+  // Sem os dois ela apareceria como linha em branco no checklist da OS.
+  if (!servicoId && !desc) { showToast('Escolha um serviço ou escreva a descrição','error'); return; }
+  if (!desc) {
+    var s = SERVICOS.find(function(x){ return String(x.id)===String(servicoId); });
+    desc = s ? s.nome : '';
+  }
+  var patch = {
+    descricao: desc,
+    periodicidade: val('pl-period'),
+    aplica_a: (val('pl-aplica')||PLANO_TODOS).trim() || PLANO_TODOS,
+    aplica_modelo: (val('pl-modelo')||'').trim() || null,
+    norma_ref: (val('pl-norma')||'').trim() || null,
+    servico_id: servicoId ? Number(servicoId) : null
+  };
+  var r = PLANO_TAREFA_EDIT_ID
+    ? await supa.from('plano_tarefas').update(patch).eq('id', PLANO_TAREFA_EDIT_ID)
+    : await supa.from('plano_tarefas').insert(patch);
+  if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
+  PLANO_TAREFA_EDIT_ID = null;
+  closeDrawer();
+  await planoCarregar();
+  renderPlanoManutencao();
+  showToast('Regra salva','ok');
+}
+
+function planoAbrirServico(id){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para editar serviços','error'); return; }
+  var s = id ? SERVICOS.find(function(x){ return x.id===id; }) : null;
+  PLANO_SERVICO_EDIT_ID = id || null;
+  var mats = s ? planoMateriaisDoServico(s.id, SERVICO_MATERIAIS, MATERIAIS) : [];
+  el('dh-id').textContent = id ? 'Editar serviço · #'+id : 'Novo serviço padrão';
+  el('dh-local').textContent = ''; el('dh-predio').textContent = ''; el('dh-pills').innerHTML = '';
+  el('drawer-body').innerHTML =
+    '<div class="ds"><div class="ds-title"><i class="fas fa-tools mr1" aria-hidden="true"></i>Serviço padrão</div><div class="fg2">' +
+    '<div><label class="fgl">Código</label><input class="fgi" id="sv-codigo" value="'+esc((s&&s.codigo)||'')+'"/></div>' +
+    '<div><label class="fgl">Tempo padrão (min)</label><input class="fgi" id="sv-tempo" type="number" step="1" min="1" value="'+((s&&s.tempo_padrao_min)!=null?s.tempo_padrao_min:'')+'"/></div>' +
+    '<div class="fg-full"><label class="fgl">Nome</label><input class="fgi" id="sv-nome" value="'+esc((s&&s.nome)||'')+'"/></div>' +
+    '<div class="fg-full"><label class="fgl">Norma de referência</label><input class="fgi" id="sv-norma" value="'+esc((s&&s.norma_ref)||'')+'"/></div>' +
+    '<div class="fg-full"><label class="fgt">Descrição</label><textarea class="fgi" id="sv-desc">'+esc((s&&s.descricao)||'')+'</textarea></div>' +
+    '</div>' +
+    '<div class="chart-note">Sem tempo medido, o cálculo de capacidade em /equipes usa os minutos por tarefa dos parâmetros. ' +
+    'Cronometre antes de preencher: um número aqui compete com aquele.</div>' +
+    '</div>' +
+    (id ? planoMateriaisFormHtml(id, mats) : '<div class="ds"><div class="chart-note">Salve o serviço para poder listar o material que ele consome.</div></div>');
+  el('drawer-footer').innerHTML =
+    '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
+    '<button class="btn-primary" onclick="planoSalvarServico()"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar</button>';
+  openDrawer();
+}
+
+function planoMateriaisFormHtml(servicoId, mats){
+  var html = '<div class="ds"><div class="ds-title"><i class="fas fa-boxes mr1" aria-hidden="true"></i>Material consumido</div>';
+  if (!MATERIAIS.length) {
+    html += '<div class="chart-note">O catálogo de materiais está vazio — cadastre na página Estoque antes de ligar peça a serviço.</div></div>';
+    return html;
+  }
+  html += mats.length
+    ? '<div>' + mats.map(function(m){
+        return '<div class="orc-item"><span class="orc-tipo MATERIAL">PEÇA</span>' +
+          '<div class="orc-desc">'+esc(m.nome)+'</div>' +
+          '<span class="orc-val">'+m.quantidade+(m.unidade?' '+esc(m.unidade):'')+'</span>' +
+          '<button class="btn-sm" onclick="planoDelMaterial('+m.id+','+servicoId+')" title="Remover" aria-label="Remover"><i class="fas fa-trash" aria-hidden="true"></i></button>' +
+          '</div>';
+      }).join('') + '</div>'
+    : '<div class="chart-note">Nenhum material declarado para este serviço.</div>';
+  html += '<div class="fg2" style="margin-top:8px">' +
+    '<div><label class="fgl">Material</label><select class="fgs" id="sm-material">' +
+      MATERIAIS.map(function(m){ return '<option value="'+m.id+'">'+esc(m.nome)+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div><label class="fgl">Quantidade</label><input class="fgi" id="sm-qtd" type="number" step="0.01" min="0.01" value="1"/></div>' +
+    '</div>' +
+    '<button class="btn-secondary btn-sm" style="margin-top:8px" onclick="planoAddMaterial('+servicoId+')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Acrescentar</button>' +
+    '</div>';
+  return html;
+}
+
+async function planoSalvarServico(){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para editar serviços','error'); return; }
+  var nome = (val('sv-nome')||'').trim();
+  if (!nome) { showToast('Informe o nome do serviço','error'); return; }
+  var tempoTxt = val('sv-tempo');
+  var tempo = tempoTxt === '' ? null : parseFloat(tempoTxt);
+  // Mesma barreira do check do banco: zero ou negativo não é serviço, e
+  // um zero aqui zeraria a soma de tempo sem nenhum erro.
+  if (tempo !== null && !(tempo > 0)) { showToast('O tempo padrão precisa ser maior que zero','error'); return; }
+  var patch = {
+    codigo: (val('sv-codigo')||'').trim() || null,
+    nome: nome,
+    norma_ref: (val('sv-norma')||'').trim() || null,
+    descricao: (val('sv-desc')||'').trim() || null,
+    tempo_padrao_min: tempo
+  };
+  var r = PLANO_SERVICO_EDIT_ID
+    ? await supa.from('servicos').update(patch).eq('id', PLANO_SERVICO_EDIT_ID)
+    : await supa.from('servicos').insert(patch);
+  if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
+  PLANO_SERVICO_EDIT_ID = null;
+  closeDrawer();
+  await planoCarregar();
+  renderPlanoManutencao();
+  showToast('Serviço salvo','ok');
+}
+
+async function planoAddMaterial(servicoId){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para editar serviços','error'); return; }
+  var materialId = Number(val('sm-material'));
+  var qtd = parseFloat(val('sm-qtd'));
+  if (!materialId || !(qtd > 0)) { showToast('Escolha o material e uma quantidade maior que zero','error'); return; }
+  var r = await supa.from('servico_materiais').insert({servico_id: servicoId, material_id: materialId, quantidade: qtd});
+  if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
+  await planoCarregar();
+  planoAbrirServico(servicoId);
+  renderPlanoManutencao();
+}
+
+async function planoDelMaterial(id, servicoId){
+  if (!podeEditarCadastro()) { showToast('Sem permissão para editar serviços','error'); return; }
+  var r = await supa.from('servico_materiais').delete().eq('id', id);
+  if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
+  await planoCarregar();
+  planoAbrirServico(servicoId);
+  renderPlanoManutencao();
+}
+
+/* ── o plano chegando na OS ──
+   Uma porta de escrita só: `osAddItem`, a mesma de sempre. Esta função
+   resolve QUAIS materiais, nunca COMO gravá-los — um segundo insert em
+   `os_itens` seria porta nova. */
+async function planoPuxarMateriais(osId){
+  if (!PLAN_OK) return;
+  var achado = manEntrada(osId);
+  if (!achado) return;
+  var equip = achado.equip; // manEntrada já resolve o equipamento — procurá-lo de novo seria uma segunda busca pela mesma linha
+  if (!equip) { showToast('Equipamento da OS não encontrado','error'); return; }
+  var mats = planoMateriaisParaEquip(PLANO_TAREFAS, SERVICOS, SERVICO_MATERIAIS, MATERIAIS, equip);
+  if (!mats.length) {
+    showToast('O plano deste equipamento não declara material','error');
+    return;
+  }
+  var postos = 0;
+  for (var i = 0; i < mats.length; i++) {
+    var m = mats[i];
+    var ok = await osAddItem(osId, { tipo: 'MATERIAL', descricao: m.nome, unidade: m.unidade || null,
+                                     quantidade: m.quantidade, valorUnitario: Number(m.preco) || 0,
+                                     materialId: m.materialId });
+    if (ok) postos++;
+  }
+  manAbrirOS(osId);
+  showToast(postos + ' item(ns) do plano lançado(s)', 'ok');
+}
 
 /* ══════════════════════════════════════════════════════════════════
    DOCUMENTOS — acervo de normas, manuais, formulários e conceitos
@@ -4469,7 +5026,7 @@ function osOnChangeExecutor(){
 function openLogForm(equipId){
   var e = DATA.find(function(r){ return r.id===equipId; }); if(!e) return;
   DETALHE_ABERTO = null; // D-92t/D-jar: cruzar o limiar com um formulário não o descarta
-  var clist = checklistDaOS(null, e.tipo); // D-uyz-16: ponto único — manutenção cai na tabela CHECKLIST de sempre
+  var clist = checklistDaOS(null, e.tipo, e); // D-uyz-16: ponto único; com PLAN_OK a lista vem do plano real, e o escopo por modelo precisa do equipamento inteiro
   var tipoOpts = MAINT_TIPOS.map(function(t){ return '<option value="'+t+'">'+t+'</option>'; }).join('');
   var chkHtml = clist.map(function(item,i){
     return '<label class="chk-item"><input type="checkbox" id="chk-'+i+'"/><span>'+esc(item)+'</span></label>';
@@ -5022,9 +5579,48 @@ var CHECKLIST_INSTALACAO = {
     'Teste de funcionamento'
   ]
 };
-function checklistDaOS(tipoOS, tipoEquip){
-  var tabela = tipoOS==='REMOÇÃO' ? CHECKLIST_REMOCAO : tipoOS==='INSTALAÇÃO' ? CHECKLIST_INSTALACAO : CHECKLIST;
-  return tabela[tipoEquip] || tabela['SPLIT'];
+/* D-uyz-16 continua valendo: ponto único. O que mudou é DE ONDE vem a
+   lista da manutenção.
+
+   Com a migração 54 aplicada (PLAN_OK), a OS de manutenção recebe o
+   checklist derivado do plano REAL — as tarefas de `plano_tarefas` que
+   se aplicam ao tipo daquele equipamento. É o conserto do defeito que
+   motivou a migração: `tabela[tipoEquip] || tabela['SPLIT']` entregava
+   à CENTRAL de 30 TR o checklist de um split, em silêncio, porque
+   `CHECKLIST` tem quatro chaves para um parque de seis tipos.
+
+   Sem a migração, nada muda: o fallback errado continua exatamente como
+   está publicado hoje. Consertá-lo aqui, com a sonda desligada,
+   mudaria o comportamento de uma tela cuja migração ninguém aplicou —
+   é justamente o que a sonda existe para impedir (D-cf8-25).
+
+   REMOÇÃO e INSTALAÇÃO NÃO passam pelo plano: aquelas listas são de
+   movimentação (a máquina saindo ou entrando do local), não de
+   manutenção programada, e o plano não tem o que dizer sobre elas. */
+/* D-6wy-08, quarta vez que a lição se paga (depois de EST_OK e
+   INSP_OK): `PLAN_OK` é declarada AQUI, ao lado da única função que a
+   avalia incondicionalmente, e não junto do resto da seção do plano. Os
+   gates que recortam esta região para testar `checklistDaOS` recebem a
+   sonda declarada e falsa de graça — sem isso são ReferenceError em
+   sandbox, infraestrutura fingindo de regressão. Quem a LIGA é
+   `planoSondarEsquema()`, na seção do plano; as outras referências
+   (`PLANO_TAREFAS`, `SERVICOS`, `planoChecklistDe`) só são avaliadas
+   depois do `if (PLAN_OK)`, logo nunca com a sonda desligada. */
+var PLAN_OK = false;
+
+function checklistDaOS(tipoOS, tipoEquip, equip){
+  if (tipoOS==='REMOÇÃO') return CHECKLIST_REMOCAO[tipoEquip] || CHECKLIST_REMOCAO['SPLIT'];
+  if (tipoOS==='INSTALAÇÃO') return CHECKLIST_INSTALACAO[tipoEquip] || CHECKLIST_INSTALACAO['SPLIT'];
+  if (PLAN_OK) {
+    var alvo = equip || { tipo: tipoEquip };
+    var doPlano = planoChecklistDe(PLANO_TAREFAS, SERVICOS, alvo);
+    if (doPlano.length) return doPlano;
+    // Plano sem nenhuma regra aplicável a este equipamento: cair na
+    // tabela antiga devolveria o checklist do split para a central de
+    // novo. Melhor lista vazia com a razão na tela do que lista errada.
+    return [];
+  }
+  return CHECKLIST[tipoEquip] || CHECKLIST['SPLIT'];
 }
 
 /* D-uyz-03: os três casos de instalação são DERIVADOS do dado gravado,
@@ -6598,6 +7194,7 @@ async function acessoLivre() {
     estInjectNav();
     await docSondarEsquema();
     docInjectNav();
+    await planoSondarEsquema();
     osInjectChipsExecutor();
     await carregarItensOS();
     await carregarComentarios();
@@ -6605,6 +7202,7 @@ async function acessoLivre() {
     await carregarComposicaoArp();
     await carregarMateriais();
     await carregarDocumentos();
+    await planoCarregar();
     // Remove tela de login
     var lw = document.getElementById('login-mobile');
     if (lw) lw.remove();
@@ -6644,6 +7242,7 @@ async function initAppOnce(){
   estInjectNav();
   await docSondarEsquema();
   docInjectNav();
+  await planoSondarEsquema();
   osInjectChipsExecutor();
   await carregarItensOS();
   await carregarComentarios();
@@ -6651,6 +7250,7 @@ async function initAppOnce(){
   await carregarComposicaoArp();
   await carregarMateriais();
   await carregarDocumentos();
+  await planoCarregar();
   await carregarPerfil();
   setupRealtime();
   renderDash();
