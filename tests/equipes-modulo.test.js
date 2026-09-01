@@ -18,6 +18,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const RAIZ = path.join(__dirname, '..');
 const SQL_49 = fs.readFileSync(path.join(RAIZ, 'supabase', '49_equipes_schema.sql'), 'utf8');
@@ -265,23 +266,297 @@ test('o setup é cobrado por VISITA, não por tarefa — a diferença é de quas
   assert.ok(seFosseTarefa > porVisita * 1.4, 'a decisão de agrupar em visitas precisa importar de verdade');
 });
 
+// O parque REAL, contado pela porta da frente em 01/09/2026: 175
+// instalados em seis tipos — SPLIT 103, SELF CONTAINED 32, PISO/TETO 22,
+// JANELA 11, CENTRAL 6, CHILLER 1. Os números importam: é o CHILLER
+// sozinho que mostra o tamanho do defeito, porque uma regra escrita para
+// ele era cobrada de 175 máquinas.
+const TIPOS_REAIS = [
+  ['SPLIT', 103], ['SELF CONTAINED', 32], ['PISO/TETO', 22],
+  ['JANELA', 11], ['CENTRAL', 6], ['CHILLER', 1],
+];
+let _seq = 0;
+const PARQUE = TIPOS_REAIS.flatMap(([tipo, n]) =>
+  Array.from({ length: n }, () => ({ id: ++_seq, tipo, modelo: null })));
+
+test('o parque de teste é o parque real: 175 instalados em seis tipos', () => {
+  assert.strictEqual(PARQUE.length, 175);
+  assert.strictEqual(TIPOS_REAIS.reduce((s, [, n]) => s + n, 0), 175);
+  assert.strictEqual(PARQUE.filter(e => e.tipo === 'SPLIT').length, 103);
+  assert.strictEqual(PARQUE.filter(e => e.tipo === 'CHILLER').length, 1);
+  // Seis tipos para um CHECKLIST de quatro chaves — a lacuna que a
+  // migração 54 fechou em /refrigeracao e que este módulo agora respeita
+  // ao cobrar cada regra a quem ela pertence.
+  assert.strictEqual(new Set(PARQUE.map(e => e.tipo)).size, 6);
+});
+
 test('a demanda anual bate com os números REAIS do banco (175 equipamentos)', () => {
-  const p = N.visitasDoPlano(PLANO_REAL);
-  const d = N.demandaAnual(p, PARAMS_SEED, 175, 99);
-  assert.strictEqual(Math.round(d.horasPorEquipamentoAno * 100) / 100, 11.58);
+  const d = N.demandaAnual(PLANO_REAL, PARQUE, PARAMS_SEED, 99);
+  assert.strictEqual(Math.round(d.horasPorEquipamentoAnoMedia * 100) / 100, 11.58);
   assert.strictEqual(Math.round(d.horasAno), 2027);
   assert.strictEqual(Math.round(d.horasSemana * 10) / 10, 39);
   assert.strictEqual(d.visitasAno, 19 * 175);
+  // A correção NÃO pode mover o estado saudável: com as 9 tarefas em
+  // TODOS, somar por escopo é a mesma multiplicação feita uma vez por
+  // grupo, e tem de dar o mesmo dígito que dava.
+  assert.strictEqual(d.comEscopo, false);
+  assert.strictEqual(d.semRegra, 0);
 });
 
-test('a cobertura é DECLARADA — 175 de 274, nunca o parcial apresentado como o todo', () => {
-  const p = N.visitasDoPlano(PLANO_REAL);
-  const d = N.demandaAnual(p, PARAMS_SEED, 175, 99);
-  assert.strictEqual(d.equipamentos, 175);
-  assert.strictEqual(d.naoCobertos, 99, 'máquinas, transportes, elétrica e fonoclama planejam por horímetro');
-  // E a tela precisa dizer isso, não só a função saber.
-  assert.match(APP, /cobre \$\{dem\.equipamentos\} de \$\{dem\.equipamentos \+ dem\.naoCobertos\} ativos/);
-  assert.match(APP, /hor[íi]metro/i);
+// ═══════════ O DEFEITO QUE ESTA CORREÇÃO CONSERTA ═══════════
+//
+// `demandaAnual` recebia `nEquipamentos`, um NÚMERO, e multiplicava por
+// ele um plano montado sobre a lista inteira de tarefas. Uma função que
+// recebe uma CONTAGEM não tem como estar certa depois que o escopo
+// existe: a contagem não sabe de que tipo é cada máquina.
+
+test('regra por TIPO é cobrada só ao tipo — não aos 175 equipamentos', () => {
+  // Uma tarefa mensal escrita só para o CHILLER, que é UMA máquina.
+  const comRegra = [...PLANO_REAL, { periodicidade: 'MENSAL', ativo: true, aplica_a: 'CHILLER' }];
+  const base = N.demandaAnual(PLANO_REAL, PARQUE, PARAMS_SEED, 99);
+  const d = N.demandaAnual(comRegra, PARQUE, PARAMS_SEED, 99);
+
+  assert.strictEqual(d.comEscopo, true, 'a tela precisa saber que o escopo entrou em jogo');
+
+  // O chiller passa a ter 3 tarefas mensais em vez de 2 — 12 visitas de
+  // 3×10+15 no lugar de 12 de 2×10+15, ou seja 12×10 = 120 min a mais.
+  // Uma máquina, 120 minutos: 2 horas no ano inteiro.
+  const acrescimo = d.horasAno - base.horasAno;
+  assert.strictEqual(Math.round(acrescimo * 100) / 100, 2,
+    'a regra do chiller vale para 1 máquina, não para 175');
+
+  // O que a conta ANTIGA faria: 9+1 tarefas para todo mundo.
+  const seFosseGlobal = 175 * 120 / 60;
+  assert.strictEqual(seFosseGlobal, 350);
+  assert.ok(acrescimo < seFosseGlobal / 100,
+    'o defeito inflaria a demanda em 350 h/ano de trabalho que ninguém vai fazer');
+
+  const chiller = d.porTipo.find(l => l.tipo === 'CHILLER');
+  const split = d.porTipo.find(l => l.tipo === 'SPLIT');
+  assert.strictEqual(chiller.regrasMax, 10);
+  assert.strictEqual(split.regrasMax, 9, 'a regra do chiller não pode ter alcançado o split');
+});
+
+test('regra por MODELO alcança só aquele modelo, dentro do tipo', () => {
+  const parque = [
+    { id: 1, tipo: 'SPLIT', modelo: 'ASBG18' },
+    { id: 2, tipo: 'SPLIT', modelo: 'ASBG18' },
+    { id: 3, tipo: 'SPLIT', modelo: 'OUTRO' },
+    { id: 4, tipo: 'SPLIT', modelo: null },
+  ];
+  const tarefas = [{ periodicidade: 'ANUAL', ativo: true, aplica_a: 'SPLIT', aplica_modelo: 'ASBG18' }];
+  const d = N.demandaAnual(tarefas, parque, PARAMS_SEED, 0);
+
+  // 2 máquinas × 1 visita anual de (1×10+15) = 50 min.
+  assert.strictEqual(Math.round(d.horasAno * 60), 50);
+  assert.strictEqual(d.visitasAno, 2);
+  // As outras duas SPLIT não são alcançadas por regra nenhuma.
+  assert.strictEqual(d.semRegra, 2);
+  // E o tipo mostra a FAIXA, não uma média: 0 para umas, 1 para outras.
+  const split = d.porTipo.find(l => l.tipo === 'SPLIT');
+  assert.strictEqual(split.regrasMin, 0);
+  assert.strictEqual(split.regrasMax, 1);
+});
+
+test('equipamento que NENHUMA regra alcança vale zero — e é contado, nunca somado em silêncio', () => {
+  // O estado que a migração 55 deliberadamente deixou: nenhuma regra
+  // própria de CENTRAL/CHILLER foi escrita. Se um dia as 9 TODOS virarem
+  // regras de SPLIT, a central sai da conta — e isso não é folga.
+  const soSplit = PLANO_REAL.map(t => ({ ...t, aplica_a: 'SPLIT' }));
+  const d = N.demandaAnual(soSplit, PARQUE, PARAMS_SEED, 99);
+
+  assert.strictEqual(d.equipamentos, 175, 'os não alcançados continuam sendo parque');
+  assert.strictEqual(d.semRegra, 72, '175 − 103 SPLIT');
+  assert.deepStrictEqual(d.tiposSemRegra.sort(),
+    ['CENTRAL', 'CHILLER', 'JANELA', 'PISO/TETO', 'SELF CONTAINED']);
+  assert.strictEqual(Math.round(d.horasAno), Math.round(103 * 695 / 60));
+
+  // E a tela precisa DIZER, não só a função saber: uma demanda que
+  // encolhe sem explicação é lida como folga.
+  //
+  // O que se afirma aqui é o GUARDA, não a frase. Uma primeira versão
+  // deste caso procurava o texto do aviso, e ele passou verde com o
+  // bloco inteiro desativado — a frase continua no arquivo mesmo quando
+  // nada a alcança. É a mesma cegueira que `tests/mapa-editor.test.js`
+  // teve ao procurar `.from('...')` depois que os nomes mudaram de
+  // lugar: um gate que não consegue reprovar não é um gate.
+  assert.match(APP, /\$\{dem\.semRegra \? `<div class="callout co-warn"/,
+    'o aviso precisa ser alcançado exatamente quando há o que avisar');
+  const aviso = APP.slice(APP.indexOf('${dem.semRegra ? `<div'));
+  assert.match(aviso.slice(0, 600), /que nenhuma regra do plano alcança/);
+  assert.match(aviso.slice(0, 600), /zero hora/);
+  assert.match(aviso.slice(0, 600), /dem\.tiposSemRegra/,
+    'dizer quantos sem dizer quais deixa o usuário sem o próximo passo');
+});
+
+test('a periodicidade desconhecida é contada UMA vez, não uma por grupo', () => {
+  const tarefas = [...PLANO_REAL, { periodicidade: 'QUINZENAL', ativo: true }];
+  const d = N.demandaAnual(tarefas, PARQUE, PARAMS_SEED, 99);
+  // São seis tipos no parque; contar por grupo relataria seis tarefas
+  // sem periodicidade onde existe uma.
+  assert.strictEqual(d.semPeriodicidade, 1);
+  assert.strictEqual(Math.round(d.horasAno), 2027, 'nem entrou na conta com número suposto');
+});
+
+test('os grupos são tipo × MODELO, não só tipo — senão a regra de modelo valeria para o tipo', () => {
+  const g = N.gruposDePlano([
+    { tipo: 'SPLIT', modelo: 'A' }, { tipo: 'SPLIT', modelo: 'A' },
+    { tipo: 'SPLIT', modelo: 'B' }, { tipo: 'SPLIT', modelo: null },
+    { tipo: 'CENTRAL', modelo: null },
+  ]);
+  assert.strictEqual(g.length, 4);
+  assert.deepStrictEqual(g.map(x => x.quantidade), [2, 1, 1, 1]);
+});
+
+test('tipo é cadastro livre: a comparação normaliza caixa e espaço', () => {
+  const t = { periodicidade: 'ANUAL', ativo: true, aplica_a: ' split ' };
+  assert.strictEqual(N.planoAplicaAoEquip(t, { tipo: 'SPLIT' }), true);
+  assert.strictEqual(N.planoAplicaAoEquip(t, { tipo: 'Split' }), true);
+  assert.strictEqual(N.planoAplicaAoEquip(t, { tipo: 'CENTRAL' }), false);
+  // Sem escopo declarado, vale para todos — inclusive para tipo vazio.
+  assert.strictEqual(N.planoAplicaAoEquip({ ativo: true }, { tipo: 'QUALQUER' }), true);
+});
+
+test('`aplica_modelo` ausente NÃO restringe — 117 das 175 linhas têm modelo nulo', () => {
+  const t = { periodicidade: 'ANUAL', ativo: true, aplica_a: 'SPLIT' };
+  assert.strictEqual(N.planoAplicaAoEquip(t, { tipo: 'SPLIT', modelo: null }), true);
+  assert.strictEqual(N.planoAplicaAoEquip({ ...t, aplica_modelo: '' }, { tipo: 'SPLIT', modelo: 'X' }), true);
+  // Exigir igualdade com nulo tiraria a regra de dois terços do parque.
+  assert.strictEqual(N.planoAplicaAoEquip({ ...t, aplica_modelo: 'X' }, { tipo: 'SPLIT', modelo: null }), false);
+});
+
+test('tarefa inativa não entra na demanda nem liga o escopo', () => {
+  const d = N.demandaAnual([...PLANO_REAL, { periodicidade: 'MENSAL', ativo: false, aplica_a: 'CHILLER' }],
+    PARQUE, PARAMS_SEED, 99);
+  assert.strictEqual(Math.round(d.horasAno), 2027);
+  assert.strictEqual(d.comEscopo, false, 'regra desativada não muda a forma da tela');
+});
+
+test('a demanda lê as LINHAS dos equipamentos, não uma contagem — uma contagem não sabe o tipo', () => {
+  const app = semComentarios(APP);
+  assert.match(app, /from\('equipamentos'\)\s*\.select\('id,tipo,modelo'\)/,
+    'sem tipo e modelo não há como cobrar a regra a quem ela pertence');
+  assert.ok(!/from\('equipamentos'\)[^\n]*head:\s*true/.test(app),
+    'o head count era exatamente o que impedia a conta de estar certa');
+  assert.match(app, /demandaAnual\(TAREFAS_PLANO, EQUIPAMENTOS, PARAMS/);
+});
+
+test('a explicação da FAIXA só aparece quando há faixa na tela', () => {
+  // Mesma classe de defeito que o aviso de "tipos sem regra própria"
+  // custou em /refrigeracao: texto que descreve o que não está ali
+  // ensina a ler explicação sem procurar o fato.
+  assert.match(APP, /const temFaixa = dem\.porTipo\.some\(l => l\.regrasMin !== l\.regrasMax\)/);
+  const tabela = APP.slice(APP.indexOf('function renderDemandaPorTipo'));
+  assert.match(tabela.slice(0, 2000), /\$\{temFaixa \? `[^`]*A faixa em/,
+    'a frase precisa estar sob a condição, não solta debaixo da tabela');
+  // E o que some com o escopo — a periodicidade de cada regra — precisa
+  // ter para onde apontar, senão a tela tira uma informação sem dizer
+  // para onde ela foi.
+  assert.match(tabela.slice(0, 2000), /aba <em>Plano<\/em> de \/refrigeracao/);
+});
+
+// ═══════════ a cópia vigiada ═══════════
+//
+// A regra de escopo existe DUAS vezes: aqui, em `equipes/nucleo.js`, e
+// em `refrigeracao/index.html`, que é módulo congelado e não pode
+// importar nada deste diretório. Não há terceiro lugar onde pôr a regra
+// que apague uma das duas cópias — subi-la um nível daria um arquivo com
+// um importador só e deixaria a réplica congelada exatamente onde está.
+//
+// O que impede a divergência não é o lugar: é este caso. Ele carrega as
+// duas implementações e roda as duas sobre a mesma tabela, e uma
+// discordância em qualquer linha reprova. Se um dia alguém corrigir a
+// regra num lado e esquecer o outro, a tela de /refrigeracao passaria a
+// dar um checklist que esta conta não cobra — e ninguém veria.
+
+const HTML_REFRIG = fs.readFileSync(path.join(RAIZ, 'refrigeracao', 'index.html'), 'utf8');
+
+function regraDaRefrigeracao() {
+  const MARCA_INI = '   PLANO DE MANUTENÇÃO — serviço padrão, material por serviço e regra';
+  const MARCA_FIM = '\nfunction planoAbrirTarefa(';
+  const ini = HTML_REFRIG.lastIndexOf('/* ═', HTML_REFRIG.indexOf(MARCA_INI));
+  const fim = HTML_REFRIG.indexOf(MARCA_FIM, ini);
+  assert.ok(ini > 0 && fim > ini, 'recorte da seção PLANO de /refrigeracao não encontrado');
+  const ctx = {
+    esc: (x) => String(x ?? ''),
+    el: () => null,
+    equipInstalado: (e) => !!e && e.situacao === 'instalado',
+    podeEditarCadastro: () => false,
+    console: { warn() {} },
+    supa: null,
+  };
+  vm.createContext(ctx);
+  vm.runInContext(HTML_REFRIG.slice(ini, fim), ctx);
+  assert.strictEqual(typeof ctx.planoAplicaAoEquip, 'function');
+  return ctx.planoAplicaAoEquip;
+}
+
+test('a regra de escopo daqui e a de /refrigeracao concordam em TODOS os casos', () => {
+  const outra = regraDaRefrigeracao();
+
+  const tarefas = [
+    { nome: 'sem escopo nenhum' },
+    { aplica_a: 'TODOS' },
+    { aplica_a: 'todos' },
+    { aplica_a: ' TODOS ' },
+    { aplica_a: 'SPLIT' },
+    { aplica_a: 'split' },
+    { aplica_a: ' SPLIT ' },
+    { aplica_a: 'CENTRAL' },
+    { aplica_a: 'SPLIT', aplica_modelo: 'ASBG18' },
+    { aplica_a: 'SPLIT', aplica_modelo: 'asbg18' },
+    { aplica_a: 'SPLIT', aplica_modelo: '' },
+    { aplica_a: 'SPLIT', aplica_modelo: null },
+    { aplica_a: 'TODOS', aplica_modelo: 'ASBG18' },
+    { aplica_a: null, aplica_modelo: 'ASBG18' },
+    { aplica_a: '', aplica_modelo: '' },
+  ];
+  const equipamentos = [
+    { tipo: 'SPLIT', modelo: 'ASBG18' },
+    { tipo: 'SPLIT', modelo: 'asbg18' },
+    { tipo: 'split', modelo: null },
+    { tipo: 'SPLIT', modelo: '' },
+    { tipo: 'CENTRAL', modelo: null },
+    { tipo: 'CHILLER', modelo: 'ASBG18' },
+    { tipo: '', modelo: null },
+    { tipo: null, modelo: null },
+    { tipo: ' SPLIT ', modelo: ' ASBG18 ' },
+  ];
+
+  let comparados = 0;
+  let houveTrue = 0;
+  let houveFalse = 0;
+  for (const t of tarefas) {
+    for (const e of equipamentos) {
+      const aqui = N.planoAplicaAoEquip(t, e);
+      const la = outra(t, e);
+      assert.strictEqual(aqui, la,
+        `divergência: tarefa ${JSON.stringify(t)} × equipamento ${JSON.stringify(e)} ` +
+        `— /equipes diz ${aqui}, /refrigeracao diz ${la}`);
+      comparados++;
+      if (aqui) houveTrue++; else houveFalse++;
+    }
+  }
+  assert.strictEqual(comparados, tarefas.length * equipamentos.length);
+  // Uma tabela em que tudo dá o mesmo valor não compara nada: as duas
+  // implementações concordariam sendo ambas `() => true`.
+  assert.ok(houveTrue > 20 && houveFalse > 20,
+    `a tabela precisa exercer os dois lados (${houveTrue} true, ${houveFalse} false)`);
+
+  // E os dois argumentos ausentes, que é como a função é chamada quando
+  // o dado ainda não carregou.
+  for (const par of [[null, {}], [{}, null], [null, null], [undefined, undefined]]) {
+    assert.strictEqual(N.planoAplicaAoEquip(par[0], par[1]), outra(par[0], par[1]));
+  }
+});
+
+test('plano_tarefas é lida com select(*) — sem a migração 54 a aba não pode cair', () => {
+  const app = semComentarios(APP);
+  assert.match(app, /from\('plano_tarefas'\)\.select\('\*'\)/);
+  // Pedir `aplica_modelo` pelo nome num banco sem a 54 devolve 400 e
+  // derruba a aba inteira; vindo undefined, a regra já a trata como
+  // "sem refinamento". É o que dispensa uma sonda aqui.
+  assert.ok(!/plano_tarefas'\)\.select\('[^']*aplica_modelo/.test(app));
 });
 
 test('parâmetro ausente ou inválido vale 0, nunca NaN — um NaN se propagaria pela demanda inteira', () => {

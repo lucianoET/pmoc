@@ -253,6 +253,74 @@ export function visitasDoPlano(tarefas) {
   }
 }
 
+// ── a regra de escopo do plano ──────────────────────────────────────
+//
+// SEGUNDA CÓPIA, DELIBERADA E VIGIADA. A regra original mora em
+// `refrigeracao/index.html`, que é módulo congelado (D-04) e não pode
+// importar deste diretório — a plataforma inteira proíbe a palavra
+// dentro daquele arquivo, e quinze gates a conferem. Subir a regra um
+// nível daria um arquivo com UM importador (este) e deixaria a réplica
+// de /refrigeracao exatamente como está, com mais um lugar para
+// divergir. O que impede a divergência não é o lugar: é o gate, que roda
+// as DUAS implementações sobre a mesma tabela de casos e falha se elas
+// discordarem em um único deles.
+
+export const PLANO_TODOS = 'TODOS'
+
+/** A tarefa vale para este equipamento?
+ *
+ *  `aplica_a` é 'TODOS' ou um valor de `equipamentos.tipo`; `aplica_modelo`
+ *  é refinamento OPCIONAL — nulo ou vazio não restringe, porque `modelo` é
+ *  nulo em 117 das 175 linhas e exigir igualdade com nulo tiraria a regra
+ *  de todo o resto do parque.
+ *
+ *  Comparação por texto normalizado (trim + maiúsculas) porque `tipo` é
+ *  cadastro livre do usuário: 'Split' e 'SPLIT' são o mesmo tipo, e uma
+ *  comparação sensível a caixa faria a regra alcançar zero equipamento
+ *  sem nada na tela dizendo por quê. */
+export function planoAplicaAoEquip(tarefa, equip) {
+  if (!tarefa || !equip) return false
+  const escopo = String(tarefa.aplica_a || PLANO_TODOS).trim().toUpperCase()
+  if (escopo !== PLANO_TODOS) {
+    if (String(equip.tipo || '').trim().toUpperCase() !== escopo) return false
+  }
+  const modelo = String(tarefa.aplica_modelo || '').trim()
+  if (!modelo) return true
+  return String(equip.modelo || '').trim().toUpperCase() === modelo.toUpperCase()
+}
+
+/** Há alguma regra com escopo? É o que decide se a demanda tem uma forma
+ *  só para o parque inteiro ou uma por tipo — e, portanto, o que a tela
+ *  precisa mostrar. Enquanto as 9 tarefas da NBR forem TODOS isto é
+ *  falso, e a tela continua dizendo o que sempre disse. */
+export function planoTemEscopo(tarefas) {
+  return (tarefas || []).some(t => t && t.ativo !== false && (
+    String(t.aplica_a || PLANO_TODOS).trim().toUpperCase() !== PLANO_TODOS ||
+    String(t.aplica_modelo || '').trim() !== ''))
+}
+
+/** Agrupa os equipamentos pelo par que DECIDE o plano: tipo e modelo.
+ *  Dois equipamentos com o mesmo par recebem exatamente as mesmas
+ *  tarefas, então o plano se resolve uma vez por grupo em vez de 175
+ *  vezes. É o par e não só o tipo porque `aplica_modelo` refina por
+ *  modelo — agrupar só por tipo faria a regra de modelo valer para o
+ *  tipo inteiro, que é a mesma classe de erro que esta correção conserta.
+ *
+ *  Não filtra por situação: quem filtra é a consulta. Uma segunda
+ *  filtragem aqui esconderia o dia em que a consulta mudasse. */
+export function gruposDePlano(equipamentos) {
+  const mapa = new Map()
+  for (const e of equipamentos || []) {
+    if (!e) continue
+    const tipo = String(e.tipo || '').trim()
+    const modelo = String(e.modelo || '').trim()
+    const k = `${tipo.toUpperCase()}|${modelo.toUpperCase()}`
+    if (!mapa.has(k)) mapa.set(k, { tipo, modelo, quantidade: 0, exemplo: e })
+    mapa.get(k).quantidade++
+  }
+  return [...mapa.values()]
+}
+
 /** Minutos que UM equipamento consome por ano.
  *
  *  Por visita: (tarefas da visita × minutos por tarefa) + setup. O setup
@@ -270,26 +338,100 @@ function numeroOuZero(v) {
   return Number.isFinite(n) && n >= 0 ? n : 0
 }
 
-/** Demanda anual do plano, em homem-hora.
+/** Demanda anual do plano, em homem-hora — SOMADA POR ESCOPO.
  *
- *  `nEquipamentos` é quantos ativos o plano cobre — e a função devolve
- *  também `naoCobertos`, que é o que a tela precisa dizer em voz alta.
- *  Hoje só a refrigeração tem plano por CALENDÁRIO: máquinas, elétrica e
- *  fonoclama planejam por HORÍMETRO, que é outro mecanismo (a demanda
- *  depende de quanto o ativo roda, não do calendário) e não cabe nesta
- *  conta. Mostrar o total sem dizer isso apresentaria 64% do parque como
- *  se fosse o parque inteiro. */
-export function demandaAnual(plano, params, nEquipamentos, naoCobertos) {
-  const porEquip = minutosPorEquipamentoAno(plano, params)
-  const n = Math.max(0, Math.floor(Number(nEquipamentos) || 0))
-  const minutos = porEquip * n
+ *  ── O DEFEITO QUE ISTO CONSERTA ──
+ *
+ *  Esta função recebia `nEquipamentos`, um NÚMERO, e multiplicava por ele
+ *  um único plano montado sobre a lista inteira de tarefas. Enquanto as 9
+ *  tarefas da NBR valessem para TODOS a conta estava certa por acidente:
+ *  todo equipamento tinha mesmo o mesmo plano. Desde a migração 54 a tela
+ *  do Plano em /refrigeracao permite criar regra por tipo e por modelo, e
+ *  a primeira que o usuário criasse seria contada para os 175
+ *  equipamentos em vez de para o tipo — uma regra mensal escrita só para
+ *  o CHILLER (1 máquina) inflaria a demanda anual em 174 equipamentos de
+ *  trabalho que ninguém vai fazer. Uma função que recebe uma CONTAGEM não
+ *  tem como estar certa depois que o escopo existe: a contagem não sabe
+ *  de que tipo é cada máquina.
+ *
+ *  Agora recebe os equipamentos, resolve o plano de cada grupo
+ *  (tipo × modelo) e soma. Com as 9 tarefas em TODOS o resultado é
+ *  idêntico ao de antes, dígito por dígito — é a mesma multiplicação,
+ *  feita uma vez por grupo.
+ *
+ *  `semRegra` é o outro lado, e precisa ser dito em voz alta: equipamento
+ *  que nenhuma regra alcança contribui ZERO para a demanda. Sem esse
+ *  número a soma encolheria e a tela pareceria estar em folga, quando o
+ *  que houve foi máquina saindo da OS sem checklist nenhum. É o mesmo
+ *  cuidado de `semPeriodicidade` e de `naoCobertos`. */
+export function demandaAnual(tarefas, equipamentos, params, naoCobertos) {
+  const lista = (tarefas || []).filter(t => t && t.ativo !== false)
+  const grupos = gruposDePlano(equipamentos)
+
+  // Contada UMA vez sobre o plano inteiro, nunca por grupo: a mesma
+  // tarefa de periodicidade desconhecida apareceria em cada grupo que
+  // ela alcança e a tela relataria seis quando existe uma.
+  const semPeriodicidade = visitasDoPlano(lista).semPeriodicidade
+
+  const porTipo = new Map()
+  let minutos = 0
+  let visitasAno = 0
+  let cobertos = 0
+  let semRegra = 0
+
+  for (const g of grupos) {
+    const doGrupo = lista.filter(t => planoAplicaAoEquip(t, g.exemplo))
+    const plano = visitasDoPlano(doGrupo)
+    const minEquip = minutosPorEquipamentoAno(plano, params)
+
+    minutos += minEquip * g.quantidade
+    visitasAno += plano.visitasPorAno * g.quantidade
+    cobertos += g.quantidade
+    if (!plano.visitas.length) semRegra += g.quantidade
+
+    const tipo = g.tipo || '—'
+    if (!porTipo.has(tipo)) {
+      porTipo.set(tipo, { tipo, equipamentos: 0, minutos: 0, visitasAno: 0,
+                          regrasMin: Infinity, regrasMax: 0 })
+    }
+    const linha = porTipo.get(tipo)
+    linha.equipamentos += g.quantidade
+    linha.minutos += minEquip * g.quantidade
+    linha.visitasAno += plano.visitasPorAno * g.quantidade
+    // Faixa, não média: um tipo com dois modelos e uma regra só para um
+    // deles tem MESMO duas contagens, e uma média esconderia isso atrás
+    // de um número que não vale para nenhum dos dois.
+    linha.regrasMin = Math.min(linha.regrasMin, plano.visitas.length ? doGrupo.length : 0)
+    linha.regrasMax = Math.max(linha.regrasMax, doGrupo.length)
+  }
+
+  const linhas = [...porTipo.values()]
+    .map(l => ({
+      tipo: l.tipo,
+      equipamentos: l.equipamentos,
+      regrasMin: Number.isFinite(l.regrasMin) ? l.regrasMin : 0,
+      regrasMax: l.regrasMax,
+      visitasAno: l.visitasAno,
+      horasAno: l.minutos / 60,
+      horasPorEquipamentoAno: l.equipamentos ? l.minutos / l.equipamentos / 60 : 0,
+    }))
+    .sort((a, b) => b.horasAno - a.horasAno || String(a.tipo).localeCompare(String(b.tipo), 'pt-BR'))
+
   return {
     horasAno: minutos / 60,
     horasSemana: minutos / 60 / 52,
-    horasPorEquipamentoAno: porEquip / 60,
-    equipamentos: n,
+    // MÉDIA ponderada, e nomeada como média: com escopo em jogo não
+    // existe "o" número por equipamento, e um nome que não diz isso seria
+    // lido como se existisse.
+    horasPorEquipamentoAnoMedia: cobertos ? minutos / cobertos / 60 : 0,
+    equipamentos: cobertos,
     naoCobertos: Math.max(0, Math.floor(Number(naoCobertos) || 0)),
-    visitasAno: (plano.visitasPorAno || 0) * n,
+    visitasAno,
+    semPeriodicidade,
+    semRegra,
+    tiposSemRegra: linhas.filter(l => l.regrasMax === 0).map(l => l.tipo),
+    porTipo: linhas,
+    comEscopo: planoTemEscopo(lista),
   }
 }
 

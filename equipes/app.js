@@ -40,6 +40,10 @@ let ARRASTANDO = null
 // a aba Plano avisa e o resto do módulo se comporta como hoje.
 let PARAMS = {}
 let TAREFAS_PLANO = []
+// Os equipamentos INSTALADOS, com tipo e modelo — não mais uma contagem.
+// Uma contagem não sabe de que tipo é cada máquina, e desde a migração 54
+// o plano pode ter regra por tipo: a demanda precisa das linhas.
+let EQUIPAMENTOS = []
 let COBERTURA = null
 let PLANO_OK = false
 
@@ -100,19 +104,27 @@ async function carregarPlano() {
   try {
     const [par, tar, equip] = await Promise.all([
       supa.from('cmasm_parametros').select('*'),
-      supa.from('plano_tarefas').select('id,periodicidade,descricao,ativo,aplica_a'),
-      supa.from('equipamentos').select('id', { count: 'exact', head: true }).eq('situacao', 'instalado'),
+      // `select('*')` e não uma lista de colunas: `aplica_modelo` só existe
+      // depois da migração 54, e pedi-la pelo nome num banco sem ela
+      // devolveria 400 e derrubaria a aba inteira. Vindo `undefined`, a
+      // regra de escopo já a trata como "sem refinamento" — o módulo se
+      // comporta igual com e sem a 54, sem precisar de sonda.
+      supa.from('plano_tarefas').select('*'),
+      // As LINHAS, não `count: 'exact', head: true`. São 175 e três
+      // colunas; o que a contagem não podia dar é justamente o tipo.
+      supa.from('equipamentos').select('id,tipo,modelo').eq('situacao', 'instalado'),
     ])
     if (par.error || tar.error || equip.error) throw (par.error || tar.error || equip.error)
     PARAMS = parametrosComoObjeto(par.data)
     TAREFAS_PLANO = tar.data || []
+    EQUIPAMENTOS = equip.data || []
     // Os ativos que o plano por CALENDÁRIO não cobre. Contados, nunca
     // omitidos: sem isso a tela apresentaria 64% do parque como se fosse
     // o parque inteiro.
     const outros = await Promise.all(['maq_ativos', 'transp_ativos', 'elet_ativos', 'fono_ativos'].map(
       t => supa.from(t).select('id', { count: 'exact', head: true })))
     COBERTURA = {
-      cobertos: equip.count || 0,
+      cobertos: EQUIPAMENTOS.length,
       naoCobertos: outros.reduce((s, r) => s + (r.error ? 0 : (r.count || 0)), 0),
     }
     PLANO_OK = true
@@ -135,8 +147,12 @@ function renderPlano() {
     return
   }
 
-  const plano = visitasDoPlano(TAREFAS_PLANO)
-  const dem = demandaAnual(plano, PARAMS, COBERTURA.cobertos, COBERTURA.naoCobertos)
+  // A demanda é somada POR ESCOPO: o plano de cada grupo tipo × modelo,
+  // multiplicado pelos equipamentos daquele grupo. Antes era um plano só,
+  // multiplicado por uma contagem — e bastaria a primeira regra por tipo
+  // criada na tela do Plano de /refrigeracao para essa conta atribuir a
+  // regra ao parque inteiro.
+  const dem = demandaAnual(TAREFAS_PLANO, EQUIPAMENTOS, PARAMS, COBERTURA.naoCobertos)
   const dias = semanaDe(SEMANA_REF)
   const cap = capacidadeDaSemana(dias, ALOCACOES, TURNOS, MEMBROS, PESSOAS)
   const u = utilizacao(dem.horasSemana, cap.horas)
@@ -169,25 +185,23 @@ function renderPlano() {
     <div class="panel-card">
       <div class="section-row"><strong>De onde vem a demanda</strong></div>
       <div class="help">Do plano REAL no banco (<code>plano_tarefas</code>), não de uma cópia de constantes.
-        Mudar a periodicidade de uma tarefa lá muda este número aqui.</div>
-      <div class="tbl-wrap" style="margin-top:8px"><table class="tbl">
-        <thead><tr><th>Periodicidade</th><th>Tarefas</th><th>Visitas/ano</th><th>Min/visita</th></tr></thead>
-        <tbody>${plano.visitas.map(v => `<tr>
-          <td><strong>${esc(v.periodicidade)}</strong></td>
-          <td>${v.tarefas}</td>
-          <td>${v.porAno}</td>
-          <td>${fmt(v.tarefas * (PARAMS.minutos_por_tarefa || 0) + (PARAMS.minutos_setup || 0))} min</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
+        Mudar a periodicidade de uma tarefa lá muda este número aqui — e o escopo de uma regra
+        (<code>aplica_a</code>, <code>aplica_modelo</code>) muda a QUEM ela é cobrada.</div>
+      ${dem.comEscopo ? renderDemandaPorTipo(dem, fmt) : renderFormaDoPlano(fmt)}
       <div class="help" style="margin-top:8px">
-        <strong>${plano.visitasPorAno} visitas/ano</strong> por equipamento
-        (${plano.tarefasPorAno} execuções de tarefa) ·
-        <strong>${fmt(dem.horasPorEquipamentoAno, 1)} h/ano</strong> por equipamento ·
-        ${dem.equipamentos} equipamentos → ${fmt(dem.horasAno)} h/ano.
+        <strong>${fmt(dem.horasPorEquipamentoAnoMedia, 1)} h/ano</strong>
+        ${dem.comEscopo ? 'em média por equipamento' : 'por equipamento'} ·
+        ${dem.equipamentos} equipamentos → <strong>${fmt(dem.horasAno)} h/ano</strong> ·
+        ${fmt(dem.visitasAno)} visitas/ano no total.
       </div>
-      ${plano.semPeriodicidade ? `<div class="callout co-warn" style="margin-top:8px">
-        ${plano.semPeriodicidade} tarefa(s) com periodicidade que não sei converter em vezes por ano —
+      ${dem.semPeriodicidade ? `<div class="callout co-warn" style="margin-top:8px">
+        ${dem.semPeriodicidade} tarefa(s) com periodicidade que não sei converter em vezes por ano —
         ficaram <strong>fora</strong> da conta, em vez de entrarem com um número suposto.</div>` : ''}
+      ${dem.semRegra ? `<div class="callout co-warn" style="margin-top:8px">
+        <strong>${dem.semRegra} equipamento(s) que nenhuma regra do plano alcança</strong>
+        ${dem.tiposSemRegra.length ? `(${dem.tiposSemRegra.map(esc).join(', ')})` : ''}
+        entraram com <strong>zero hora</strong>. Não é folga: é máquina que sai da OS sem checklist.
+        Crie a regra na aba <em>Plano</em> de /refrigeracao — a demanda sobe quando ela existir.</div>` : ''}
     </div>
 
     ${dem.naoCobertos ? `<div class="callout co-warn">
@@ -215,6 +229,57 @@ function renderPlano() {
         inflaria a demanda em cerca de metade (1.025 min contra 695, por equipamento/ano).</div>
     </div>
   `
+}
+
+/** A FORMA do plano, para quando nenhuma regra tem escopo: aí todo
+ *  equipamento tem mesmo o mesmo plano, e uma tabela por tipo repetiria
+ *  a mesma linha seis vezes. É o estado de hoje — as 9 tarefas da NBR
+ *  valem para TODOS. */
+function renderFormaDoPlano(fmt) {
+  const plano = visitasDoPlano(TAREFAS_PLANO)
+  return `<div class="tbl-wrap" style="margin-top:8px"><table class="tbl">
+      <thead><tr><th>Periodicidade</th><th>Tarefas</th><th>Visitas/ano</th><th>Min/visita</th></tr></thead>
+      <tbody>${plano.visitas.map(v => `<tr>
+        <td><strong>${esc(v.periodicidade)}</strong></td>
+        <td>${v.tarefas}</td>
+        <td>${v.porAno}</td>
+        <td>${fmt(v.tarefas * (PARAMS.minutos_por_tarefa || 0) + (PARAMS.minutos_setup || 0))} min</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="help" style="margin-top:8px"><strong>${plano.visitasPorAno} visitas/ano</strong>
+      por equipamento (${plano.tarefasPorAno} execuções de tarefa). Nenhuma regra tem escopo:
+      as ${plano.visitas.reduce((n, v) => n + v.tarefas, 0)} tarefas valem para o parque inteiro,
+      então este plano é o de cada equipamento.</div>`
+}
+
+/** Com escopo em jogo, a forma do plano deixa de ser uma só — mostrar a
+ *  lista inteira de tarefas como se fosse o plano de cada máquina seria
+ *  a mesma mentira que esta correção conserta, mudada de lugar. A tabela
+ *  passa a ser por tipo, que é como a regra discrimina. */
+function renderDemandaPorTipo(dem, fmt) {
+  const regras = l => (l.regrasMin === l.regrasMax ? String(l.regrasMax) : `${l.regrasMin}–${l.regrasMax}`)
+  // A explicação da faixa só aparece quando existe faixa na tela. Um
+  // texto que descreve o que não está ali é a mesma classe de defeito
+  // que o aviso de "tipos sem regra própria" já custou em /refrigeracao:
+  // ensina a ler explicação sem procurar o fato.
+  const temFaixa = dem.porTipo.some(l => l.regrasMin !== l.regrasMax)
+  return `<div class="tbl-wrap" style="margin-top:8px"><table class="tbl">
+      <thead><tr><th>Tipo</th><th>Equip.</th><th>Regras</th><th>Visitas/ano</th><th>h/ano</th></tr></thead>
+      <tbody>${dem.porTipo.map(l => `<tr>
+        <td><strong>${esc(l.tipo)}</strong></td>
+        <td>${l.equipamentos}</td>
+        <td${l.regrasMax === 0 ? ' style="color:#E52207"' : ''}>${regras(l)}</td>
+        <td>${fmt(l.visitasAno)}</td>
+        <td>${fmt(l.horasAno)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="help" style="margin-top:8px">
+      Com escopo em jogo o plano deixa de ter uma forma só, então a periodicidade de cada regra
+      fica onde ela é editada: a aba <em>Plano</em> de /refrigeracao.
+      ${temFaixa ? ` A faixa em <em>Regras</em> marca os tipos cujos modelos recebem contagens
+        diferentes — um refinamento por modelo alcança uns e não outros, e uma média esconderia
+        isso atrás de um número que não vale para nenhum dos dois.` : ''}
+    </div>`
 }
 
 function abrirParametros() {
