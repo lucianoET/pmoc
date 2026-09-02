@@ -915,7 +915,16 @@ async function boot() {
   try {
     supa = await criarClienteSupabase()
   } catch (erro) {
-    el('app').innerHTML = `<div class="callout co-red">Não foi possível carregar a configuração: ${esc(erro.message)}</div>`
+    // Na tela de LOGIN, nunca no #app: o #app nasce `display:none` e só
+    // aparece em mostrarApp(), que nunca roda quando a carga falha — escrever
+    // ali deixava o módulo em branco, sem uma palavra dizendo o que houve.
+    // Foi assim que o único módulo da plataforma sem mensagem nenhuma passou
+    // despercebido. Mesma classe de erro do rodapé desenhado antes do miolo.
+    el('login-screen').innerHTML = `
+      <div class="callout co-red" style="max-width:560px;margin:40px auto">
+        <strong>Falha ao iniciar o módulo Equipes.</strong><br>${esc(erro.message)}
+      </div>`
+    el('login-screen').style.display = 'flex'
     return
   }
 
