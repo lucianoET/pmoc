@@ -771,3 +771,78 @@ test('o zero é aceito ou recusado por coluna, exatamente como a migração 56 m
     }
   });
 });
+
+
+// ═══════ 9. FAIXA DOS INTEIROS (migração 57, 02/09) ══════════════════
+//
+// A varredura de 02/09 achou 77 colunas numéricas sem check no banco.
+// Triadas por risco real — sem check E preenchível por uma pessoa —
+// sobraram estas quatro como urgentes, porque estão na planilha que foi
+// a campo: `horas_dia`, `dias_semana`, `tensao` e `btu`. Nem a tela nem
+// o banco recusavam `horas_dia = 30`, e essa coluna alimenta a
+// estimativa de kWh: 25% de consumo a mais, em silêncio.
+//
+// `janelas` tinha os números escritos dentro de um `if` no parser; virou
+// linha de PLANILHA_FAIXAS porque um gate compara uma tabela contra o
+// SQL e não compara um `if`.
+
+test('PLANILHA_FAIXAS espelha, coluna a coluna, os check das migrações 47 e 57', () => {
+  const ctx = carregarSandbox();
+  const faixas = vm.runInContext('PLANILHA_FAIXAS', ctx);
+  const sql =
+    fs.readFileSync(path.join(RAIZ, 'supabase', '47_refrigeracao_carga_termica.sql'), 'utf8') +
+    fs.readFileSync(path.join(RAIZ, 'supabase', '57_refrigeracao_operacao_checks.sql'), 'utf8');
+
+  const colunas = { janelas: 'janelas', horasDia: 'horas_dia', diasSemana: 'dias_semana',
+                    tensao: 'tensao', btu: 'btu' };
+
+  Object.keys(colunas).forEach((chave) => {
+    const col = colunas[chave];
+    const faixa = faixas[chave];
+    assert.ok(faixa, `${chave} sumiu de PLANILHA_FAIXAS`);
+    // Os dois números lidos do SQL, não escritos aqui: se alguém mexer no
+    // check sem mexer na tela (ou o contrário), este caso reprova.
+    const min = sql.match(new RegExp(`${col}\\s*>=\\s*(\\d+)`));
+    const max = sql.match(new RegExp(`${col}\\s*<=\\s*(\\d+)`));
+    assert.ok(min && max, `a migração não declara faixa para ${col}`);
+    assert.equal(faixa.min, Number(min[1]), `${col}: tela min=${faixa.min}, banco min=${min[1]}`);
+    assert.equal(faixa.max, Number(max[1]), `${col}: tela max=${faixa.max}, banco max=${max[1]}`);
+  });
+});
+
+test('a borda de cada faixa é aceita e o passo seguinte é recusado', () => {
+  const ctx = carregarSandbox();
+  const faixas = vm.runInContext('PLANILHA_FAIXAS', ctx);
+  Object.keys(faixas).forEach((chave) => {
+    const { min, max } = faixas[chave];
+    assert.equal(ctx.celulaParaValor(chave, String(min)).ok, true, `${chave}: ${min} deveria passar`);
+    assert.equal(ctx.celulaParaValor(chave, String(max)).ok, true, `${chave}: ${max} deveria passar`);
+    assert.equal(ctx.celulaParaValor(chave, String(min - 1)).ok, false, `${chave}: ${min - 1} deveria ser recusado`);
+    assert.equal(ctx.celulaParaValor(chave, String(max + 1)).ok, false, `${chave}: ${max + 1} deveria ser recusado`);
+  });
+});
+
+// O caso concreto que motivou a migração, escrito por extenso para não
+// se perder atrás da varredura de bordas acima.
+test('horas_dia = 30 e dias_semana = 99 são recusados antes do Postgres', () => {
+  const ctx = carregarSandbox();
+  assert.equal(ctx.celulaParaValor('horasDia', '30').ok, false, 'não existe vigésima quinta hora');
+  assert.equal(ctx.celulaParaValor('diasSemana', '99').ok, false, 'não existe octogésimo dia');
+  assert.equal(ctx.celulaParaValor('horasDia', '24').ok, true);
+  assert.equal(ctx.celulaParaValor('diasSemana', '7').ok, true);
+});
+
+// btu aceita zero, e isso é decisão de DADO, não de gosto: dbToEquip faz
+// `o.btu = o.btu || 0`, então os equipamentos com btu nulo no banco saem
+// da exportação com a célula "0". Um check `> 0` os recusaria em toda
+// importação — e linha recusada bloqueia o arquivamento do arquivo
+// inteiro (D-5hy-11). tensao não sofre disso e por isso exige >= 1.
+test('btu aceita 0 porque dbToEquip força null em 0; tensao não aceita', () => {
+  const ctx = carregarSandbox();
+  assert.equal(ctx.celulaParaValor('btu', '0').ok, true,
+    'btu = 0 é o que a exportação produz para um equipamento sem capacidade cadastrada');
+  assert.equal(ctx.celulaParaValor('tensao', '0').ok, false, 'zero volt não é uma tensão');
+  const sql = fs.readFileSync(path.join(RAIZ, 'supabase', '57_refrigeracao_operacao_checks.sql'), 'utf8');
+  assert.match(sql, /btu >= 0/, 'o banco tem de concordar com a tela sobre o zero');
+  assert.match(sql, /tensao >= 1/);
+});
