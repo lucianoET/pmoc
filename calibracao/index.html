@@ -9260,7 +9260,7 @@ if (!window.__calSupa) {
   // SDK fora do ar: sem client não há login nem dado. Abrir o app aqui
   // mostraria onze telas vazias, que é pior do que dizer o que houve.
   alvo.innerHTML = '<div style="padding:40px;text-align:center;color:var(--tx)">' +
-    'Não foi possível carregar o SDK do Supabase. Verifique a conexão e recarregue.</div>';
+    'Não foi possível carregar o SDK do Supabase (cdn.jsdelivr.net). Sem ele o módulo não acessa o banco de dados. Verifique a conexão — se a rede bloqueia CDN externo, esse endereço precisa ser liberado.</div>';
 } else {
   // `mount` checa a sessão salva E escuta onAuthStateChange: com sessão
   // válida no navegador, onLogin chega duas vezes para o mesmo login. Sem

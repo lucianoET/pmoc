@@ -37,7 +37,31 @@ export async function obterSupabaseConfig() {
   )
 }
 
+// O endereço de onde o SDK vem, escrito uma vez: é o que a mensagem precisa
+// nomear para alguém da rede saber o que liberar.
+export const ORIGEM_SDK = 'cdn.jsdelivr.net'
+
+/** A frase que o usuário lê quando o SDK não carregou.
+ *
+ *  Existe porque a alternativa media mal: `window.supabase` indefinido fazia
+ *  `Cannot read properties of undefined (reading 'createClient')` subir até a
+ *  tela em SETE módulos — mensagem que não diz o que houve nem o que fazer, e
+ *  que quem lê não tem como agir sobre. A causa real quase sempre é uma só,
+ *  e é externa ao aplicativo: a rede não deixou o CDN passar.
+ *
+ *  Nomear o endereço é o que torna a frase acionável: quem administra a rede
+ *  da OM precisa saber QUAL host liberar, não que "houve um erro". */
+export const MSG_SDK_AUSENTE =
+  `Não foi possível carregar o SDK do Supabase (${ORIGEM_SDK}). ` +
+  'Sem ele o módulo não acessa o banco de dados. Verifique a conexão — ' +
+  'se a rede bloqueia CDN externo, esse endereço precisa ser liberado.'
+
 export async function criarClienteSupabase() {
   const { url, key } = await obterSupabaseConfig()
+  // A guarda mora AQUI, na única linha do projeto que dereferencia o SDK:
+  // os oito módulos da base comum a herdam sem uma linha mudada em cada um.
+  if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+    throw new Error(MSG_SDK_AUSENTE)
+  }
   return window.supabase.createClient(url, key)
 }

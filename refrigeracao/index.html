@@ -357,6 +357,30 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
 /* ── SUPABASE CONFIG ── */
 const SUPA_URL = 'https://thoaqipyhfmromsgzmjs.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRob2FxaXB5aGZtcm9tc2d6bWpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjk5NTksImV4cCI6MjEwMTY0NTk1OX0.1Ig6ijb6SKgeQRgGwM54MyzlVr-n_feSAxaFTwbHRGY';
+/* Sem o SDK, `supabase` é indefinido e ESTA linha lançava — matando o resto
+   do <script> inteiro. O resultado na tela era o pior dos quatro módulos
+   medidos: a barra de topo e as abas desenhavam (são HTML estático) e mais
+   nada acontecia, sem uma palavra dizendo que houve falha. Parecia um parque
+   vazio. A frase é a mesma que os módulos da base comum exibem, replicada
+   porque este arquivo não importa de lugar nenhum, por decisão de projeto —
+   o gate compara as cópias ao pé da letra. Estilo em linha, sem classe. */
+if (typeof supabase === 'undefined' || !supabase || typeof supabase.createClient !== 'function') {
+  document.addEventListener('DOMContentLoaded', function(){
+    var aviso = document.createElement('div');
+    aviso.setAttribute('role', 'alert');
+    aviso.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#fff;'
+      + 'display:flex;align-items:center;justify-content:center;padding:24px;'
+      + 'font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+    aviso.innerHTML = '<div style="max-width:560px;border-left:4px solid #E52207;'
+      + 'background:#FEF2F2;color:#1B1B1B;padding:16px 18px;border-radius:8px;line-height:1.5">'
+      + '<strong style="display:block;margin-bottom:6px">Falha ao iniciar o PMOC Refrigeração.</strong>'
+      + 'Não foi possível carregar o SDK do Supabase (cdn.jsdelivr.net). Sem ele o módulo não '
+      + 'acessa o banco de dados. Verifique a conexão — se a rede bloqueia CDN externo, esse '
+      + 'endereço precisa ser liberado.</div>';
+    document.body.appendChild(aviso);
+  });
+  throw new Error('SDK do Supabase ausente');
+}
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 /* ── CONVERSORES ── */
