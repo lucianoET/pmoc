@@ -124,7 +124,22 @@ Three independent frontend entry points sharing one Postgres backend via the Sup
 - Globals `UPPER_CASE`, functions `camelCase`, private helpers `_prefixed`, HTML ids `kebab-case`.
 - Section comments as `// ── nome ──`.
 - Supabase error handling idiom: `const { error } = await supa.from(...)…; if(error){ alert('Erro: '+error.message); return }`.
-- Detailed codebase analysis lives in `.planning/codebase/` (ARCHITECTURE, STACK, CONVENTIONS, TESTING, CONCERNS, INTEGRATIONS, STRUCTURE) — read those before large changes.
+- Nomes: funções `camelCase`, incluindo as `async`; helpers privados `_prefixados` (também métodos de classe); constantes de configuração `UPPER_CASE`; classes `PascalCase`.
+- Erro de Supabase, sempre a mesma forma: desestruturar `const { error } = await …`, checar antes de seguir, `alert('Erro: '+error.message)` e `return`. Validação de formulário escreve em `erroEl.textContent`, não em `alert`.
+- Funções de render entre 30 e 80 linhas com template literals; 1 a 3 parâmetros, apoiadas no estado global em vez de encadear argumentos. A maioria é void, por efeito colateral. Utilitários (`esc()`, `el()`, `val()`, `fmtDate()`, `today()`) são puros.
+- Comentário de seção `// ── nome ──`; JSDoc só no que é exportado de `shared/`.
+- Sem formatador nem linter automático — indentação de 2 espaços, revisão manual.
+
+**Registro único (02/09/2026):** este arquivo é o registro do projeto. Não existe mais
+`/.planning/` nem `/.claude/CLAUDE.md` — os dois foram arquivados em
+`docs/historico/planning/`, com o motivo em `LEIA-ME.md` de lá. Havia dois registros e um
+estava morto: o `.planning/` parou em 23/08 sem artefato para as 12 tasks de 30/08 em
+diante, e o `/.claude/CLAUDE.md`, gerado dele, era **injetado como instrução em toda
+sessão** afirmando "dois módulos em produção" (são dez), "7 cutting machines" (são 28) e
+"migrações 01 a 09" (são 55). Cada task nova acrescenta aqui uma nota datada; o roteiro
+manual vai para `TESTES.md`. A análise de código que ficava em `.planning/codebase/` **não
+deve ser consultada**: é da era de dois módulos e o `STRUCTURE.md` de lá só conhece
+`refrigeracao/` e `maquinas/`.
 
 ## Decisões travadas — Phase 10 (mapa operacional)
 
@@ -134,6 +149,60 @@ Each has a permanent automated gate — a future phase contradicting one of thes
 - **D-02** — the satellite basemap stays **online-only**, no local tile cache, by user decision. Gate: `tests/mapa-base-offline.test.js` (scoped to the satellite construction region of `mapa/xmap.js`, not the whole file, because the local-tile class legitimately appears elsewhere in the same file for the other basemap).
 - **D-03** — service zones live in `maq_areas`, deliberately **outside** the `cmasm_locais` tree — they're auxiliary and temporary, not permanent locations. Not gated by a dedicated test; documented here so a future phase doesn't "reorganize" them into the locations tree.
 - **D-04** — time/cost estimate per zone is **out of scope**. Not in the legacy app; when it arrives, it should derive from real execution (`maq_operacoes.horas_utilizadas`/`area_executada_m2`), not an arbitrary constant. Gate: `tests/mapa-decisoes.test.js` (no file under `mapa/` may reference those two columns).
+
+## Roadmap — o que falta
+
+Herdado de `.planning/ROADMAP.md`, arquivado em 02/09/2026. O marco v2.0 está em
+**4 de 8 fases**: 5 (base unificada), 6 (tema), 7 (UI/UX mobile) e 10 (mapa) entregues.
+
+**Fase 8 — kanban e calendário compartilhados.** Kanban e calendário deixam de ser
+exclusivos de `/maquinas` e viram componentes de `shared/`, com ao menos um segundo
+consumidor cada, sem quebrar `tests/operacoes-maquinas.test.js`. **Andou para trás:** em
+31/08 a Refrigeração ganhou calendário próprio (`agendaChave`, seção Calendário do PMOC),
+então hoje há **dois** calendários independentes onde a fase existia para haver um. Quem
+retomar herda mais duplicação do que o roadmap previu.
+
+**Fase 9 — documentos.** Um utilitário de CSV em `shared/`, com proteção contra injeção de
+fórmula (como `csvSeguro()` de `transportes/app.js` já faz), pré-visualização antes de
+gravar, importação idempotente e geração de PDF compartilhada. O critério dizia "as 5
+implementações independentes deixam de existir" e hoje são **6** (`calibracao`, `maquinas`,
+`predial`, `refrigeracao`, `transportes`, `shared/modulo-manutencao.js`).
+
+**Fase 11 — telemetria no mapa. Travada**, e não por razão técnica: depende de decisão de
+política de segurança da OM sobre expor telemetria. A arquitetura é ingestão **de fora para
+dentro** — o dispositivo empurra para o Supabase e nenhum serviço interno (Home Assistant,
+Frigate, Mosquitto) aceita conexão vinda do site público; stream de câmera nunca transita
+pelo site. O padrão já foi provado no `aguada` (ESP32 → MQTT → bridge → SQLite → WebSocket).
+
+**Fase 12 — planta como camada.** Carregar planta em imagem, PDF ou CAD vetorial, ancorada
+geograficamente, com opacidade/rotação/escala ajustáveis e alinhamento persistido. Existe
+meio caminho andado: `mapa/mapa-planta.js` (quick-260819-406) já faz `L.imageOverlay`
+georreferenciado, mas **só na aba** — persistir exige um bucket de Storage com política
+própria. Falta o PDF (via `pdf.js`) e o DXF, que compensa converter em geometria Leaflet
+em vez de imagem: georreferencia certo, escala sem borrar e torna os elementos clicáveis.
+
+## Dívida de segurança
+
+Herdada de `.planning/BACKLOG-TECNICO.md` (08/08/2026), arquivado em 02/09/2026 —
+**54 itens, nenhum marcado**. A lista completa continua lá; o que ela diz, em resumo:
+
+- **A RLS é mais frouxa do que a tela sugere.** O frontend aplica permissão por cargo, mas
+  várias policies aceitam escrita de qualquer usuário autenticado, sem distinguir papel —
+  é o que faz `podeEditarCadastro()` em `/maquinas` ser explicitamente "UX only". Fechar de
+  verdade exige um helper SQL que resolva o papel a partir de `auth.uid()` e `usuarios.auth_id`.
+- **As senhas dos cargos seguem no `cmasm2026` inicial**, compartilhadas.
+- **O bucket `os-fotos` é público** — precisa virar privado com URL assinada.
+- **Concluir OS de Máquinas não é transação:** OS, horímetro, uso, movimento e estoque
+  mudam em chamadas independentes; uma falha no meio deixa estado inconsistente. O conserto
+  é um RPC transacional que também recuse delta negativo, horímetro regressivo e estoque
+  insuficiente.
+- **A auditoria é gravada pelo cliente**, logo é alterável por ele; deveria vir de trigger,
+  com `auth.uid()`, papel e valores anterior/novo.
+- **Certificação pode encerrar OS com divergência** entre orçado, composição, NE e NF, sem
+  tolerância definida.
+- **`innerHTML` recebe dado do banco sem escape consistente** em `/maquinas`; falta CSP.
+
+Nada disso foi endereçado e nada disso é refinamento — é sistema com dado real da OM.
 
 ## Known pendências (from README)
 

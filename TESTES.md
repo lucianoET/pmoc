@@ -326,7 +326,7 @@ Ao terminar: `docker rm -f pmoc-teste-reparos`.
 
 A importação da programação de VTR/EMB já foi aplicada por
 `supabase/11_transportes_seed.sql` e conferida linha a linha em
-`.planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md`
+`docs/historico/planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md`
 (9/9 ativos e 23/23 viagens reconciliados, seed idempotente por `codigo` e por
 `chave_importacao`). Para confirmar o estado em produção, rodar no SQL Editor
 do Supabase:

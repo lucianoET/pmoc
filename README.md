@@ -52,7 +52,7 @@ em CSV. Escrita restrita por RBAC (`transp_pode_escrever()`); leitura pública.
 O inventário anterior tinha 9 ativos porque o seed original usou a "Programação
 de Viaturas de Rotina" (um registro de viagens de um dia) no lugar do mapa da
 frota. Corrigido na migração 24 — ver
-`.planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md`.
+`docs/historico/planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md`.
 
 ### Elétrica e Fonoclama
 Portados dos apps legados em `localStorage` (`ref/eletrica.html` e o
@@ -210,8 +210,8 @@ pmoc/
 │   └── 54–55  refrigeração: serviços do plano e regra por tipo
 ├── tests/                     Gates automatizados (node --test tests/*.test.js)
 ├── ref/                       Fontes legadas: planilhas, PDFs, HTMLs originais
-├── .planning/                 Artefatos GSD (ver Pendências — desatualizados)
-└── docs/historico/            Registros de setup e incidentes já resolvidos
+└── docs/historico/            Registros já resolvidos, e os artefatos GSD aposentados
+    └── planning/              Ex-`.planning/` e ex-`.claude/CLAUDE.md` (ver LEIA-ME.md)
 ```
 
 ---
@@ -317,10 +317,11 @@ porque o cadastro correspondente está vazio. Nenhuma delas depende de desenvolv
 ### 2. Segurança — não endereçada
 
 - [ ] **Senhas dos cargos ainda no `cmasm2026` inicial.** Trocar antes do uso operacional.
-- [ ] `.planning/BACKLOG-TECNICO.md` tem **54 itens, nenhum marcado**, parado desde
-      23/08/2026 — inclui tornar o bucket `os-fotos` privado, RLS por papel nas tabelas
-      `maq_*`, auditoria não alterável pelo cliente e CSP. É dívida de segurança em
-      sistema com dado real da OM, não refinamento.
+- [ ] **54 itens de dívida de segurança, nenhum endereçado** — RLS que aceita escrita de
+      qualquer autenticado sem distinguir papel, bucket `os-fotos` público, conclusão de OS
+      de Máquinas sem transação, auditoria gravada pelo cliente e sem CSP. Resumo em
+      `CLAUDE.md` § Dívida de segurança; lista completa em
+      `docs/historico/planning/BACKLOG-TECNICO.md`.
 
 ### 3. Negócio
 
@@ -338,11 +339,12 @@ porque o cadastro correspondente está vazio. Nenhuma delas depende de desenvolv
       independentes de CSV deixam de existir" e hoje são **6**. Em 31/08 a Refrigeração
       ganhou calendário próprio, então há **dois** calendários independentes onde a fase
       existia para haver um.
-- [ ] **`.planning/` está 10 dias e 12 PRs atrás do código** — `STATE.md` foi realinhado em
-      02/09, mas `ROADMAP.md`, `MILESTONES.md` e `BACKLOG-TECNICO.md` continuam em 23/08 e
-      não têm artefato para nenhuma task de 30/08 em diante. Decidir explicitamente se o
-      `.planning/` continua sendo mantido ou se o `CLAUDE.md` passa a ser o registro único —
-      manter dois registros onde um está morto é pior que assumir um só.
+- [x] ~~Decidir se o `.planning/` continua sendo mantido ou se o `CLAUDE.md` vira o registro
+      único.~~ **Resolvido em 02/09/2026: o `CLAUDE.md` é o registro único.** O `.planning/`
+      e o `/.claude/CLAUDE.md` gerado dele foram **arquivados** — não apagados, pela mesma
+      regra que vale para o banco — em `docs/historico/planning/`, com o motivo em
+      `LEIA-ME.md` de lá. O que ainda valia migrou antes: as fases 8, 9, 11 e 12 e as 54
+      pendências de segurança agora vivem em `CLAUDE.md`.
 
 ### Não são pendências
 
