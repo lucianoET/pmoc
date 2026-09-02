@@ -17,13 +17,19 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 | Rota | App | Conteúdo | Estado |
 |------|-----|----------|--------|
 | `/` | **Portal** | Índice dos sistemas | ✅ |
-| `/refrigeracao` | **PMOC Refrigeração** v2.8 | 171 unidades · ARP 04/2024 · fiscalização · QR · impressão | ✅ |
-| `/maquinas` | **PMOC Máquinas** v1.1 | 28 máquinas · 59 planos · 34 peças · operações · consumo · ciclo de vida | ✅ |
+| `/refrigeracao` | **PMOC Refrigeração** v2.8 | 175 unidades · OS unificada por tipo de executor · ARP 04/2024 · carga térmica · estoque · acervo de normas · QR | ✅ |
+| `/maquinas` | **PMOC Máquinas** v1.1 | 28 máquinas · 59 planos · 35 peças · operações · necessidades e compras · contratações | ✅ |
 | `/transportes` | **PMOC Transportes** v1.0 | 43 ativos · 23 viagens · planos, estoque, OS e lista de compras | ✅ |
-| `/eletrica` | **PMOC Elétrica** v1.0 | 13 ativos · 9 planos · 11 peças · geradores, QGBT, nobreaks, iluminação | ✅ |
-| `/fonoclama` | **PMOC Fonoclama** v1.0 | 10 ativos · 7 planos · 10 peças · PA 70V | ✅ |
-| `/predial` | **PMOC Predial** v1.0 | 233 locais · 3 templates · 206 itens de checklist · GUT · laudos | ✅ |
-| `/mapa` | **Mapa CMASM** v1.0 | Planta do centro em Leaflet, portada do legado xMap | ✅ |
+| `/eletrica` | **PMOC Elétrica** v1.0 | 13 ativos · geradores, QGBT, nobreaks, iluminação | ✅ |
+| `/fonoclama` | **PMOC Fonoclama** v1.0 | 15 ativos · PA 70V | ✅ |
+| `/predial` | **PMOC Predial** v1.0 | 3 templates · 223 itens de checklist · GUT · laudos · 20 normas | ✅ |
+| `/reparos` | **PMOC Reparos** v1.0 | 7 modelos · 25 serviços · 34 reparos — sintoma → causa provável | ✅ |
+| `/calibracao` | **Controle de Calibração** | 38 instrumentos · 8 laboratórios · 12 PS · 2 lotes | ✅ |
+| `/equipes` | **PMOC Equipes** v1.0 | 8 ofícios · 2 turnos · escala semanal e capacidade | ⚠️ sem pessoas cadastradas |
+| `/mapa` | **Mapa CMASM** v1.0 | Leaflet · 5 camadas de ativos · zonas, prédios e planta vetorial | ✅ |
+
+O portal lista dez rotas; `/reparos` não aparece nele por decisão de projeto — o catálogo
+de diagnóstico é alcançado de dentro de `/maquinas`, que é onde a OS corretiva é aberta.
 
 ### Refrigeração
 Inventário de climatização com fluxo completo de contratação pública:
@@ -46,7 +52,7 @@ em CSV. Escrita restrita por RBAC (`transp_pode_escrever()`); leitura pública.
 O inventário anterior tinha 9 ativos porque o seed original usou a "Programação
 de Viaturas de Rotina" (um registro de viagens de um dia) no lugar do mapa da
 frota. Corrigido na migração 24 — ver
-`.planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md`.
+`docs/historico/planning/phases/01-transportes-frota-sob-manuten-o/01-CONFERENCIA-IMPORT.md`.
 
 ### Elétrica e Fonoclama
 Portados dos apps legados em `localStorage` (`ref/eletrica.html` e o
@@ -77,27 +83,54 @@ os arquivos do legado e emite o SQL:
 python3 supabase/gerar_18_predial_seed.py
 ```
 
+### Reparos
+Catálogo sintoma → causa provável, chaveado no **modelo** da máquina (`rep_modelos`),
+não no ativo. Complementa Máquinas: lá o gatilho é o horímetro (determinístico), aqui
+é o sintoma relatado (probabilístico, ranqueado). `rep_reparos.frequencia` sobe pelo RPC
+`rep_confirmar_reparo` quando o mecânico confirma a causa ao fechar a OS corretiva, de
+modo que a lista deixa de ser alfabética e passa a refletir o que falha nesta oficina.
+
+### Calibração
+App legado independente (React 18 embutido, sidebar e tema próprios, 11 páginas).
+Migrado do `localStorage` para o Supabase em 18/08/2026 (migrações 35 e 36) e com login
+por cargo desde 19/08/2026 (migração 39). Fica fora da base comum por decisão — não usa
+`shared/tema.js` nem `shared/shell.js`, mas importa o `Auth` compartilhado.
+
+### Equipes
+Quem executa a manutenção: pessoas, ofícios, equipes, turnos e escala semanal, mais o
+confronto entre a capacidade escalada e a demanda que o plano preventivo real
+(`plano_tarefas`) obriga. Tabelas com prefixo `cmasm_` porque atravessam módulos.
+Nenhuma pessoa é semeada — nome de militar é dado real da OM.
+
 ---
 
 ## Dados em produção
 
 | Tabela | Registros |
 |--------|-----------|
-| `equipamentos` | 171 (136 OK · 35 NOK) |
+| `equipamentos` | 175 (137 OP · 37 INOP · 1 OR) — todos `instalado` |
+| `logs_manutencao` | 8 OS (7 contrato · 1 interna) |
+| `os_itens` | 27 |
 | `arp_itens` | 19 (R$ 66.447,86 empenhados) |
-| `os_contratacao` | 2 (NE 334 e 335) |
+| `os_contratacao` | 0 — **dormente** desde a migração 43 (OS unificada), sem `drop` |
 | `plano_tarefas` | 9 (NBR 17037) |
-| `maq_ativos` | 28 |
-| `maq_planos` | 59 |
-| `maq_materiais` | 34 (R$ 4.861,80 de estoque mínimo) |
-| `transp_ativos` | 43 (33 viaturas · 10 embarcações · 26 INOP) |
-| `cmasm_locais` | 311 |
-| `cmasm_estrutura` | 78 |
-| `elet_ativos` | 13 |
-| `fono_ativos` | 10 |
-| `transp_viagens` | 23 |
-| `transp_planos` | 0 (aguardando cadastro) |
-| `transp_materiais` | 0 (aguardando cadastro) |
+| `servicos` | 9 · `servico_materiais` 0 |
+| `materiais` | 0 (catálogo de estoque ainda vazio) · `estoque_movimentos` 0 |
+| `maq_ativos` | 28 · `maq_planos` 59 · `maq_materiais` 35 |
+| `maq_areas` | 19 (17 ativas) |
+| `transp_ativos` | 43 (33 viaturas · 10 embarcações) · `transp_viagens` 23 |
+| `transp_planos` | 0 (aguardando cadastro) · `transp_materiais` 0 |
+| `elet_ativos` | 13 · `fono_ativos` 15 |
+| `pred_checklist_templates` | 3 · `pred_checklist_itens` 223 · `pred_inspecoes` 1 · `pred_laudos` 1 |
+| `pred_normas` | 20 · `cmasm_documentos` 18 |
+| `rep_modelos` | 7 · `rep_servicos` 25 · `rep_reparos` 34 |
+| `cal_equipamentos` | 38 · `cal_labs` 8 · `cal_ps` 12 · `cal_lotes` 2 |
+| `cmasm_locais` | 312 (106 com coordenada) · `cmasm_estrutura` 78 |
+| `cmasm_especialidades` | 8 · `cmasm_turnos` 2 · `cmasm_parametros` 2 |
+| `cmasm_pessoas` | 0 · `cmasm_equipes` 0 · `cmasm_alocacoes` 0 |
+
+Conferido pela API REST com a `anon key` em 02/09/2026. As tabelas com zero não estão
+quebradas — são cadastros que ainda não foram preenchidos; ver **Pendências**.
 
 ---
 
@@ -106,39 +139,79 @@ python3 supabase/gerar_18_predial_seed.py
 ```
 pmoc/
 ├── index.html                 Portal
-├── vercel.json                Rewrites de rota (7 módulos)
-├── refrigeracao/index.html    v2.8 — single-file, 436 KB
+├── vercel.json                Rewrites de rota (10 módulos)
+├── refrigeracao/
+│   ├── index.html             v2.8 — single-file, ~860 KB (CSS + JS embutidos)
+│   ├── qrcode.js  manifest.json  icone-*.png
+│   └── vendor/                Font Awesome 5.15.4 hospedado (css/ + webfonts/ irmãos)
 ├── maquinas/
 │   ├── index.html
 │   ├── app.js                 Aplicação e acesso ao Supabase
-│   └── operacoes.js           Regras testáveis de operações e agenda
-├── transportes/
-│   ├── index.html
-│   └── app.js                 Frota mista, viagens, planos, estoque e OS
-├── eletrica/    index.html + app.js    Configuração do módulo (tabelas elet_)
-├── fonoclama/   index.html + app.js    Configuração do módulo (tabelas fono_)
+│   ├── operacoes.js           Regras testáveis de operações e agenda
+│   ├── estoque-tabela.js      Colunas do Estoque (adapta shared/tabela.js)
+│   ├── areas-tabela.js        Colunas das Áreas Vegetais
+│   └── contratacoes.js        Etapas da contratação (usa shared/fluxo.js)
+├── transportes/  index.html + app.js    Frota mista, viagens, planos, estoque e OS
+├── eletrica/     index.html + app.js    Configuração do módulo (tabelas elet_)
+├── fonoclama/    index.html + app.js    Configuração do módulo (tabelas fono_)
 ├── predial/
-│   ├── index.html
-│   ├── app.js                 Inspeção, checklist GUT e laudos (tabelas pred_)
+│   ├── index.html + app.js    Inspeção, checklist GUT e laudos (tabelas pred_)
 │   └── dominio.js             Regras testáveis: faixas GUT e árvore de locais
-├── mapa/                      Planta do CMASM em Leaflet (portado do xMap)
+├── reparos/
+│   ├── index.html + app.js    Catálogo sintoma → causa provável (tabelas rep_)
+│   └── tabelas.js             Definições de coluna das três tabelas
+├── calibracao/
+│   ├── index.html             App legado, React 18 embutido (~1 MB)
+│   └── gerar-seed.mjs         Gera a migração 36 a partir do próprio HTML (rodado à mão)
+├── equipes/
+│   ├── index.html + app.js    Pessoas, ofícios, equipes, turnos e escala (tabelas cmasm_)
+│   └── nucleo.js              Núcleo puro: capacidade, demanda e escopo de plano
+├── mapa/
+│   ├── index.html + app.js
+│   ├── xmap.js / xmap.css     Componente Leaflet portado do legado (travado, sem edições)
+│   ├── xmap-layers-*.js       Camadas (ativos genérica, prédios, grama, elétrica, aguada)
+│   ├── xmap-marcadores.js     Agrupamento por ponto, rótulos e popups
+│   ├── mapa-dados.js          Porta única de leitura/escrita no Supabase
+│   ├── mapa-geometria.js      Núcleo puro: área geodésica, herança de posição, vocabulários
+│   ├── mapa-editor.js         Desenho de zona e posicionamento de ativo/prédio
+│   ├── mapa-exportar.js       Exportação GeoJSON · mapa-planta.js  planta de referência
+│   ├── planta-cmasm.geojson   Planta vetorial (117 feições) · gerar-planta.mjs (rodado à mão)
+│   ├── vendor/                Leaflet 1.9.4 + leaflet-draw hospedados
+│   └── tiles/                 Tiles raster locais, opcionais (ver GERAR-TILES.md)
 ├── shared/
 │   ├── auth.js                Login por cargo (reutilizável)
-│   ├── supabase-config.js     Reuso da configuração Supabase
+│   ├── supabase-config.js     Configuração do Supabase e guarda de SDK ausente
 │   ├── pmoc.css               Estilo comum dos módulos novos
-│   ├── shell.js               Shell de layout comum — cabeçalho, abas e rodapé (testado)
+│   ├── shell.js               Cabeçalho, abas e rodapé (testado)
+│   ├── tema.js                Tema claro/escuro das 7 superfícies
+│   ├── icones.js              Conjunto único de 28 ícones SVG inline
+│   ├── tabela.js              Ordenação e filtro por coluna (3 consumidores)
+│   ├── fluxo.js               Núcleo de fluxo por definição de etapas
+│   ├── componentes.js         Peças de tela com dois ou mais consumidores
+│   ├── arvore.js              Árvore de locais colapsável
 │   ├── vencimento.js          Regra de vencimento por horímetro (testada)
+│   ├── persistencia.js
 │   └── modulo-manutencao.js   Motor de elétrica/fonoclama
-├── supabase/                  24 migrações numeradas, aplicadas em ordem
+├── supabase/                  55 migrações numeradas, aplicadas em ordem
 │   ├── 01–09  máquinas, usuários, refrigeração, ARP, frota
 │   ├── 10–13  transportes (schema e seed), áreas e operações de máquinas
 │   ├── 14–16  elétrica e fonoclama
 │   ├── 17–18  predial (18 é gerado por gerar_18_predial_seed.py)
 │   ├── 19–21  cmasm_locais unificado e vínculo com os módulos
-│   └── 22–24  transportes: planos e RBAC, estoque e OS, inventário completo
-├── tests/                     Testes de regra de negócio (node <arquivo>.test.js)
+│   ├── 22–24  transportes: planos e RBAC, estoque e OS, inventário completo
+│   ├── 25, 37 mapa: geometria e posição; contorno dos prédios
+│   ├── 26–28  reparos (28 corrige o formato que a 26 não aplicou)
+│   ├── 29–34  máquinas: itens e custos de OS, fluxo, ficha, compras
+│   ├── 35–36, 39  calibração: schema, seed e RLS autenticada
+│   ├── 38     máquinas: contratação de empresa
+│   ├── 40–48  refrigeração: OS unificada, estoque, atributos, carga térmica, inspeção
+│   ├── 49–51  equipes: schema, seed e parâmetros de plano
+│   ├── 52–53  acervo de documentos (normas, formulários, conceitos)
+│   └── 54–55  refrigeração: serviços do plano e regra por tipo
+├── tests/                     Gates automatizados (node --test tests/*.test.js)
 ├── ref/                       Fontes legadas: planilhas, PDFs, HTMLs originais
-└── docs/historico/            Registros de setup e incidentes já resolvidos
+└── docs/historico/            Registros já resolvidos, e os artefatos GSD aposentados
+    └── planning/              Ex-`.planning/` e ex-`.claude/CLAUDE.md` (ver LEIA-ME.md)
 ```
 
 ---
@@ -146,7 +219,9 @@ pmoc/
 ## Stack
 
 Sem build, sem npm, sem framework. HTML + vanilla JS + Supabase JS SDK via CDN.
-Cada `index.html` abre direto no navegador para desenvolvimento.
+Leaflet e Font Awesome são **hospedados no repositório** (`mapa/vendor/`,
+`refrigeracao/vendor/`) desde 02/09/2026; o SDK do Supabase e o SheetJS do
+`/calibracao` continuam vindo de CDN.
 
 | Camada | Tecnologia |
 |--------|-----------|
@@ -174,7 +249,11 @@ Novos cargos: editar o array `CARGOS` no topo de `maquinas/app.js`.
 
 ## Setup
 
-Não há build. Para rodar local, abra qualquer `index.html` no navegador ou sirva a raiz:
+Não há build, mas **abrir um `index.html` direto do disco (`file://`) não funciona** em
+nenhum módulo: todos referenciam os próprios arquivos por caminho raiz-absoluto
+(`/refrigeracao/qrcode.js`, `/mapa/vendor/leaflet.js`, …) para resolverem na rota que o
+Vercel serve em produção, e caminho raiz-absoluto não tem significado sob `file://`.
+Sirva a raiz do repositório por HTTP:
 
 ```bash
 python -m http.server
@@ -204,32 +283,93 @@ O histórico do setup inicial, da recuperação dos dados do refrigeração e da
 
 ## Pendências
 
+Conferido contra o banco de produção em **02/09/2026** pela API REST. As migrações
+**01 a 55 estão todas aplicadas** — a lista anterior afirmava que a 44, a 45 e a 46
+aguardavam aplicação, e isso deixou de ser verdade em 31/08/2026.
+
+### 1. Dado de campo — é aqui que está o gargalo
+
+Seis funcionalidades estão prontas, publicadas e com migração aplicada, mas mostram zero
+porque o cadastro correspondente está vazio. Nenhuma delas depende de desenvolvimento novo.
+
+- [ ] **Carga térmica não calcula para nenhum equipamento** — `area_m2` 0/175 e `tipo_uso`
+      0/175. Sem área, o veredito de dimensionamento diz "não calculável", por construção.
+      O caminho de carga em massa já existe: a planilha exportar/importar
+      (quick-260822-5hy) carrega as sete colunas de ambiente, porque as colunas dela
+      derivam de `EQUIP_EDITAVEIS` (D-5hy-06). Exportar → preencher em campo → importar.
+- [ ] **EER não é publicado** — `corrente_nominal` 0/175. Sem corrente de placa a potência
+      é estimada pela capacidade (BTU/h ÷ 3412 ÷ COP 3) e o EER sairia como uma constante,
+      então ele é deliberadamente omitido (D-2wq-07). Entra pela mesma planilha.
+- [ ] **Estoque de `/refrigeracao` sem catálogo** — `materiais` 0 linhas, logo
+      `servico_materiais` 0 e `estoque_movimentos` 0: a baixa ao entrar em execução nunca
+      foi exercida em produção. Cadastrar peça por peça na página Estoque.
+- [ ] **`/equipes` sem o lado da oferta** — `cmasm_pessoas`, `cmasm_equipes` e
+      `cmasm_alocacoes` com 0 linhas. Só a demanda calcula (2.027 h/ano sobre os 175
+      equipamentos); a utilização devolve `null` enquanto não houver equipe escalada, por
+      decisão (D-eq-12). Nenhuma pessoa é semeada de propósito (D-eq-06).
+- [ ] **Atributos técnicos quase todos não avaliados** — `inverter` 20/175 marcados,
+      `automacao` 2/175. O F21 ficou fora do seed 46 de propósito: quais das 6 centrais e
+      dos 17 splits compõem o arranjo redundante é decisão do usuário.
+- [ ] **Quatro máquinas existem no chão e não no cadastro** — PAIOL D-5 e K-6 têm uma cada,
+      R-7 nenhuma. Entram por "Cadastrar novo equipamento", nunca por seed.
+- [ ] `transp_planos` e `transp_materiais` seguem com 0 linhas.
+
+### 2. Segurança — não endereçada
+
+- [ ] **Senhas dos cargos ainda no `cmasm2026` inicial.** Trocar antes do uso operacional.
+- [ ] **54 itens de dívida de segurança, nenhum endereçado** — RLS que aceita escrita de
+      qualquer autenticado sem distinguir papel, bucket `os-fotos` público, conclusão de OS
+      de Máquinas sem transação, auditoria gravada pelo cliente e sem CSP. Resumo em
+      `CLAUDE.md` § Dívida de segurança; lista completa em
+      `docs/historico/planning/BACKLOG-TECNICO.md`.
+
+### 3. Negócio
+
 - [ ] Divergência RLP: MCP R$ 43.467,13 × NE334 R$ 39.926,11 (dif. R$ 3.541,02)
 - [ ] Centrais F21 são 30 TR; itens 1365/1366 aderidos são 12 TR — verificar aplicabilidade
-- [ ] Trocar senhas dos cargos
 - [ ] Valores de aquisição das máquinas são estimativas — ajustar com patrimônio real
-- [ ] Corrente nominal de placa continua ausente no banco de `/refrigeracao` (0 de 175); enquanto
-      estiver, a potência de toda a frota é estimada pela capacidade (BTU/h), não medida — o
-      número real entra pela planilha exportar/importar já existente (quick-260822-5hy),
-      equipamento por equipamento. O card deixou de mentir zero, mas ainda não diz a verdade
-      medida.
-- [ ] `supabase/44_refrigeracao_estoque.sql` (estoque de peças e materiais de `/refrigeracao`,
-      quick-260826-6wy) está **escrita e conferida, aguardando aplicação** pelo usuário — depois
-      do deploy do frontend (mesma ordem de D-cf8-25). Até lá a tela publicada se comporta byte a
-      byte como hoje (`EST_OK` falso: sem botão de Estoque, sem catálogo no formulário de item,
-      sem baixa, sem alerta). Depois de aplicada, conferir: cadastro de material, item de MATERIAL
-      escolhido do catálogo numa OS, baixa única ao entrar em execução (sem baixar de novo ao ir e
-      voltar), entrada de recebimento, e o alerta "Estoque abaixo do mínimo" nas duas larguras —
-      roteiro completo em `TESTES.md`. Limite conhecido: voltar de Em execução não estorna o
-      estoque automaticamente; a correção é uma entrada registrada à mão.
-- [ ] `supabase/45_refrigeracao_atributos_tecnicos.sql` e `46_refrigeracao_atributos_seed.sql`
-      (atributos técnicos inverter/redundante/automação de `/refrigeracao`, quick-260829-500)
-      estão **escritas e conferidas, aguardando aplicação** pelo usuário — depois do deploy do
-      frontend (mesma ordem de D-cf8-25). Até lá a tela publicada se comporta byte a byte como
-      hoje (`ATRIB_OK` falso: sem os três campos no formulário, sem as três linhas na ficha, sem
-      as três colunas na planilha). A 46 transcreve as marcações já levantadas em campo (19
-      inverter, 16 redundante — as **duas** máquinas de cada câmara do PAIOL, porque o rodízio não
-      tem reserva fixa). As linhas sem id da planilha são **quatro máquinas ausentes do cadastro**
-      (PAIOL D-5 e K-6 têm uma cada, R-7 nenhuma) e entram por "Cadastrar novo equipamento". O F21
-      ficou fora do seed: quais das 6 centrais e dos 17 splits compõem o arranjo é decisão sua. `automacao` nasce
-      inteira sem marcação: nenhum equipamento foi avaliado ainda. Roteiro em `TESTES.md`.
+- [ ] `plano_tarefas` ainda cita a **RE 09/2003 da ANVISA** como norma da tarefa de QAI;
+      essa resolução foi substituída pela **NBR 17037:2023**. Correção de cadastro.
+- [ ] `pred_inspecoes` tem 1 linha com dado de teste (`"ffffffffffffff ffff"`) em produção.
+
+### 4. Plataforma
+
+- [ ] **Fases 8 e 9 do roadmap não foram entregues, e a 8 andou para trás.** Não existe
+      kanban nem calendário em `shared/`; o critério da Fase 9 era "as 5 implementações
+      independentes de CSV deixam de existir" e hoje são **6**. Em 31/08 a Refrigeração
+      ganhou calendário próprio, então há **dois** calendários independentes onde a fase
+      existia para haver um.
+- [x] ~~Decidir se o `.planning/` continua sendo mantido ou se o `CLAUDE.md` vira o registro
+      único.~~ **Resolvido em 02/09/2026: o `CLAUDE.md` é o registro único.** O `.planning/`
+      e o `/.claude/CLAUDE.md` gerado dele foram **arquivados** — não apagados, pela mesma
+      regra que vale para o banco — em `docs/historico/planning/`, com o motivo em
+      `LEIA-ME.md` de lá. O que ainda valia migrou antes: as fases 8, 9, 11 e 12 e as 54
+      pendências de segurança agora vivem em `CLAUDE.md`.
+
+### Não são pendências
+
+- **`ref/seguranca.html`, `ref/paiol.html`, `ref/cftv.html` não são módulos a importar.**
+  São launchers de 1–4 KB que redirecionam para sistemas externos autônomos
+  (`127.0.0.1:8000/ui` em FastAPI, o webapp Java `xCFTV`, `/paiol/paiois.html`) e só
+  resolvem na rede interna. Mesma categoria da camada `aguada` (D-01): importar
+  significaria construir do zero, não portar.
+- **`ref/xgrama.html`** (Controle Vegetal) já está absorvido por `/maquinas` — OS-Corte,
+  `maq_areas`, `maq_operacoes` e abastecimentos — mais as zonas de vegetação do `/mapa`.
+- **`ref/pmoc-engine.js`** (motor v8.3) foi portado em função onde interessava: `calcBTU`
+  virou a carga térmica e `renderCalendar` virou o calendário de OS, ambos em 31/08/2026.
+  Sobram os gráficos do dashboard (`donutSVG`, `barRows`) e o par `syncFromAPI`/`syncToAPI`,
+  que não tem sentido aqui — o estado vive no Supabase, não em `localStorage`.
+
+---
+
+## Testes
+
+Sem framework: `node:test` e `node:assert` apenas, sem `package.json`.
+
+```bash
+node --test tests/*.test.js
+```
+
+**1288 testes, todos passando em 02/09/2026.** São gates permanentes: cada decisão
+travada tem um teste que reprova uma fase futura que a contradiga. O checklist de
+verificação manual fica em `TESTES.md`.

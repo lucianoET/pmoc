@@ -2,19 +2,21 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Consolidação da plataforma
-current_phase: 7
-current_phase_name: ui-ux-mobile
-status: verifying
-stopped_at: "Completed quick task 260823-jar: a OS de /refrigeracao vira PAGINA inteira em >=1024px (#page-os-detalhe), mesmo mecanismo compartilhado da ficha-pagina de 260823-92t (DETALHE_ABERTO/DETALHE_ORIGEM/reAlojarDetalhe) -- tres tasks, node --test 945/945; gaveta provada byte a byte em cinco cenarios; texto nao salvo sobrevive ao cruzar o limiar nos dois sentidos"
-last_updated: "2026-08-23T17:44:18.000Z"
-last_activity: 2026-08-23
-last_activity_desc: "Quick task 260823-jar: OS como página inteira no computador (>=1024px) — manMontarOS fonte única, camada compartilhada de detalhe com a ficha (260823-92t), OS_CAMPOS_VOLATEIS preserva texto digitado ao cruzar o limiar; gaveta intocada, provada byte a byte em cinco cenários"
+current_phase: 8
+current_phase_name: kanban-e-calendario-compartilhados
+status: not_started
+stopped_at: "Realinhamento de documentacao em 02/09/2026. As fases 5, 6, 7 e 10 estao completas; as fases 8 e 9 NAO foram entregues. Todo o trabalho de 24/08 a 02/09 saiu como quick task fora do fluxo GSD -- 12 PRs (#35 a #47) sem PLAN/SUMMARY. Ultima entrega: PR #47, guarda de SDK ausente em shared/supabase-config.js. node --test 1288/1288."
+last_updated: "2026-09-02T00:00:00.000Z"
+last_activity: 2026-09-02
+last_activity_desc: "Correcao de README.md e STATE.md: as migracoes 44/45/46 constavam como 'aguardando aplicacao' e estao aplicadas desde 31/08 (conferido pela API REST); contagens de migracao (24->55), de rotas (7->10) e de dados de producao atualizadas; pendencias reescritas com o gargalo real, que e dado de campo e nao codigo"
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 20
   completed_plans: 20
   percent: 50
+  quick_tasks_documentadas: 38
+  quick_tasks_sem_artefato: 12
 ---
 
 # Project State
@@ -24,16 +26,60 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** Cada módulo novo entra no ar seguindo o padrão pmoc existente (Vercel + Supabase + login por cargo), com os dados legados consolidados e importados — sem quebrar os módulos em produção.
-**Current focus:** Phase 7 — ui-ux-mobile
+**Current focus:** Phase 8 — kanban e calendário compartilhados (não iniciada)
 
 ## Current Position
 
-Phase: 7 (ui-ux-mobile) — EXECUTED
-Plan: 1 of 1
-Status: Fase 7 completa. Fase 10 completa e com a migração 25 em produção desde 18/08/2026 — o UAT de leitura passou; o que falta é validar a escrita (posicionar ativo, desenhar zona) pela interface, em TESTES.md
-Last activity: 2026-08-26 — Quick task 260826-6wy: estoque de peças e materiais do /refrigeracao (migração 44 escrita, aguardando aplicação depois do deploy; EST_OK mantém a tela publicada como hoje até lá). Próxima: 260826-B — PM (pedido de material) e listas de compra.
+Phase: 8 (kanban-e-calendario-compartilhados) — **NÃO INICIADA**
+Plan: 0 of TBD
 
-Progress: [██████████] 100% (v2.0)
+Progress: [█████░░░░░] 50% (v2.0 — 4 de 8 fases)
+
+### Estado real em 02/09/2026
+
+**Fases 5, 6, 7 e 10 completas.** As migrações 01 a 55 estão **todas aplicadas em
+produção**, conferido pela API REST com a `anon key` em 02/09/2026 — inclusive a 44, a 45
+e a 46, que o README descrevia como "aguardando aplicação" até esta correção.
+
+**As fases 8 e 9 não foram entregues, e a 8 andou para trás.** Não existe kanban nem
+calendário em `shared/`; o critério 1 da Fase 9 era "as 5 implementações independentes de
+CSV deixam de existir" e hoje são **6**. Em 31/08 a Refrigeração ganhou calendário próprio,
+então há **dois** calendários independentes onde a fase existia para haver um. Quem retomar
+a Fase 8 herda mais duplicação do que o roadmap previu, não menos.
+
+**A Fase 11 segue travada** por decisão de política de segurança da OM, que não é técnica.
+
+### Lacuna de artefato — 12 PRs sem PLAN/SUMMARY
+
+`.planning/quick/` tem 38 pastas e para em `260829-a8u`. De 30/08 a 02/09 foram mesclados
+**12 PRs (#35 a #47) sem nenhum artefato GSD**: módulo `/equipes` (com Plano & capacidade),
+acervo de documentos, carga térmica e inspeção, calendário de OS, cadastro e movimentação de
+equipamento, fluxo de plano com serviço padrão, demanda somada por escopo, conserto do shell
+de `/equipes`, Leaflet e Font Awesome hospedados, e a guarda de SDK ausente.
+
+O registro dessas doze existe e está completo — em `CLAUDE.md`, que é hoje a fonte de
+verdade de fato do projeto, e em `TESTES.md`. **Decisão pendente do usuário:** o `.planning/`
+volta a ser mantido ou o `CLAUDE.md` passa a ser o registro único? `ROADMAP.md`,
+`MILESTONES.md` e `BACKLOG-TECNICO.md` continuam parados em 23/08. Manter dois registros
+onde um está morto é pior que assumir um só.
+
+### O gargalo deixou de ser código
+
+Seis funcionalidades estão prontas, publicadas, com migração aplicada — e mostram zero,
+porque o cadastro está vazio: `area_m2` e `tipo_uso` 0/175 (carga térmica não calcula),
+`corrente_nominal` 0/175 (EER não é publicado), `materiais` 0 (estoque sem catálogo, baixa
+nunca exercida), `cmasm_pessoas`/`cmasm_equipes`/`cmasm_alocacoes` 0 (`/equipes` só calcula
+a demanda). Nove ondas de feature em sete dias, quase nenhuma com dado.
+
+Recomendação registrada: **antes da Fase 8, carregar o dado**. O caminho de carga em massa
+já existe e não precisa de desenvolvimento — a planilha exportar/importar de
+quick-260822-5hy carrega as sete colunas de ambiente, porque as colunas dela derivam de
+`EQUIP_EDITAVEIS` (D-5hy-06). Lista completa em `README.md` § Pendências.
+
+### Verificação
+
+`node --test tests/*.test.js` → **1288/1288 passando** em 02/09/2026.
+Checklist manual em `TESTES.md` (469 itens ainda não marcados).
 
 ## Performance Metrics
 
@@ -106,8 +152,11 @@ Progress: [██████████] 100% (v2.0)
   erro nenhum. A migração 28 fecha a diferença. Conferir colunas depois de aplicar, não só se o
   script terminou sem exceção.
 
-- [Reparos 18/08/2026]: o write path do módulo **nunca foi exercido** — `rep_reparos.frequencia`
-  está 0 nos 33 reparos. Mesma pendência do `/mapa` na Fase 10. Checklist em TESTES.md.
+- ~~[Reparos 18/08/2026]: o write path do módulo **nunca foi exercido** — `rep_reparos.frequencia`
+  está 0 nos 33 reparos.~~ **Superado em 02/09/2026:** conferido pela API REST, são **34
+  reparos e 1 com `frequencia > 0`** — o RPC `rep_confirmar_reparo` já rodou em produção.
+  O caminho de escrita do `/mapa` também deixou de ser inexercido: 117 equipamentos têm
+  coordenada própria, 106 locais têm coordenada e 17 zonas de `maq_areas` estão ativas.
 
 Decisões completas em PROJECT.md (Key Decisions). Relevantes agora:
 
