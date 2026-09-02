@@ -75,6 +75,17 @@ function carregarSandbox() {
     ctx
   );
 
+  // E (260902) — TERM_TIPOS_USO, a lista fechada da migração 47. Entra
+  // DEPOIS de D de propósito: `celulaParaValor` a consulta atrás de um
+  // `typeof`, então carregar só D prova o caminho "sem a seção térmica" e
+  // carregar D+E prova o caminho com ela. É o mesmo cuidado que faltou em
+  // `agendaTerminais`, que lia `globalThis[nome]` e não enxergava um `var`
+  // de topo dentro de sandbox — a lista voltava incompleta, em silêncio.
+  vm.runInContext(
+    recorte('/* ══ carga térmica: núcleo puro (migração 47) ══', 'function termRotuloInsolacao('),
+    ctx
+  );
+
   return ctx;
 }
 
@@ -653,4 +664,110 @@ test('estrutural: a única ocorrência de .update( com chave de situação em to
   const tela = recorteTela();
   const ocorrencias = tela.match(/\.update\([^)]*situacao[^)]*\)/g) || [];
   assert.equal(ocorrencias.length, 1, `esperada 1 ocorrência, achadas: ${JSON.stringify(ocorrencias)}`);
+});
+
+
+// ═══════ 8. TRAVESSIA DAS COLUNAS DE AMBIENTE (260902) ═══════════════════
+//
+// As cinco colunas da migração 04 (area_m2, pe_direito, n_pessoas,
+// dissipacao_w, fator_insolacao) entraram em EQUIP_EDITAVEIS em 31/08
+// (D-2wq-01), e `tipoUso`/`janelas` entraram pela sonda TERM_OK. Nenhuma
+// delas ganhou ramo em `celulaParaValor`: caíam no `return` final, que
+// devolve o TEXTO CRU. Este gate nasce de uma medição, não de leitura —
+// gerei a planilha das 175 linhas de produção para trabalho de campo e,
+// ao conferir o que a importação aceitaria de volta, os seis casos abaixo
+// passavam.
+//
+// O que torna isso grave, e não só feio: ao contrário de `janelas` e
+// `tipo_uso`, as cinco da migração 04 são `numeric`/`integer` SEM CHECK —
+// não há segunda barreira no banco. `'1.200'` (mil e duzentos à
+// brasileira) o Postgres lê como 1,2 e grava sem erro nenhum.
+
+function tipos(ctx) { return vm.runInContext('Object.keys(TERM_TIPOS_USO)', ctx); }
+
+test('a lista fechada da tela é a mesma do check da migração 47', () => {
+  const ctx = carregarSandbox();
+  const sql = fs.readFileSync(path.join(RAIZ, 'supabase', '47_refrigeracao_carga_termica.sql'), 'utf8');
+  const bloco = sql.slice(sql.indexOf('equipamentos_tipo_uso_check'));
+  tipos(ctx).forEach((k) => {
+    assert.ok(bloco.includes(`'${k}'`), `"${k}" está na tela e não no check da migração 47`);
+  });
+});
+
+test('tipo de uso: a chave passa, o rótulo é normalizado para a chave', () => {
+  const ctx = carregarSandbox();
+  eq(ctx.celulaParaValor('tipoUso', 'escritorio'), { ok: true, valor: 'escritorio' });
+  // Quem preenche em campo lê "Escritório" na coluna e escreve isso.
+  eq(ctx.celulaParaValor('tipoUso', 'Escritório'), { ok: true, valor: 'escritorio' });
+  eq(ctx.celulaParaValor('tipoUso', 'sala técnica / ti'), { ok: true, valor: 'sala_tecnica' });
+});
+
+test('tipo de uso fora da lista é recusado ANTES de chegar ao Postgres', () => {
+  const ctx = carregarSandbox();
+  const r = ctx.celulaParaValor('tipoUso', 'sala_de_estar');
+  assert.equal(r.ok, false, 'valor fora do check da migração 47 tem de ser recusado aqui');
+  // A mensagem nomeia as opções: sem isso o técnico descobre a lista por
+  // tentativa, e o erro do banco não a diz.
+  tipos(ctx).forEach((k) => assert.ok(r.erro.includes(k), `a mensagem deveria nomear "${k}"`));
+});
+
+test('janelas espelha a faixa do check da migração 47 (0 a 50)', () => {
+  const ctx = carregarSandbox();
+  const sql = fs.readFileSync(path.join(RAIZ, 'supabase', '47_refrigeracao_carga_termica.sql'), 'utf8');
+  assert.match(sql, /janelas >= 0 and janelas <= 50/, 'o check mudou — esta faixa vem dele, não de escolha da tela');
+  eq(ctx.celulaParaValor('janelas', '2'), { ok: true, valor: 2 });
+  assert.equal(ctx.celulaParaValor('janelas', '-1').ok, false);
+  assert.equal(ctx.celulaParaValor('janelas', '99').ok, false);
+});
+
+test('decimais: vírgula é aceita, e o milhar ambíguo é RECUSADO em vez de virar 1,2', () => {
+  const ctx = carregarSandbox();
+  eq(ctx.celulaParaValor('areaM2', '12,5'), { ok: true, valor: 12.5 });
+  eq(ctx.celulaParaValor('peDireito', '2,7'), { ok: true, valor: 2.7 });
+  eq(ctx.celulaParaValor('dissipacaoW', '1200'), { ok: true, valor: 1200 });
+  // O caso que motivou tudo: sem esta guarda o valor entra como 1.2 num
+  // `numeric` sem check, silenciosamente, e a carga térmica calcula com um
+  // milésimo da dissipação real.
+  const amb = ctx.celulaParaValor('dissipacaoW', '1.200');
+  assert.equal(amb.ok, false, '"1.200" é ambíguo e não pode ser adivinhado');
+  assert.match(amb.erro, /ambíguo/);
+  assert.equal(ctx.celulaParaValor('areaM2', 'abc').ok, false);
+});
+
+test('grandeza física negativa é recusada', () => {
+  const ctx = carregarSandbox();
+  assert.equal(ctx.celulaParaValor('areaM2', '-5').ok, false);
+  assert.equal(ctx.celulaParaValor('nPessoas', '-3').ok, false);
+  assert.equal(ctx.celulaParaValor('correnteNominal', '-1').ok, false);
+});
+
+// O erro que este caso existe para impedir eu cometi ao escrever a
+// correção: o parser aceitava 0 para TODAS as decimais, e a migração 56
+// exige `area_m2 > 0`. Uma sala de zero m² passaria pela tela e seria
+// recusada pelo Postgres — o mesmo erro opaco no meio da gravação que a
+// travessia inteira existe para evitar. Onde o zero é legítimo (ocupação,
+// dissipação) ele continua passando.
+test('o zero é aceito ou recusado por coluna, exatamente como a migração 56 manda', () => {
+  const ctx = carregarSandbox();
+  const sql = fs.readFileSync(path.join(RAIZ, 'supabase', '56_refrigeracao_ambiente_checks.sql'), 'utf8');
+  const mins = vm.runInContext('PLANILHA_MINIMOS', ctx);
+
+  // A coluna cujo check no banco é `> 0` tem de ter mínimo positivo aqui,
+  // e a cujo check é `>= 0` tem de aceitar zero. Lido do SQL, não escrito
+  // à mão: se alguém afrouxar o banco sem afrouxar a tela (ou o contrário)
+  // este caso reprova.
+  const colunas = { areaM2: 'area_m2', peDireito: 'pe_direito', fatorInsolacao: 'fator_insolacao',
+                    dissipacaoW: 'dissipacao_w', nPessoas: 'n_pessoas' };
+  Object.keys(colunas).forEach((chave) => {
+    const col = colunas[chave];
+    const exigePositivo = new RegExp(`${col}\\s*>\\s*0`).test(sql);
+    const aceitaZero = new RegExp(`${col}\\s*>=\\s*0`).test(sql);
+    assert.ok(exigePositivo || aceitaZero, `a migração 56 não diz nada sobre ${col}`);
+    const r = ctx.celulaParaValor(chave, '0');
+    assert.equal(r.ok, aceitaZero && !exigePositivo,
+      `${col}: banco ${exigePositivo ? 'exige > 0' : 'aceita 0'}, tela ${r.ok ? 'aceita 0' : 'recusa 0'}`);
+    if (chave !== 'nPessoas') {
+      assert.ok((mins[chave] > 0) === exigePositivo, `PLANILHA_MINIMOS.${chave} divergiu do check de ${col}`);
+    }
+  });
 });

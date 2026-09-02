@@ -9141,14 +9141,75 @@ function celulaParaData(t){
 /* D-5hy-20: vírgula decimal aceita (o Excel em pt-BR escreve 7,5); duas
    vírgulas ou separador de milhar (ponto convivendo com vírgula) são
    recusados em vez de adivinhados. */
-function celulaParaCorrente(t){
+/* 260902: era `celulaParaCorrente`, servindo só a `correnteNominal`. As
+   colunas de ambiente da migração 04 (area_m2, pe_direito, dissipacao_w,
+   fator_insolacao) entraram em EQUIP_EDITAVEIS em 31/08 (D-2wq-01) e caíam
+   no `return` final de celulaParaValor — texto cru direto para uma coluna
+   `numeric`. E ao contrário de `janelas`/`tipo_uso`, essas cinco NÃO têm
+   check nenhum no banco (migração 04: `numeric` puro), então não havia
+   segunda barreira: `'1.200'` — mil e duzentos escrito à brasileira — o
+   Postgres lê como **1,2**, grava sem erro, e a carga térmica calcula com
+   um milésimo da dissipação real. As regras já estavam certas aqui; só
+   estavam presas a uma coluna. `rotulo` entra na mensagem porque "corrente
+   inválida" numa célula de área não diz onde procurar. */
+function celulaParaDecimal(t, rotulo, minimo){
+  var nome = rotulo || 'valor';
   var virgulas = (t.match(/,/g) || []).length;
-  if (virgulas > 1) return {ok:false, erro:'corrente com mais de um separador decimal'};
-  if (virgulas === 1 && t.indexOf('.') >= 0) return {ok:false, erro:'corrente com separador de milhar não é aceito — use só vírgula ou ponto decimal'};
+  if (virgulas > 1) return {ok:false, erro:nome + ' com mais de um separador decimal'};
+  if (virgulas === 1 && t.indexOf('.') >= 0) return {ok:false, erro:nome + ' com separador de milhar não é aceito — use só vírgula ou ponto decimal'};
+  /* O caso que motivou generalizar isto: `1.200` é mil e duzentos para quem
+     escreve em português e um vírgula dois para o `parseFloat`. A regra
+     antiga só pegava vírgula E ponto juntos, então o ponto sozinho passava
+     e a dissipação entrava com um milésimo do valor — sem erro, em coluna
+     sem check. A ambiguidade é real e não se resolve pelo texto, então a
+     célula é RECUSADA e quem preencheu decide: 1200 ou 1200.0. Custo
+     aceito e medido: um valor com exatamente três casas decimais (1.234)
+     também é recusado; nas cinco colunas em questão — m², metros, watts,
+     pessoas e um fator de insolação de uma casa — não existe leitura ao
+     milésimo, e hoje as cinco estão nulas nas 175 linhas. */
+  if (virgulas === 0 && /^-?\d{1,3}\.\d{3}$/.test(t)){
+    return {ok:false, erro:nome + ': "' + t + '" é ambíguo — ponto separando três casas pode ser milhar ou decimal; escreva sem separador de milhar'};
+  }
   var normalizado = virgulas === 1 ? t.replace(',', '.') : t;
-  if (!/^-?\d+(\.\d+)?$/.test(normalizado)) return {ok:false, erro:'corrente inválida'};
-  return {ok:true, valor: parseFloat(normalizado)};
+  if (!/^-?\d+(\.\d+)?$/.test(normalizado)) return {ok:false, erro:nome + ' inválido'};
+  var v = parseFloat(normalizado);
+  if (minimo !== undefined && minimo !== null && v < minimo){
+    /* "menor que 0.0001" não diz nada a quem preencheu; o que ele precisa
+       saber é se zero vale ou não nesta coluna. */
+    return {ok:false, erro: minimo > 0
+      ? nome + ' tem de ser maior que zero'
+      : nome + ' não pode ser negativo'};
+  }
+  return {ok:true, valor: v};
 }
+
+/* Mantido com o nome antigo: `correnteNominal` é a única com precedente de
+   comportamento publicado, e o gate da planilha já a exercita. O mínimo 0
+   é regra de domínio, não do banco — corrente de placa negativa não existe,
+   e `corrente_nominal` também não tem check (migração 05 nunca a importou). */
+function celulaParaCorrente(t){
+  return celulaParaDecimal(t, 'corrente', 0);
+}
+
+/* As decimais que a planilha grava. `fatorInsolacao` não está em
+   EQUIP_DECIMAIS de propósito — na tela ela é lista fechada por rótulo
+   (D-2wq-02) e aquela lista decide a forma do CAMPO, não a da célula —,
+   mas no CSV ela chega como número e precisa da mesma travessia. Uma lista
+   nomeada, num lugar só, pela lição de D-500-06/D-2wq-05. */
+var PLANILHA_DECIMAIS = EQUIP_DECIMAIS.concat(['fatorInsolacao']);
+
+/* Espelha, coluna a coluna, os `check` da migração 56 — e é por isso que
+   existe em vez de um `0` solto no parser: área e pé-direito são `> 0` no
+   banco (uma sala de zero m² não é medição, é campo preenchido por
+   engano), enquanto dissipação e ocupação aceitam zero de verdade. Com um
+   mínimo único a tela aceitaria `area_m2 = 0` e o Postgres recusaria —
+   exatamente o erro opaco no meio da gravação que esta travessia existe
+   para evitar. Um limite aqui que não esteja lá, ou o contrário, é
+   divergência: o gate compara os dois. */
+var PLANILHA_MINIMOS = {
+  areaM2: 0.0001, peDireito: 0.0001, fatorInsolacao: 0.0001,
+  dissipacaoW: 0, correnteNominal: 0
+};
 
 /* Travessia de tipos de D-5hy-18/19/20/21, uma célula por vez. `texto` chega
    cru — a mesma forma que planilhaValor produziria para uma célula intocada,
@@ -9174,10 +9235,50 @@ function celulaParaValor(chave, texto){
     if (t === '') return {ok:true, valor:null};
     return celulaParaCorrente(t);
   }
+  /* 260902: as quatro decimais mais fatorInsolacao. Antes caíam no
+     `return` final e iam como TEXTO para colunas `numeric`. */
+  if (PLANILHA_DECIMAIS.indexOf(chave) >= 0){
+    if (t === '') return {ok:true, valor:null};
+    var min = PLANILHA_MINIMOS.hasOwnProperty(chave) ? PLANILHA_MINIMOS[chave] : 0;
+    return celulaParaDecimal(t, EQUIP_ROTULOS[chave] || chave, min);
+  }
   if (EQUIP_NUMERICOS.indexOf(chave) >= 0){
     if (t === '') return {ok:true, valor:null};
     if (!/^-?\d+$/.test(t)) return {ok:false, erro:'esperado número inteiro'};
-    return {ok:true, valor: parseInt(t, 10)};
+    var inteiro = parseInt(t, 10);
+    /* Espelha o check da migração 47 — `janelas` é a ÚNICA das colunas de
+       ambiente que o banco protege, e a mensagem aqui existe para o erro
+       aparecer na tela de confirmação, com número de linha e coluna, em vez
+       de voltar como `alert('Erro: ...')` do Postgres no meio da gravação. */
+    if (chave === 'janelas' && (inteiro < 0 || inteiro > 50)){
+      return {ok:false, erro:'janelas fora da faixa aceita pelo banco (0 a 50)'};
+    }
+    /* Regra de domínio, não do banco: `n_pessoas` é `integer` sem check
+       (migração 04), então uma ocupação negativa seria ACEITA e a carga
+       térmica somaria gente negativa. Os demais inteiros da lista (btu,
+       tensao, horasDia, diasSemana) também não podem ser negativos. */
+    if (inteiro < 0) return {ok:false, erro:(EQUIP_ROTULOS[chave] || chave) + ' não pode ser negativo'};
+    return {ok:true, valor: inteiro};
+  }
+  /* Lista fechada da migração 47. O `typeof` não é zelo: TERM_TIPOS_USO é
+     `var` de topo e, num sandbox que recorta só esta seção, existe como
+     variável e não como propriedade do global — foi assim que
+     `agendaTerminais` deixou uma OS concluída arrastável, em silêncio.
+     Sem a seção carregada a coluna volta ao comportamento de hoje. */
+  if (chave === 'tipoUso' && typeof TERM_TIPOS_USO !== 'undefined'){
+    if (t === '') return {ok:true, valor:null};
+    var bruto = t.trim();
+    if (TERM_TIPOS_USO.hasOwnProperty(bruto)) return {ok:true, valor:bruto};
+    /* Aceita também o RÓTULO: a planilha é preenchida à mão em campo, e
+       quem lê "Escritório" na coluna ao lado escreve "Escritório", não
+       `escritorio`. A exportação continua gravando a chave, então o ciclo
+       fechado de D-5hy-04 não muda. */
+    var achado = null;
+    Object.keys(TERM_TIPOS_USO).forEach(function(k){
+      if (TERM_TIPOS_USO[k].rotulo.toLowerCase() === bruto.toLowerCase()) achado = k;
+    });
+    if (achado) return {ok:true, valor:achado};
+    return {ok:false, erro:'tipo de uso fora da lista fechada — use ' + Object.keys(TERM_TIPOS_USO).join(', ')};
   }
   if (chave === 'funciona'){
     if (t === '') return {ok:true, valor:null};
