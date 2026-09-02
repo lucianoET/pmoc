@@ -844,7 +844,7 @@ function trocarView(id, botao) {
 
 function mostrarApp() {
   el('login-screen').style.display = 'none'
-  el('app').style.display = 'flex'
+  el('app').style.display = 'block'
   el('user-chip').textContent = USUARIO?.role || '—'
   renderEscala(); renderPlano(); renderPessoas(); renderEquipes(); renderOficios()
 }
@@ -875,19 +875,10 @@ function exporNoWindow() {
 async function boot() {
   exporNoWindow()
 
-  aplicarShell({
-    nome: 'Equipes',
-    accent: '#4a7fc9',
-    versao: '1.0',
-    navItems: [
-      { id: 'escala',  label: 'Escala',   icone: 'agenda',   ativo: true },
-      { id: 'plano',   label: 'Plano',    icone: 'plano' },
-      { id: 'equipes', label: 'Equipes',  icone: 'empresa' },
-      { id: 'pessoas', label: 'Pessoas',  icone: 'chave' },
-      { id: 'oficios', label: 'Ofícios',  icone: 'checklist' },
-    ],
-  })
-
+  // O miolo entra ANTES de aplicarShell, nunca depois: o shell insere a
+  // topbar com `afterbegin` e o rodapé com `beforeend`, então o que chega
+  // depois dele cai ABAIXO do rodapé. Era o que acontecia — o rodapé
+  // desenhava no meio da tela, acima do conteúdo.
   el('app').insertAdjacentHTML('beforeend', `
     <div class="main">
       <div class="view active" id="view-escala"></div>
@@ -907,6 +898,19 @@ async function boot() {
       </div>
     </div>
   `)
+  aplicarShell({
+    nome: 'Equipes',
+    accent: '#4a7fc9',
+    versao: '1.0',
+    navItems: [
+      { id: 'escala',  label: 'Escala',   icone: 'agenda',   ativo: true },
+      { id: 'plano',   label: 'Plano',    icone: 'plano' },
+      { id: 'equipes', label: 'Equipes',  icone: 'empresa' },
+      { id: 'pessoas', label: 'Pessoas',  icone: 'chave' },
+      { id: 'oficios', label: 'Ofícios',  icone: 'checklist' },
+    ],
+  })
+
 
   try {
     supa = await criarClienteSupabase()

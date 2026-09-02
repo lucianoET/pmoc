@@ -102,3 +102,74 @@ test('ícone de aba aceita nome do conjunto comum e caractere solto, sem quebrar
   assert.match(topo, /<svg class="ico nav-ico"/, 'nome conhecido deveria virar SVG monocromático')
   assert.match(topo, /⛽ Consumo/, 'caractere solto continua saindo como texto')
 })
+
+// ═══════════ o contrato de montagem do #app ═══════════
+//
+// Dois defeitos reais, os dois em produção do dia 31/08 ao 01/09, os dois
+// em `/equipes`, e nenhum gate os via — porque o de 375px lê texto e diz
+// isso de si mesmo ("o repo é zero-build, sem navegador headless"), e
+// porque nenhum caso afirmava COMO o módulo monta o #app.
+//
+// 1) `#app` aberto com `display:flex` sem `flex-direction`. O padrão do
+//    flex é `row`: topbar, faixa de abas, conteúdo e rodapé desenhavam
+//    LADO A LADO, em qualquer largura — a faixa espremida a 20px de
+//    conteúdo (duas das cinco abas na tela) e o rodapé virando uma coluna
+//    no meio. `column` também não serve de conserto: como item flex com
+//    `margin:0 auto`, a `.main` deixa de esticar e cai de 1240px para o
+//    tamanho do conteúdo. Quem quiser flex declara a direção, como
+//    `/mapa` faz no próprio HTML.
+//
+// 2) miolo inserido DEPOIS de `aplicarShell`. O shell põe a topbar com
+//    `afterbegin` e o rodapé com `beforeend` — o que chega depois cai
+//    ABAIXO do rodapé, que foi exatamente o que aconteceu.
+//
+// Continua sendo verificação estática: Playwright existe no ambiente de
+// desenvolvimento, não no repositório, e um gate que exigisse dependência
+// nova reprovaria na máquina do usuário.
+
+const fs = require('node:fs')
+const path = require('node:path')
+const RAIZ = path.join(__dirname, '..')
+
+// Os módulos que consomem o shell. `equipes` está aqui de propósito: ele
+// ficou de fora da lista do gate de 375px, e foi o único que quebrou.
+const CONSOMEM_SHELL = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'mapa', 'equipes']
+
+function fontesDo(modulo) {
+  const dir = path.join(RAIZ, modulo)
+  if (!fs.existsSync(dir)) return []
+  return fs.readdirSync(dir).filter(f => f.endsWith('.js') || f.endsWith('.html'))
+    .map(f => ({ nome: `${modulo}/${f}`, txt: fs.readFileSync(path.join(dir, f), 'utf8') }))
+}
+
+test('nenhum módulo abre o #app como flex sem declarar a direção', () => {
+  for (const modulo of CONSOMEM_SHELL) {
+    const fontes = fontesDo(modulo)
+    const abreFlex = fontes.some(f => /el\('app'\)\.style\.display\s*=\s*'flex'/.test(f.txt)
+      || /getElementById\('app'\)\.style\.display\s*=\s*'flex'/.test(f.txt))
+    if (!abreFlex) continue
+    const declara = fontes.some(f => /#app\s*\{[^}]*flex-direction\s*:/.test(f.txt))
+    assert.ok(declara,
+      `${modulo} abre o #app com display:flex e não declara flex-direction — ` +
+      'o padrão é row, e o shell inteiro sai lado a lado')
+  }
+})
+
+test('nenhum módulo insere miolo no #app DEPOIS de aplicarShell — cairia abaixo do rodapé', () => {
+  for (const modulo of CONSOMEM_SHELL) {
+    for (const f of fontesDo(modulo)) {
+      const i = f.txt.indexOf('aplicarShell(')
+      if (i < 0) continue
+      const depois = f.txt.slice(i)
+      assert.ok(!/el\('app'\)\.insertAdjacentHTML\('beforeend'/.test(depois),
+        `${f.nome} insere conteúdo no fim do #app depois de aplicarShell; ` +
+        'o rodapé já está lá, então o miolo cai abaixo dele')
+    }
+  }
+})
+
+test('o shell põe topo no início e rodapé no fim — é o que torna a ordem de chamada decisiva', () => {
+  const shell = fs.readFileSync(path.join(RAIZ, 'shared', 'shell.js'), 'utf8')
+  assert.match(shell, /insertAdjacentHTML\('afterbegin', topo\)/)
+  assert.match(shell, /insertAdjacentHTML\('beforeend', rodape\)/)
+})
