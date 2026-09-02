@@ -7,8 +7,15 @@
 <script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t!=='claro'&&t!=='escuro'){t=(typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','escuro')}})()/* script classico de proposito: modulo ES e adiado, rodaria depois do primeiro desenho e reintroduziria a piscada de tema */</script>
 <title>PMOC Mapa</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+<!-- Leaflet e leaflet-draw hospedados no proprio projeto. Vinham de unpkg,
+     e com o CDN bloqueado o modulo perdia o mapa inteiro: sem
+     .leaflet-container, 220 marcadores viravam zero e a tela caia de 1.197
+     para 160 caracteres. Os PNG/SVG de images/ vao junto porque as duas
+     folhas os referenciam por caminho relativo. Isto NAO cobre os tiles do
+     mapa-base, que continuam online (D-02 para o satelite) e tem
+     procedimento proprio em mapa/tiles/GERAR-TILES.md. -->
+<link rel="stylesheet" href="/mapa/vendor/leaflet.css"/>
+<script src="/mapa/vendor/leaflet.js"></script>
 <!-- leaflet-draw@1.0.4, versão exata fixada de proposito (nao faixa): e a
      biblioteca sobre a qual o editor legado (DEV_ERP/cmms-mapa/admin.html)
      ja foi escrito — porta-lo por cima dela evita reescrever o editor do
@@ -17,8 +24,8 @@
      download alto e estavel). Caminho de saida registrado, nao so aceito:
      se um navegador futuro quebrar a compatibilidade, o sucessor mantido e
      @geoman-io/leaflet-geoman-free (10-RESEARCH.md, Pattern 8). -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" crossorigin="anonymous"/>
-<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="/mapa/vendor/leaflet.draw.css"/>
+<script src="/mapa/vendor/leaflet.draw.js"></script>
 <link rel="stylesheet" href="../shared/pmoc.css"/>
 <link rel="stylesheet" href="/mapa/xmap.css"/>
 <style>

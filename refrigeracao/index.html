@@ -11,7 +11,12 @@
 <link rel="icon" href="/refrigeracao/icone-192.png"/>
 <link rel="apple-touch-icon" href="/refrigeracao/icone-apple-180.png"/>
 <link rel="manifest" href="/refrigeracao/manifest.json"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" crossorigin="anonymous"/>
+<!-- Font Awesome hospedado no proprio projeto. Vinha de cdnjs, e com o CDN
+     bloqueado os 209 icones deste arquivo colapsavam para largura zero: o
+     rotulo subia e a bolha de contagem cobria "OS" e "Alertas". Caminho
+     raiz-absoluto porque a rota do Vercel serve /refrigeracao sem barra
+     final. Só a familia solid e usada aqui, e so ela e versionada. -->
+<link rel="stylesheet" href="/refrigeracao/vendor/css/all.min.css"/>
 <style>
 /* ═══════════════════════════════════════════
    RESET & BASE
