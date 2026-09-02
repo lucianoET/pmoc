@@ -9211,6 +9211,28 @@ var PLANILHA_MINIMOS = {
   dissipacaoW: 0, correnteNominal: 0
 };
 
+/* Faixa dos INTEIROS, espelhando coluna a coluna os `check` das migrações
+   47 (`janelas`) e 57 (as quatro restantes). `janelas` era um `if` com os
+   números escritos no meio do parser; virou linha desta tabela porque com
+   cinco colunas seriam cinco ramos, e porque um gate consegue comparar uma
+   tabela contra o SQL — não consegue comparar um `if`.
+
+   `btu` aceita ZERO, e isso não é frouxidão: `dbToEquip` faz
+   `o.btu = o.btu || 0`, então os 2 equipamentos com `btu` nulo no banco
+   saem da exportação como a célula "0". Exigir `> 0` recusaria essas duas
+   linhas em TODA importação, mesmo sem ninguém as tocar — e linha recusada
+   bloqueia o arquivamento do arquivo inteiro (D-5hy-11). `tensao` não sofre
+   disso (dbToEquip não a força) e por isso exige >= 1: zero volt não é uma
+   tensão. `horasDia`/`diasSemana` aceitam zero porque máquina instalada e
+   desligada tem mesmo zero hora por dia. */
+var PLANILHA_FAIXAS = {
+  janelas:     {min: 0, max: 50},
+  horasDia:    {min: 0, max: 24},
+  diasSemana:  {min: 0, max: 7},
+  tensao:      {min: 1, max: 1000},
+  btu:         {min: 0, max: 5000000}
+};
+
 /* Travessia de tipos de D-5hy-18/19/20/21, uma célula por vez. `texto` chega
    cru — a mesma forma que planilhaValor produziria para uma célula intocada,
    o que é o que faz o diff (planoDeImportacao) funcionar por comparação de
@@ -9246,18 +9268,20 @@ function celulaParaValor(chave, texto){
     if (t === '') return {ok:true, valor:null};
     if (!/^-?\d+$/.test(t)) return {ok:false, erro:'esperado número inteiro'};
     var inteiro = parseInt(t, 10);
-    /* Espelha o check da migração 47 — `janelas` é a ÚNICA das colunas de
-       ambiente que o banco protege, e a mensagem aqui existe para o erro
-       aparecer na tela de confirmação, com número de linha e coluna, em vez
-       de voltar como `alert('Erro: ...')` do Postgres no meio da gravação. */
-    if (chave === 'janelas' && (inteiro < 0 || inteiro > 50)){
-      return {ok:false, erro:'janelas fora da faixa aceita pelo banco (0 a 50)'};
+    var rot = EQUIP_ROTULOS[chave] || chave;
+    /* A faixa vem da tabela, que espelha o banco. A mensagem existe para o
+       erro aparecer na tela de confirmação com linha e coluna, em vez de
+       voltar como `alert('Erro: ...')` do Postgres no meio da gravação —
+       que é o que acontecia com `horas_dia = 30`: nem a tela nem o banco
+       recusavam, e a estimativa de kWh do parque inflava 25% em silêncio. */
+    var faixa = PLANILHA_FAIXAS[chave];
+    if (faixa && (inteiro < faixa.min || inteiro > faixa.max)){
+      return {ok:false, erro: rot + ' fora da faixa aceita pelo banco (' + faixa.min + ' a ' + faixa.max + ')'};
     }
-    /* Regra de domínio, não do banco: `n_pessoas` é `integer` sem check
-       (migração 04), então uma ocupação negativa seria ACEITA e a carga
-       térmica somaria gente negativa. Os demais inteiros da lista (btu,
-       tensao, horasDia, diasSemana) também não podem ser negativos. */
-    if (inteiro < 0) return {ok:false, erro:(EQUIP_ROTULOS[chave] || chave) + ' não pode ser negativo'};
+    /* `n_pessoas` não tem faixa própria: é `integer` sem check na migração
+       04 e sem teto plausível a inventar, mas negativo somaria gente
+       negativa na carga térmica. */
+    if (inteiro < 0) return {ok:false, erro: rot + ' não pode ser negativo'};
     return {ok:true, valor: inteiro};
   }
   /* Lista fechada da migração 47. O `typeof` não é zelo: TERM_TIPOS_USO é
