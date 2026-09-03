@@ -363,9 +363,9 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       </div>
       <div class="fgrid3">
         <div class="frow"><label for="area-tipo">Tipo</label><select id="area-tipo"><option value="corte">Corte</option><option value="poda">Poda</option><option value="limpeza">Limpeza</option><option value="mista">Mista</option><option value="outro">Outro</option></select></div>
-        <div class="frow"><label for="area-m2">Área (m²)</label><input type="number" id="area-m2" min="0" step="1"/>
+        <div class="frow"><label for="area-m2">Área (m²)</label><input type="text" inputmode="decimal" id="area-m2"/>
           <small id="area-m2-nota" class="tagline" hidden>Calculada do contorno desenhado no mapa.</small></div>
-        <div class="frow"><label for="area-periodicidade">Periodicidade (dias)</label><input type="number" id="area-periodicidade" min="1" step="1"/></div>
+        <div class="frow"><label for="area-periodicidade">Periodicidade (dias)</label><input type="text" inputmode="numeric" id="area-periodicidade"/></div>
       </div>
       <div class="frow"><label for="area-localizacao">Localização</label><input id="area-localizacao"/></div>
       <div class="frow"><label for="area-obs">Observações</label><textarea id="area-obs"></textarea></div>
@@ -395,7 +395,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="fgrid3">
         <div class="frow"><label for="ct-solicitante">Solicitante</label><input id="ct-solicitante"/></div>
         <div class="frow"><label for="ct-ne">Nota de empenho</label><input id="ct-ne"/></div>
-        <div class="frow"><label for="ct-valor">Valor estimado (R$)</label><input type="number" id="ct-valor" min="0" step="0.01"/></div>
+        <div class="frow"><label for="ct-valor">Valor estimado (R$)</label><input type="text" inputmode="decimal" id="ct-valor"/></div>
       </div>
       <div class="frow"><label for="ct-obs">Observações</label><textarea id="ct-obs"></textarea></div>
     </div>
@@ -438,9 +438,9 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     <div class="modal-body">
       <div id="concluir-operacao-resumo" class="callout co-ok"></div>
       <div class="fgrid3">
-        <div class="frow"><label for="concluir-horas">Horas utilizadas *</label><input type="number" id="concluir-horas" min="0.1" step="0.1"/></div>
-        <div class="frow"><label for="concluir-area">Área executada (m²)</label><input type="number" id="concluir-area" min="0" step="1"/></div>
-        <div class="frow"><label for="concluir-combustivel">Combustível utilizado (L)</label><input type="number" id="concluir-combustivel" min="0" step="0.1"/></div>
+        <div class="frow"><label for="concluir-horas">Horas utilizadas *</label><input type="text" inputmode="decimal" id="concluir-horas"/></div>
+        <div class="frow"><label for="concluir-area">Área executada (m²)</label><input type="text" inputmode="decimal" id="concluir-area"/></div>
+        <div class="frow"><label for="concluir-combustivel">Combustível utilizado (L)</label><input type="text" inputmode="decimal" id="concluir-combustivel"/></div>
       </div>
       <div class="frow"><label for="concluir-obs">Observações da execução</label><textarea id="concluir-obs"></textarea></div>
     </div>
@@ -521,7 +521,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="fgrid">
         <div class="frow">
           <label>Horas registradas (delta)</label>
-          <input type="number" id="os-delta" placeholder="Ex: 8" min="0" step="0.5"/>
+          <input type="text" inputmode="decimal" id="os-delta" placeholder="Ex: 8"/>
         </div>
         <div class="frow">
           <label>Técnico / Operador</label>
@@ -588,7 +588,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <!-- Uso inicial só na criação: numa máquina existente o uso atual é
              calculado dos registros de uso, e editá-lo aqui dessincronizaria o
              horímetro do histórico que o produziu. -->
-        <div class="frow"><label id="at-uso-label">Uso inicial</label><input type="number" id="at-uso" value="0" min="0" step="0.5"/>
+        <div class="frow"><label id="at-uso-label">Uso inicial</label><input type="text" inputmode="decimal" id="at-uso" value="0"/>
           <div class="help" id="at-uso-ajuda"></div></div>
         <div class="frow">
           <label>Unidade</label>
@@ -672,8 +672,8 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     <div class="modal-body">
       <div class="frow"><label>Nome *</label><input type="text" id="sv-nome" placeholder="Troca de lâmina"/></div>
       <div class="fgrid">
-        <div class="frow"><label>Tempo padrão (h)</label><input type="number" id="sv-tempo" min="0.1" step="0.5" placeholder="1"/></div>
-        <div class="frow"><label>Valor da hora (R$)</label><input type="number" id="sv-valor" min="0" step="0.01"/></div>
+        <div class="frow"><label>Tempo padrão (h)</label><input type="text" inputmode="decimal" id="sv-tempo" placeholder="1"/></div>
+        <div class="frow"><label>Valor da hora (R$)</label><input type="text" inputmode="decimal" id="sv-valor"/></div>
       </div>
       <div class="help">Entra no catálogo de serviços (módulo Reparos) e já volta selecionado na OS.</div>
     </div>
@@ -698,7 +698,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     <div class="modal-body">
       <div class="frow">
         <label for="cfg-valor-hora">Valor da hora-homem (R$)</label>
-        <input type="number" id="cfg-valor-hora" min="0" step="0.01" placeholder="não informado"/>
+        <input type="text" inputmode="decimal" id="cfg-valor-hora" placeholder="não informado"/>
       </div>
       <div class="help" id="cfg-hora-ajuda" style="margin:0">
         Usado como padrão no custo de mão de obra das OS. Enquanto estiver vazio,
@@ -734,7 +734,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           </select>
         </div>
         <div class="frow"><label>Unidade</label><input type="text" id="mat-uni" value="un"/></div>
-        <div class="frow"><label>Estoque mínimo</label><input type="number" id="mat-min" value="2" min="0"/></div>
+        <div class="frow"><label>Estoque mínimo</label><input type="text" inputmode="decimal" id="mat-min" value="2"/></div>
       </div>
       <!-- Sistema/aplicação (migração 34): some quando a migração não rodou —
            não há onde gravar. Mesmo idioma do wrapper de serviço abaixo. -->
@@ -818,9 +818,9 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       </select></div>
     </div>
     <div class="fgrid3">
-      <div class="frow"><label>Litros *</label><input type="number" id="ab-litros" step="0.1" min="0.1"/></div>
-      <div class="frow"><label>R$ / litro</label><input type="number" id="ab-preco" step="0.01" min="0"/></div>
-      <div class="frow"><label>Horímetro</label><input type="number" id="ab-horim" step="0.5" min="0"/></div>
+      <div class="frow"><label>Litros *</label><input type="text" inputmode="decimal" id="ab-litros"/></div>
+      <div class="frow"><label>R$ / litro</label><input type="text" inputmode="decimal" id="ab-preco"/></div>
+      <div class="frow"><label>Horímetro</label><input type="text" inputmode="decimal" id="ab-horim"/></div>
     </div>
     <div class="frow"><label>Operador</label><input type="text" id="ab-oper"/></div>
     <div class="frow"><label>Observações</label><input type="text" id="ab-obs"/></div>
@@ -836,7 +836,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
     </div>
     <div class="modal-body">
       <div class="frow"><label>Material *</label><select id="mov-material"></select></div>
-      <div class="frow"><label>Quantidade *</label><input type="number" id="mov-qtd" value="1" min="0.1" step="0.5"/></div>
+      <div class="frow"><label>Quantidade *</label><input type="text" inputmode="decimal" id="mov-qtd" value="1"/></div>
       <div class="frow"><label>Motivo</label><input type="text" id="mov-motivo" placeholder="Compra, doação..."/></div>
     </div>
     <div class="modal-ft">
@@ -868,7 +868,7 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
       <div class="fgrid">
         <div class="frow">
           <label id="uso-delta-label">Horas trabalhadas *</label>
-          <input type="number" id="uso-delta" placeholder="Ex: 8" min="0" step="0.5"/>
+          <input type="text" inputmode="decimal" id="uso-delta" placeholder="Ex: 8"/>
         </div>
         <div class="frow">
           <label>Data *</label>

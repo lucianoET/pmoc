@@ -4,6 +4,7 @@ import { aplicarShell } from '../shared/shell.js'
 import { COLUNAS_ESTOQUE, proximaOrdem, aplicarOrdemEFiltro } from './estoque-tabela.js'
 import { pilula, seletor, chips as chipsHTML, regua, vazio } from '../shared/componentes.js'
 import { FLUXO_CONTRATACAO } from './contratacoes.js'
+import { lerNumero, lerNumeroTexto, paraCampo } from './numeros.js'
 import {
   RECORTES,
   filtrarPorRecorte,
@@ -478,7 +479,8 @@ function atualizarContextoUso(){
   const ativo = ATIVOS.find(a => a.id === parseInt(document.getElementById('uso-ativo').value))
   if(!ativo) return
   const unidade = ativo.unidade_uso || 'h'
-  const delta = parseFloat(document.getElementById('uso-delta').value) || 0
+  const lido = lerNumero('uso-delta')
+  const delta = lido.ok ? (lido.valor ?? 0) : 0
   document.getElementById('uso-atual').textContent = `${ativo.uso_atual} ${unidade}`
   document.getElementById('uso-delta-label').textContent =
     unidade === 'km' ? 'Quilômetros rodados *' : `Uso no período (${unidade}) *`
@@ -489,13 +491,15 @@ function atualizarContextoUso(){
 
 async function salvarUso(){
   const ativo_id = parseInt(document.getElementById('uso-ativo').value)
-  const delta    = parseFloat(document.getElementById('uso-delta').value)
+  const lidoDelta = lerNumero('uso-delta')
   const data     = document.getElementById('uso-data').value
   const operador = document.getElementById('uso-operador').value.trim()
   const obs      = document.getElementById('uso-obs').value.trim()
 
   if(!ativo_id || !data){ alert('Preencha a máquina e a data.'); return }
-  if(!(delta > 0)){ alert('Informe o uso do período — precisa ser maior que zero.'); return }
+  if(!lidoDelta.ok){ alert(lidoDelta.erro); return }
+  const delta = lidoDelta.valor
+  if(delta === null){ alert('Informe o uso do período.'); return }
 
   const ativo = ATIVOS.find(a => a.id === ativo_id)
   const uso_total = Number(ativo?.uso_atual || 0) + delta
@@ -997,6 +1001,8 @@ async function salvarContratacao(){
   if(!podeContratar()) return
   const objeto = document.getElementById('ct-objeto').value.trim()
   if(!objeto){ alert('Descreva o objeto da contratação.'); return }
+  const lidoValor = lerNumero('ct-valor')
+  if(!lidoValor.ok){ alert(lidoValor.erro); return }
   const { error } = await supa.from('maq_contratacoes').insert({
     numero: proximoNumero(CONTRATACOES, new Date().getFullYear()),
     ativo_id: parseInt(document.getElementById('ct-ativo').value, 10) || null,
@@ -1007,7 +1013,7 @@ async function salvarContratacao(){
     cnpj: document.getElementById('ct-cnpj').value.trim() || null,
     fiscal: document.getElementById('ct-fiscal').value.trim() || null,
     ne: document.getElementById('ct-ne').value.trim() || null,
-    valor_estimado: parseFloat(document.getElementById('ct-valor').value) || null,
+    valor_estimado: lidoValor.valor,
     obs: document.getElementById('ct-obs').value.trim() || null,
   })
   if(error){ alert('Erro ao salvar contratação: '+error.message); return }
@@ -1269,9 +1275,9 @@ function renderLinhasMateriais(){
         <td><span class="badge b-blue">${esc(m.tipo.toUpperCase())}</span></td>
         <td>${esc(m.sistema || '—')}</td>
         <td>${esc(m.aplicacao || '—')}</td>
-        <td><input type="number" id="ed-atual" value="${m.estoque_atual}" min="0" step="0.5" style="width:88px"/></td>
-        <td><input type="number" id="ed-minimo" value="${m.estoque_minimo}" min="0" step="0.5" style="width:88px"/></td>
-        <td><input type="number" id="ed-preco" value="${m.preco ?? ''}" min="0" step="0.01" placeholder="0,00" style="width:96px"/></td>
+        <td><input type="text" inputmode="decimal" id="ed-atual" value="${paraCampo(m.estoque_atual)}" style="width:88px"/></td>
+        <td><input type="text" inputmode="decimal" id="ed-minimo" value="${paraCampo(m.estoque_minimo)}" style="width:88px"/></td>
+        <td><input type="text" inputmode="decimal" id="ed-preco" value="${paraCampo(m.preco)}" placeholder="0,00" style="width:96px"/></td>
         <td>
           <div style="display:flex;gap:6px">
             <button class="btn btn-p btn-sm" onclick="salvarLinhaMaterial(${m.id})">Salvar</button>
@@ -1373,7 +1379,7 @@ function limparFiltrosMateriais(){
 // conferência de estoque.
 function abrirModalHoraHomem(){
   const campo = document.getElementById('cfg-valor-hora')
-  campo.value = valorHoraPadrao() ?? ''
+  campo.value = paraCampo(valorHoraPadrao())
   aplicarPermissoesConfig()
   document.getElementById('modal-hora-homem').classList.add('open')
 }
@@ -1413,12 +1419,12 @@ function aplicarPermissoesConfig(){
 }
 
 async function salvarValorHora(){
-  const campo = document.getElementById('cfg-valor-hora')
-  const texto = campo.value.trim()
   // vazio apaga o valor: é diferente de zero, e zero afirmaria que a hora não
-  // custa nada em vez de "ainda não informado"
-  const valor = texto === '' ? null : Number(texto)
-  if(valor !== null && !(valor >= 0)){ alert('Valor da hora precisa ser um número não negativo.'); return }
+  // custa nada em vez de "ainda não informado" — a distinção entre vazio e
+  // zero é justamente o que o leitor devolve, em vez do `|| 0` de antes
+  const lidoHora = lerNumero('cfg-valor-hora')
+  if(!lidoHora.ok){ alert(lidoHora.erro); return }
+  const valor = lidoHora.valor
 
   // .select() não é enfeite: sob RLS, um update que não alcança nenhuma linha
   // permitida volta SEM erro e sem efeito. Sem conferir a linha de retorno, a
@@ -1459,13 +1465,12 @@ async function salvarLinhaMaterial(id){
   const material = MATERIAIS.find(m => m.id === id)
   if(!material) return
 
-  const atual  = parseFloat(document.getElementById('ed-atual').value)
-  const minimo = parseFloat(document.getElementById('ed-minimo').value)
-  const precoTexto = document.getElementById('ed-preco').value.trim()
-  const preco = precoTexto === '' ? null : parseFloat(precoTexto)
-
-  if(!(atual >= 0) || !(minimo >= 0)){ alert('Quantidade e mínimo precisam ser números não negativos.'); return }
-  if(preco !== null && !(preco >= 0)){ alert('Preço precisa ser um número não negativo.'); return }
+  const lidoAtual  = lerNumero('ed-atual')
+  const lidoMinimo = lerNumero('ed-minimo')
+  const lidoPreco  = lerNumero('ed-preco')
+  for(const r of [lidoAtual, lidoMinimo, lidoPreco]){ if(!r.ok){ alert(r.erro); return } }
+  const atual = lidoAtual.valor, minimo = lidoMinimo.valor, preco = lidoPreco.valor
+  if(atual === null || minimo === null){ alert('Preencha a quantidade e o mínimo.'); return }
 
   // .select() pelo mesmo motivo de salvarValorHora(): sob RLS um update que não
   // alcança linha permitida volta sem erro e sem efeito, e a tela diria "salvo"
@@ -1602,7 +1607,7 @@ function renderNecessidades(){
             <td class="hi">${l.a_comprar.toFixed(1)} ${esc(l.material.unidade)}</td>
             ${podeGerar ? `
               <td><input type="checkbox" id="nec-sel-${l.material.id}"/></td>
-              <td><input type="number" id="nec-qtd-${l.material.id}" value="${l.a_comprar}" min="0.01" step="0.5" style="width:80px"/></td>` : ''}
+              <td><input type="text" inputmode="decimal" id="nec-qtd-${l.material.id}" value="${paraCampo(l.a_comprar)}" style="width:80px"/></td>` : ''}
           </tr>`).join('')}
         </tbody>
       </table>
@@ -1688,20 +1693,23 @@ function abrirModalListaCompra(){
     .map(l => {
       const check = document.getElementById(`nec-sel-${l.material.id}`)
       if(!check?.checked) return null
-      const quantidade = parseFloat(document.getElementById(`nec-qtd-${l.material.id}`)?.value)
-      return { linha: l, quantidade }
+      const lido = lerNumero(`nec-qtd-${l.material.id}`, 'nec-qtd')
+      return { linha: l, lido }
     })
     .filter(Boolean)
 
   if(!selecionados.length){ alert('Selecione ao menos um item.'); return }
-  if(selecionados.some(s => !(s.quantidade > 0))){
-    alert('Toda linha selecionada precisa de uma quantidade maior que zero.')
+  // A linha recusada é NOMEADA: com várias marcadas, "alguma quantidade está
+  // errada" obrigaria a conferir uma por uma.
+  const ruim = selecionados.find(s => !s.lido.ok || s.lido.valor === null)
+  if(ruim){
+    alert(`${ruim.linha.material.nome} — ${ruim.lido.ok ? 'informe a quantidade' : ruim.lido.erro}`)
     return
   }
 
   LISTA_NOVA_ITENS = selecionados.map(s => ({
     material_id: s.linha.material.id,
-    quantidade: s.quantidade,
+    quantidade: s.lido.valor,
     origem: s.linha.prev > 0 ? 'preventiva' : s.linha.corr > 0 ? 'corretiva' : s.linha.min_rep > 0 ? 'minimo' : 'manual',
   }))
 
@@ -1758,8 +1766,10 @@ async function receberItem(itemId){
   const pendente = Number(item.quantidade) - Number(item.qtd_recebida)
   const bruto = prompt(`Quantidade recebida (pendente: ${pendente})`, String(pendente))
   if(bruto === null) return
-  const quantidade = parseFloat(bruto)
-  if(!(quantidade > 0)){ alert('Informe uma quantidade maior que zero.'); return }
+  const lido = lerNumeroTexto(bruto, 'recebimento')
+  if(!lido.ok){ alert(lido.erro); return }
+  const quantidade = lido.valor
+  if(quantidade === null){ alert('Informe uma quantidade maior que zero.'); return }
   // D6: qtd_recebida nunca ultrapassa quantidade
   if(quantidade > pendente){ alert('A quantidade recebida não pode ser maior que o pendente.'); return }
 
@@ -1899,13 +1909,17 @@ function abrirModalAbastecimento(){
 
 async function salvarAbastecimento(){
   const ativo_id = parseInt(document.getElementById('ab-ativo').value)
-  const litros   = parseFloat(document.getElementById('ab-litros').value)
-  if(!ativo_id || !litros){ alert('Informe máquina e litros.'); return }
+  const lidoLitros = lerNumero('ab-litros')
+  const lidoPreco  = lerNumero('ab-preco')
+  const lidoHorim  = lerNumero('ab-horim')
+  for(const r of [lidoLitros, lidoPreco, lidoHorim]){ if(!r.ok){ alert(r.erro); return } }
+  const litros = lidoLitros.valor
+  if(!ativo_id || litros === null){ alert('Informe máquina e litros.'); return }
   const { error } = await supa.from('maq_abastecimentos').insert({
     ativo_id, litros,
     data:        document.getElementById('ab-data').value,
-    preco_litro: parseFloat(document.getElementById('ab-preco').value) || null,
-    horimetro:   parseFloat(document.getElementById('ab-horim').value) || null,
+    preco_litro: lidoPreco.valor,
+    horimetro:   lidoHorim.valor,
     combustivel: document.getElementById('ab-comb').value,
     operador:    document.getElementById('ab-oper').value.trim(),
     obs:         document.getElementById('ab-obs').value.trim(),
@@ -2099,11 +2113,13 @@ async function salvarOS(){
   const plano_id  = parseInt(document.getElementById('os-plano').value) || null
   const tipo      = document.getElementById('os-tipo').value
   const data      = document.getElementById('os-data').value
-  const delta     = parseFloat(document.getElementById('os-delta').value) || 0
+  const lidoDeltaOS = lerNumero('os-delta')
   const tecnico   = document.getElementById('os-tecnico').value.trim()
   const descricao = document.getElementById('os-desc').value.trim()
 
   if(!ativo_id || !data){ alert('Preencha a máquina e a data.'); return }
+  if(!lidoDeltaOS.ok){ alert(lidoDeltaOS.erro); return }
+  const delta = lidoDeltaOS.valor ?? 0
 
   const ativo = ATIVOS.find(a => a.id === ativo_id)
   const uso_na_os = (ativo?.uso_atual || 0) + delta
@@ -2388,9 +2404,9 @@ function renderPecasOS(){
           ${MATERIAIS.map(m => `<option value="${m.id}" ${m.id===peca.material_id?'selected':''}>${esc(m.nome)}</option>`).join('')}
           <option value="novo">➕ Cadastrar nova peça…</option>
         </select>
-        <input type="number" value="${peca.quantidade}" min="0.01" step="0.5" title="Quantidade"
+        <input type="text" inputmode="decimal" value="${paraCampo(peca.quantidade)}" title="Quantidade"
           oninput="atualizarPecaOS(${i}, 'quantidade', this.value)" style="width:82px"/>
-        <input type="number" value="${peca.preco_unit ?? ''}" min="0" step="0.01" placeholder="preço" title="Preço unitário"
+        <input type="text" inputmode="decimal" value="${paraCampo(peca.preco_unit)}" placeholder="preço" title="Preço unitário"
           oninput="atualizarPecaOS(${i}, 'preco_unit', this.value)" style="width:96px"/>
         <span class="mono" style="font-size:12px;color:var(--text2);min-width:80px;text-align:right">R$ ${total.toFixed(2)}</span>
         <button class="btn btn-d btn-sm" onclick="removerPecaOS(${i})" aria-label="Remover peça">✕</button>
@@ -2425,9 +2441,9 @@ function renderServicosOS(){
     return `<div class="panel-card" style="padding:10px 12px">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         ${seletor}
-        <input type="number" value="${servico.horas}" min="0.1" step="0.5" title="Horas"
+        <input type="text" inputmode="decimal" value="${paraCampo(servico.horas)}" title="Horas"
           oninput="atualizarServicoOS(${i}, 'horas', this.value)" style="width:78px"/>
-        <input type="number" value="${servico.valor_hora ?? ''}" min="0" step="0.01" placeholder="R$/h" title="Valor da hora"
+        <input type="text" inputmode="decimal" value="${paraCampo(servico.valor_hora)}" placeholder="R$/h" title="Valor da hora"
           oninput="atualizarServicoOS(${i}, 'valor_hora', this.value)" style="width:92px"/>
         <span class="mono" style="font-size:12px;color:var(--text2);min-width:80px;text-align:right">R$ ${total.toFixed(2)}</span>
         <button class="btn btn-d btn-sm" onclick="removerServicoOS(${i})" aria-label="Remover serviço">✕</button>
@@ -2516,7 +2532,9 @@ function trocarPecaOS(indice, materialId){
 }
 
 function atualizarPecaOS(indice, campo, valor){
-  OSD_PECAS[indice][campo] = valor === '' ? null : Number(valor)
+  const chave = campo === 'quantidade' ? 'osd-peca-qtd' : 'osd-peca-preco'
+  const lido = lerNumeroTexto(valor, chave)
+  OSD_PECAS[indice][campo] = lido.ok ? lido.valor : null
   recalcularCustosOS()
 }
 
@@ -2562,15 +2580,17 @@ function trocarServicoOS(indice, servicoId){
 function abrirModalServicoNovo(){
   document.getElementById('sv-nome').value = ''
   document.getElementById('sv-tempo').value = ''
-  document.getElementById('sv-valor').value = valorHoraPadrao() ?? ''
+  document.getElementById('sv-valor').value = paraCampo(valorHoraPadrao())
   document.getElementById('modal-servico').classList.add('open')
 }
 
 async function salvarServicoNovo(){
   const nome = document.getElementById('sv-nome').value.trim()
   if(!nome){ alert('Nome obrigatório.'); return }
-  const tempo = parseFloat(document.getElementById('sv-tempo').value) || null
-  const valor = parseFloat(document.getElementById('sv-valor').value) || null
+  const lidoTempo = lerNumero('sv-tempo')
+  const lidoValor = lerNumero('sv-valor')
+  for(const r of [lidoTempo, lidoValor]){ if(!r.ok){ alert(r.erro); return } }
+  const tempo = lidoTempo.valor, valor = lidoValor.valor
 
   const { data, error } = await supa.from('rep_servicos')
     .insert({ nome, tempo_padrao_h: tempo, valor_hora: valor })
@@ -2588,9 +2608,11 @@ async function salvarServicoNovo(){
 }
 
 function atualizarServicoOS(indice, campo, valor){
-  OSD_SERVICOS[indice][campo] = campo === 'descricao' ? valor : (valor === '' ? null : Number(valor))
-  if(campo === 'descricao') recalcularCustosOS()
-  else recalcularCustosOS()
+  if(campo === 'descricao'){ OSD_SERVICOS[indice][campo] = valor; recalcularCustosOS(); return }
+  const chave = campo === 'horas' ? 'osd-servico-horas' : 'osd-servico-valor'
+  const lido = lerNumeroTexto(valor, chave)
+  OSD_SERVICOS[indice][campo] = lido.ok ? lido.valor : null
+  recalcularCustosOS()
 }
 
 function removerServicoOS(indice){
@@ -2958,7 +2980,7 @@ function abrirModalAtivo(id){
   // existente ele é calculado dos registros de uso — editá-lo aqui
   // dessincronizaria o horímetro do histórico que o produziu.
   const campoUso = document.getElementById('at-uso')
-  campoUso.value = ativo?.uso_atual || 0
+  campoUso.value = paraCampo(ativo?.uso_atual ?? 0)
   campoUso.disabled = !!ativo
   document.getElementById('at-uso-label').textContent = ativo ? 'Uso atual' : 'Uso inicial'
   document.getElementById('at-uso-ajuda').textContent = ativo
@@ -2987,7 +3009,9 @@ async function salvarAtivo(){
   // uso_atual só entra na criação — depois disso ele pertence aos registros
   // de uso, nunca mais ao formulário
   if(!ATIVO_EDIT_ID){
-    campos.uso_atual = parseFloat(document.getElementById('at-uso').value) || 0
+    const lidoUso = lerNumero('at-uso')
+    if(!lidoUso.ok){ alert(lidoUso.erro); return }
+    campos.uso_atual = lidoUso.valor ?? 0
   }
 
   if(ATIVO_EDIT_ID){
@@ -3024,7 +3048,7 @@ function abrirModalMaterial(id){
   document.getElementById('mat-nome').value = material?.nome || ''
   document.getElementById('mat-tipo').value = material?.tipo || 'consumivel'
   document.getElementById('mat-uni').value  = material?.unidade || 'un'
-  document.getElementById('mat-min').value  = material?.estoque_minimo ?? 2
+  document.getElementById('mat-min').value  = paraCampo(material?.estoque_minimo ?? 2)
 
   // sistema/aplicação (migração 34): sem a migração não há onde gravar, o
   // bloco some — mesmo idioma de mat-servico-wrap logo abaixo.
@@ -3054,12 +3078,14 @@ async function salvarMaterial(){
 
   const nome = document.getElementById('mat-nome').value.trim()
   if(!nome){ alert('Nome obrigatório.'); return }
+  const lidoMin = lerNumero('mat-min')
+  if(!lidoMin.ok){ alert(lidoMin.erro); return }
   const campos = {
     codigo:          document.getElementById('mat-cod').value.trim().toUpperCase() || null,
     nome,
     tipo:            document.getElementById('mat-tipo').value,
     unidade:         document.getElementById('mat-uni').value.trim() || 'un',
-    estoque_minimo:  parseFloat(document.getElementById('mat-min').value) || 0,
+    estoque_minimo:  lidoMin.valor ?? 0,
     servico_id:      parseInt(document.getElementById('mat-servico').value) || null,
   }
 
@@ -3103,9 +3129,11 @@ function abrirModalMovimento(){
 
 async function salvarMovimento(){
   const material_id = parseInt(document.getElementById('mov-material').value)
-  const quantidade  = parseFloat(document.getElementById('mov-qtd').value)
+  const lidoQtd     = lerNumero('mov-qtd')
   const motivo      = document.getElementById('mov-motivo').value.trim()
-  if(!material_id || !quantidade){ alert('Preencha material e quantidade.'); return }
+  if(!lidoQtd.ok){ alert(lidoQtd.erro); return }
+  const quantidade = lidoQtd.valor
+  if(!material_id || quantidade === null){ alert('Preencha material e quantidade.'); return }
 
   const mat = MATERIAIS.find(m => m.id === material_id)
   const novo = (mat?.estoque_atual || 0) + quantidade
@@ -3127,8 +3155,8 @@ function abrirModalArea(id){
   document.getElementById('area-codigo').value = area?.codigo || ''
   document.getElementById('area-nome').value = area?.nome || ''
   document.getElementById('area-tipo').value = area?.tipo || 'corte'
-  document.getElementById('area-m2').value = area?.area_m2 ?? ''
-  document.getElementById('area-periodicidade').value = area?.periodicidade_dias ?? ''
+  document.getElementById('area-m2').value = paraCampo(area?.area_m2)
+  document.getElementById('area-periodicidade').value = paraCampo(area?.periodicidade_dias)
   document.getElementById('area-localizacao').value = area?.localizacao || ''
   document.getElementById('area-obs').value = area?.obs || ''
 
@@ -3151,18 +3179,21 @@ async function salvarArea(){
   const nome = document.getElementById('area-nome').value.trim()
   if(!nome){ alert('Informe o nome da área.'); return }
   const area = AREA_EDIT_ID ? AREAS.find(a => String(a.id) === String(AREA_EDIT_ID)) : null
+  const lidoPeriod = lerNumero('area-periodicidade')
+  const lidoAreaM2 = lerNumero('area-m2')
+  for(const r of [lidoPeriod, lidoAreaM2]){ if(!r.ok){ alert(r.erro); return } }
   const dados = {
     codigo: document.getElementById('area-codigo').value.trim().toUpperCase() || null,
     nome,
     tipo: document.getElementById('area-tipo').value,
-    periodicidade_dias: parseInt(document.getElementById('area-periodicidade').value) || null,
+    periodicidade_dias: lidoPeriod.valor,
     localizacao: document.getElementById('area-localizacao').value.trim(),
     obs: document.getElementById('area-obs').value.trim(),
   }
   // A dimensão só entra no payload quando NÃO vem do contorno: mandar o
   // valor do campo travado devolveria ao banco um número que o mapa
   // recalcula, com chance de gravar o que a tela mostrava desatualizado.
-  if(!temContorno(area)) dados.area_m2 = parseFloat(document.getElementById('area-m2').value) || null
+  if(!temContorno(area)) dados.area_m2 = lidoAreaM2.valor
 
   const { error } = AREA_EDIT_ID
     ? await supa.from('maq_areas').update(dados).eq('id', AREA_EDIT_ID)
@@ -3204,21 +3235,27 @@ function abrirConcluirOperacao(id){
   OPERACAO_CONCLUIR_ID=id
   document.getElementById('concluir-operacao-resumo').textContent = `${operacao.maq_areas?.nome || 'Área'} · ${operacao.maq_ativos?.codigo || 'Máquina'}`
   document.getElementById('concluir-horas').value=''
-  document.getElementById('concluir-area').value=operacao.maq_areas?.area_m2 || ''
+  document.getElementById('concluir-area').value=paraCampo(operacao.maq_areas?.area_m2)
   document.getElementById('concluir-combustivel').value=''
   document.getElementById('concluir-obs').value=operacao.obs || ''
   document.getElementById('modal-concluir-operacao').classList.add('open')
 }
 
 async function concluirOperacao(){
-  const horas = parseFloat(document.getElementById('concluir-horas').value)
+  const lidoHoras = lerNumero('concluir-horas')
+  const lidoAreaEx = lerNumero('concluir-area')
+  const lidoComb = lerNumero('concluir-combustivel')
+  for(const r of [lidoHoras, lidoAreaEx, lidoComb]){ if(!r.ok){ alert(r.erro); return } }
+  const horas = lidoHoras.valor
+  // projetarUsoTotal continua sendo a última palavra sobre as horas: ele
+  // conhece a regra do horímetro, que o leitor não tem como conhecer
   try { OperacoesMaq.projetarUsoTotal(0,horas) }
   catch(error){ alert(error.message); return }
   const { error } = await supa.rpc('concluir_maq_operacao',{
     p_operacao_id: OPERACAO_CONCLUIR_ID,
     p_horas_utilizadas: horas,
-    p_area_executada_m2: parseFloat(document.getElementById('concluir-area').value) || null,
-    p_combustivel_utilizado: parseFloat(document.getElementById('concluir-combustivel').value) || null,
+    p_area_executada_m2: lidoAreaEx.valor,
+    p_combustivel_utilizado: lidoComb.valor,
     p_observacoes: document.getElementById('concluir-obs').value.trim() || null,
   })
   if(error){ alert('Erro ao concluir operação: '+error.message); return }
