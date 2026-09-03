@@ -1016,7 +1016,7 @@ function inspCampoHtml(prefixo, entry){
   if (!INSP_OK) return '';
   return '<label class="fgl" style="margin-top:10px;display:block">Inspeção</label>' +
     '<div class="fg2">' +
-    '<div><label class="fgl">Ruído (dB)</label><input class="fgi" id="'+prefixo+'-ruido" type="number" step="1" min="0" max="130" value="'+
+    '<div><label class="fgl">Ruído (dB)</label><input class="fgi" id="'+prefixo+'-ruido" type="text" inputmode="decimal" value="'+
       (entry ? manValCampo(entry.ruidoDb) : '')+'"/></div>' +
     INSP_CAMPOS.map(function(c){
       var atual = entry ? inspNormalizar(entry[c.chave]) : null;
@@ -1031,7 +1031,7 @@ function inspCampoHtml(prefixo, entry){
    que é o que derrubaria a gravação inteira (lição de D-500-05). */
 function inspLerForm(prefixo){
   if (!INSP_OK) return {};
-  var patch = { ruidoDb: manNumOuNull(prefixo+'-ruido') };
+  var patch = { ruidoDb: manNumOuNull(prefixo+'-ruido', 'ruido') };
   INSP_CAMPOS.forEach(function(c){
     var campo = el(prefixo+'-'+c.id);
     patch[c.chave] = campo ? inspNormalizar(campo.value) : null;
@@ -1537,6 +1537,179 @@ function el(id){ return document.getElementById(id); }
 function val(id){ var e=el(id); return e?e.value:''; }
 function fmtDate(iso){ if(!iso)return''; try{var d=new Date(iso+'T12:00:00');return d.toLocaleDateString('pt-BR');}catch(e){return iso;} }
 function today(){ return new Date().toISOString().slice(0,10); }
+
+/* ── leitura numérica de formulário: porta única ─────────────────────
+   Medido no Chromium, com teclado de verdade, em pt-BR e en-US (idêntico
+   nos dois — não é locale): num `input[type=number]`, digitar
+
+     "12,5"    → .value === "125"      (dez vezes o valor)
+     "0,5"     → .value === "5"
+     "1.200"   → .value === "1.2"
+     "1234,56" → .value === "123456"
+     "-3,5"    → .value === "-35"
+
+   O navegador NÃO recusa a vírgula: engole o caractere e mantém os
+   dígitos, com `validity.badInput` false e `min` calado. Os 30 campos
+   numéricos deste arquivo tinham o defeito, todos. O pior deles é a
+   corrente da OS: `corrente_medida` tem check `<= 1000` na migração 58,
+   então 12,5 A vira 125 A e PASSA; e insuflamento, retorno e pressão são
+   três das quatro colunas que a 58 deixou deliberadamente sem check, onde
+   −3,5 °C vira −35 °C sem barreira nenhuma.
+
+   Um campo `type=number` não tem conserto para separador decimal — medido:
+   `setRangeText` lança "does not support selection" e atribuir "12." zera
+   o campo pela sanitização. Os campos passaram a `type="text"` com
+   `inputmode`, e a leitura passou por aqui.
+
+   A regra de ambiguidade é a MESMA de `celulaParaDecimal` (migração 56):
+   ponto separando três casas pode ser milhar ou decimal, e adivinhar foi
+   o que fez `dissipacao_w` virar 1,2. Uma diferença é deliberada e está
+   medida: aqui `1.234,56` é aceito (vírgula presente ⇒ o ponto é milhar),
+   e na planilha é recusado — lá o arquivo é editado à mão e vale forçar a
+   limpeza, aqui é uma pessoa digitando uma vez.
+
+   Réplica vigiada de `maquinas/numeros.js`: este arquivo é congelado e
+   não pode citar a pasta comum (PLAT-15 — e escrever o caminho dela aqui,
+   ainda que em comentário, reprova quatro gates; foi o que aconteceu na
+   primeira versão deste próprio comentário), então a regra é copiada — e o que
+   impede a divergência não é o lugar, é o gate, que roda as DUAS
+   implementações sobre a mesma tabela de casos (precedente de D-eq-15). */
+function numNormalizar(texto){
+  var t = String(texto === null || texto === undefined ? '' : texto).trim();
+  if (t === '') return {ok:true, texto:''};
+  var virgulas = (t.match(/,/g) || []).length;
+  var pontos = (t.match(/\./g) || []).length;
+  if (virgulas > 1) return {ok:false, erro:'tem mais de uma vírgula'};
+  if (virgulas === 1 && pontos > 0) return {ok:true, texto:t.replace(/\./g,'').replace(',','.')};
+  if (virgulas === 1) return {ok:true, texto:t.replace(',','.')};
+  if (pontos > 1) return {ok:false, erro:'tem mais de um ponto'};
+  if (pontos === 1 && /^-?\d{1,3}\.\d{3}$/.test(t)){
+    return {ok:false, erro:'é ambíguo — ponto separando três casas pode ser milhar ou decimal; escreva sem separador de milhar'};
+  }
+  return {ok:true, texto:t};
+}
+
+/* Vazio, zero e lixo são TRÊS respostas. O `parseFloat(v)||0` que estava
+   em nove lugares devolvia uma só, e transformava cadastro incompleto em
+   afirmação numérica. */
+function numValidar(texto, spec){
+  var s = spec || {};
+  var nome = s.rotulo || 'Valor';
+  var norm = numNormalizar(texto);
+  if (!norm.ok) return {ok:false, erro:nome + ': "' + String(texto).trim() + '" ' + norm.erro};
+  if (norm.texto === '') return s.obrigatorio ? {ok:false, erro:nome + ': preencha este campo'} : {ok:true, valor:null};
+  /* Number() e não parseFloat(): parseFloat("12abc") devolve 12 e engole o
+     resto, que é a leitura silenciosa que esta porta existe para acabar. */
+  var v = Number(norm.texto);
+  if (!isFinite(v)) return {ok:false, erro:nome + ': "' + norm.texto + '" não é um número'};
+  if (s.inteiro && Math.floor(v) !== v) return {ok:false, erro:nome + ': precisa ser um número inteiro'};
+  if (s.min !== undefined && s.min !== null){
+    if (s.exclusivo && !(v > s.min)) return {ok:false, erro:nome + ': precisa ser maior que ' + s.min};
+    if (!s.exclusivo && v < s.min) return {ok:false, erro:nome + ': não pode ser menor que ' + s.min};
+  }
+  if (s.max !== undefined && s.max !== null && v > s.max){
+    return {ok:false, erro:nome + ': ' + v + ' está acima do limite de ' + s.max + ' — confira se não sobrou um dígito'};
+  }
+  return {ok:true, valor:v};
+}
+
+/* Espelha os `check` que existem, e é MAIS estrito onde a tela já era
+   (a regra: nunca mais frouxa que o Postgres, porque frouxidão vira erro
+   opaco no meio da gravação). Insuflamento, retorno e pressão não têm
+   piso de propósito — a migração 58 registra por quê: pressão negativa é
+   vácuo e câmara refrigerada insufla abaixo de zero. */
+var NUM_CAMPOS = {
+  'est-ed-atual':  {rotulo:'Estoque atual',  coluna:'materiais.estoque_atual',  min:0, max:1000000},
+  'est-ed-minimo': {rotulo:'Estoque mínimo', coluna:'materiais.estoque_minimo', min:0, max:1000000},
+  'est-ed-preco':  {rotulo:'Preço',          coluna:'materiais.preco',          min:0, max:10000000},
+  'mt-preco':      {rotulo:'Preço',          coluna:'materiais.preco',          min:0, max:10000000},
+  'mt-atual':      {rotulo:'Estoque atual',  coluna:'materiais.estoque_atual',  min:0, max:1000000},
+  'mt-minimo':     {rotulo:'Estoque mínimo', coluna:'materiais.estoque_minimo', min:0, max:1000000},
+  'ent-qtd':       {rotulo:'Quantidade',     coluna:'estoque_movimentos.quantidade', min:0, exclusivo:true, max:1000000},
+  'sv-tempo':      {rotulo:'Tempo padrão',   coluna:'servicos.tempo_padrao_min', min:0, exclusivo:true, max:100000},
+  'sm-qtd':        {rotulo:'Quantidade',     coluna:'servico_materiais.quantidade', min:0, exclusivo:true, max:1000000},
+  'oi-un-qtd':     {rotulo:'Quantidade',     coluna:'os_itens.quantidade',      min:0, exclusivo:true, max:1000000},
+  'oi-un-vu':      {rotulo:'Valor unitário', coluna:'os_itens.valor_unitario',  min:0, max:10000000},
+  'cp-qtd':        {rotulo:'Quantidade',     coluna:'os_composicao_arp.qtd',    min:0, exclusivo:true, max:1000000},
+  'tarifa':        {rotulo:'Tarifa',         coluna:'(localStorage)',           min:0, exclusivo:true, max:100},
+  'ruido':         {rotulo:'Ruído',          coluna:'logs_manutencao.ruido_db', min:0, max:130},
+  /* As 7 medições da OS. `-ins`, `-ret` e `-press` SEM piso: ver acima. */
+  'med-ins':       {rotulo:'Insuflamento',   coluna:'logs_manutencao.temp_insuflamento', min:-90, max:100},
+  'med-ret':       {rotulo:'Retorno',        coluna:'logs_manutencao.temp_retorno',      min:-90, max:100},
+  'med-corr':      {rotulo:'Corrente',       coluna:'logs_manutencao.corrente_medida',   min:0, max:1000},
+  'med-press':     {rotulo:'Pressão',        coluna:'logs_manutencao.pressao_succao',    min:-30, max:1000},
+  'med-cap-marcha':{rotulo:'Cap. marcha',    coluna:'logs_manutencao.capacitor_marcha',  min:0, max:1000},
+  'med-cap-partida':{rotulo:'Cap. partida',  coluna:'logs_manutencao.capacitor_partida', min:0, max:1000},
+  'med-tensao':    {rotulo:'Tensão',         coluna:'logs_manutencao.tensao_medida',     min:0, max:1000}
+};
+
+/* Os campos do cadastro de equipamento NÃO entram em NUM_CAMPOS: os
+   limites deles já existem em PLANILHA_MINIMOS/PLANILHA_FAIXAS, espelhando
+   os check das migrações 47/56/57. Repeti-los aqui seria a segunda fonte
+   de verdade que este projeto já pagou caro para não ter. */
+function numSpecEquip(chave, rotulo){
+  var s = {rotulo: rotulo || chave};
+  if (typeof PLANILHA_FAIXAS !== 'undefined' && PLANILHA_FAIXAS[chave]){
+    s.min = PLANILHA_FAIXAS[chave].min; s.max = PLANILHA_FAIXAS[chave].max; s.inteiro = true;
+    return s;
+  }
+  if (typeof PLANILHA_MINIMOS !== 'undefined' && PLANILHA_MINIMOS[chave] !== undefined){
+    /* PLANILHA_MINIMOS usa 0.0001 como aproximação de "maior que zero";
+       aqui isso vira exclusividade declarada, que é o que a frase de erro
+       precisa para dizer "maior que zero" em vez de "menor que 0.0001". */
+    var m = PLANILHA_MINIMOS[chave];
+    if (m > 0) { s.min = 0; s.exclusivo = true; } else { s.min = 0; }
+  }
+  return s;
+}
+
+function numLer(id, chave){
+  var spec = NUM_CAMPOS[chave || id];
+  if (!spec) return {ok:false, erro:'Campo ' + (chave || id) + ' não está em NUM_CAMPOS'};
+  var e = (typeof el === 'function') ? el(id) : null;
+  if (!e) return {ok:false, erro:spec.rotulo + ': campo não encontrado na tela'};
+  return numValidar(e.value, spec);
+}
+
+/* Porta das 7 medições da OS e do ruído. O `parseFloat` de antes engolia a
+   vírgula descartada pelo type=number e ainda devolvia null para lixo, que
+   é indistinguível de "não mediu". Agora recusa com motivo, e quem chama
+   passa o erro adiante em vez de gravar silêncio. */
+function manNumOuNull(id, chave){
+  /* Lê por val(), que é como o resto do arquivo lê campo — e devolve '' para
+     campo ausente, que numValidar já traduz para null ("não mediu"). */
+  var bruto = (typeof val === 'function') ? val(id) : ((typeof el === 'function' && el(id)) ? el(id).value : '');
+  var r = numValidar(bruto, NUM_CAMPOS[chave || 'med-corr']);
+  if (!r.ok) { MAN_NUM_ERRO = r.erro; return null; }
+  return r.valor;
+}
+var MAN_NUM_ERRO = null;
+/* Sufixo do id ('-ins', '-corr'…) → chave da tabela, para os dois prefixos
+   ('man-ed', 'man-ex') caírem na mesma especificação. */
+function manChaveMedicao(id){
+  var suf = String(id).replace(/^man-(ed|ex)-/, '');
+  var mapa = {ins:'med-ins', ti:'med-ins', ret:'med-ret', tr:'med-ret', corr:'med-corr',
+              press:'med-press', 'cap-marcha':'med-cap-marcha', 'cap-partida':'med-cap-partida',
+              tensao:'med-tensao', ruido:'ruido'};
+  return mapa[suf] || 'med-corr';
+}
+function manLerMedicoes(ids){
+  MAN_NUM_ERRO = null;
+  var out = {};
+  for (var i=0;i<ids.length;i++){ out[ids[i]] = manNumOuNull(ids[i], manChaveMedicao(ids[i])); }
+  return MAN_NUM_ERRO ? null : out;
+}
+
+/* A metade inversa, e o gate exige as duas: sem ela o app preenche o campo
+   com um texto que ele próprio recusa — `String(Number(5.392))` é "5.392",
+   que a regra de ambiguidade barra. Grava com VÍRGULA, que é como se
+   escreve decimal em português e o que a pessoa reencontra ao editar. */
+function numParaCampo(v){
+  if (v === null || v === undefined || v === '') return '';
+  var n = Number(v);
+  if (!isFinite(n)) return '';
+  return String(n).replace('.', ',');
+}
 
 function showToast(msg, type){
   var t = el('toast');
@@ -3094,9 +3267,9 @@ function estLinhaHtml(m){
 
 function estLinhaEdicaoHtml(m){
   return '<div class="orc-item" id="mat-row-'+m.id+'">' +
-    '<div class="fg2"><div><label class="fgl">Atual</label><input class="fgi" id="est-ed-atual" type="number" step="0.01" value="'+m.estoqueAtual+'"/></div>' +
-    '<div><label class="fgl">Mínimo</label><input class="fgi" id="est-ed-minimo" type="number" step="0.01" value="'+m.estoqueMinimo+'"/></div></div>' +
-    '<div><label class="fgl">Preço</label><input class="fgi" id="est-ed-preco" type="number" step="0.01" value="'+(m.preco!=null?m.preco:'')+'"/></div>' +
+    '<div class="fg2"><div><label class="fgl">Atual</label><input class="fgi" id="est-ed-atual" type="text" inputmode="decimal" value="'+numParaCampo(m.estoqueAtual)+'"/></div>' +
+    '<div><label class="fgl">Mínimo</label><input class="fgi" id="est-ed-minimo" type="text" inputmode="decimal" value="'+numParaCampo(m.estoqueMinimo)+'"/></div></div>' +
+    '<div><label class="fgl">Preço</label><input class="fgi" id="est-ed-preco" type="text" inputmode="decimal" value="'+numParaCampo(m.preco)+'"/></div>' +
     '<button class="btn-secondary btn-sm" onclick="estCancelarEdicaoLinha('+m.id+')">Cancelar</button>' +
     '<button class="btn-primary btn-sm" onclick="estSalvarLinha('+m.id+')">Salvar</button>' +
     '</div>';
@@ -3121,11 +3294,11 @@ function estCancelarEdicaoLinha(id){
 
 async function estSalvarLinha(id){
   if (!manPode('estoque')) { showToast('Sem permissão para editar estoque','error'); return; } // guarda na ação, não só no botão (D-l7n-03)
-  var atual = parseFloat(val('est-ed-atual'));
-  var minimo = parseFloat(val('est-ed-minimo'));
-  var precoTxt = val('est-ed-preco');
-  var preco = precoTxt===''? null : parseFloat(precoTxt);
-  if (!(atual>=0) || !(minimo>=0) || (preco!==null && preco<0)) { showToast('Valores inválidos','error'); return; }
+  var rAtual = numLer('est-ed-atual'), rMinimo = numLer('est-ed-minimo'), rPreco = numLer('est-ed-preco');
+  var ruim = [rAtual, rMinimo, rPreco].filter(function(r){ return !r.ok; })[0];
+  if (ruim) { showToast(ruim.erro,'error'); return; }
+  var atual = rAtual.valor, minimo = rMinimo.valor, preco = rPreco.valor;
+  if (atual===null || minimo===null) { showToast('Preencha a quantidade e o mínimo','error'); return; }
   var r = await supa.from('materiais').update({estoque_atual:atual, estoque_minimo:minimo, preco:preco}).eq('id', id);
   if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
   EST_EDIT_ID = null;
@@ -3151,9 +3324,9 @@ function openMaterialForm(id){
     '<div><label class="fgl">Tipo</label><select class="fgs" id="mt-tipo"><option value="consumivel"'+(!m||m.tipo==='consumivel'?' selected':'')+'>Consumível</option><option value="peca"'+(m&&m.tipo==='peca'?' selected':'')+'>Peça</option></select></div>' +
     '<div><label class="fgl">Unidade</label><input class="fgi" id="mt-unidade" value="'+esc(m?m.unidade:'un')+'"/></div>' +
     '<div><label class="fgl">Aplicação</label><input class="fgi" id="mt-aplicacao" value="'+esc(m&&m.aplicacao?m.aplicacao:'')+'"/></div>' +
-    '<div><label class="fgl">Preço (R$)</label><input class="fgi" id="mt-preco" type="number" step="0.01" value="'+(m&&m.preco!=null?m.preco:'')+'"/></div>' +
-    '<div><label class="fgl">Estoque atual</label><input class="fgi" id="mt-atual" type="number" step="0.01" value="'+(m?m.estoqueAtual:0)+'"/></div>' +
-    '<div><label class="fgl">Estoque mínimo</label><input class="fgi" id="mt-minimo" type="number" step="0.01" value="'+(m?m.estoqueMinimo:0)+'"/></div>' +
+    '<div><label class="fgl">Preço (R$)</label><input class="fgi" id="mt-preco" type="text" inputmode="decimal" value="'+numParaCampo(m?m.preco:null)+'"/></div>' +
+    '<div><label class="fgl">Estoque atual</label><input class="fgi" id="mt-atual" type="text" inputmode="decimal" value="'+numParaCampo(m?m.estoqueAtual:0)+'"/></div>' +
+    '<div><label class="fgl">Estoque mínimo</label><input class="fgi" id="mt-minimo" type="text" inputmode="decimal" value="'+numParaCampo(m?m.estoqueMinimo:0)+'"/></div>' +
     '<div class="fg-full"><label class="fgt">Observação</label><textarea class="fgi" id="mt-obs">'+esc(m&&m.obs?m.obs:'')+'</textarea></div>' +
     '</div></div>';
   el('drawer-footer').innerHTML =
@@ -3166,16 +3339,18 @@ async function estSalvarMaterial(){
   if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar material','error'); return; }
   var nome = (val('mt-nome')||'').trim();
   if (!nome) { showToast('Informe o nome do material','error'); return; }
-  var precoTxt = val('mt-preco');
+  var rPreco = numLer('mt-preco'), rAtual = numLer('mt-atual'), rMinimo = numLer('mt-minimo');
+  var ruimMt = [rPreco, rAtual, rMinimo].filter(function(r){ return !r.ok; })[0];
+  if (ruimMt) { showToast(ruimMt.erro,'error'); return; }
   var m = {
     codigo: (val('mt-codigo')||'').trim() || null,
     nome: nome,
     tipo: val('mt-tipo') || 'consumivel',
     unidade: (val('mt-unidade')||'un').trim() || 'un',
     aplicacao: (val('mt-aplicacao')||'').trim() || null,
-    preco: precoTxt===''? null : parseFloat(precoTxt),
-    estoqueAtual: parseFloat(val('mt-atual'))||0,
-    estoqueMinimo: parseFloat(val('mt-minimo'))||0,
+    preco: rPreco.valor,
+    estoqueAtual: rAtual.valor===null ? 0 : rAtual.valor,
+    estoqueMinimo: rMinimo.valor===null ? 0 : rMinimo.valor,
     obs: (val('mt-obs')||'').trim() || null
   };
   var db = materialParaDb(m);
@@ -3196,7 +3371,7 @@ function openEntradaForm(id){
   el('dh-local').textContent = ''; el('dh-predio').textContent = ''; el('dh-pills').innerHTML = '';
   el('drawer-body').innerHTML =
     '<div class="ds"><div class="ds-title"><i class="fas fa-arrow-down mr1" aria-hidden="true"></i>Registrar entrada</div>' +
-    '<label class="fgl">Quantidade</label><input class="fgi" id="ent-qtd" type="number" min="0.01" step="0.01"/>' +
+    '<label class="fgl">Quantidade</label><input class="fgi" id="ent-qtd" type="text" inputmode="decimal"/>' +
     '<label class="fgl" style="margin-top:8px">Motivo</label><input class="fgi" id="ent-motivo" placeholder="Ex.: Recebimento de compra"/></div>';
   el('drawer-footer').innerHTML =
     '<button class="btn-secondary" onclick="closeDrawer()">Cancelar</button>' +
@@ -3208,8 +3383,10 @@ function openEntradaForm(id){
    frase: o estorno da baixa também é uma entrada, feita por aqui). */
 async function estRegistrarEntrada(id){
   if (!manPode('estoque')) { showToast('Sem permissão para registrar entrada','error'); return; }
-  var qtd = parseFloat(val('ent-qtd'))||0;
-  if (!(qtd>0)) { showToast('Informe uma quantidade válida','error'); return; }
+  var rQtd = numLer('ent-qtd');
+  if (!rQtd.ok) { showToast(rQtd.erro,'error'); return; }
+  var qtd = rQtd.valor;
+  if (qtd===null) { showToast('Informe uma quantidade válida','error'); return; }
   var motivo = (val('ent-motivo')||'').trim() || null;
   var m = MATERIAIS.find(function(x){ return x.id===id; }); if (!m) return;
   var ri = await supa.from('estoque_movimentos').insert({material_id:id, tipo:'entrada', quantidade:qtd, motivo:motivo});
@@ -3672,7 +3849,7 @@ function planoAbrirServico(id){
   el('drawer-body').innerHTML =
     '<div class="ds"><div class="ds-title"><i class="fas fa-tools mr1" aria-hidden="true"></i>Serviço padrão</div><div class="fg2">' +
     '<div><label class="fgl">Código</label><input class="fgi" id="sv-codigo" value="'+esc((s&&s.codigo)||'')+'"/></div>' +
-    '<div><label class="fgl">Tempo padrão (min)</label><input class="fgi" id="sv-tempo" type="number" step="1" min="1" value="'+((s&&s.tempo_padrao_min)!=null?s.tempo_padrao_min:'')+'"/></div>' +
+    '<div><label class="fgl">Tempo padrão (min)</label><input class="fgi" id="sv-tempo" type="text" inputmode="decimal" value="'+numParaCampo(s?s.tempo_padrao_min:null)+'"/></div>' +
     '<div class="fg-full"><label class="fgl">Nome</label><input class="fgi" id="sv-nome" value="'+esc((s&&s.nome)||'')+'"/></div>' +
     '<div class="fg-full"><label class="fgl">Norma de referência</label><input class="fgi" id="sv-norma" value="'+esc((s&&s.norma_ref)||'')+'"/></div>' +
     '<div class="fg-full"><label class="fgt">Descrição</label><textarea class="fgi" id="sv-desc">'+esc((s&&s.descricao)||'')+'</textarea></div>' +
@@ -3706,7 +3883,7 @@ function planoMateriaisFormHtml(servicoId, mats){
     '<div><label class="fgl">Material</label><select class="fgs" id="sm-material">' +
       MATERIAIS.map(function(m){ return '<option value="'+m.id+'">'+esc(m.nome)+'</option>'; }).join('') +
     '</select></div>' +
-    '<div><label class="fgl">Quantidade</label><input class="fgi" id="sm-qtd" type="number" step="0.01" min="0.01" value="1"/></div>' +
+    '<div><label class="fgl">Quantidade</label><input class="fgi" id="sm-qtd" type="text" inputmode="decimal" value="1"/></div>' +
     '</div>' +
     '<button class="btn-secondary btn-sm" style="margin-top:8px" onclick="planoAddMaterial('+servicoId+')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Acrescentar</button>' +
     '</div>';
@@ -3717,8 +3894,9 @@ async function planoSalvarServico(){
   if (!podeEditarCadastro()) { showToast('Sem permissão para editar serviços','error'); return; }
   var nome = (val('sv-nome')||'').trim();
   if (!nome) { showToast('Informe o nome do serviço','error'); return; }
-  var tempoTxt = val('sv-tempo');
-  var tempo = tempoTxt === '' ? null : parseFloat(tempoTxt);
+  var rTempo = numLer('sv-tempo');
+  if (!rTempo.ok) { showToast(rTempo.erro,'error'); return; }
+  var tempo = rTempo.valor;
   // Mesma barreira do check do banco: zero ou negativo não é serviço, e
   // um zero aqui zeraria a soma de tempo sem nenhum erro.
   if (tempo !== null && !(tempo > 0)) { showToast('O tempo padrão precisa ser maior que zero','error'); return; }
@@ -3743,8 +3921,10 @@ async function planoSalvarServico(){
 async function planoAddMaterial(servicoId){
   if (!podeEditarCadastro()) { showToast('Sem permissão para editar serviços','error'); return; }
   var materialId = Number(val('sm-material'));
-  var qtd = parseFloat(val('sm-qtd'));
-  if (!materialId || !(qtd > 0)) { showToast('Escolha o material e uma quantidade maior que zero','error'); return; }
+  var rSm = numLer('sm-qtd');
+  if (!rSm.ok) { showToast(rSm.erro,'error'); return; }
+  var qtd = rSm.valor;
+  if (!materialId || qtd === null) { showToast('Escolha o material e uma quantidade maior que zero','error'); return; }
   var r = await supa.from('servico_materiais').insert({servico_id: servicoId, material_id: materialId, quantidade: qtd});
   if (r.error) { showToast('Erro: '+r.error.message,'error'); return; }
   await planoCarregar();
@@ -5210,10 +5390,10 @@ function campoEquipForm(chave, e){
     return '<div><label class="fgl">'+esc(rot)+'</label><select class="fgs" id="'+id+'">'+optsIns+'</select></div>';
   }
   if (EQUIP_DECIMAIS.indexOf(chave)>=0) {
-    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="number" step="0.1" min="0" value="'+(e[chave]===null||e[chave]===undefined?'':e[chave])+'"/></div>';
+    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="text" inputmode="decimal" value="'+numParaCampo(e[chave])+'"/></div>';
   }
   if (EQUIP_NUMERICOS.indexOf(chave)>=0) {
-    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="number" step="1" value="'+(e[chave]||'')+'"/></div>';
+    return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="text" inputmode="numeric" value="'+numParaCampo(e[chave])+'"/></div>';
   }
   return '<div><label class="fgl">'+esc(rot)+'</label><input class="fgi" id="'+id+'" type="text" value="'+esc(e[chave]||'')+'"/></div>';
 }
@@ -5240,11 +5420,23 @@ async function salvarEquip(id){
   if (somenteLeitura()) { showToast('Modo somente leitura', ''); return; }
   if (!podeEditarCadastro()) { showToast('Sem permissão para editar cadastro','error'); return; } // guarda na ação, não só no botão (D-l7n-03)
   var patch = {};
+  var erroNum = null;
   EQUIP_EDITAVEIS.forEach(function(k){
     var campo = el('equip-'+k);
     if (!campo) return;
-    patch[k] = (EQUIP_BOOLEANOS.indexOf(k)>=0) ? campo.checked : campo.value;
+    if (EQUIP_BOOLEANOS.indexOf(k)>=0) { patch[k] = campo.checked; return; }
+    /* Decimais e inteiros do cadastro passam pela porta única, com os
+       limites que já vivem em PLANILHA_MINIMOS/PLANILHA_FAIXAS — as mesmas
+       colunas, os mesmos check das migrações 47/56/57. */
+    if (EQUIP_DECIMAIS.indexOf(k)>=0 || EQUIP_NUMERICOS.indexOf(k)>=0){
+      var r = numValidar(campo.value, numSpecEquip(k, EQUIP_ROTULOS[k] || k));
+      if (!r.ok) { erroNum = erroNum || r.erro; return; }
+      patch[k] = (r.valor === null) ? '' : String(r.valor);
+      return;
+    }
+    patch[k] = campo.value;
   });
+  if (erroNum) { showToast(erroNum,'error'); return; }
   if (patch.link && !linkSeguro(patch.link)) { showToast('Link inválido — use http:// ou https://','error'); return; }
   if (patch.manualUrl && !linkSeguro(patch.manualUrl)) { showToast('Manual inválido — use http:// ou https://','error'); return; }
   var db = equipParaDb(patch);
@@ -5288,11 +5480,23 @@ async function salvarEquipNovo(){
   if (somenteLeitura()) { showToast('Modo somente leitura', ''); return; }
   if (!podeEditarCadastro()) { showToast('Sem permissão para cadastrar equipamento','error'); return; } // guarda na ação, não só no botão
   var patch = {};
+  var erroNum = null;
   EQUIP_EDITAVEIS.forEach(function(k){
     var campo = el('equip-'+k);
     if (!campo) return;
-    patch[k] = (EQUIP_BOOLEANOS.indexOf(k)>=0) ? campo.checked : campo.value;
+    if (EQUIP_BOOLEANOS.indexOf(k)>=0) { patch[k] = campo.checked; return; }
+    /* Decimais e inteiros do cadastro passam pela porta única, com os
+       limites que já vivem em PLANILHA_MINIMOS/PLANILHA_FAIXAS — as mesmas
+       colunas, os mesmos check das migrações 47/56/57. */
+    if (EQUIP_DECIMAIS.indexOf(k)>=0 || EQUIP_NUMERICOS.indexOf(k)>=0){
+      var r = numValidar(campo.value, numSpecEquip(k, EQUIP_ROTULOS[k] || k));
+      if (!r.ok) { erroNum = erroNum || r.erro; return; }
+      patch[k] = (r.valor === null) ? '' : String(r.valor);
+      return;
+    }
+    patch[k] = campo.value;
   });
+  if (erroNum) { showToast(erroNum,'error'); return; }
   if (patch.link && !linkSeguro(patch.link)) { showToast('Link inválido — use http:// ou https://','error'); return; }
   if (patch.manualUrl && !linkSeguro(patch.manualUrl)) { showToast('Manual inválido — use http:// ou https://','error'); return; }
   var db = equipParaDb(patch);
@@ -6044,15 +6248,10 @@ function manCancelarEdicao(logId){ MAN_EDIT_ID = null; manAbrirOS(logId); }
 /* esc() devolve '' para qualquer valor falso — inclusive o número 0, que é
    medição legítima (pressão, corrente). Daí este par próprio: só null e
    string vazia viram campo vazio. */
-function manValCampo(v){ return (v===null || v===undefined || v==='') ? '' : esc(String(v)); }
-
-function manNumOuNull(id){
-  var campo = el(id); if (!campo) return null;
-  var v = String(campo.value||'').trim();
-  if (v === '') return null;
-  var n = parseFloat(v);
-  return isNaN(n) ? null : n;
-}
+/* Escreve no campo a forma que a porta única lê de volta. Sem isto o app
+   preencheria com "5.392" (que é String(Number(5.392))) e o próprio leitor
+   recusaria por ambíguo — campo cheio de algo que o app não aceita. */
+function manValCampo(v){ return (v===null || v===undefined || v==='') ? '' : esc(numParaCampo(v)); }
 
 function manFormDados(entry, logId){
   var mov = osEhMovimentacao(entry);
@@ -6072,13 +6271,13 @@ function manFormDados(entry, logId){
     '<textarea class="fgt" id="man-ed-desc">'+esc(entry.desc||'')+'</textarea>' +
     '<label class="fgl" style="margin-top:10px;display:block">Medições</label>' +
     '<div class="fg2">' +
-    '<div><label class="fgl">Insuflamento (°C)</label><input class="fgi" id="man-ed-ins" type="number" step="0.1" value="'+manValCampo(entry.insuflamento)+'"/></div>' +
-    '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="man-ed-ret" type="number" step="0.1" value="'+manValCampo(entry.retorno)+'"/></div>' +
-    '<div><label class="fgl">Corrente (A)</label><input class="fgi" id="man-ed-corr" type="number" step="0.1" value="'+manValCampo(entry.corrente)+'"/></div>' +
-    '<div><label class="fgl">Pressão (psi)</label><input class="fgi" id="man-ed-press" type="number" step="1" value="'+manValCampo(entry.pressao)+'"/></div>' +
-    '<div><label class="fgl">Cap. marcha (µF)</label><input class="fgi" id="man-ed-cap-marcha" type="number" step="0.1" value="'+manValCampo(entry.capMarcha)+'"/></div>' +
-    '<div><label class="fgl">Cap. partida (µF)</label><input class="fgi" id="man-ed-cap-partida" type="number" step="0.1" value="'+manValCampo(entry.capPartida)+'"/></div>' +
-    '<div><label class="fgl">Tensão (V)</label><input class="fgi" id="man-ed-tensao" type="number" step="0.1" value="'+manValCampo(entry.tensaoMedida)+'"/></div></div>' +
+    '<div><label class="fgl">Insuflamento (°C)</label><input class="fgi" id="man-ed-ins" type="text" inputmode="decimal" value="'+manValCampo(entry.insuflamento)+'"/></div>' +
+    '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="man-ed-ret" type="text" inputmode="decimal" value="'+manValCampo(entry.retorno)+'"/></div>' +
+    '<div><label class="fgl">Corrente (A)</label><input class="fgi" id="man-ed-corr" type="text" inputmode="decimal" value="'+manValCampo(entry.corrente)+'"/></div>' +
+    '<div><label class="fgl">Pressão (psi)</label><input class="fgi" id="man-ed-press" type="text" inputmode="decimal" value="'+manValCampo(entry.pressao)+'"/></div>' +
+    '<div><label class="fgl">Cap. marcha (µF)</label><input class="fgi" id="man-ed-cap-marcha" type="text" inputmode="decimal" value="'+manValCampo(entry.capMarcha)+'"/></div>' +
+    '<div><label class="fgl">Cap. partida (µF)</label><input class="fgi" id="man-ed-cap-partida" type="text" inputmode="decimal" value="'+manValCampo(entry.capPartida)+'"/></div>' +
+    '<div><label class="fgl">Tensão (V)</label><input class="fgi" id="man-ed-tensao" type="text" inputmode="decimal" value="'+manValCampo(entry.tensaoMedida)+'"/></div></div>' +
     inspCampoHtml('man-ed', entry) +
     '<div class="ct-btn-row" style="margin-top:10px">' +
     '<button class="btn-success" onclick="manSalvarDados(\''+esc(logId)+'\')"><i class="fas fa-save mr1" aria-hidden="true"></i>Salvar correção</button>' +
@@ -6092,7 +6291,8 @@ async function manSalvarDados(logId){
   if (!podeEditarCadastro()) { showToast('Sem permissão para corrigir a OS','error'); return; }
   var data = (el('man-ed-data')||{}).value || '';
   if (!data) { showToast('A data da OS não pode ficar vazia','error'); return; }
-  var ins = manNumOuNull('man-ed-ins'), ret = manNumOuNull('man-ed-ret');
+  MAN_NUM_ERRO = null;
+  var ins = manNumOuNull('man-ed-ins','med-ins'), ret = manNumOuNull('man-ed-ret','med-ret');
   var patch = {
     date: data,
     tecnico: (el('man-ed-tecnico')||{}).value || '',
@@ -6100,11 +6300,11 @@ async function manSalvarDados(logId){
     insuflamento: ins,
     retorno: ret,
     deltaT: manDeltaT(ins, ret),
-    corrente: manNumOuNull('man-ed-corr'),
-    pressao: manNumOuNull('man-ed-press'),
-    capMarcha: manNumOuNull('man-ed-cap-marcha'),
-    capPartida: manNumOuNull('man-ed-cap-partida'),
-    tensaoMedida: manNumOuNull('man-ed-tensao')
+    corrente: manNumOuNull('man-ed-corr','med-corr'),
+    pressao: manNumOuNull('man-ed-press','med-press'),
+    capMarcha: manNumOuNull('man-ed-cap-marcha','med-cap-marcha'),
+    capPartida: manNumOuNull('man-ed-cap-partida','med-cap-partida'),
+    tensaoMedida: manNumOuNull('man-ed-tensao','med-tensao')
   };
   // Espalha os cinco da migração 48 — objeto vazio com a sonda desligada.
   Object.assign(patch, inspLerForm('man-ed'));
@@ -6267,15 +6467,15 @@ function manMontarOS(logId){
     if (st==='EM_EXECUCAO' && manPode('executar')) {
       b3 += '<div style="margin-top:8px;border-top:1px dashed #DDD;padding-top:10px">' +
         '<div class="fg2">' +
-        '<div><label class="fgl">Insufl. (°C)</label><input class="fgi" id="man-ex-ti" type="number" step="0.1"/></div>' +
-        '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="man-ex-tr" type="number" step="0.1"/></div>' +
-        '<div><label class="fgl">Corrente (A)</label><input class="fgi" id="man-ex-corr" type="number" step="0.1"/></div>' +
-        '<div><label class="fgl">Pressão (psi)</label><input class="fgi" id="man-ex-press" type="number" step="1"/></div></div>' +
+        '<div><label class="fgl">Insufl. (°C)</label><input class="fgi" id="man-ex-ti" type="text" inputmode="decimal"/></div>' +
+        '<div><label class="fgl">Retorno (°C)</label><input class="fgi" id="man-ex-tr" type="text" inputmode="decimal"/></div>' +
+        '<div><label class="fgl">Corrente (A)</label><input class="fgi" id="man-ex-corr" type="text" inputmode="decimal"/></div>' +
+        '<div><label class="fgl">Pressão (psi)</label><input class="fgi" id="man-ex-press" type="text" inputmode="decimal"/></div></div>' +
         '<label class="fgl" style="margin-top:10px;display:block">Elétrico</label>' +
         '<div class="fg2">' +
-        '<div><label class="fgl">Capacitor de marcha (µF)</label><input class="fgi" id="man-ex-cap-marcha" type="number" step="0.1"/></div>' +
-        '<div><label class="fgl">Capacitor de partida (µF)</label><input class="fgi" id="man-ex-cap-partida" type="number" step="0.1"/></div>' +
-        '<div><label class="fgl">Tensão medida (V)</label><input class="fgi" id="man-ex-tensao" type="number" step="0.1"/></div></div>' +
+        '<div><label class="fgl">Capacitor de marcha (µF)</label><input class="fgi" id="man-ex-cap-marcha" type="text" inputmode="decimal"/></div>' +
+        '<div><label class="fgl">Capacitor de partida (µF)</label><input class="fgi" id="man-ex-cap-partida" type="text" inputmode="decimal"/></div>' +
+        '<div><label class="fgl">Tensão medida (V)</label><input class="fgi" id="man-ex-tensao" type="text" inputmode="decimal"/></div></div>' +
         inspCampoHtml('man-ex', null) +
         '<label class="fgl" style="margin-top:8px">Fotos</label>' +
         '<input class="fgi" id="man-ex-fotos" type="file" accept="image/*" multiple/>' +
@@ -6650,6 +6850,10 @@ async function manRegistrarEvidencia(logId){
   var achado = manEntrada(logId); if(!achado) return;
   if (!manPode('executar')) { showToast('Sem permissão para registrar evidência','error'); return; }
   var entry = achado.entry;
+  var IDS_EX = ['man-ex-ti','man-ex-tr','man-ex-corr','man-ex-press',
+                'man-ex-cap-marcha','man-ex-cap-partida','man-ex-tensao'];
+  var med = manLerMedicoes(IDS_EX);
+  if (!med) { showToast(MAN_NUM_ERRO,'error'); return; }
   var ti = val('man-ex-ti'), tr = val('man-ex-tr'), corr = val('man-ex-corr'), press = val('man-ex-press');
   var capM = val('man-ex-cap-marcha'), capP = val('man-ex-cap-partida'), tensaoM = val('man-ex-tensao');
   var files = (el('man-ex-fotos')||{files:[]}).files;
@@ -6674,13 +6878,13 @@ async function manRegistrarEvidencia(logId){
     } catch(e) { console.error('foto', e); showToast('Falha no upload de uma foto', 'error'); }
   }
   var patch = { fotos: (entry.fotos||[]).concat(novos) }; // acrescenta, nunca substitui
-  if (ti !== '') patch.insuflamento = parseFloat(ti);
-  if (tr !== '') patch.retorno = parseFloat(tr);
-  if (corr !== '') patch.corrente = parseFloat(corr);
-  if (press !== '') patch.pressao = parseFloat(press);
-  if (capM !== '') patch.capMarcha = parseFloat(capM);
-  if (capP !== '') patch.capPartida = parseFloat(capP);
-  if (tensaoM !== '') patch.tensaoMedida = parseFloat(tensaoM);
+  if (ti !== '') patch.insuflamento = med['man-ex-ti'];
+  if (tr !== '') patch.retorno = med['man-ex-tr'];
+  if (corr !== '') patch.corrente = med['man-ex-corr'];
+  if (press !== '') patch.pressao = med['man-ex-press'];
+  if (capM !== '') patch.capMarcha = med['man-ex-cap-marcha'];
+  if (capP !== '') patch.capPartida = med['man-ex-cap-partida'];
+  if (tensaoM !== '') patch.tensaoMedida = med['man-ex-tensao'];
   if (ti !== '' || tr !== '') patch.deltaT = manDeltaT(ti, tr); // ΔT é sempre derivado, nunca digitado
   // Só as chaves efetivamente preenchidas — um null aqui apagaria a
   // inspeção de uma OS que já a tinha, numa segunda gravação de fotos.
@@ -6806,10 +7010,10 @@ function osItensHtml(osId, entry){
   if (podeEditar) {
     h += '<div style="margin-top:10px;border-top:1px dashed #DDD;padding-top:10px">' +
       '<div class="fg2"><div><label class="fgl">Tipo</label><select class="fgs" id="oi-un-tipo"><option value="SERVICO">Serviço</option><option value="MATERIAL">Material/Peça</option></select></div>' +
-      '<div><label class="fgl">Qtd</label><input class="fgi" id="oi-un-qtd" type="number" value="1" min="0.01" step="0.01"/></div></div>' +
+      '<div><label class="fgl">Qtd</label><input class="fgi" id="oi-un-qtd" type="text" inputmode="decimal" value="1"/></div></div>' +
       (EST_OK ? osSeletorMaterialHtml() : '') +
       '<label class="fgl">Descrição</label><input class="fgi" id="oi-un-desc" placeholder="Ex.: Substituição do compressor"/>' +
-      '<label class="fgl" style="margin-top:8px">Valor unitário (R$)</label><input class="fgi" id="oi-un-vu" type="number" min="0" step="0.01" placeholder="0,00"/>' +
+      '<label class="fgl" style="margin-top:8px">Valor unitário (R$)</label><input class="fgi" id="oi-un-vu" type="text" inputmode="decimal" placeholder="0,00"/>' +
       '<button class="btn-secondary" style="width:100%;margin-top:8px" onclick="osAddItemUI(\''+esc(osId)+'\')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Adicionar item</button></div>';
   }
   h += '</div>';
@@ -6838,7 +7042,7 @@ function estPreencherItemDaOS(){
   var m = MATERIAIS.find(function(x){ return String(x.id)===String(sel); });
   if (!m) return;
   var descEl = el('oi-un-desc'); if (descEl) descEl.value = m.nome;
-  var vuEl = el('oi-un-vu'); if (vuEl) vuEl.value = (m.preco!=null ? m.preco : '');
+  var vuEl = el('oi-un-vu'); if (vuEl) vuEl.value = numParaCampo(m.preco);
   var tipoEl = el('oi-un-tipo'); if (tipoEl) tipoEl.value = 'MATERIAL';
 }
 
@@ -6859,8 +7063,11 @@ async function osAddItem(osId, item){
 }
 async function osAddItemUI(osId){
   var desc = (val('oi-un-desc')||'').trim();
-  var qtd = parseFloat(val('oi-un-qtd'))||0;
-  var vu = parseFloat(val('oi-un-vu'))||0;
+  var rOiQtd = numLer('oi-un-qtd'), rOiVu = numLer('oi-un-vu');
+  var ruimOi = [rOiQtd, rOiVu].filter(function(r){ return !r.ok; })[0];
+  if (ruimOi) { showToast(ruimOi.erro,'error'); return; }
+  var qtd = rOiQtd.valor||0;
+  var vu = rOiVu.valor||0;
   if(!desc || qtd<=0 || vu<0){ showToast('Preencha descrição, qtd e valor','error'); return; }
   var item = {tipo:val('oi-un-tipo'), descricao:desc, quantidade:qtd, valorUnitario:vu};
   if (EST_OK) {
@@ -6910,7 +7117,9 @@ async function manFiscalizar(logId, aprovado){
    manPode('certificar'), e só em FISCALIZADA — mesma janela de hoje. */
 async function osAddComp(osId){
   var item = parseInt(val('cp-item'));
-  var qtd = parseFloat(val('cp-qtd'))||0;
+  var rCp = numLer('cp-qtd');
+  if (!rCp.ok) { showToast(rCp.erro,'error'); return; }
+  var qtd = rCp.valor||0;
   if (!manPode('certificar')) { showToast('Sem permissão para compor a ata','error'); return; }
   if (!item || qtd<=0) { showToast('Selecione item e quantidade','error'); return; }
   var it = ctArp.find(function(a){return a.item===item;});
@@ -6979,7 +7188,7 @@ function osComposicaoAtaHtml(osId, entry, st){
     }).join('');
     h += '<div style="margin-top:8px;border-top:1px dashed #DDD;padding-top:10px">' +
       '<label class="fgl">Item da ata</label><select class="fgs" id="cp-item">'+arpOpts+'</select>' +
-      '<div class="fg2" style="margin-top:8px"><div><label class="fgl">Qtd</label><input class="fgi" id="cp-qtd" type="number" value="1" min="1" step="1"/></div>' +
+      '<div class="fg2" style="margin-top:8px"><div><label class="fgl">Qtd</label><input class="fgi" id="cp-qtd" type="text" inputmode="decimal" value="1"/></div>' +
       '<div style="display:flex;align-items:flex-end"><button class="btn-secondary" style="width:100%" onclick="osAddComp(\''+esc(osId)+'\')"><i class="fas fa-plus mr1" aria-hidden="true"></i>Adicionar</button></div></div>' +
       '<div class="fg2" style="margin-top:10px">' +
       '<div><label class="fgl">Nota Fiscal</label><input class="fgi" id="cf-nf" value="'+esc(entry.nf||'')+'" placeholder="NF nº"/></div>' +
@@ -7695,7 +7904,11 @@ function dvGetTarifa(){
   return (t>0&&t<20)?t:0.85;
 }
 function dvSetTarifa(v){
-  var t=parseFloat(String(v).replace(',','.'))||0.85;
+  /* O `replace(',','.')` que estava aqui nunca rodou sobre uma vírgula: o
+     type=number a descartava antes. Agora o campo é texto e quem traduz é
+     a porta única. */
+  var r=numValidar(v, NUM_CAMPOS['tarifa']);
+  var t=(r.ok && r.valor!==null) ? r.valor : 0.85;
   try{ localStorage.setItem('pmoc_tarifa_kwh',t); }catch(e){}
   renderDash();
 }
@@ -7762,7 +7975,7 @@ function dvRenderCharts(){
         '<span class="hbar-val">'+dvFmt(x.value)+' kWh</span></div>';
     }).join('')+'</div>' +
     '<div class="tarifa-row"><span style="font-size:11px;color:#666;font-weight:600;flex:1">Tarifa (R$/kWh)</span>' +
-    '<input type="number" step="0.01" min="0" value="'+tarifa.toFixed(2)+'" onchange="dvSetTarifa(this.value)"/>' +
+    '<input type="text" inputmode="decimal" value="'+numParaCampo(tarifa.toFixed(2))+'" onchange="dvSetTarifa(this.value)"/>' +
     '<span style="font-size:15px;font-weight:800;color:#1351B4">'+('R$ '+dvFmt(custoMes,2))+'/mês</span></div>' +
     '<div class="chart-note">Estimativa: onde há corrente nominal de placa, potência é corrente × tensão (380 V trifásico ×√3); onde falta — hoje, a maior parte do parque — potência é estimada pela capacidade (BTU/h ÷ 3412 ÷ COP 3, ~1,17 kW por 12.000 BTU/h). Horas de uso semanais cadastradas e fator de ciclo do compressor de 70%. Considera apenas máquinas operacionais (OK). O consumo real varia com carga térmica e regulagem.</div></div>';
 

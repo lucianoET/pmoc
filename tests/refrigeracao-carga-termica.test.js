@@ -81,6 +81,7 @@ function bloco(marcador) {
 function sandboxTermico(extra) {
   const ctx = Object.assign({ dvPotenciaW: undefined }, extra || {});
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ══ carga térmica: núcleo puro (migração 47) ══', '/* -- ficha: uma fonte, dois continentes -- */'), ctx);
   return ctx;
 }
