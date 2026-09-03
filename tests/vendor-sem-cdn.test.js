@@ -37,11 +37,14 @@ const SUPERFICIES = ['index.html', 'refrigeracao/index.html', 'maquinas/index.ht
 //
 //  1. o SDK do Supabase (207 KB). Sem ele nenhum módulo tem dado nenhum, e
 //     hospedá-lo é decisão à parte: vale para as onze superfícies de uma vez.
-//  2. o SheetJS do /calibracao (~950 KB). Carregado SOB DEMANDA por
-//     `ensureXLSX()`, só quando alguém exporta para Excel, e o módulo já diz
-//     "Sem internet para carregar" quando falha. Hospedá-lo custaria mais que
-//     tudo o que esta task versionou junto, para uma ação ocasional.
-//     (A documentação do projeto dizia que o SheetJS era embutido; não é.)
+//  2. o SheetJS do /calibracao. A URL está no arquivo, mas é um FALLBACK QUE
+//     NUNCA RODA: a biblioteca está embutida (0.18.5, `var XLSX={}` no corpo
+//     do HTML), e `ensureXLSX()` devolve `window.XLSX` de imediato quando ele
+//     existe. Medido em 03/09/2026 com cdnjs BLOQUEADO: `window.XLSX` é
+//     objeto, versão 0.18.5, com `utils.book_new` — a exportação para Excel
+//     funciona offline. A correção anterior desta nota ("o SheetJS não é
+//     embutido") foi feita LENDO o `ensureXLSX`, sem abrir o navegador, e
+//     estava errada. Lê-se a URL; mede-se o que ela faz.
 const EXCECOES = [
   /cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@2/,
   /cdnjs\.cloudflare\.com\/ajax\/libs\/xlsx\//,
