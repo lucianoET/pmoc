@@ -64,6 +64,7 @@ function sandbox(fluxos) {
     FLUXO_LEGADO: [{ id: 'ABERTA' }, { id: 'CONFERIDA' }],
   }, fluxos || {});
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ══ agenda: núcleo puro (sem migração) ══', '/* ══ carga térmica: núcleo puro (migração 47) ══'), ctx);
   return ctx;
 }

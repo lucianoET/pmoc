@@ -90,6 +90,7 @@ function colunasDeTabela(sql, nomeTabela) {
 function carregarNucleo() {
   const ctx = {};
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
   return ctx;
 }
@@ -126,6 +127,7 @@ function carregarSandboxSonda(opts) {
     },
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
   ctx._chamadas = chamadas;
   return ctx;
@@ -494,6 +496,7 @@ function carregarSandboxBaixa(opts) {
   ctx._logCache[linhaBase.equip_id] = [Object.assign({ id: linhaBase.id }, opts.entryInicial || {})];
 
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCA_PONTE_LOG_INI, MARCA_PONTE_LOG_FIM), ctx);
   vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
 
@@ -678,6 +681,7 @@ function carregarSandboxItens(opts) {
   };
 
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
   vm.runInContext(recorte(MARCA_ITENS_INI, MARCA_ITENS_FIM), ctx);
 
@@ -723,7 +727,12 @@ test('estPreencherItemDaOS: escolher um material preenche descrição, valor uni
   ctx.el('oi-un-mat').value = '5';
   ctx.estPreencherItemDaOS();
   assert.strictEqual(ctx.el('oi-un-desc').value, 'Compressor');
-  assert.strictEqual(ctx.el('oi-un-vu').value, 350.5);
+  // O campo deixou de ser type=number (que descartava a vírgula digitada) e
+  // passou a receber o preço na forma que o leitor lê de volta — vírgula, que
+  // é como se escreve decimal em português. O que importa é a ida e a volta:
+  // o número que entra no campo é o mesmo que sai dele.
+  assert.strictEqual(ctx.el('oi-un-vu').value, '350,5');
+  assert.strictEqual(ctx.numValidar(ctx.el('oi-un-vu').value, { rotulo: 'Valor' }).valor, 350.5);
   assert.strictEqual(ctx.el('oi-un-tipo').value, 'MATERIAL');
 });
 
@@ -794,6 +803,7 @@ test('existe <div class="page" id="page-estoque"> na marcação, irmã de page-a
 test('MAN_ACOES_CARGO ganha a ação estoque com admin, gestor e tecnico', () => {
   const ctx = {};
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCA_VOCAB_INI, MARCA_VOCAB_FIM), ctx);
   eq(ctx.MAN_ACOES_CARGO.estoque.slice().sort(), ['admin', 'gestor', 'tecnico'].sort());
 });
@@ -829,6 +839,7 @@ function carregarSandboxNav(opts) {
     navTo(page, btn) { chamadasNavTo.push({ page, btn }); },
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
   vm.runInContext(recorte(MARCA_PAGINA_INI, MARCA_PAGINA_FIM), ctx);
   ctx.EST_OK = opts.estOk !== undefined ? opts.estOk : true;
@@ -919,6 +930,7 @@ function carregarSandboxEstoquePagina(opts) {
   };
 
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
   vm.runInContext(recorte(MARCA_PAGINA_INI, MARCA_PAGINA_FIM), ctx);
 
@@ -1078,6 +1090,7 @@ function carregarSandboxAlerta(opts) {
     navTo() {},
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCA_INI, MARCA_FIM), ctx);
   vm.runInContext(recorte(MARCA_PAGINA_INI, MARCA_PAGINA_FIM), ctx);
   ctx.EST_OK = opts.estOk !== undefined ? opts.estOk : true;

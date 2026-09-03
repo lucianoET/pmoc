@@ -41,6 +41,7 @@ function carregarNucleoMovimentacao() {
   const ctx = { esc(s) { return s == null ? '' : String(s); } };
   vm.createContext(ctx);
   // MAINT_TIPOS + CHECKLIST (checklistDaOS recua para CHECKLIST fora de mov.)
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('var MAINT_TIPOS =', 'var CRIT_COLORS ='), ctx);
   // vocabulário de movimentação + carga de locais + formulário/gravação
   vm.runInContext(
@@ -270,6 +271,7 @@ function colunasCreateTable04(tabela) {
 function carregarPonteLog() {
   const ctx = {};
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   return ctx;
 }
@@ -385,6 +387,7 @@ function carregarAplicacao(opts) {
   )];
 
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── situação patrimonial do equipamento: instalado/removido/baixado ── */', '/* ── alertas: contagem única ── */'), ctx);
   vm.runInContext(recorte('function podeDarBaixa()', '/* ── ponte de campos de logs_manutencao ── */'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);

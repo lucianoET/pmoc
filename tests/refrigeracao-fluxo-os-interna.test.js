@@ -116,6 +116,7 @@ function colunasAddColumnLog(sql) {
 function carregarPonte() {
   const ctx = {};
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   return ctx;
 }
@@ -253,8 +254,10 @@ function carregarPortaEscrita(opts) {
   };
   // dependências: CAMPOS_LOG/dbToLog/logParaDb (ponte) + _logCache (camada de dados)
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   ctx._logCache = opts.logCache || {};
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
   ctx._updates = updates;
   ctx._usuariosConsultas = usuariosConsultas;
@@ -362,6 +365,7 @@ function carregarVocabulario() {
     },
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
   return ctx;
 }
@@ -603,6 +607,7 @@ function carregarFluxoCompleto(opts) {
   // bloco do estado do equipamento (260821-q57): atualizarEstadoEquip chama
   // normalizarEstadoEquip/equipEstado, definidos aqui — sem ele o sandbox
   // lança ReferenceError na primeira conferência aprovada.
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── estado do equipamento: vocabulário OP/INOP/OR ── */', '/* ── alertas: contagem única ── */'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);

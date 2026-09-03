@@ -83,6 +83,7 @@ function carregarTudo(uniOk) {
     },
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);
   return ctx;
 }
@@ -91,6 +92,7 @@ function carregarTudo(uniOk) {
 function carregarPonte() {
   const ctx = {};
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   return ctx;
 }
@@ -309,6 +311,7 @@ function carregarPortaEscritaUni(opts) {
     },
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
   ctx._chamadas = chamadas;
   return ctx;
@@ -374,6 +377,7 @@ function carregarCamadaDados(opts) {
     },
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   vm.runInContext(recorte('/* ── CAMADA DE DADOS SUPABASE ── */', '/* ── fluxo da OS interna: porta de escrita ── */'), ctx);
   ctx._inserts = inserts;
@@ -556,6 +560,7 @@ function carregarTelaCompleta(opts) {
   ctx._logCache[ctx.DATA[0] ? ctx.DATA[0].id : (opts.equipId !== undefined ? opts.equipId : 10)] = [Object.assign({ id: linhaBase.id, status: linhaBase.status, date: linhaBase.data_os, fotos: linhaBase.fotos, tipoExecutor: linhaBase.tipo_executor }, opts.entryExtra || {})];
 
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── estado do equipamento: vocabulário OP/INOP/OR ── */', '/* ── alertas: contagem única ── */'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);

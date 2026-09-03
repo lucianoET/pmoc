@@ -62,6 +62,7 @@ function carregarNucleo() {
     supa: null,
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(), ctx);
   return ctx;
 }

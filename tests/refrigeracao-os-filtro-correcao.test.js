@@ -112,16 +112,29 @@ test('o botão Corrigir não olha o estado da OS — terminal inclusive', () => 
     'o bloco de abertura não pode voltar a condicionar a correção ao estado');
 });
 
-test('medição zero sobrevive ao formulário — esc() devolveria vazio', () => {
-  const helper = recorte('function manValCampo(', 'function manNumOuNull(');
+test('medição zero sobrevive ao formulário, e o decimal sai na forma que o leitor lê de volta', () => {
+  // O zero continua sobrevivendo — era o que este caso protegia, e continua
+  // protegendo. O que mudou é o DECIMAL: desde que os campos deixaram de ser
+  // type=number (que descartava a vírgula digitada), o formulário escreve
+  // "21,5" e não "21.5", porque é essa a forma que numValidar lê de volta.
+  // Escrever com ponto voltaria a encher o campo com algo que o próprio
+  // aplicativo recusaria quando o valor caísse em três casas decimais.
   const ctx = { esc: (s) => String(s) };
   vm.createContext(ctx);
-  vm.runInContext(helper, ctx);
-  assert.strictEqual(ctx.manValCampo(0), '0');
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
+  vm.runInContext(recorte('function manValCampo(', 'function manFormDados('), ctx);
+  assert.strictEqual(ctx.manValCampo(0), '0', 'zero é medição, não ausência');
   assert.strictEqual(ctx.manValCampo(null), '');
   assert.strictEqual(ctx.manValCampo(undefined), '');
   assert.strictEqual(ctx.manValCampo(''), '');
-  assert.strictEqual(ctx.manValCampo(21.5), '21.5');
+  assert.strictEqual(ctx.manValCampo(21.5), '21,5');
+  // A ida e a volta fecham: é isso que impede o campo de nascer recusado.
+  for (const v of [0, 21.5, 5.392, 1200, 380.5]) {
+    const escrito = ctx.manValCampo(v);
+    const lido = ctx.numValidar(escrito, { rotulo: 'x' });
+    assert.strictEqual(lido.ok, true, `manValCampo(${v}) = "${escrito}" foi recusado pelo leitor`);
+    assert.strictEqual(lido.valor, v, `${v} não sobreviveu à ida e volta`);
+  }
 });
 
 test('o checklist também responde ao gestor em qualquer estado', () => {

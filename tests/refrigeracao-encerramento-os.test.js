@@ -80,6 +80,7 @@ function carregarSandbox(opts) {
     },
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── encerramento de OS: última manutenção ── */', 'async function saveLogEntry('), ctx);
   ctx._updates = updates;
   ctx._insercoes = insercoes;
@@ -199,6 +200,7 @@ function carregarSandboxSaveLogEntry(opts) {
     },
   };
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── encerramento de OS: última manutenção ── */', 'async function saveLogEntry('), ctx);
   vm.runInContext(recorte('async function saveLogEntry(', 'async function delLog('), ctx);
   ctx._updatesEquip = updatesEquip;
@@ -296,6 +298,7 @@ function carregarSandboxCertificar(opts) {
   ctx._logCache = {};
   ctx._logCache[linhaBase.equip_id] = [Object.assign({ id: linhaBase.id, status: linhaBase.status, tipoExecutor: 'contrato' }, opts.entryExtra || {})];
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: vocabulário e transições ── */', 'function loadData('), ctx);

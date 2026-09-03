@@ -131,6 +131,7 @@ function criarSandboxOS(opts) {
   ctx._logCache[equipIdChave] = [opts.entry];
 
   vm.createContext(ctx);
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte('/* ── estado do equipamento: vocabulário OP/INOP/OR ── */', '/* ── alertas: contagem única ── */'), ctx);
   vm.runInContext(recorte('/* ── ponte de campos de logs_manutencao ── */', '/* ── CAMADA DE DADOS SUPABASE ── */'), ctx);
   vm.runInContext(recorte('/* ── fluxo da OS interna: porta de escrita ── */', '/* ── REALTIME ── */'), ctx);
@@ -411,6 +412,7 @@ function criarSandboxOSPagina(opts) {
     if (nodes['page-' + pagina]) nodes['page-' + pagina].classList.add('active');
   };
 
+  vm.runInContext(recorte('/* ── leitura numérica de formulário: porta única ─', 'function showToast(msg, type){'), ctx);
   vm.runInContext(recorte(MARCADOR_INICIO_DETALHE, MARCADOR_FIM_DETALHE), ctx);
   // reAlojarDetalhe mora na seção da ficha (logo depois de abrirFichaPagina),
   // fora do recorte compartilhado acima — carregado à parte, mesmo padrão
