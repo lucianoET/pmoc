@@ -64,7 +64,13 @@ test('o uso atual não é editável numa máquina existente', () => {
 
   const salvar = APP.match(/async function salvarAtivo\(\)\{([\s\S]*?)\n\}/)
   assert.ok(salvar)
-  assert.match(salvar[1], /if\(!ATIVO_EDIT_ID\)\{\s*\n\s*campos\.uso_atual/,
+  // Afirma o FATO (uso_atual mora dentro do ramo de criação), não a adjacência
+  // de duas linhas: a versão anterior casava `if(...){\n campos.uso_atual` e
+  // reprovou quando a leitura passou pelo leitor central e ganhou duas linhas
+  // antes — o que mudou foi o caminho, não a regra.
+  const ramoCriacao = salvar[1].match(/if\(!ATIVO_EDIT_ID\)\{([\s\S]*?)\n  \}/)
+  assert.ok(ramoCriacao, 'sumiu o ramo que separa criação de edição')
+  assert.match(ramoCriacao[1], /campos\.uso_atual/,
     'uso_atual só entra no payload na criação (leitura inicial do horímetro)')
   assert.doesNotMatch(salvar[1], /^\s*uso_atual:/m,
     'uso_atual não pode voltar para o objeto de campos comum a criação e edição')

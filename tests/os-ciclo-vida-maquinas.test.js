@@ -276,7 +276,17 @@ test('mexer na quantidade à mão deixa rastro em maq_estoque_movimentos', () =>
 test('a edição em linha valida antes de gravar', () => {
   const bloco = APP.match(/async function salvarLinhaMaterial\(id\)\{([\s\S]*?)\n\}/)
   assert.ok(bloco)
-  assert.match(bloco[1], /if\(!\(atual >= 0\) \|\| !\(minimo >= 0\)\)/,
-    'quantidade e mínimo negativos ou não numéricos não podem chegar ao banco')
-  assert.match(bloco[1], /if\(preco !== null && !\(preco >= 0\)\)/)
+  // A regra não mudou — quantidade, mínimo e preço negativos ou não numéricos
+  // continuam sem chegar ao banco. Mudou QUEM a aplica: a comparação escrita à
+  // mão aqui virou `lerNumero`, a porta única de maquinas/numeros.js, e o
+  // comportamento é provado por tests/maquinas-numeros.test.js. Este caso
+  // afirma o que é dele: que esta função não voltou a ler o campo cru.
+  for(const campo of ['ed-atual', 'ed-minimo', 'ed-preco']){
+    assert.match(bloco[1], new RegExp(`lerNumero\\('${campo}'\\)`),
+      `${campo} tem de ser lido pelo leitor central, não por parseFloat`)
+  }
+  assert.match(bloco[1], /if\(!r\.ok\)\{ alert\(r\.erro\); return \}/,
+    'a recusa do leitor interrompe a gravação e mostra o motivo escrito')
+  assert.doesNotMatch(bloco[1], /parseFloat|parseInt/,
+    'nenhuma leitura numérica crua sobrevive nesta função')
 })
