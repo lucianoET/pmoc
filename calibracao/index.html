@@ -4710,11 +4710,13 @@ function Catalogo({
       localStorage.setItem(CAT_KEY, JSON.stringify(cat));
     } catch (e) {}
   };
+  // O ramo de `preco` que morava aqui — `parseFloat(String(v).replace(',',
+  // '.'))` mais `if (isNaN(v) || v < 0) v = 0` — era CÓDIGO MORTO: quem
+  // escreveu já esperava a vírgula, mas `type="number"` a descartava antes,
+  // e nunca chegava um texto com vírgula para converter. O `|| 0` restante
+  // era pior que inútil: colapsava lixo em zero, em silêncio. Agora quem
+  // valida é o CampoNum, que entrega número ou não entrega nada.
   const edit = (eq, idx, f, v) => {
-    if (f === 'preco') {
-      v = parseFloat(String(v).replace(',', '.'));
-      if (isNaN(v) || v < 0) v = 0;
-    }
     cat[eq][idx][f] = v;
     s.setCatalog({
       ...cat
@@ -4904,11 +4906,10 @@ function Catalogo({
         style: {
           textAlign: 'right'
         }
-      }, /*#__PURE__*/React.createElement("input", {
-        type: "number",
-        step: "0.01",
-        value: (+o.preco).toFixed(2),
-        onChange: e => edit(eq, idx, 'preco', e.target.value),
+      }, /*#__PURE__*/React.createElement(CampoNum, {
+        chave: "preco",
+        valor: +o.preco || 0,
+        aoMudar: v => edit(eq, idx, 'preco', v),
         style: {
           fontSize: 12,
           padding: '4px 7px',
@@ -5466,6 +5467,178 @@ function paraBR(v) {
   if (!v) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v));
   return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+}
+
+// ── borda: texto da tela ↔ número do banco ──
+// A terceira fronteira deste módulo, ao lado de CAMPOS_* (camelCase ↔
+// snake_case) e paraISO/paraBR (dd/mm/aaaa ↔ date). Como as outras duas,
+// existe num lugar só: um campo numérico que não passe por aqui volta a
+// ser um caminho de corrupção silenciosa.
+//
+// ── O que a medição mostrou (Chromium, teclado de verdade, pt-BR)
+// Os cinco campos numéricos do módulo eram `type="number"`, e o navegador
+// não recusa a vírgula: ele ENGOLE o caractere e mantém os dígitos.
+//
+//   "12,5"    → value "125"     → 125       (dez vezes o valor)
+//   "0,5"     → value "05"      → 5
+//   "1.200"   → value "1.200"   → 1.2
+//   "1234,56" → value "123456"  → 123456
+//
+// `validity.badInput` é false, `min` não dispara e `valueAsNumber` concorda
+// com o valor corrompido. É o mesmo defeito medido em /maquinas e em
+// /refrigeracao — 35 de 35 campos da plataforma —, e `type="number"` não
+// tem conserto: sem API de seleção não dá para trocar a vírgula por ponto
+// enquanto se digita, e atribuir um valor parcial ("12.") ZERA o campo.
+// Por isso os cinco viraram `type="text" inputmode="decimal"`.
+//
+// ── E o defeito que só o navegador achou: o preço do catálogo
+// O campo de preço é controlado por `value: (+o.preco).toFixed(2)` enquanto
+// `edit()` guarda o texto cru. A cada tecla o React reescreve o campo
+// formatado e o cursor volta para o começo. Medido: digitar "90" deixa
+// 0,01; digitar "1.200" deixa 0,00. O campo não era só ruim com vírgula —
+// era impossível de digitar, com qualquer valor. Guardar o texto enquanto
+// se digita, e só o número quando ele é válido, é o que conserta os dois.
+//
+// ── A regra: a tela é igual ou MAIS estrita que o banco, nunca mais frouxa
+// Cada campo declara a coluna que alimenta e espelha o `check` da migração
+// 35. Frouxidão vira erro opaco do Postgres no meio da gravação, que é o
+// que esta porta existe para evitar. `vazio` diz o que um campo em branco
+// significa para AQUELA coluna, e não é preferência: as quatro colunas
+// `not null` precisam de um valor, e mandar null nelas é o mesmo erro
+// opaco por outro caminho. Só `cal_ps.valor_exec` aceita null — e ali null
+// é o fato ("ainda não executado"), que o `+''` de antes transformava em
+// zero afirmado.
+//
+// Réplica deliberada de `maquinas/numeros.js`: este módulo é legado
+// independente (D-05) e não importa da pasta comum, como /refrigeracao não
+// importa por ser congelado. O que impede as três de divergirem não é o
+// lugar, é o gate — ele roda as implementações sobre a mesma tabela de
+// casos e exige que concordem.
+const NUM_CAMPOS = {
+  // O banco só exige `> 0`; o teto de 60 meses é o que esta tela sempre
+  // DECLAROU (`min=1 max=60`) e nunca chegou a exigir, porque em
+  // `type="number"` fora de <form> o `max` é decorativo. Passar a valer o
+  // que já estava escrito é mais honesto que inventar um teto novo, e as
+  // 37 linhas semeadas usam 12, 24 e 36.
+  per:   { rotulo: 'Periodicidade (meses)', coluna: 'cal_equipamentos.per',
+           min: 0, exclusivo: true, max: 60, inteiro: true, obrigatorio: true },
+  cC:    { rotulo: 'Custo máx. calibração', coluna: 'cal_equipamentos.custo_cal',
+           min: 0, max: 10000000, vazio: 0 },
+  cR:    { rotulo: 'Custo máx. reparo',     coluna: 'cal_equipamentos.custo_rep',
+           min: 0, max: 10000000, vazio: 0 },
+  preco: { rotulo: 'Preço',                 coluna: 'cal_catalogo.preco',
+           min: 0, max: 10000000, vazio: 0 },
+  // A coluna aceita null e não tem check; a tela recusa negativo, porque
+  // valor executado negativo não é nota fiscal nenhuma. Mais estrita de
+  // propósito, como `uso-delta` em /maquinas.
+  vE:    { rotulo: 'Valor executado',       coluna: 'cal_ps.valor_exec',
+           min: 0, max: 10000000 }
+};
+
+// Normaliza o separador decimal. Mesma regra de `celulaParaDecimal`
+// (/refrigeracao, migração 56) e de `normalizarDecimal` (/maquinas): ponto
+// separando exatamente três casas pode ser milhar ou decimal, e adivinhar é
+// o que transforma mil e duzentos em um vírgula dois.
+function numNormalizar(texto) {
+  const t = String(texto == null ? '' : texto).trim();
+  if (t === '') return { ok: true, texto: '' };
+  const virgulas = (t.match(/,/g) || []).length;
+  const pontos = (t.match(/\./g) || []).length;
+  if (virgulas > 1) return { ok: false, erro: 'tem mais de uma vírgula' };
+  if (virgulas === 1 && pontos > 0) return { ok: true, texto: t.replace(/\./g, '').replace(',', '.') };
+  if (virgulas === 1) return { ok: true, texto: t.replace(',', '.') };
+  if (pontos > 1) return { ok: false, erro: 'tem mais de um ponto' };
+  if (pontos === 1 && /^-?\d{1,3}\.\d{3}$/.test(t)) {
+    return { ok: false, erro: 'é ambíguo — ponto separando três casas pode ser milhar ou decimal; escreva sem separador de milhar' };
+  }
+  return { ok: true, texto: t };
+}
+
+// Três respostas onde o `+e.target.value` de antes dava uma só: vazio,
+// número válido, e recusa com motivo escrito. Colapsar "não preenchi" e
+// "escrevi bobagem" em zero é o que fazia um campo em branco virar uma
+// afirmação numérica.
+function numValidar(texto, spec) {
+  const s = spec || {};
+  const nome = s.rotulo || 'Valor';
+  const norm = numNormalizar(texto);
+  if (!norm.ok) return { ok: false, erro: `${nome}: "${String(texto).trim()}" ${norm.erro}` };
+  if (norm.texto === '') {
+    if (s.obrigatorio) return { ok: false, erro: `${nome}: preencha este campo` };
+    return { ok: true, valor: 'vazio' in s ? s.vazio : null };
+  }
+  // Number() e não parseFloat(): parseFloat('12abc') devolve 12 e engole o
+  // resto, que é a leitura silenciosa que esta porta existe para acabar.
+  const valor = Number(norm.texto);
+  if (!Number.isFinite(valor)) return { ok: false, erro: `${nome}: "${norm.texto}" não é um número` };
+  if (s.inteiro && !Number.isInteger(valor)) return { ok: false, erro: `${nome}: precisa ser um número inteiro` };
+  if (s.min != null) {
+    if (s.exclusivo && !(valor > s.min)) return { ok: false, erro: `${nome}: precisa ser maior que ${s.min}` };
+    if (!s.exclusivo && valor < s.min) return { ok: false, erro: `${nome}: não pode ser menor que ${s.min}` };
+  }
+  if (s.max != null && valor > s.max) {
+    return { ok: false, erro: `${nome}: ${valor} está acima do limite de ${s.max} — confira se não sobrou um dígito` };
+  }
+  return { ok: true, valor };
+}
+
+// Escreve um número no campo na forma que este leitor lê de volta — com
+// VÍRGULA, que é como se escreve decimal em português. Sem esta metade o
+// aplicativo preencheria o campo com um texto que ele próprio recusa.
+function numParaCampo(valor) {
+  if (valor == null || valor === '') return '';
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return '';
+  return String(n).replace('.', ',');
+}
+
+// O campo. Guarda o TEXTO enquanto se digita e entrega o NÚMERO ao redor:
+// um controlado por número não deixa digitar vírgula (ela some no
+// ida-e-volta) nem escapa do `.toFixed(2)` que inutilizou o preço.
+//
+// Enquanto o texto é inválido o valor de fora NÃO é atualizado — o campo
+// fica vermelho e diz por quê, e quem tem botão Salvar o desabilita por
+// `aoErro`. Escrever null ali seria gravar em silêncio o contrário do que
+// está na tela.
+function CampoNum({ chave, valor, aoMudar, aoErro, ...resto }) {
+  const h = React.createElement;
+  const spec = NUM_CAMPOS[chave];
+  const [texto, setTexto] = useState(() => numParaCampo(valor));
+  const [erro, setErro] = useState('');
+  // Ressincroniza quando o valor chega de fora (outra linha, outro
+  // instrumento, formulário reaberto) — nunca quando foi este campo que o
+  // mudou, senão "12," viraria "12" no meio da digitação.
+  useEffect(() => {
+    const lido = numValidar(texto, spec);
+    if (lido.ok && lido.valor === valor) return;
+    setTexto(numParaCampo(valor));
+    setErro('');
+    if (aoErro) aoErro(chave, '');
+  }, [valor]);
+  function mudou(t) {
+    setTexto(t);
+    const lido = numValidar(t, spec);
+    setErro(lido.ok ? '' : lido.erro);
+    if (aoErro) aoErro(chave, lido.ok ? '' : lido.erro);
+    if (lido.ok) aoMudar(lido.valor);
+  }
+  return h(React.Fragment, null,
+    h('input', {
+      ...resto,
+      type: 'text',
+      inputMode: spec && spec.inteiro ? 'numeric' : 'decimal',
+      value: texto,
+      onChange: e => mudou(e.target.value),
+      style: { ...(resto.style || {}), ...(erro ? { borderColor: 'var(--red)' } : {}) }
+    }),
+    // `maxWidth` porque este campo também vive dentro de `<td>`: sem limite,
+    // a frase inteira derrama por cima das colunas vizinhas da linha do
+    // catálogo — medido na tela, não deduzido. `marginLeft:auto` a mantém
+    // sob o campo nas células alinhadas à direita, e a frase continua
+    // inteira: encurtá-la por corte é como nasceram "TRIMES" e "FORMUL".
+    erro && h('div', { style: { color: 'var(--red)', fontSize: 11, marginTop: 3,
+                                maxWidth: 200, marginLeft: 'auto', whiteSpace: 'normal' } }, erro)
+  );
 }
 
 // objeto do app → linha do banco. Só os campos presentes viajam, para
@@ -6319,6 +6492,14 @@ function Equipamentos({
       [k]: v
     }));
   }
+  // Enquanto um campo numérico está inválido o valor de fora não é
+  // atualizado (CampoNum segura o texto), então salvar gravaria o valor
+  // ANTIGO com a tela mostrando outro. O botão fica desabilitado.
+  const [errosNum, setErrosNum] = useState({});
+  function marcarErroNum(k, msg) {
+    setErrosNum(e => e[k] === msg ? e : { ...e, [k]: msg });
+  }
+  const temErroNum = Object.values(errosNum).some(Boolean);
   function salvar() {
     const d = {
       ...fm,
@@ -6530,7 +6711,7 @@ function Equipamentos({
     }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
       className: "btn pr",
       onClick: salvar,
-      disabled: !fm.tipo || !fm.mod
+      disabled: !fm.tipo || !fm.mod || temErroNum
     }, "Salvar"))
   }, /*#__PURE__*/React.createElement("div", {
     className: "fr c3"
@@ -6654,12 +6835,11 @@ function Equipamentos({
     className: "fr c3"
   }, /*#__PURE__*/React.createElement("div", {
     className: "fld"
-  }, /*#__PURE__*/React.createElement("label", null, "Periodicidade (meses)", /*#__PURE__*/React.createElement(Tip, { k: 'periodicidade' })), /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: 1,
-    max: 60,
-    value: fm.per,
-    onChange: e => sf('per', +e.target.value)
+  }, /*#__PURE__*/React.createElement("label", null, "Periodicidade (meses)", /*#__PURE__*/React.createElement(Tip, { k: 'periodicidade' })), /*#__PURE__*/React.createElement(CampoNum, {
+    chave: "per",
+    valor: fm.per,
+    aoMudar: v => sf('per', v),
+    aoErro: marcarErroNum
   })), /*#__PURE__*/React.createElement("div", {
     className: "fld"
   }, /*#__PURE__*/React.createElement("label", null, "\xDAltima cal."), /*#__PURE__*/React.createElement("input", {
@@ -6694,20 +6874,18 @@ function Equipamentos({
     className: "fr"
   }, /*#__PURE__*/React.createElement("div", {
     className: "fld"
-  }, /*#__PURE__*/React.createElement("label", null, "Custo m\xE1x. calibra\xE7\xE3o (R$)"), /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    step: 0.01,
-    min: 0,
-    value: fm.cC,
-    onChange: e => sf('cC', +e.target.value)
+  }, /*#__PURE__*/React.createElement("label", null, "Custo m\xE1x. calibra\xE7\xE3o (R$)"), /*#__PURE__*/React.createElement(CampoNum, {
+    chave: "cC",
+    valor: fm.cC,
+    aoMudar: v => sf('cC', v),
+    aoErro: marcarErroNum
   })), /*#__PURE__*/React.createElement("div", {
     className: "fld"
-  }, /*#__PURE__*/React.createElement("label", null, "Custo m\xE1x. reparo (R$)"), /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    step: 0.01,
-    min: 0,
-    value: fm.cR,
-    onChange: e => sf('cR', +e.target.value)
+  }, /*#__PURE__*/React.createElement("label", null, "Custo m\xE1x. reparo (R$)"), /*#__PURE__*/React.createElement(CampoNum, {
+    chave: "cR",
+    valor: fm.cR,
+    aoMudar: v => sf('cR', v),
+    aoErro: marcarErroNum
   }))), /*#__PURE__*/React.createElement("div", {
     className: "fr f"
   }, /*#__PURE__*/React.createElement("div", {
@@ -7309,6 +7487,14 @@ function PedidosServico({
       [k]: v
     }));
   }
+  // Mesma guarda do formulário de equipamento: com o campo inválido o
+  // valor de fora fica no anterior, e salvar gravaria o que não está na
+  // tela.
+  const [errosNumPs, setErrosNumPs] = useState({});
+  function marcarErroNumPs(k, msg) {
+    setErrosNumPs(e => e[k] === msg ? e : { ...e, [k]: msg });
+  }
+  const temErroNumPs = Object.values(errosNumPs).some(Boolean);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "ph"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
@@ -7646,7 +7832,8 @@ function PedidosServico({
       onClick: () => setEditPs(null)
     }, "Cancelar"), /*#__PURE__*/React.createElement("button", {
       className: "btn pr",
-      onClick: salvarEd
+      onClick: salvarEd,
+      disabled: temErroNumPs
     }, "Salvar"))
   }, /*#__PURE__*/React.createElement("div", {
     className: "fr"
@@ -7708,11 +7895,11 @@ function PedidosServico({
     className: "fr"
   }, /*#__PURE__*/React.createElement("div", {
     className: "fld"
-  }, /*#__PURE__*/React.createElement("label", null, "Valor executado (R$)"), /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    step: 0.01,
-    value: ef.vE || '',
-    onChange: e => sfe('vE', +e.target.value)
+  }, /*#__PURE__*/React.createElement("label", null, "Valor executado (R$)"), /*#__PURE__*/React.createElement(CampoNum, {
+    chave: "vE",
+    valor: ef.vE == null ? null : +ef.vE,
+    aoMudar: v => sfe('vE', v),
+    aoErro: marcarErroNumPs
   })), /*#__PURE__*/React.createElement("div", {
     className: "fld"
   }, /*#__PURE__*/React.createElement("label", null, "NF / NE"), /*#__PURE__*/React.createElement("input", {
