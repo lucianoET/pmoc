@@ -5449,6 +5449,18 @@ const CAMPOS_PS = {
   cert: 'cert', res: 'res', vM: 'valor_prev', vE: 'valor_exec',
   nf: 'nf', ctr: 'ctr', emi_nm: 'emitente', obs: 'obs'
 };
+// As três da migração 59. Ficam FORA do mapa acima até a sonda dizer que
+// existem no banco: `paraLinha` citando uma coluna inexistente não deixa
+// o campo novo de fora — derruba TODA gravação de PS, que é a lição de
+// D-500-05. Entram por Object.assign em `_carregar`, num ponto só.
+const CAMPOS_PS_DERIVA = { afl: 'afl', ajust: 'ajust', apv: 'apv' };
+// A tela pergunta a MESMA coisa que a gravação, e não uma bandeira ao
+// lado: se `afl` não está no mapa, o campo não tem para onde ir. Sem a
+// migração 59 o editor de deriva e "Aprovado por" não aparecem — um
+// formulário que aceita o que vai jogar fora é pior que formulário
+// nenhum, e é literalmente o defeito que esta migração conserta. Mesmo
+// precedente de "sem migração, sem botão" (D-6wy-07, /refrigeracao).
+const derivaDisponivel = () => 'afl' in CAMPOS_PS;
 const CAMPOS_LOTE = {
   id: 'id', code: 'code', desc: 'descricao', contrato: 'contrato',
   status: 'status', data: 'data', itens: 'itens'
@@ -5532,7 +5544,21 @@ const NUM_CAMPOS = {
   // valor executado negativo não é nota fiscal nenhuma. Mais estrita de
   // propósito, como `uso-delta` em /maquinas.
   vE:    { rotulo: 'Valor executado',       coluna: 'cal_ps.valor_exec',
-           min: 0, max: 10000000 }
+           min: 0, max: 10000000 },
+
+  // Erros as-found / as-left, um par por ponto do certificado (migração
+  // 59). Sem `min` e sem `max`, e isso é decisão, não esquecimento: erro
+  // de calibração é NEGATIVO com frequência (o instrumento indica a
+  // menos), e o valor está na unidade do próprio instrumento — volt,
+  // milímetro, micrometro, newton-metro —, então qualquer teto seria
+  // arbitrário e recusaria dado legítimo. A lição já paga na migração 58:
+  // um check errado é pior que check nenhum.
+  //
+  // O que estes dois campos ganham é o que faltava: a regra de
+  // ambiguidade. Antes de existirem no banco eles eram texto lido por
+  // `numBR`, e `parseFloat('1.200')` devolvia 1,2 em silêncio.
+  'afl-found': { rotulo: 'Erro as-found', coluna: 'cal_ps.afl' },
+  'afl-left':  { rotulo: 'Erro as-left',  coluna: 'cal_ps.afl' }
 };
 
 // Normaliza o separador decimal. Mesma regra de `celulaParaDecimal`
@@ -5622,7 +5648,15 @@ function CampoNum({ chave, valor, aoMudar, aoErro, ...resto }) {
     if (aoErro) aoErro(chave, lido.ok ? '' : lido.erro);
     if (lido.ok) aoMudar(lido.valor);
   }
-  return h(React.Fragment, null,
+  // Um DIV, nunca um Fragment: os filhos de um Fragment viram itens
+  // separados do layout de fora, e no editor de deriva — que é um grid de
+  // cinco colunas — a mensagem de erro virava a SEXTA célula, expulsando
+  // "Un." e o botão de remover da linha. Medido no navegador; lendo o
+  // código não aparece. Com o div, o campo é um item só em qualquer
+  // container: `.fld` (flex coluna), `<td>` do catálogo e a grade da
+  // deriva. `minWidth:0` deixa esse item encolher em vez de esticar a
+  // coluna até caber a frase.
+  return h('div', { style: { minWidth: 0 } },
     h('input', {
       ...resto,
       type: 'text',
@@ -5631,13 +5665,10 @@ function CampoNum({ chave, valor, aoMudar, aoErro, ...resto }) {
       onChange: e => mudou(e.target.value),
       style: { ...(resto.style || {}), ...(erro ? { borderColor: 'var(--red)' } : {}) }
     }),
-    // `maxWidth` porque este campo também vive dentro de `<td>`: sem limite,
-    // a frase inteira derrama por cima das colunas vizinhas da linha do
-    // catálogo — medido na tela, não deduzido. `marginLeft:auto` a mantém
-    // sob o campo nas células alinhadas à direita, e a frase continua
-    // inteira: encurtá-la por corte é como nasceram "TRIMES" e "FORMUL".
+    // A frase quebra dentro da largura que o container der e nunca a
+    // aumenta. Encurtá-la por corte seria repetir "TRIMES" e "FORMUL".
     erro && h('div', { style: { color: 'var(--red)', fontSize: 11, marginTop: 3,
-                                maxWidth: 200, marginLeft: 'auto', whiteSpace: 'normal' } }, erro)
+                                maxWidth: 'min(200px, 100%)', whiteSpace: 'normal' } }, erro)
   );
 }
 
@@ -5702,7 +5733,7 @@ function useStore() {
   }
 
   async function _carregar() {
-    const [rl, re, rp, rt, rc] = await comPrazo(Promise.all([
+    const [rl, re, rp, rt, rc, rd] = await comPrazo(Promise.all([
       // `order` em tudo, sempre. Sem ele o Postgres devolve na ordem que
       // quiser, e um UPDATE reescreve a linha noutra posição do heap: a
       // lista de instrumentos se reembaralhava sozinha a cada edição.
@@ -5712,8 +5743,15 @@ function useStore() {
       supa.from('cal_equipamentos').select('*').order('id'),
       supa.from('cal_ps').select('*').order('id'),
       supa.from('cal_lotes').select('*').order('id'),
-      supa.from('cal_catalogo').select('*').order('equip_tipo').order('ord')
+      supa.from('cal_catalogo').select('*').order('equip_tipo').order('ord'),
+      // Sonda da migração 59 — a décima do projeto. Uma leitura, uma
+      // pergunta: as três colunas de deriva existem? Pede as colunas pelo
+      // NOME, não a tabela: `cal_ps` existe desde a 35 em qualquer banco.
+      supa.from('cal_ps').select('id,afl,ajust,apv').limit(1)
     ]));
+    // `rd` fica DE FORA desta lista de propósito: o erro dela é a resposta
+    // da sonda, não uma falha de carga. Somá-la aqui faria um banco sem a
+    // migração 59 abrir o módulo em "erro" em vez de abrir sem a deriva.
     const falha = [rl, re, rp, rt, rc].find(r => r.error);
     if (falha) {
       // Sem as migrações 35/36 o módulo avisa em vez de mostrar tela
@@ -5722,6 +5760,10 @@ function useStore() {
       setCarregando(false);
       return;
     }
+    // Antes de qualquer daLinha: com a sonda verde as três colunas passam
+    // a viajar nos dois sentidos, e sem ela o módulo se comporta byte a
+    // byte como antes da migração 59 (D-cf8-25).
+    if (!rd.error) Object.assign(CAMPOS_PS, CAMPOS_PS_DERIVA);
     setLabs((rl.data || []).map(l => daLinha(l, CAMPOS_LAB)));
     setEqs((re.data || []).map(e => daLinha(e, CAMPOS_EQ, DATAS.eq)));
     setPss((rp.data || []).map(p => daLinha(p, CAMPOS_PS, DATAS.ps)));
@@ -7262,10 +7304,23 @@ function AjudaPage() {
 }
 // ===== DERIVA / AS-FOUND AS-LEFT (ILAC-G24 / OIML D 10) =====
 const fmtN = n => n === null || n === undefined ? '\u2014' : (+n).toLocaleString('pt-BR', { maximumFractionDigits: 4 });
+// Leitura de um erro as-found/as-left já gravado.
+//
+// Desde a migração 59 o valor chega aqui como NÚMERO — o CampoNum do
+// editor valida na digitação e entrega número. Esta função continua
+// existindo para o texto: um jsonb editado à mão, uma importação, um PS
+// gravado por outra via. E delega a normalização à porta única do módulo
+// em vez de repetir a regra: era o quarto leitor de vírgula deste
+// arquivo, e o único sem a guarda de ambiguidade — `parseFloat('1.200')`
+// devolvia 1,2 em silêncio, e esse número entrava no gráfico de deriva e
+// na comparação com o EMA como se fosse medição.
 function numBR(v) {
   if (v === null || v === undefined || v === '') return null;
-  const n = parseFloat(String(v).replace(',', '.'));
-  return isNaN(n) ? null : n;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  const norm = numNormalizar(v);
+  if (!norm.ok || norm.texto === '') return null;
+  const n = Number(norm.texto);
+  return Number.isFinite(n) ? n : null;
 }
 function parseEmaNum(ema) {
   if (!ema) return null;
@@ -7361,11 +7416,15 @@ function AflEditor({ afl, ajust, onChange }) {
   return h('div', { style: { marginTop: 4 } },
     h('div', { className: 'ssep' }, 'Resultados da calibra\u00E7\u00E3o \u2014 as-found / as-left (deriva)', h(Tip, { k: 'asfound' })),
     h('div', { style: { fontSize: 11, color: 'var(--tx3)', marginBottom: 8, lineHeight: 1.5 } },
-      'Registre o ERRO encontrado em cada ponto do certificado, na mesma unidade do EMA da ficha do equipamento. As-found = como recebido; as-left = ap\u00F3s ajuste (repita o as-found se n\u00E3o houve ajuste).'),
-    rows.map((r, i) => h('div', { key: i, style: { display: 'grid', gridTemplateColumns: '2fr 1.4fr 1.4fr 1fr 32px', gap: 6, marginBottom: 6 } },
+      'Registre o ERRO encontrado em cada ponto do certificado, na mesma unidade do EMA da ficha do equipamento. As-found = como recebido; as-left = ap\u00F3s ajuste (repita o as-found se n\u00E3o houve ajuste). O erro pode ser negativo, e a v\u00EDrgula decimal \u00E9 aceita.'),
+    rows.map((r, i) => h('div', { key: i, style: { display: 'grid', gridTemplateColumns: '2fr 1.4fr 1.4fr 1fr 32px', gap: 6, marginBottom: 6, alignItems: 'start' } },
       h('input', { placeholder: 'Ponto/nominal (ex: 10 V)', value: r.pt || '', onChange: e => upd(i, 'pt', e.target.value) }),
-      h('input', { placeholder: 'Erro as-found', value: r.found || '', onChange: e => upd(i, 'found', e.target.value) }),
-      h('input', { placeholder: 'Erro as-left', value: r.left || '', onChange: e => upd(i, 'left', e.target.value) }),
+      h(CampoNum, { chave: 'afl-found', placeholder: 'Erro as-found',
+        valor: r.found == null || r.found === '' ? null : +r.found,
+        aoMudar: v => upd(i, 'found', v) }),
+      h(CampoNum, { chave: 'afl-left', placeholder: 'Erro as-left',
+        valor: r.left == null || r.left === '' ? null : +r.left,
+        aoMudar: v => upd(i, 'left', v) }),
       h('input', { placeholder: 'Un.', value: r.un || '', onChange: e => upd(i, 'un', e.target.value) }),
       h('button', { className: 'bico', title: 'Remover ponto', onClick: () => onChange(rows.filter((_, j) => j !== i), ajust) }, '\u2715'))),
     h('div', { style: { display: 'flex', gap: 14, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' } },
@@ -7912,12 +7971,12 @@ function PedidosServico({
   }, /*#__PURE__*/React.createElement("label", null, "Contrato / ATA"), /*#__PURE__*/React.createElement("input", {
     value: ef.ctr || '',
     onChange: e => sfe('ctr', e.target.value)
-  })), /*#__PURE__*/React.createElement("div", {
+  })), derivaDisponivel() ? /*#__PURE__*/React.createElement("div", {
     className: "fld"
   }, /*#__PURE__*/React.createElement("label", null, "Aprovado por"), /*#__PURE__*/React.createElement("input", {
     value: ef.apv || '',
     onChange: e => sfe('apv', e.target.value)
-  }))), /*#__PURE__*/React.createElement(AflEditor, {
+  })) : null), derivaDisponivel() && /*#__PURE__*/React.createElement(AflEditor, {
     afl: ef.afl || [],
     ajust: !!ef.ajust,
     onChange: (afl, ajust) => setEf(f => ({ ...f, afl: afl, ajust: ajust }))

@@ -35,7 +35,12 @@ const vm = require('node:vm')
 
 const RAIZ = path.join(__dirname, '..')
 const HTML = fs.readFileSync(path.join(RAIZ, 'calibracao', 'index.html'), 'utf8')
-const SCHEMA = fs.readFileSync(path.join(RAIZ, 'supabase', '35_calibracao_schema.sql'), 'utf8')
+// União das migrações que definem as colunas que a tela alimenta: a 35
+// cria as cinco tabelas, a 59 acrescenta as três de deriva a `cal_ps`.
+// Mesmo precedente da união de migrações em
+// `tests/refrigeracao-ficha-equipamento.test.js`.
+const SCHEMA = ['35_calibracao_schema.sql', '59_calibracao_deriva.sql']
+  .map(f => fs.readFileSync(path.join(RAIZ, 'supabase', f), 'utf8')).join('\n')
 const MAQ = require(path.join(RAIZ, 'maquinas', 'numeros.js'))
 
 // Comentário não é marcação. Sem esta separação o gate mede a própria
@@ -172,18 +177,26 @@ function corpoDaTabela(tabela) {
   return m[1]
 }
 
+// A definição de uma coluna mora no corpo do `create table` OU num
+// `alter table … add column` de uma migração posterior — as duas formas
+// valem, e o gate tem de enxergar as duas ou passa a mentir sobre toda
+// coluna acrescentada depois.
 function defColuna(tabela, coluna) {
   const corpo = corpoDaTabela(tabela)
-  const linhas = corpo.split('\n').filter(l => new RegExp(`^\\s*${coluna}\\s`).test(l))
-  assert.equal(linhas.length, 1, `esperava uma definição de ${tabela}.${coluna}`)
-  return linhas[0]
+  const noCreate = corpo.split('\n').filter(l => new RegExp(`^\\s*${coluna}\\s`).test(l))
+  if (noCreate.length === 1) return noCreate[0]
+  const alter = SQL_SEM_COMENTARIO.split('\n').filter(l =>
+    new RegExp(`^\\s*alter table ${tabela} add column (if not exists )?${coluna}\\s`).test(l))
+  assert.equal(noCreate.length + alter.length, 1,
+    `esperava uma definição de ${tabela}.${coluna}`)
+  return alter[0]
 }
 
 test('cada campo declara a coluna que alimenta, e ela existe na migração 35', () => {
   const ctx = sandbox()
   const chaves = Object.keys(campos(ctx))
-  assert.deepEqual(chaves.sort(), ['cC', 'cR', 'preco', 'per', 'vE'].sort(),
-    'os campos numéricos do módulo são exatamente estes cinco')
+  assert.deepEqual(chaves.sort(), ['cC', 'cR', 'preco', 'per', 'vE', 'afl-found', 'afl-left'].sort(),
+    'os campos numéricos do módulo são exatamente estes sete')
   for (const chave of chaves) {
     const spec = campos(ctx)[chave]
     assert.ok(spec.coluna, `${chave} não declara a coluna`)
@@ -333,6 +346,19 @@ test('o Salvar dos dois formulários é desabilitado enquanto há erro numérico
     assert.match(HTML, new RegExp(`const ${nome} = Object\\.values\\(erros`),
       `${nome} precisa ser derivado do mapa de erros, não de uma bandeira solta`)
   }
+})
+
+test('o CampoNum é UM item de layout, nunca um Fragment', () => {
+  // Os filhos de um Fragment viram itens separados do layout de fora. No
+  // editor de deriva — um grid de cinco colunas — a mensagem de erro
+  // virava a SEXTA célula e expulsava "Un." e o botão de remover da
+  // linha. Medido no navegador em 04/09/2026; lendo o código não aparece,
+  // porque o Fragment parece agrupar e não agrupa.
+  const corpo = recorte('function CampoNum(', '\n}\n')
+  assert.doesNotMatch(corpo, /h\(React\.Fragment/,
+    'voltar ao Fragment quebra a linha do editor de deriva de novo')
+  assert.match(corpo, /return h\('div', \{ style: \{ minWidth: 0 \} \}/,
+    'o campo precisa devolver um container único, que possa encolher')
 })
 
 test('o CampoNum só entrega o valor quando o texto é válido', () => {
