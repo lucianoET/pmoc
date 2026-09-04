@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const test = require('node:test')
 
 // Gate do núcleo genérico de kanban e calendário (Fase 13 Plano 03, D-06/D-07,
@@ -182,4 +184,47 @@ test('nenhuma das funções de kanban ou calendário toca API de navegador', () 
     eventosDoMes([{ id: 1, data: '2026-01-01' }], 2026, 0)
     htmlCalendario(2026, 5, [], { hoje: 1 })
   })
+})
+
+// ── fachada maquinas/operacoes.js — protegida por estrutura, não por
+// comportamento (o comportamento já é coberto por
+// tests/operacoes-maquinas.test.js e tests/integracao-operacoes-maquinas.test.js,
+// que não podem ganhar uma linha — a outra metade da prova, PLAT-08/09) ──
+
+const raiz = path.join(__dirname, '..')
+const operacoesJs = fs.readFileSync(path.join(raiz, 'maquinas', 'operacoes.js'), 'utf8')
+const maquinasHtml = fs.readFileSync(path.join(raiz, 'maquinas', 'index.html'), 'utf8')
+
+test('maquinas/operacoes.js importa os dois núcleos genéricos de shared/', () => {
+  assert.match(operacoesJs, /from ['"]\.\.\/shared\/kanban\.js['"]/)
+  assert.match(operacoesJs, /from ['"]\.\.\/shared\/calendario\.js['"]/)
+})
+
+test('maquinas/operacoes.js não ficou com cópia local da lógica genérica (GEQ-04)', () => {
+  const semComentarios = operacoesJs
+    .split('\n')
+    .filter((linha) => !/^\s*(\/\/|\*|\/\*)/.test(linha))
+    .join('\n')
+  assert.doesNotMatch(semComentarios, /\bObject\.fromEntries\b/)
+  assert.doesNotMatch(semComentarios, /\bpadStart\b/)
+})
+
+test('maquinas/operacoes.js publica OperacoesMaq no escopo global e não escreve module.exports', () => {
+  assert.match(operacoesJs, /globalThis\.OperacoesMaq\s*=/)
+  assert.doesNotMatch(operacoesJs, /module\.exports/)
+})
+
+test('maquinas/index.html carrega /maquinas/operacoes.js como módulo, antes de /maquinas/app.js', () => {
+  assert.match(maquinasHtml, /<script type="module" src="\/maquinas\/operacoes\.js">|<script src="\/maquinas\/operacoes\.js" type="module">/)
+  const indiceOperacoes = maquinasHtml.indexOf('/maquinas/operacoes.js')
+  const indiceApp = maquinasHtml.indexOf('/maquinas/app.js')
+  assert.ok(indiceOperacoes >= 0 && indiceOperacoes < indiceApp)
+})
+
+test('maquinas/index.html continua com a própria @media(max-width:600px) mencionando o kanban', () => {
+  assert.match(maquinasHtml, /@media\(max-width:600px\)\{[\s\S]*kanban[\s\S]*?\}/)
+})
+
+test('nenhuma regra remanescente de maquinas/index.html aplica overflow:hidden ao contêiner do kanban ou da grade do calendário (lição D-8yc-01)', () => {
+  assert.doesNotMatch(maquinasHtml, /\.(kanban|calendar-grid)\s*\{[^}]*overflow:\s*hidden/)
 })
