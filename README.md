@@ -188,6 +188,13 @@ pmoc/
 │   ├── tabela.js              Ordenação e filtro por coluna (3 consumidores)
 │   ├── fluxo.js               Núcleo de fluxo por definição de etapas
 │   ├── componentes.js         Peças de tela com dois ou mais consumidores
+│   ├── grafico.js             Gráficos SVG inline: barras, linha, Pareto, carta de controle, sparkline
+│   ├── indicadores.js         Cartão de indicador com meta, semáforo e tendência
+│   ├── gantt.js               Gantt em CSS grid, sem canvas
+│   ├── abc.js                 Curva ABC genérica por campo de valor
+│   ├── gut.js                 Matriz GUT (predial/dominio.js reexporta)
+│   ├── kanban.js              Kanban por definição de colunas (Máquinas consome)
+│   ├── calendario.js          Calendário mensal por eventos (Máquinas consome)
 │   ├── arvore.js              Árvore de locais colapsável
 │   ├── vencimento.js          Regra de vencimento por horímetro (testada)
 │   ├── persistencia.js
@@ -334,11 +341,12 @@ porque o cadastro correspondente está vazio. Nenhuma delas depende de desenvolv
 
 ### 4. Plataforma
 
-- [ ] **Fases 8 e 9 do roadmap não foram entregues, e a 8 andou para trás.** Não existe
-      kanban nem calendário em `shared/`; o critério da Fase 9 era "as 5 implementações
-      independentes de CSV deixam de existir" e hoje são **6**. Em 31/08 a Refrigeração
-      ganhou calendário próprio, então há **dois** calendários independentes onde a fase
-      existia para haver um.
+- [ ] **Fase 9 do roadmap não foi entregue, e a 8 foi entregue em parte (04/09/2026).** Kanban e
+      calendário agora vivem em `shared/` e Máquinas os consome sem cópia (Onda A da Fase 13);
+      falta o segundo consumidor, que chega com `/gestao` (Onda B, planejada em
+      `docs/fase-13-gestao-qualidade/`). O critério da Fase 9 era "as 5 implementações
+      independentes de CSV deixam de existir" e hoje são **6**. A Refrigeração segue com o
+      calendário próprio de 31/08 — módulo congelado, decisão e não pendência.
 - [x] ~~Decidir se o `.planning/` continua sendo mantido ou se o `CLAUDE.md` vira o registro
       único.~~ **Resolvido em 02/09/2026: o `CLAUDE.md` é o registro único.** O `.planning/`
       e o `/.claude/CLAUDE.md` gerado dele foram **arquivados** — não apagados, pela mesma
@@ -370,6 +378,6 @@ Sem framework: `node:test` e `node:assert` apenas, sem `package.json`.
 node --test tests/*.test.js
 ```
 
-**1288 testes, todos passando em 02/09/2026.** São gates permanentes: cada decisão
+**1481 testes, todos passando em 04/09/2026.** São gates permanentes: cada decisão
 travada tem um teste que reprova uma fase futura que a contradiga. O checklist de
 verificação manual fica em `TESTES.md`.

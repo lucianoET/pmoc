@@ -23,6 +23,8 @@ import {
   formatarArea,
   aplicarOrdemEFiltro as aplicarOrdemEFiltroAreas,
 } from './areas-tabela.js'
+import { htmlKanban } from '../shared/kanban.js'
+import { MESES, htmlCalendario } from '../shared/calendario.js'
 
 // ── CONFIG: shared/supabase-config.js descobre a configuração dos outros
 // cinco módulos lendo este arquivo por expressão regular — as duas
@@ -793,22 +795,15 @@ function renderOperacoes(){
   const kanban = document.getElementById('operacoes-kanban')
   const tbody = document.getElementById('tb-areas')
   if(!kanban || !tbody) return
-  const colunas = [
-    ['programada','Programadas'],['em_execucao','Em execução'],
-    ['concluida','Concluídas'],['cancelada','Canceladas'],
-  ]
+  const colunas = OperacoesMaq.COLUNAS_KANBAN
   if(OPERACOES_ERRO){
     document.getElementById('operacoes-kpis').innerHTML=''
     kanban.innerHTML = '<div class="callout co-warn" style="grid-column:1/-1">Operações indisponíveis. A migração 12 precisa ser aplicada no Supabase.</div>'
   } else {
     const grupos = OperacoesMaq.agruparOperacoes(OPERACOES)
-    document.getElementById('operacoes-kpis').innerHTML = colunas.map(([status,label]) => `
-      <div class="kpi"><div class="kpi-n">${grupos[status].length}</div><div class="kpi-l">${label}</div></div>`).join('')
-    kanban.innerHTML = colunas.map(([status,label]) => `
-      <section class="kanban-col">
-        <div class="kanban-title"><span>${label}</span><span class="kanban-count">${grupos[status].length}</span></div>
-        ${grupos[status].length ? grupos[status].map(renderCartaoOperacao).join('') : '<div class="empty" style="padding:24px 8px"><p>Nenhuma operação</p></div>'}
-      </section>`).join('')
+    document.getElementById('operacoes-kpis').innerHTML = colunas.map(({id,rotulo}) => `
+      <div class="kpi"><div class="kpi-n">${grupos[id].length}</div><div class="kpi-l">${rotulo}</div></div>`).join('')
+    kanban.innerHTML = htmlKanban(grupos, colunas, { cartao: renderCartaoOperacao, vazio: 'Nenhuma operação' })
   }
   renderAreas()
 }
@@ -1163,23 +1158,15 @@ async function iniciarOperacao(id){
 function renderAgenda(){
   const calendario = document.getElementById('agenda-calendario')
   if(!calendario) return
-  const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
-  document.getElementById('agenda-titulo').textContent = `${meses[AGENDA_MES]} ${AGENDA_ANO}`
+  document.getElementById('agenda-titulo').textContent = `${MESES[AGENDA_MES]} ${AGENDA_ANO}`
   const eventos = OperacoesMaq.criarEventosCalendario(OPERACOES,OS_LIST,AGENDA_ANO,AGENDA_MES)
-  const porData = eventos.reduce((grupos,evento)=>{
-    ;(grupos[evento.data] ||= []).push(evento); return grupos
-  },{})
-  const primeiroDia = new Date(AGENDA_ANO,AGENDA_MES,1).getDay()
-  const totalDias = new Date(AGENDA_ANO,AGENDA_MES+1,0).getDate()
-  const cabecalho = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(dia=>`<div class="calendar-weekday">${dia}</div>`).join('')
-  let dias = '<div class="calendar-day is-empty"></div>'.repeat(primeiroDia)
-  for(let dia=1;dia<=totalDias;dia++){
-    const data = `${AGENDA_ANO}-${String(AGENDA_MES+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
-    dias += `<div class="calendar-day"><div class="calendar-date">${dia}</div>${(porData[data]||[]).map(evento=>
-      `<div class="calendar-event ${evento.origem==='operacao'?'op':'os'}">${evento.origem==='operacao'?'Operação':'OS'} · ${esc(evento.titulo)}</div>`
-    ).join('')}</div>`
-  }
-  calendario.innerHTML = cabecalho+dias
+  const agora = new Date()
+  const hoje = (agora.getFullYear()===AGENDA_ANO && agora.getMonth()===AGENDA_MES) ? agora.getDate() : null
+  calendario.innerHTML = htmlCalendario(AGENDA_ANO, AGENDA_MES, eventos, {
+    hoje,
+    rotuloEvento: evento => evento.origem==='operacao' ? 'Operação' : 'OS',
+    classeEvento: evento => evento.origem==='operacao' ? 'op' : 'os',
+  })
 }
 
 function navegarAgenda(direcao){
