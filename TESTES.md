@@ -2555,13 +2555,16 @@ ainda 'TODOS' nas 9.
 Esta seção existe porque a rede de uma OM costuma **bloquear CDN externo**, e o que
 acontece nesse caso mudou em 02/09/2026: Leaflet e Font Awesome passaram a ser servidos
 pelo próprio projeto (`mapa/vendor/`, `refrigeracao/vendor/`), então dois dos três CDN
-deixaram de ter efeito. **Sobram duas dependências externas, nomeadas de propósito** em
-`tests/vendor-sem-cdn.test.js` para que uma terceira não entre sem decisão:
+deixaram de ter efeito. **Sobra UMA dependência externa de verdade — o SDK do Supabase** —,
+nomeada de propósito em `tests/vendor-sem-cdn.test.js` para que uma segunda não entre sem
+decisão. A URL do SheetJS em `/calibracao` também está nomeada lá, mas é um **fallback que
+nunca roda**: a biblioteca está embutida no HTML, e `ensureXLSX()` devolve `window.XLSX` de
+imediato quando ele já existe.
 
 | host | quem usa | efeito de bloquear |
 |---|---|---|
 | `cdn.jsdelivr.net` | SDK do Supabase, **10 das 11 superfícies** | fatal: nenhum dado |
-| `cdnjs.cloudflare.com` | SheetJS do `/calibracao`, **sob demanda** | só a exportação para Excel |
+| ~~`cdnjs.cloudflare.com`~~ | ~~Font Awesome do `/refrigeracao`~~ | **nenhum** — hospedado desde 02/09 |
 | ~~`unpkg.com`~~ | ~~Leaflet do `/mapa`~~ | **nenhum** — hospedado desde 02/09 |
 
 **A parte estática já é coberta por gate** (`tests/vendor-sem-cdn.test.js`,
@@ -2591,8 +2594,10 @@ que reproduz a rede da OM: a página carrega, o CDN não.
       subia e a bolha de contagem cobria os dois — se isso reaparecer, a hospedagem do
       Font Awesome quebrou.)
 - [ ] As outras dez superfícies: **nenhuma mudança**.
-- [ ] `/calibracao` → exportar para Excel: **falha com mensagem escrita**, não em silêncio.
-      É a única função que ainda depende deste host.
+- [ ] `/calibracao` → exportar para Excel: **funciona normalmente**, arquivo `.xlsx` gerado.
+      A URL do SheetJS em `cdnjs` é um fallback que nunca roda — a biblioteca está embutida
+      no HTML (0.18.5). Medido em 03/09/2026 com o host bloqueado: `window.XLSX` presente,
+      pasta escrita. Se aqui **falhar**, alguém removeu o SheetJS embutido.
 
 ### Cenário B — `*unpkg.com*` bloqueado
 
