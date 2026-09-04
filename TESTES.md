@@ -2649,3 +2649,41 @@ Não foi feito, e a razão está registrada: são 207 KB que valem para as onze 
 uma vez, o que faz disso uma decisão de plataforma e não de módulo. Se for tomada, o
 cenário C deixa de ter efeito e **esta seção precisa ser reescrita, não apagada** — o
 histórico do que quebrava é o que impede alguém de reintroduzir a dependência sem perceber.
+
+## Gestão e Qualidade — Onda A: núcleos compartilhados (04/09/2026)
+
+O que entrou é biblioteca (`shared/grafico.js`, `indicadores.js`, `gantt.js`, `abc.js`,
+`gut.js`, `kanban.js`, `calendario.js`) e o consumo dela por `/maquinas` e `/predial`; o
+comportamento das funções está coberto pelos sete gates `tests/*-compartilhado*.test.js`
+(106 casos) e o CSS pelo `tests/estilos-gestao-compartilhados.test.js`. O que só o navegador
+prova é que **Máquinas ficou igual** depois de o kanban e o calendário passarem a vir de
+`shared/` — o CSS deles saiu de `maquinas/index.html` e entrou em `shared/pmoc.css`, e
+`maquinas/operacoes.js` virou módulo ES.
+
+### Máquinas — kanban e calendário iguais aos de antes
+
+- [ ] Abrir `/maquinas` com qualquer cargo, aba **OS-Corte**: as quatro colunas do kanban
+      (Programada, Em execução, Concluída, Cancelada) aparecem lado a lado no computador, com a
+      contagem no cabeçalho de cada coluna e o `Nenhuma operação` na coluna vazia.
+- [ ] Arrastar/mover uma operação de coluna continua funcionando (o mecanismo não mudou; o que
+      mudou foi quem desenha as colunas).
+- [ ] Aba **Calendário**: grade de 7 colunas com o mês corrente, `‹ ›` trocam de mês, o dia de
+      hoje tem borda de destaque (`.hoje` — é a única adição visual desta onda), eventos de
+      operação e de OS com as mesmas cores de antes.
+- [ ] Alternar o tema (botão no rodapé): kanban e calendário legíveis nos dois temas — as
+      regras migradas só usam tokens, então um tom ilegível aqui é regressão.
+- [ ] Em 375 px (DevTools): o kanban rola dentro do próprio quadro, sem rolagem horizontal da
+      página; a grade do calendário rola dentro do cartão. É o `@media(max-width:600px)` que
+      **ficou** em `maquinas/index.html` de propósito (`tests/mobile-375.test.js` exige).
+- [ ] Console sem erro ao abrir a aba OS-Corte e a aba Calendário (`operacoes.js` agora é
+      `type="module"`; um erro de import aqui derruba as duas abas de uma vez).
+
+### Predial — GUT igual ao de antes
+
+- [ ] Abrir uma inspeção e pontuar um item com G=10, U=10, T=6: total 600 e faixa **Crítico**,
+      como antes — `predial/dominio.js` agora só reexporta de `shared/gut.js`.
+
+### O que NÃO existe ainda (Ondas B e C, planejadas em `docs/fase-13-gestao-qualidade/`)
+
+- Não há rota `/gestao`, nem tabelas `ges_*`, nem migração 60 aplicada — nada a testar.
+- Os cartões de indicador com meta/semáforo ainda não aparecem em nenhum painel.
