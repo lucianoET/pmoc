@@ -266,6 +266,84 @@ label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bot
 .calendar-event.os{color:var(--blue)}
 .calendar-day.hoje{border:1px solid var(--accent)}
 
+/* ── gráfico, indicador, Gantt e curva ABC (Fase 13, Onda A, D-10) ──
+   shared/grafico.js, shared/indicadores.js, shared/gantt.js e
+   shared/abc.js são núcleos puros que devolvem SVG/HTML em texto —
+   nenhuma cor escrita em JavaScript, mesma regra de shared/icones.js e
+   shared/componentes.js. Cada tom semântico (neutro/info/ok/warn/erro)
+   resolve aqui, uma vez só, para os tokens que já existem; accent
+   aparece só onde o UI-SPEC reserva (marca de hoje no Gantt, ponto do
+   sparkline, linha acumulada do Pareto, classe A da curva ABC). Nenhum
+   contêiner destes componentes recorta conteúdo (T-13-14) — quem rola é
+   .gantt-linhas, nunca o pai. */
+
+/* gráfico (shared/grafico.js) — 100% da largura do cartão, 140px de
+   altura fixa (kanban-col tem min-height:180px como referência de
+   escala: o gráfico fica menor que uma coluna de kanban). O sparkline é
+   a exceção, mais baixo, sem eixo. */
+.grafico{width:100%;height:140px;display:block}
+.grafico-sparkline{height:32px}
+.grafico-barra{shape-rendering:crispEdges}
+.grafico-linha{vector-effect:non-scaling-stroke}
+.grafico-acumulado{vector-effect:non-scaling-stroke}
+.grafico-ponto{vector-effect:non-scaling-stroke}
+.grafico-media{vector-effect:non-scaling-stroke}
+.grafico-limite{stroke-dasharray:4 3}
+.grafico-eixo{color:var(--text3)}
+.grafico-rotulo{font-size:10px;fill:var(--text3)}
+.grafico-vazio{font-size:12px;fill:var(--text3)}
+.grafico-tom-neutro{color:var(--text3)}
+.grafico-tom-info{color:var(--blue)}
+.grafico-tom-ok{color:var(--green)}
+.grafico-tom-warn{color:var(--yellow)}
+.grafico-tom-erro{color:var(--red)}
+.grafico-tom-accent{color:var(--accent)}
+
+/* indicador (shared/indicadores.js) — herda a casca .kpi; borda
+   esquerda de 3px colorida pelo tom, mesmo mecanismo de
+   .kc-ok/.kc-warn/.kc-red/.kc-blue. */
+.indicador{border-left:3px solid var(--border)}
+.indicador-meta{font-size:11px;color:var(--text2);margin-top:4px}
+.indicador-tendencia{font-size:11px;color:var(--text2);margin-top:2px}
+.indicador-spark{margin-top:8px}
+.indicador-vazio{font-size:13px;color:var(--text3);margin-top:4px}
+.indicador-tom-neutro{border-left:3px solid var(--text3)}
+.indicador-tom-info{border-left:3px solid var(--blue)}
+.indicador-tom-ok{border-left:3px solid var(--green)}
+.indicador-tom-warn{border-left:3px solid var(--yellow)}
+.indicador-tom-erro{border-left:3px solid var(--red)}
+
+/* Gantt (shared/gantt.js) — grade de duas faixas: coluna de rótulos
+   (.gantt-rotulos, fora do contêiner que rola) e área de barras
+   (.gantt-linhas, rolagem própria no eixo horizontal) — a barra em si é
+   posicionada em porcentagem, inline por item, nunca em px fixo. A
+   marca de hoje é o único elemento accent do gráfico inteiro. */
+.gantt{display:grid;grid-template-columns:160px 1fr;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.gantt-rotulos{border-right:1px solid var(--border)}
+.gantt-rotulo{display:flex;align-items:center;font-size:11px;color:var(--text2);padding:8px 10px;min-height:36px;border-bottom:1px solid color-mix(in srgb,var(--border) 45%,transparent)}
+.gantt-linhas{position:relative;overflow-x:auto}
+.gantt-linha{position:relative;min-height:36px;padding:8px 10px;border-bottom:1px solid color-mix(in srgb,var(--border) 45%,transparent)}
+.gantt-barra{position:absolute;top:8px;height:20px;min-width:2px;border-radius:4px;background:var(--surface2);border-left:3px solid var(--border)}
+.gantt-aberto{font-size:10px;color:var(--text3);margin-left:8px}
+.gantt-hoje{position:absolute;top:0;bottom:0;border-left:1px solid var(--accent)}
+.gantt-hoje-rotulo{position:absolute;top:-14px;left:3px;font-size:10px;color:var(--accent-texto);white-space:nowrap}
+.gantt-tom-neutro{border-left-color:var(--text3)}
+.gantt-tom-info{border-left-color:var(--blue)}
+.gantt-tom-ok{border-left-color:var(--green)}
+.gantt-tom-warn{border-left-color:var(--yellow)}
+.gantt-tom-erro{border-left-color:var(--red)}
+
+/* curva ABC (shared/abc.js) — classificação de valor, não alerta: A em
+   destaque (accent, mais atenção de gestão), B em info, C em neutro
+   (ver UI-SPEC, seção Color — mapeamento próprio, fora da escala de 5
+   tons semânticos). */
+.abc{display:grid;gap:6px}
+.abc-linha{display:flex;align-items:center;gap:8px}
+.abc-barra{height:6px;border-radius:4px;background:var(--surface2)}
+.abc-classe-a{color:var(--accent)}
+.abc-classe-b{color:var(--blue)}
+.abc-classe-c{color:var(--text3)}
+
 /* ── rodapé do shell comum ── */
 .shell-footer{border-top:1px solid var(--border);background:var(--surface);color:var(--text3);
   font-size:11px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;
