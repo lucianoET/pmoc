@@ -54,6 +54,14 @@ test('cortes fora de ordem ou fora de 0..1 caem no padrão [0.8, 0.95]', () => {
   assert.deepEqual(foraDeFaixa.linhas.map((l) => l.classe), padrao.linhas.map((l) => l.classe))
 })
 
+test('fronteira exata dos cortes: o item que cruza 80% fica na classe anterior à travessia', () => {
+  // 40+40=80 exatamente no corte A; o terceiro item (20) cruza para B porque
+  // o acumulado ANTES dele (80) já não é < 80.
+  const itens = [{ valor: 40 }, { valor: 40 }, { valor: 20 }]
+  const r = classificarAbc(itens, 'valor')
+  assert.deepEqual(r.linhas.map((l) => l.classe), ['A', 'A', 'B'])
+})
+
 test('total zero (todos os valores nulos) não divide por zero: todas as linhas saem classe C com acumulado 0', () => {
   const itens = [{ valor: null }, { valor: undefined }, { valor: 0 }]
   const r = classificarAbc(itens, 'valor')

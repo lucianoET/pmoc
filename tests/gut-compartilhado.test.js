@@ -44,6 +44,19 @@ test('gutTotal com dimensão fora de GUT_ESCALA devolve null', () => {
   assert.equal(gutTotal(6, 5, 10), null, '5 não está em GUT_ESCALA')
 })
 
+test('0 e null são resultados distintos — zero é avaliação real, não ausência', () => {
+  assert.notEqual(classificarGut(0), null)
+  assert.equal(classificarGut(0), 'ok')
+  assert.notEqual(gutTotal(0, 0, 0), null)
+  assert.equal(gutTotal(0, 0, 0), 0)
+  assert.notEqual(rotuloGut(0), rotuloGut(null))
+})
+
+test('gutTotal com total não numérico na origem (dimensão string) devolve null, nunca lança', () => {
+  assert.equal(gutTotal(6, 8, 'dez'), null)
+  assert.doesNotThrow(() => gutTotal(6, 8, 'dez'))
+})
+
 test('rotuloGut devolve texto por faixa, e "Não avaliado" para null', () => {
   assert.equal(rotuloGut(null), 'Não avaliado')
   assert.equal(rotuloGut(480), classificarGut(480) === 'critico' ? 'Crítico' : rotuloGut(480))
