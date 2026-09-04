@@ -2543,6 +2543,109 @@ ainda 'TODOS' nas 9.
 - [ ] **Rótulos:** a etiqueta de periodicidade diz MENSAL/TRIM./SEM./ANUAL — nunca
       "TRIMES" ou "SEMEST". As linhas de cobertura não têm etiqueta (tipo é dado do
       usuário e não tem rótulo curto que caiba).
-- [ ] **Consequência a acompanhar:** criar a primeira regra por tipo faz o cálculo de
-      demanda de `/equipes` contar essa regra para os 175 equipamentos, e não só para o
-      tipo — aquele módulo ainda não olha `aplica_a`. Correção de outro módulo, registrada.
+- [ ] **Consequência já corrigida (01/09/2026):** quando esta seção foi escrita, criar a
+      primeira regra por tipo faria o cálculo de demanda de `/equipes` contar a regra para
+      os 175 equipamentos em vez de só para o tipo. `demandaAnual` passou a receber os
+      equipamentos e a somar por grupo tipo × modelo — então **criar uma regra por tipo e
+      conferir a aba Plano de `/equipes`** é um passo válido de teste, e o esperado é a
+      demanda subir só na proporção daquele tipo.
+
+## Rede sem CDN externo — o que ainda depende de internet (02/09/2026)
+
+Esta seção existe porque a rede de uma OM costuma **bloquear CDN externo**, e o que
+acontece nesse caso mudou em 02/09/2026: Leaflet e Font Awesome passaram a ser servidos
+pelo próprio projeto (`mapa/vendor/`, `refrigeracao/vendor/`), então dois dos três CDN
+deixaram de ter efeito. **Sobra UMA dependência externa de verdade — o SDK do Supabase** —,
+nomeada de propósito em `tests/vendor-sem-cdn.test.js` para que uma segunda não entre sem
+decisão. A URL do SheetJS em `/calibracao` também está nomeada lá, mas é um **fallback que
+nunca roda**: a biblioteca está embutida no HTML, e `ensureXLSX()` devolve `window.XLSX` de
+imediato quando ele já existe.
+
+| host | quem usa | efeito de bloquear |
+|---|---|---|
+| `cdn.jsdelivr.net` | SDK do Supabase, **10 das 11 superfícies** | fatal: nenhum dado |
+| ~~`cdnjs.cloudflare.com`~~ | ~~Font Awesome do `/refrigeracao`~~ | **nenhum** — hospedado desde 02/09 |
+| ~~`unpkg.com`~~ | ~~Leaflet do `/mapa`~~ | **nenhum** — hospedado desde 02/09 |
+
+**A parte estática já é coberta por gate** (`tests/vendor-sem-cdn.test.js`,
+`tests/falha-sem-sdk.test.js`): que nenhuma superfície volte a pedir CSS/JS de fora, que os
+arquivos hospedados existam, que tudo que as folhas pedem por `url(...)` exista no disco, e
+que as três cópias da mensagem de falha digam a mesma coisa. **O que só o navegador prova é
+o que está abaixo.**
+
+### Preparação
+
+1. Servidor local rodando (`python -m http.server` a partir da raiz).
+2. Abrir DevTools → aba **Network** → **Request blocking** (em português: *Bloqueio de
+   requisições*). Em navegador sem esse painel, clicar com o botão direito numa requisição
+   da lista e escolher **Block request domain**.
+3. Acrescentar o padrão do cenário, **recarregar** e observar. Um padrão por cenário — o
+   objetivo é saber qual host causa o quê, e bloquear tudo de uma vez esconde isso.
+
+Não adianta fazer isto contra `https://pmoc-orcin.vercel.app` com o Wi-Fi desligado: pelo
+mesmo motivo já registrado na seção do mapa offline, **o projeto não tem service worker**,
+então sem rede o navegador nem chega a buscar a página. O bloqueio seletivo do DevTools é o
+que reproduz a rede da OM: a página carrega, o CDN não.
+
+### Cenário A — `*cdnjs.cloudflare.com*` bloqueado
+
+- [ ] `/refrigeracao` abre **igual**: os ícones da barra inferior desenham, e "OS" e
+      "Alertas" continuam legíveis. (Antes de 02/09 os `<i>` colapsavam para 0×0, o rótulo
+      subia e a bolha de contagem cobria os dois — se isso reaparecer, a hospedagem do
+      Font Awesome quebrou.)
+- [ ] As outras dez superfícies: **nenhuma mudança**.
+- [ ] `/calibracao` → exportar para Excel: **funciona normalmente**, arquivo `.xlsx` gerado.
+      A URL do SheetJS em `cdnjs` é um fallback que nunca roda — a biblioteca está embutida
+      no HTML (0.18.5). Medido em 03/09/2026 com o host bloqueado: `window.XLSX` presente,
+      pasta escrita. Se aqui **falhar**, alguém removeu o SheetJS embutido.
+
+### Cenário B — `*unpkg.com*` bloqueado
+
+- [ ] `/mapa` abre **inteiro**: mapa desenhado, marcadores e rótulos no lugar. (Antes de
+      02/09 o módulo perdia o mapa inteiro — sem `.leaflet-container`, zero marcador.)
+- [ ] Conferir também os **ícones do Leaflet**: o alfinete do marcador e a barra de desenho
+      têm imagem. São os oito arquivos de `mapa/vendor/images/`, e é exatamente o que
+      quebra se alguém mover a pasta sem mover as folhas junto.
+- [ ] As outras dez superfícies: **nenhuma mudança**.
+
+### Cenário C — `*cdn.jsdelivr.net*` bloqueado (o que ainda dói)
+
+O SDK do Supabase não carrega. **As dez superfícies com banco devem exibir a MESMA frase**,
+nomeando o host — a diferença entre uma tela que orienta e uma que não diz nada:
+
+> Não foi possível carregar o SDK do Supabase (cdn.jsdelivr.net). Sem ele o módulo não
+> acessa o banco de dados. Verifique a conexão — se a rede bloqueia CDN externo, esse
+> endereço precisa ser liberado.
+
+- [ ] `/refrigeracao` — aviso cobrindo a tela. **Nunca** a barra de topo e as abas
+      desenhadas sem explicação: era o pior dos quatro estados anteriores, porque não
+      parecia falha nenhuma.
+- [ ] `/equipes` — aviso na tela de login. **Nunca em branco** (escrever no `#app`, que
+      nasce `display:none`, era o defeito).
+- [ ] `/maquinas`, `/transportes`, `/eletrica`, `/fonoclama`, `/predial`, `/reparos`,
+      `/mapa` — "Falha ao iniciar o módulo X." seguido da frase. **Nunca**
+      `Cannot read properties of undefined (reading 'createClient')`: erro cru de
+      JavaScript não diz o que houve nem o que fazer.
+- [ ] `/calibracao` — a mesma frase, no cartão do módulo.
+- [ ] **Portal (`/`)** — abre **inteiro e normal**. É a única superfície sem dependência
+      externa nenhuma, e serve de controle: se o portal também quebrar, o problema é outro.
+
+### Cenário D — todos os três bloqueados
+
+- [ ] O resultado é o do cenário C, e **nada além dele**: A e B não somam sintoma. É o que
+      prova que a hospedagem resolveu os dois, e não apenas os adiou.
+
+### Quando alguém liberar o `cdn.jsdelivr.net` na rede
+
+- [ ] Repetir sem bloqueio nenhum e conferir que as onze superfícies voltam ao normal —
+      `/refrigeracao` com os ícones, `/mapa` com os marcadores, os dez com dado na tela.
+      Referência medida em 02/09/2026: `/mapa` com 220 marcadores e 256 rótulos. **Um número
+      diferente não é falha por si** — depende do dado posicionado no banco naquele dia; o
+      que seria falha é o mapa vir com **zero**, que é o sintoma de biblioteca faltando.
+
+### Se a decisão for hospedar também o SDK
+
+Não foi feito, e a razão está registrada: são 207 KB que valem para as onze superfícies de
+uma vez, o que faz disso uma decisão de plataforma e não de módulo. Se for tomada, o
+cenário C deixa de ter efeito e **esta seção precisa ser reescrita, não apagada** — o
+histórico do que quebrava é o que impede alguém de reintroduzir a dependência sem perceber.
