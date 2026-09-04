@@ -27,8 +27,9 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 | `/calibracao` | **Controle de Calibração** | 38 instrumentos · 8 laboratórios · 12 PS · 2 lotes | ✅ |
 | `/equipes` | **PMOC Equipes** v1.0 | 8 ofícios · 2 turnos · escala semanal e capacidade | ⚠️ sem pessoas cadastradas |
 | `/mapa` | **Mapa CMASM** v1.0 | Leaflet · 5 camadas de ativos · zonas, prédios e planta vetorial | ✅ |
+| `/gestao` | **PMOC Gestão e Qualidade** v1.0 | NBR 5674 item 7.5 · 5W2H + GUT (lista/kanban/gantt) · calendário consolidado · ferramentas · POP | ✅ |
 
-O portal lista dez rotas; `/reparos` não aparece nele por decisão de projeto — o catálogo
+O portal lista dez rotas de módulos em seus cards; `/reparos` não aparece nele por decisão de projeto — o catálogo
 de diagnóstico é alcançado de dentro de `/maquinas`, que é onde a OS corretiva é aberta.
 
 ### Refrigeração
@@ -101,6 +102,10 @@ Quem executa a manutenção: pessoas, ofícios, equipes, turnos e escala semanal
 confronto entre a capacidade escalada e a demanda que o plano preventivo real
 (`plano_tarefas`) obriga. Tabelas com prefixo `cmasm_` porque atravessam módulos.
 Nenhuma pessoa é semeada — nome de militar é dado real da OM.
+
+### Gestão e Qualidade
+Plataforma integrada de governança da manutenção baseada na NBR 5674 item 7.5 e ferramentas de qualidade da EPR:
+Painel com indicadores e semáforo, Plano de Ação 5W2H priorizado por Matriz GUT com visualização alternável em Lista, Kanban e Gantt, Calendário Consolidado multi-módulo (leitura estrita de outros módulos, incluindo refrigeração), Ferramentas (Pareto, Ishikawa 6M, PDCA, Carta de Controle com LSC/LIC, Curva ABC, Checklist 5S) e Acervo de Procedimentos Operacionais Padrão (POP). Tolerante à ausência da migração 60 no banco via sonda `GES_OK`.
 
 ---
 
@@ -178,14 +183,17 @@ pmoc/
 │   ├── planta-cmasm.geojson   Planta vetorial (117 feições) · gerar-planta.mjs (rodado à mão)
 │   ├── vendor/                Leaflet 1.9.4 + leaflet-draw hospedados
 │   └── tiles/                 Tiles raster locais, opcionais (ver GERAR-TILES.md)
+├── gestao/                    PMOC Gestão e Qualidade v1.0 (5 abas, 3 modais, 9 núcleos)
+│   ├── index.html
+│   └── app.js
 ├── shared/
 │   ├── auth.js                Login por cargo (reutilizável)
 │   ├── supabase-config.js     Configuração do Supabase e guarda de SDK ausente
 │   ├── pmoc.css               Estilo comum dos módulos novos
 │   ├── shell.js               Cabeçalho, abas e rodapé (testado)
 │   ├── tema.js                Tema claro/escuro das 7 superfícies
-│   ├── icones.js              Conjunto único de 28 ícones SVG inline
-│   ├── tabela.js              Ordenação e filtro por coluna (3 consumidores)
+│   ├── icones.js              Conjunto único de 32 ícones SVG inline
+│   ├── tabela.js              Ordenação e filtro por coluna (4 consumidores)
 │   ├── fluxo.js               Núcleo de fluxo por definição de etapas
 │   ├── componentes.js         Peças de tela com dois ou mais consumidores
 │   ├── grafico.js             Gráficos SVG inline: barras, linha, Pareto, carta de controle, sparkline
@@ -193,13 +201,13 @@ pmoc/
 │   ├── gantt.js               Gantt em CSS grid, sem canvas
 │   ├── abc.js                 Curva ABC genérica por campo de valor
 │   ├── gut.js                 Matriz GUT (predial/dominio.js reexporta)
-│   ├── kanban.js              Kanban por definição de colunas (Máquinas consome)
-│   ├── calendario.js          Calendário mensal por eventos (Máquinas consome)
+│   ├── kanban.js              Kanban por definição de colunas (Máquinas e Gestão consomem)
+│   ├── calendario.js          Calendário mensal por eventos (Máquinas e Gestão consomem)
 │   ├── arvore.js              Árvore de locais colapsável
 │   ├── vencimento.js          Regra de vencimento por horímetro (testada)
 │   ├── persistencia.js
 │   └── modulo-manutencao.js   Motor de elétrica/fonoclama
-├── supabase/                  55 migrações numeradas, aplicadas em ordem
+├── supabase/                  60 migrações numeradas, aplicadas em ordem
 │   ├── 01–09  máquinas, usuários, refrigeração, ARP, frota
 │   ├── 10–13  transportes (schema e seed), áreas e operações de máquinas
 │   ├── 14–16  elétrica e fonoclama
@@ -214,7 +222,8 @@ pmoc/
 │   ├── 40–48  refrigeração: OS unificada, estoque, atributos, carga térmica, inspeção
 │   ├── 49–51  equipes: schema, seed e parâmetros de plano
 │   ├── 52–53  acervo de documentos (normas, formulários, conceitos)
-│   └── 54–55  refrigeração: serviços do plano e regra por tipo
+│   ├── 54–55  refrigeração: serviços do plano e regra por tipo
+│   └── 60     gestão e qualidade: schema aditivo com 5 tabelas ges_* (aguardando aplicação)
 ├── tests/                     Gates automatizados (node --test tests/*.test.js)
 ├── ref/                       Fontes legadas: planilhas, PDFs, HTMLs originais
 └── docs/historico/            Registros já resolvidos, e os artefatos GSD aposentados
@@ -341,12 +350,8 @@ porque o cadastro correspondente está vazio. Nenhuma delas depende de desenvolv
 
 ### 4. Plataforma
 
-- [ ] **Fase 9 do roadmap não foi entregue, e a 8 foi entregue em parte (04/09/2026).** Kanban e
-      calendário agora vivem em `shared/` e Máquinas os consome sem cópia (Onda A da Fase 13);
-      falta o segundo consumidor, que chega com `/gestao` (Onda B, planejada em
-      `docs/fase-13-gestao-qualidade/`). O critério da Fase 9 era "as 5 implementações
-      independentes de CSV deixam de existir" e hoje são **6**. A Refrigeração segue com o
-      calendário próprio de 31/08 — módulo congelado, decisão e não pendência.
+- [x] ~~**Fase 8 do roadmap entregue (04/09/2026).**~~ Kanban e calendário vivem em `shared/` e têm dois consumidores sem cópia: `/maquinas` e `/gestao`. A Refrigeração segue com o calendário próprio de 31/08 — módulo congelado, decisão e não pendência.
+- [ ] **Fase 9 do roadmap não foi entregue.** O critério da Fase 9 era "as 5 implementações independentes de CSV deixam de existir" e hoje são **6**.
 - [x] ~~Decidir se o `.planning/` continua sendo mantido ou se o `CLAUDE.md` vira o registro
       único.~~ **Resolvido em 02/09/2026: o `CLAUDE.md` é o registro único.** O `.planning/`
       e o `/.claude/CLAUDE.md` gerado dele foram **arquivados** — não apagados, pela mesma
@@ -378,6 +383,6 @@ Sem framework: `node:test` e `node:assert` apenas, sem `package.json`.
 node --test tests/*.test.js
 ```
 
-**1481 testes, todos passando em 04/09/2026.** São gates permanentes: cada decisão
+**1504 testes, todos passando em 04/09/2026.** São gates permanentes: cada decisão
 travada tem um teste que reprova uma fase futura que a contradiga. O checklist de
 verificação manual fica em `TESTES.md`.

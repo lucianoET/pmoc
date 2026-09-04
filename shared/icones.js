@@ -57,6 +57,12 @@ const TRACOS = {
   veiculo: '<path d="M3 16V7a1 1 0 0 1 1-1h9v10"/><path d="M13 9h4l3 3.5V16"/><path d="M3 16h2M9 16h4M17 16h4"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="15" cy="17.5" r="1.6"/>',
   eletrico: '<path d="M13 2 5 13h5l-1 9 8-11h-5z"/>',
   som: '<path d="M4 9h3l6-4v14l-6-4H4z"/><path d="M17 8.5a5 5 0 0 1 0 7"/>',
+
+  // ── abas do módulo /gestao (Fase 13, Onda B) ──
+  acoes: '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  calendario: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  ferramentas: '<path d="M14.7 6.3a4 4 0 0 1-5 5L4 17v3h3l5.7-5.7a4 4 0 0 0 5-5z"/><path d="m15 9 3-3-2-2 3-1 2 2-1 3z"/>',
+  pop: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>',
 }
 
 export const NOMES_DE_ICONE = Object.keys(TRACOS)

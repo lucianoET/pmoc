@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#1a1a18"/>
+<script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t!=='claro'&&t!=='escuro'){t=(typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','escuro')}})()/* script classico de proposito: modulo ES e adiado, rodaria depois do primeiro desenho e reintroduziria a piscada de tema */</script>
+<title>PMOC Gestão</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
+<style>
+:root{--accent:#3d8b7a}
+</style>
+</head>
+<body>
+<div id="login-screen"></div>
+
+<div id="app">
+  <div class="main">
+    <!-- View Painel -->
+    <div class="view active" id="view-painel">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Painel de Indicadores</div>
+          <div class="view-sub">Indicadores de desempenho e KPIs de manutenção (NBR 5674 item 7.5).</div>
+        </div>
+      </div>
+      <div id="painel-indicadores"></div>
+    </div>
+
+    <!-- View Ações -->
+    <div class="view" id="view-acoes">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Plano de Ações (5W2H)</div>
+          <div class="view-sub">Ações de melhoria e correção priorizadas por matriz GUT.</div>
+        </div>
+        <div id="acoes-topo-acoes"></div>
+      </div>
+      <div class="view-toolbar" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div id="acoes-seletor"></div>
+        <div id="acoes-filtros"></div>
+      </div>
+      <div id="acoes-lista" class="tbl-wrap"></div>
+      <div id="acoes-kanban" class="hidden"></div>
+      <div id="acoes-gantt" class="hidden"></div>
+    </div>
+
+    <!-- View Calendário -->
+    <div class="view" id="view-calendario">
+      <div class="view-head">
+        <div>
+          <div class="view-title" id="calendario-titulo">Calendário Consolidado</div>
+          <div class="view-sub">Visão integrada das ordens de serviço e intervenções de todos os módulos.</div>
+        </div>
+        <div id="calendario-topo-acoes"></div>
+      </div>
+      <div id="calendario-consolidado"></div>
+    </div>
+
+    <!-- View Ferramentas -->
+    <div class="view" id="view-ferramentas">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Ferramentas da Qualidade</div>
+          <div class="view-sub">Análise de falhas, estratificação e métodos de melhoria contínua.</div>
+        </div>
+      </div>
+      <div class="section-split" style="margin-bottom:20px">
+        <div class="panel-card">
+          <h3>Gráfico de Pareto (Causas de Falha)</h3>
+          <div id="ferramentas-pareto"></div>
+        </div>
+        <div class="panel-card">
+          <h3>Carta de Controle (Tempo de Resposta)</h3>
+          <div id="ferramentas-controle"></div>
+        </div>
+      </div>
+      <div class="section-split" style="margin-bottom:20px">
+        <div class="panel-card">
+          <h3>Curva ABC de Criticidade</h3>
+          <div id="ferramentas-abc" class="tbl-wrap"></div>
+        </div>
+        <div class="panel-card">
+          <h3>Ciclo PDCA das Ações</h3>
+          <div id="ferramentas-pdca"></div>
+        </div>
+      </div>
+      <div class="section-split" style="margin-bottom:20px">
+        <div class="panel-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <h3>Diagrama de Ishikawa (6M)</h3>
+            <div id="ferramentas-ishikawa-acoes"></div>
+          </div>
+          <div id="ferramentas-ishikawa"></div>
+        </div>
+        <div class="panel-card">
+          <h3>Checklist 5S (Auditoria de Oficina)</h3>
+          <div id="ferramentas-5s"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- View POP -->
+    <div class="view" id="view-pop">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Procedimentos Operacionais Padrão (POP)</div>
+          <div class="view-sub">Instruções de trabalho e procedimentos normativos vinculados aos ativos.</div>
+        </div>
+        <div id="pop-topo-acoes"></div>
+      </div>
+      <div id="pop-lista" class="tbl-wrap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modais -->
+<div class="overlay hidden" id="modal-acao">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3 id="modal-acao-titulo">Nova Ação 5W2H</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('acao')">Fechar</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-acao-erro" class="error-msg hidden" style="color:var(--red);margin-bottom:10px"></div>
+      <div class="frow">
+        <label>O quê? (Ação a ser executada) *</label>
+        <input id="acao-o-que" placeholder="Ex: Substituição preventiva do retentor..."/>
+      </div>
+      <div class="fgrid">
+        <div class="frow">
+          <label>Por quê? (Justificativa)</label>
+          <input id="acao-por-que" placeholder="Ex: Evitar vazamento de óleo..."/>
+        </div>
+        <div class="frow">
+          <label>Onde? (Local / Equipamento)</label>
+          <input id="acao-onde" placeholder="Ex: Oficina Mecânica / Torno..."/>
+        </div>
+      </div>
+      <div class="fgrid3">
+        <div class="frow">
+          <label>Quando? (Prazo limite)</label>
+          <input id="acao-quando" type="date"/>
+        </div>
+        <div class="frow">
+          <label>Quem? (Responsável)</label>
+          <input id="acao-quem" placeholder="Nome ou equipe"/>
+        </div>
+        <div class="frow">
+          <label>Quanto? (Custo estimado R$)</label>
+          <input id="acao-quanto" type="number" min="0" step="0.01" placeholder="0.00"/>
+        </div>
+      </div>
+      <div class="frow">
+        <label>Como? (Método de execução)</label>
+        <textarea id="acao-como" placeholder="Descreva os passos operacionais..."></textarea>
+      </div>
+
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px;margin-top:12px">
+        <div style="font-weight:600;font-size:12px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+          <span>Matriz de Prioridade GUT</span>
+          <span id="acao-gut-resumo" style="font-size:12px;font-weight:700">Não avaliado</span>
+        </div>
+        <div class="fgrid3">
+          <div class="frow">
+            <label>Gravidade (G)</label>
+            <select id="acao-g" onchange="atualizarGutModal()">
+              <option value="">— Não avaliado —</option>
+              <option value="0">0 — Sem gravidade</option>
+              <option value="1">1 — Danos mínimos</option>
+              <option value="3">3 — Danos regulares</option>
+              <option value="6">6 — Danos médios</option>
+              <option value="8">8 — Danos graves</option>
+              <option value="10">10 — Danos gravíssimos</option>
+            </select>
+          </div>
+          <div class="frow">
+            <label>Urgência (U)</label>
+            <select id="acao-u" onchange="atualizarGutModal()">
+              <option value="">— Não avaliado —</option>
+              <option value="0">0 — Pode esperar</option>
+              <option value="1">1 — Pouco urgente</option>
+              <option value="3">3 — O mais cedo possível</option>
+              <option value="6">6 — Urgente</option>
+              <option value="8">8 — Muito urgente</option>
+              <option value="10">10 — Ação imediata</option>
+            </select>
+          </div>
+          <div class="frow">
+            <label>Tendência (T)</label>
+            <select id="acao-t" onchange="atualizarGutModal()">
+              <option value="">— Não avaliado —</option>
+              <option value="0">0 — Não vai piorar</option>
+              <option value="1">1 — Piora a longo prazo</option>
+              <option value="3">3 — Piora a médio prazo</option>
+              <option value="6">6 — Piora a curto prazo</option>
+              <option value="8">8 — Piora rápida</option>
+              <option value="10">10 — Piora imediata</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="fgrid" style="margin-top:12px">
+        <div class="frow">
+          <label>Módulo relacionado</label>
+          <select id="acao-modulo">
+            <option value="">Geral / Transversal</option>
+            <option value="refrigeracao">Refrigeração</option>
+            <option value="maquinas">Máquinas</option>
+            <option value="transportes">Transportes</option>
+            <option value="eletrica">Elétrica</option>
+            <option value="fonoclama">Fonoclama</option>
+            <option value="predial">Predial</option>
+            <option value="calibracao">Calibração</option>
+          </select>
+        </div>
+        <div class="frow">
+          <label>Código / Ref. Ativo</label>
+          <input id="acao-ativo-ref" placeholder="Ex: MAQ-001, VTR-12..."/>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('acao')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarAcao()">Salvar ação</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="modal-pop">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3 id="modal-pop-titulo">Novo POP</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('pop')">Fechar</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-pop-erro" class="error-msg hidden" style="color:var(--red);margin-bottom:10px"></div>
+      <div class="frow">
+        <label>Título do Procedimento *</label>
+        <input id="pop-titulo" placeholder="Ex: Procedimento de inspeção diária de baterias"/>
+      </div>
+      <div class="fgrid3">
+        <div class="frow">
+          <label>Módulo</label>
+          <select id="pop-modulo">
+            <option value="">Geral</option>
+            <option value="refrigeracao">Refrigeração</option>
+            <option value="maquinas">Máquinas</option>
+            <option value="transportes">Transportes</option>
+            <option value="eletrica">Elétrica</option>
+            <option value="fonoclama">Fonoclama</option>
+            <option value="predial">Predial</option>
+            <option value="calibracao">Calibração</option>
+          </select>
+        </div>
+        <div class="frow">
+          <label>Ref. Ativo / Modelo</label>
+          <input id="pop-ativo-ref" placeholder="Ex: Gerador Stemac 250kVA"/>
+        </div>
+        <div class="frow">
+          <label>Ref. Plano de Tarefa</label>
+          <input id="pop-plano-ref" placeholder="Ex: NBR 17037 Item 4.2"/>
+        </div>
+      </div>
+      <div class="frow">
+        <label>Conteúdo / Instrução de Trabalho *</label>
+        <textarea id="pop-texto" style="min-height:160px" placeholder="Descreva os passos detalhados, cuidados de segurança (EPI) e critérios de aceitação..."></textarea>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('pop')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarPop()">Salvar POP</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="modal-causa">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3>Adicionar Causa (Ishikawa)</h3>
+      <button class="btn btn-s btn-sm" onclick="fecharModal('causa')">Fechar</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-causa-erro" class="error-msg hidden" style="color:var(--red);margin-bottom:10px"></div>
+      <div class="frow">
+        <label>Ação 5W2H relacionada *</label>
+        <select id="causa-acao-id"></select>
+      </div>
+      <div class="frow">
+        <label>Categoria (6M) *</label>
+        <select id="causa-categoria">
+          <option value="metodo">Método</option>
+          <option value="maquina">Máquina</option>
+          <option value="mao_de_obra">Mão de Obra</option>
+          <option value="material">Material</option>
+          <option value="medicao">Medição</option>
+          <option value="meio_ambiente">Meio Ambiente</option>
+        </select>
+      </div>
+      <div class="frow">
+        <label>Causa identificada *</label>
+        <input id="causa-texto" placeholder="Ex: Falta de treinamento operacional..."/>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-s" onclick="fecharModal('causa')">Cancelar</button>
+      <button class="btn btn-p" onclick="salvarCausa()">Salvar causa</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+const base = location.pathname.replace(/\/[^/]*\.[^/]*$/, '').replace(/\/$/, '')
+import(`${base}/app.js`)
+</script>
+</body>
+</html>
