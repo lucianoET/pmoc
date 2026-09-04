@@ -165,6 +165,29 @@ test('sparkline aceita opcoes.tom e usa o tom accent quando nenhum é informado'
   assert.match(comTom, /<g class="grafico-tom-erro">/)
 })
 
+// ── aria-label resume máximo/mínimo/último (populated) ──
+
+test('aria-label de barras/linha resume máximo, mínimo e último ponto da série', () => {
+  const svg = barras([{ rotulo: 'A', valor: 1 }, { rotulo: 'B', valor: 9 }, { rotulo: 'C', valor: 4 }], {})
+  const ariaLabel = svg.match(/aria-label="([^"]+)"/)[1]
+  assert.match(ariaLabel, /Máximo/)
+  assert.match(ariaLabel, /Mínimo/)
+  assert.match(ariaLabel, /Último/)
+})
+
+// ── rótulos de eixo limitados a 6 por gráfico (overflow) ──
+
+test('rótulos de eixo nunca passam de 6, mesmo com mais categorias — a barra continua existindo', () => {
+  const serie = Array.from({ length: 12 }, (_, i) => ({ rotulo: `Cat${i}`, valor: i + 1 }))
+  const svg = barras(serie, {})
+  const rects = svg.match(/<rect/g) || []
+  assert.equal(rects.length, 12, 'todas as 12 barras são desenhadas, só o rótulo é que raleia')
+  const rotulos = svg.match(/<text class="grafico-rotulo"/g) || []
+  assert.ok(rotulos.length <= 6, `esperado <= 6 rótulos, veio ${rotulos.length}`)
+  assert.match(svg, />Cat0</, 'o primeiro rótulo é mantido')
+  assert.match(svg, />Cat11</, 'o último rótulo é mantido')
+})
+
 // ── nenhuma função devolve undefined; nenhuma lança para objeto sem os campos esperados ──
 
 test('nenhuma das seis funções devolve undefined para entrada vazia ou malformada', () => {
