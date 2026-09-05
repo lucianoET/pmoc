@@ -26,9 +26,10 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 | `/reparos` | **PMOC Reparos** v1.0 | 7 modelos · 25 serviços · 34 reparos — sintoma → causa provável | ✅ |
 | `/calibracao` | **Controle de Calibração** | 38 instrumentos · 8 laboratórios · 12 PS · 2 lotes | ✅ |
 | `/equipes` | **PMOC Equipes** v1.0 | 8 ofícios · 2 turnos · escala semanal e capacidade | ⚠️ sem pessoas cadastradas |
+| `/gestao` | **PMOC Gestão** v1.0 | Painel NBR 5674 · ações 5W2H com GUT · calendário consolidado · ferramentas da qualidade · POP | ✅ |
 | `/mapa` | **Mapa CMASM** v1.0 | Leaflet · 5 camadas de ativos · zonas, prédios e planta vetorial | ✅ |
 
-O portal lista dez rotas; `/reparos` não aparece nele por decisão de projeto — o catálogo
+O portal lista onze rotas; `/reparos` não aparece nele por decisão de projeto — o catálogo
 de diagnóstico é alcançado de dentro de `/maquinas`, que é onde a OS corretiva é aberta.
 
 ### Refrigeração
@@ -139,7 +140,7 @@ quebradas — são cadastros que ainda não foram preenchidos; ver **Pendências
 ```
 pmoc/
 ├── index.html                 Portal
-├── vercel.json                Rewrites de rota (10 módulos)
+├── vercel.json                Rewrites de rota (11 módulos)
 ├── refrigeracao/
 │   ├── index.html             v2.8 — single-file, ~860 KB (CSS + JS embutidos)
 │   ├── qrcode.js  manifest.json  icone-*.png
@@ -166,6 +167,8 @@ pmoc/
 ├── equipes/
 │   ├── index.html + app.js    Pessoas, ofícios, equipes, turnos e escala (tabelas cmasm_)
 │   └── nucleo.js              Núcleo puro: capacidade, demanda e escopo de plano
+├── gestao/
+│   └── index.html + app.js    Painel, ações 5W2H+GUT, calendário consolidado, ferramentas e POP (tabelas ges_)
 ├── mapa/
 │   ├── index.html + app.js
 │   ├── xmap.js / xmap.css     Componente Leaflet portado do legado (travado, sem edições)
@@ -199,7 +202,7 @@ pmoc/
 │   ├── vencimento.js          Regra de vencimento por horímetro (testada)
 │   ├── persistencia.js
 │   └── modulo-manutencao.js   Motor de elétrica/fonoclama
-├── supabase/                  55 migrações numeradas, aplicadas em ordem
+├── supabase/                  60 migrações numeradas, aplicadas em ordem
 │   ├── 01–09  máquinas, usuários, refrigeração, ARP, frota
 │   ├── 10–13  transportes (schema e seed), áreas e operações de máquinas
 │   ├── 14–16  elétrica e fonoclama
@@ -214,7 +217,9 @@ pmoc/
 │   ├── 40–48  refrigeração: OS unificada, estoque, atributos, carga térmica, inspeção
 │   ├── 49–51  equipes: schema, seed e parâmetros de plano
 │   ├── 52–53  acervo de documentos (normas, formulários, conceitos)
-│   └── 54–55  refrigeração: serviços do plano e regra por tipo
+│   ├── 54–55  refrigeração: serviços do plano e regra por tipo
+│   ├── 56–59  checks de faixa e de grandezas físicas; deriva do /calibracao
+│   └── 60     gestão e qualidade (ges_acoes, ges_indicadores, ges_pop, ges_causas)
 ├── tests/                     Gates automatizados (node --test tests/*.test.js)
 ├── ref/                       Fontes legadas: planilhas, PDFs, HTMLs originais
 └── docs/historico/            Registros já resolvidos, e os artefatos GSD aposentados
@@ -378,6 +383,6 @@ Sem framework: `node:test` e `node:assert` apenas, sem `package.json`.
 node --test tests/*.test.js
 ```
 
-**1481 testes, todos passando em 04/09/2026.** São gates permanentes: cada decisão
+**1526 testes, todos passando em 05/09/2026.** São gates permanentes: cada decisão
 travada tem um teste que reprova uma fase futura que a contradiga. O checklist de
 verificação manual fica em `TESTES.md`.

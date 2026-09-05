@@ -2687,3 +2687,47 @@ prova é que **Máquinas ficou igual** depois de o kanban e o calendário passar
 
 - Não há rota `/gestao`, nem tabelas `ges_*`, nem migração 60 aplicada — nada a testar.
 - Os cartões de indicador com meta/semáforo ainda não aparecem em nenhum painel.
+
+## Gestão e Qualidade — Onda B: módulo `/gestao` (05/09/2026)
+
+A migração 60 **já está em produção** (aplicada pelo dashboard em 04/09 às 23:24 UTC), então
+`GES_OK` nasce verdadeiro e o módulo abre com as cinco abas inteiras. O estado "Migração 60
+não aplicada" é coberto por `tests/gestao-modulo.test.js` com cliente falso; na tela de
+produção ele não aparece mais. O que só o navegador prova:
+
+### Como observador (botão **Livre**, sem senha)
+
+- [ ] `/gestao` abre nas cinco abas; nenhum botão de escrita (`+ Nova ação`, `+ Novo POP`,
+      mover coluna do kanban, arquivar POP) aparece — a policy `r_ins_*`/`r_upd_*` é só
+      `authenticated`, e a tela não oferece o que o banco recusaria.
+- [ ] Painel: "Ordens de serviço abertas por módulo" com as barras de Máquinas e Refrigeração,
+      e os cartões de indicador com "Sem meta definida" (não há `ges_indicadores` cadastrado).
+- [ ] Calendário: mês corrente, `Mês anterior · Hoje · Próximo mês`, rodapé dizendo quais
+      fontes foram lidas; Refrigeração entra só em leitura.
+
+### Como gestor
+
+- [ ] Ações → `+ Nova ação`: preencher os 5W2H, G=10, U=6, T=3 → linha na tabela com GUT 180
+      e faixa **Atenção**; a mesma ação aparece no kanban (coluna Planejada) e no Gantt (barra até
+      hoje com "em aberto" se não houver data fim).
+- [ ] Mover a ação para "Em execução" no kanban → `status` muda no banco (recarregar a página).
+- [ ] `quanto` com `1.234,56` grava 1234.56 (leitor pt-BR); `1.200` é recusado por ambíguo.
+- [ ] POP → `+ Novo POP` com título e texto; "Arquivar POP" pede confirmação nominal e some da
+      lista (`ativo = false`, nunca apagado).
+- [ ] Ferramentas: Pareto por módulo com dados reais; Carta de controle e Curva ABC desenham
+      com o que os módulos têm; Ishikawa 6M vazio até haver causa cadastrada.
+
+### Nos dois temas e em 375 px
+
+- [ ] Tema claro e escuro legíveis (só tokens de `pmoc.css`).
+- [ ] 375 px: sem rolagem horizontal da página; kanban e Gantt rolam dentro do próprio quadro;
+      tabela de ações dentro de `.tbl-wrap`.
+
+### Conferência do esquema (feita em 05/09/2026, repetir depois de qualquer mudança em `ges_*`)
+
+- [ ] `select table_name, count(*) from information_schema.columns where table_name like 'ges\_%' group by 1`
+      → ges_acoes 19 · ges_indicadores 10 · ges_indicador_valores 5 · ges_pop 9 · ges_causas 5.
+- [ ] `select count(*) from pg_policies where tablename like 'ges\_%'` → 20 (`r_sel_*` public,
+      `r_ins_*`/`r_upd_*`/`r_del_*` authenticated).
+- [ ] Porta da frente com a chave pública: `select` 200, coluna inexistente 400, `POST` anônimo
+      401, `PATCH` anônimo `[]`.
