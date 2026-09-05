@@ -41,6 +41,17 @@ function numerico(v) {
   return typeof v === 'number' && Number.isFinite(v)
 }
 
+// Número na forma que se lê em português: vírgula decimal e ponto de
+// milhar. `String(0.5)` devolvia "0.5" na tela — separador de outro idioma
+// num aplicativo inteiro em português, que só apareceu quando o /gestao
+// desenhou o primeiro indicador fracionário. A comparação com a meta
+// continua sendo NUMÉRICA (`avaliar` recebe o número, não este texto): o
+// que muda é só a forma de exibir, senão o semáforo passaria a comparar
+// string e cairia sempre em "sem dado".
+function formatarNumero(v) {
+  return numerico(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : String(v)
+}
+
 /**
  * Avalia o tom de um valor contra a definição do indicador.
  * - Sem valor numérico → 'neutro' (indicador ainda não tem dado).
@@ -131,13 +142,13 @@ export function cartaoIndicador(def, valor, serie) {
   if (!temValor) {
     corpo = `<p class="indicador-vazio">Sem dado no período</p>`
   } else {
-    const valorTexto = esc(String(valor))
+    const valorTexto = esc(formatarNumero(valor))
 
     let metaTexto
     if (!numerico(definicao.meta)) {
       metaTexto = `<p class="indicador-meta">Sem meta definida</p>`
     } else {
-      metaTexto = `<p class="indicador-meta">Meta: ${esc(String(definicao.meta))} ${esc(unidade)}</p>`
+      metaTexto = `<p class="indicador-meta">Meta: ${esc(formatarNumero(definicao.meta))} ${esc(unidade)}</p>`
     }
 
     const t = tendencia(serieValida)

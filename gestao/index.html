@@ -49,6 +49,22 @@
 /* Texto do POP e da ação: quebra em qualquer ponto para não empurrar a
    tabela na horizontal (a coluna é estreita e o título é livre). */
 .txt-quebra{overflow-wrap:anywhere}
+
+/* ── Gantt das ações ──
+   O núcleo desenha duas faixas independentes (rótulos à esquerda, barras à
+   direita) e elas só ficam alinhadas enquanto cada rótulo couber numa
+   linha: um rótulo que quebra empurra a própria faixa para baixo e as
+   barras deixam de corresponder à linha que nomeiam — medido no navegador,
+   com "Refazer a vedação da câmara fria do PAIOL D-5…" ocupando quatro
+   linhas. Aqui o rótulo fica em uma linha só; o texto inteiro está a um
+   clique, na Lista e no Kanban, e a tela diz isso. */
+/* `height` fixa, não `min-height`: medido, a linha de rótulo fechava em
+   37px contra 36px da linha de barra, e 1px por linha vira cinco linhas de
+   desalinhamento numa lista de cinco ações. */
+#acoes-gantt .gantt-rotulo{display:block;height:36px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Em tela estreita a coluna de rótulos de 160px deixava 157px de linha do
+   tempo — menos espaço para a barra do que para o nome dela. */
+@media (max-width:600px){#acoes-gantt .gantt{grid-template-columns:96px 1fr}}
 </style>
 </head>
 <body>

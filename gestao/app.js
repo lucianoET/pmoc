@@ -41,7 +41,7 @@ import { GUT_ESCALA, gutTotal, rotuloGut, classificarGut } from '../shared/gut.j
 import { agruparKanban, htmlKanban } from '../shared/kanban.js'
 import { htmlCalendario, MESES } from '../shared/calendario.js'
 import { aplicarOrdemEFiltro, proximaOrdem } from '../shared/tabela.js'
-import { etapasDe, rotuloDaEtapa, tomDaEtapa, proximosEstados, ehTerminal } from '../shared/fluxo.js'
+import { etapasDe, etapa, indiceDaEtapa, rotuloDaEtapa, tomDaEtapa, proximosEstados, ehTerminal } from '../shared/fluxo.js'
 
 // ── estado global ──────────────────────────────────────────────────────
 let supa = null
@@ -104,12 +104,39 @@ const FLUXO_ACAO = {
   terminaisDeSucesso: ['concluida'],
   rotulosTerminais: { concluida: 'Concluída — verificada e fechada', cancelada: 'Cancelada — fora do fluxo' },
   tonsTerminais: { concluida: 'ok', cancelada: 'neutro' },
+  // Chave própria deste módulo: shared/fluxo.js ignora o que não conhece, e
+  // é aqui que os terminais ganham o rótulo curto que as etapas já têm.
+  curtosTerminais: { concluida: 'Concluir', cancelada: 'Cancelar' },
+}
+
+/** Rótulo curto de qualquer estado — etapa ou terminal. Existe porque o
+ *  rótulo longo nomeia o que a etapa ESPERA ("Em execução — aguardando
+ *  conclusão"), que é o texto certo para a pílula e errado para um botão. */
+function curtoDe(id) {
+  return etapa(FLUXO_ACAO, id)?.curto || FLUXO_ACAO.curtosTerminais[id] || rotuloDaEtapa(FLUXO_ACAO, id)
+}
+
+/** Rótulo de uma linha só para pílula e coluna de kanban. */
+function rotuloCurto(id) {
+  return rotuloDaEtapa(FLUXO_ACAO, id).split(' — ')[0]
+}
+
+/** A etapa seguinte, e só ela. `proximosEstados` devolve também a anterior
+ *  e os terminais — o caminho de volta e o cancelamento existem, mas por
+ *  botões próprios: quatro botões de estado por linha da tabela deixavam a
+ *  coluna de ações mais larga que a de descrição (medido em 800px, com
+ *  "Cancelar ação" transbordando a célula). */
+function proximaEtapa(status) {
+  const i = indiceDaEtapa(FLUXO_ACAO, status)
+  if (i < 0) return null
+  const etapas = FLUXO_ACAO.etapas
+  return i + 1 < etapas.length ? etapas[i + 1].id : FLUXO_ACAO.terminaisDeSucesso[0]
 }
 
 // Derivada, nunca escrita à mão: um estado novo no fluxo passa a valer
 // aqui sozinho.
 const ESTADOS_ACAO = [...etapasDe(FLUXO_ACAO), ...FLUXO_ACAO.terminais]
-const COLUNAS_KANBAN = ESTADOS_ACAO.map(id => ({ id, rotulo: rotuloDaEtapa(FLUXO_ACAO, id).split(' — ')[0] }))
+const COLUNAS_KANBAN = ESTADOS_ACAO.map(id => ({ id, rotulo: rotuloCurto(id) }))
 
 // PDCA é o mesmo fluxo lido por outro nome — não uma segunda lista de
 // estados. Ciclo de Deming sobre as ações que já existem.
@@ -558,7 +585,7 @@ function htmlListaAcoes(lista) {
       <td>${esc(fmtData(a.quando))}</td>
       <td>${esc(a.modulo || '—')}</td>
       <td class="num">${total == null ? '<span class="pilula pilula-neutro">Não avaliado</span>' : pilula(String(total), tomGut(total))}</td>
-      <td>${pilula(rotuloDaEtapa(FLUXO_ACAO, a.status).split(' — ')[0], tomDaEtapa(FLUXO_ACAO, a.status))}</td>
+      <td>${pilula(rotuloCurto(a.status), tomDaEtapa(FLUXO_ACAO, a.status))}</td>
       <td>${botoesDaAcao(a)}</td>
     </tr>`
   }).join('')
@@ -576,17 +603,17 @@ function tomGut(total) {
 
 function botoesDaAcao(acao) {
   if (!GES_OK || !podeEditarGestao()) return ''
-  const avancos = proximosEstados(FLUXO_ACAO, acao.status)
-    .filter(destino => destino !== 'cancelada')
-    .map(destino => `<button class="btn btn-s btn-sm" onclick="mudarEstadoAcao(${acao.id},'${destino}')">${esc(rotuloDaEtapa(FLUXO_ACAO, destino).split(' — ')[0])}</button>`)
-    .join(' ')
+  const seguinte = ehTerminal(FLUXO_ACAO, acao.status) ? null : proximaEtapa(acao.status)
+  const avancar = seguinte
+    ? `<button class="btn btn-s btn-sm" onclick="mudarEstadoAcao(${acao.id},'${seguinte}')" title="Avançar para: ${esc(rotuloDaEtapa(FLUXO_ACAO, seguinte))}">${esc(curtoDe(seguinte))}</button>`
+    : ''
   const cancelar = ehTerminal(FLUXO_ACAO, acao.status)
     ? ''
-    : `<button class="btn btn-d btn-sm" onclick="pedirCancelamento(${acao.id})">Cancelar ação</button>`
-  return `<div class="section-row" style="margin-bottom:0">
+    : `<button class="btn btn-d btn-sm" onclick="pedirCancelamento(${acao.id})">Cancelar</button>`
+  return `<div class="section-row" style="margin-bottom:0;gap:5px">
     <button class="btn btn-s btn-sm" onclick="abrirAcao(${acao.id})">Editar</button>
-    <button class="btn btn-s btn-sm" onclick="abrirIshikawaDa(${acao.id})">Ishikawa</button>
-    ${avancos}${cancelar}</div>`
+    <button class="btn btn-s btn-sm" onclick="abrirIshikawaDa(${acao.id})">Causas</button>
+    ${avancar}${cancelar}</div>`
 }
 
 function cartaoAcao(acao) {
@@ -621,7 +648,10 @@ function htmlGanttAcoes(lista) {
   const datas = itens.flatMap(i => [i.inicio, i.fim]).filter(Boolean).sort()
   const inicio = datas[0] || hoje
   const fim = datas[datas.length - 1] || hoje
-  return `<div class="panel-card">${htmlGantt(itens, { inicio, fim: fim < hoje ? hoje : fim, hoje })}</div>`
+  return `<div class="panel-card">${htmlGantt(itens, { inicio, fim: fim < hoje ? hoje : fim, hoje })}
+    <div class="help">O rótulo é cortado em uma linha para a barra continuar na mesma altura do nome
+      que ela representa; a descrição inteira está na Lista e no Kanban. Ação sem <em>quando</em> é
+      item em aberto: a barra vai até hoje.</div></div>`
 }
 
 function vazioDasAcoes() {
@@ -690,6 +720,15 @@ function opcoesGut(atual) {
     .map(v => `<option value="${v}"${String(atual) === String(v) ? ' selected' : ''}>${v}</option>`).join('')
 }
 
+/** Estados que o formulário oferece. NÃO é a lista fechada inteira: a
+ *  regra de adjacência de shared/fluxo.js existe para o processo não saltar
+ *  etapa, e um `<select>` com os cinco estados a desfaria em silêncio. Ação
+ *  nova nasce sempre no primeiro estado. */
+function estadosOferecidos(atual) {
+  if (!atual) return [FLUXO_ACAO.etapas[0].id]
+  return [atual, ...proximosEstados(FLUXO_ACAO, atual)]
+}
+
 function abrirAcao(id) {
   if (!GES_OK || !podeEditarGestao()) return
   ACAO_EDICAO = id ? ACOES.find(a => a.id === id) || null : null
@@ -730,7 +769,9 @@ function abrirAcao(id) {
     <div class="help">Prioridade GUT: G × U × T. Deixar qualquer uma em branco mantém a ação
       como "Não avaliado" — nunca prioridade zero.</div>
     <div class="frow" style="margin-top:14px"><label for="acao-status">Situação</label>
-      <select id="acao-status">${ESTADOS_ACAO.map(s => `<option value="${s}"${(a.status || 'planejada') === s ? ' selected' : ''}>${esc(rotuloDaEtapa(FLUXO_ACAO, s))}</option>`).join('')}</select></div>
+      <select id="acao-status">${estadosOferecidos(a.status).map(s => `<option value="${s}"${(a.status || 'planejada') === s ? ' selected' : ''}>${esc(rotuloDaEtapa(FLUXO_ACAO, s))}</option>`).join('')}</select>
+      <div class="help">Só a etapa atual, a seguinte, a anterior e os terminais — um processo não salta
+        etapa, e é aqui que se corrige um avanço clicado por engano.</div></div>
     <div id="acao-erro" class="help"></div>`
   abrirModal('modal-acao')
 }
@@ -742,11 +783,34 @@ function textoOuNulo(id) {
   return v === '' ? null : v
 }
 
-function numeroOuNulo(id) {
-  const v = (el(id)?.value || '').trim()
-  if (v === '') return null
-  const n = Number(v.replace(',', '.'))
-  return Number.isFinite(n) ? n : null
+/** Lê um decimal digitado em português. Núcleo puro: recebe o texto, nunca
+ *  o campo, para poder ser exercido em Node.
+ *
+ *  Campo em branco é NULO — ausência de valor é um fato. Texto que não é
+ *  número devolve o MOTIVO, nunca `null`: `null` é indistinguível de "não
+ *  informado", e a primeira versão desta função devolvia exatamente isso —
+ *  medido no navegador, `1.234,56` digitado no campo "Quanto" chegava ao
+ *  banco como null, em silêncio. É a mesma classe de defeito que a
+ *  travessia numérica de /maquinas, /refrigeracao e /calibracao já pagou
+ *  três vezes.
+ *
+ *  `1.234,56` é aceito (ponto de milhar com vírgula decimal). `1.234`
+ *  sozinho é AMBÍGUO — mil duzentos e trinta e quatro, ou um vírgula
+ *  duzentos e trinta e quatro? — e é recusado em vez de adivinhado, a
+ *  mesma regra de `celulaParaDecimal` da migração 56. */
+function lerDecimal(texto) {
+  const bruto = String(texto ?? '').trim()
+  if (bruto === '') return { valor: null }
+  const temVirgula = bruto.includes(',')
+  const temPonto = bruto.includes('.')
+  if (temPonto && !temVirgula) {
+    return { erro: `"${bruto}" é ambíguo: use vírgula para o decimal (1234,56) e ponto só para o milhar.` }
+  }
+  const normalizado = temVirgula ? bruto.replace(/\./g, '').replace(',', '.') : bruto
+  const numero = Number(normalizado)
+  if (!Number.isFinite(numero)) return { erro: `"${bruto}" não é um número.` }
+  if (numero < 0) return { erro: 'O valor não pode ser negativo.' }
+  return { valor: numero }
 }
 
 function inteiroOuNulo(id) {
@@ -760,6 +824,10 @@ async function salvarAcao() {
   const oQue = textoOuNulo('acao-o-que')
   if (!oQue) { el('acao-erro').textContent = 'O campo "O quê" é obrigatório.'; return }
 
+  // Valor recusado PARA a tela, nunca convertido em nulo às escondidas.
+  const quanto = lerDecimal(el('acao-quanto')?.value)
+  if (quanto.erro) { el('acao-erro').textContent = quanto.erro; return }
+
   const carga = {
     o_que: oQue,
     por_que: textoOuNulo('acao-por-que'),
@@ -767,7 +835,7 @@ async function salvarAcao() {
     quando: textoOuNulo('acao-quando'),
     quem: textoOuNulo('acao-quem'),
     como: textoOuNulo('acao-como'),
-    quanto: numeroOuNulo('acao-quanto'),
+    quanto: quanto.valor,
     g: inteiroOuNulo('acao-g'),
     u: inteiroOuNulo('acao-u'),
     t: inteiroOuNulo('acao-t'),
@@ -1243,7 +1311,7 @@ export const __teste = {
   definirSupa: cliente => { supa = cliente },
   definirUsuario: usuario => { USUARIO = usuario },
   estado: () => ({ GES_OK, ACOES, INDICADORES, POPS, CAUSAS, EVENTOS_CALENDARIO, FONTES_OMITIDAS, METRICAS }),
-  sondarGestao, carregarTudo, podeEditarGestao,
+  sondarGestao, carregarTudo, podeEditarGestao, lerDecimal,
   htmlPainel, htmlAcoes, htmlCalendarioMes, htmlFerramentas, htmlPop,
   FLUXO_ACAO, ESTADOS_ACAO, COLUNAS_ACOES, CATEGORIAS_6M, INDICADORES_PLATAFORMA,
 }

@@ -109,3 +109,18 @@ test('cartaoIndicador nunca lança para definição nula, série nula ou valor n
   assert.equal(typeof html, 'string')
   assert.notEqual(html, '')
 })
+
+// Acrescentado na Onda B (plano 13-06), depois que o /gestao desenhou o
+// primeiro indicador fracionário e a tela mostrou "0.5": `String(valor)`
+// escrevia o número com o separador decimal de outro idioma, num aplicativo
+// inteiro em português. O que este caso trava é que a correção fique na
+// EXIBIÇÃO — o semáforo continua comparando número, não texto, senão
+// `avaliar` cairia sempre em "sem dado".
+test('valor e meta fracionários saem com vírgula decimal, e o semáforo continua numérico', () => {
+  const html = cartaoIndicador({ rotulo: 'MTTR', unidade: 'dias', meta: 2.5, sentido: 'menor' }, 1.5, [])
+  assert.match(html, /<p class="kpi-n">1,5<\/p>/, 'o número do indicador saiu com ponto decimal')
+  assert.match(html, /Meta: 2,5 dias/, 'a meta saiu com ponto decimal')
+  assert.match(html, /indicador-tom-ok/, 'a comparação com a meta deixou de ser numérica')
+  const grande = cartaoIndicador({ rotulo: 'Custo', unidade: 'R$' }, 1234.5, [])
+  assert.match(grande, /<p class="kpi-n">1\.234,5<\/p>/, 'faltou o ponto de milhar')
+})
