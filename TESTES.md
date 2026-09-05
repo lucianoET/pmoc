@@ -2763,3 +2763,52 @@ ABC (`shared/abc.js`) na aba Estoque de Máquinas. Gate: `tests/adocao-indicador
 
 - ~~`fmtR` de `maquinas/app.js` escreve `R$ 14808.57` (ponto decimal) em 24 pontos~~ — corrigido em
   05/09/2026: conferir na aba Estoque e no Consumo que o dinheiro sai como `R$ 14.808,57`.
+
+## Transportes e Mapa — loader do `app.js` por caminho raiz-absoluto (05/09/2026)
+
+PRs #65 e #66. É o **espelho** da seção "Refrigeração — caminhos de asset absolutos de raiz
+(21/08/2026)": lá o defeito aparecia na rota **sem barra** de produção; aqui aparecia na rota
+**com `index.html`** do servidor local. `transportes/index.html` e `mapa/index.html` carregavam
+o `app.js` por `import()` dinâmico montando a URL a partir de `location.pathname` com um
+`endsWith('/')` que não sabia de `index.html` — em `localhost:8000/transportes/index.html`
+virava `/transportes/index.html/app.js`, 404 e módulo em branco. Produção (`/transportes`,
+rota reescrita sem expor `index.html`) e `/transportes/` (com barra) sempre funcionaram, e é
+por isso que o defeito passou despercebido: as duas URLs que se costuma conferir não o
+reproduziam. Os dois módulos passaram à forma de D-td4-07, a mesma de `/maquinas` e `/gestao`:
+`<script type="module" src="/<módulo>/app.js">`. Só o `index.html` foi tocado; `mapa/xmap.js`
+e `mapa/xmap.css` seguem travados.
+
+**Coberto por gate:** `tests/modulos-caminhos.test.js` exige a tag estática raiz-absoluta nos
+dois módulos e reprova `location.pathname` fora de comentário — um terceiro módulo que copie
+o loader antigo é pego pela lista, não pela sorte. Os outros cinco módulos que carregam por
+`import()` (`eletrica`, `fonoclama`, `predial`, `reparos`, `equipes`) usam um `base` que
+remove o nome de arquivo e não sofrem disso.
+
+### Servidor local (`python3 -m http.server 8000` na raiz)
+
+As **três formas de URL** têm de abrir o módulo — a do meio era a que quebrava:
+
+- [ ] `http://localhost:8000/transportes/` → Painel com os 7 KPIs preenchidos e os 5 cartões
+      de indicador.
+- [ ] `http://localhost:8000/transportes/index.html` → o mesmo Painel (antes: página em
+      branco e, no console, `Failed to fetch dynamically imported module …/transportes/index.html/app.js`).
+- [ ] `http://localhost:8000/mapa/` e `http://localhost:8000/mapa/index.html` → o mapa desenha
+      (Leaflet, ~221 marcadores e ~243 rótulos no zoom inicial); no console, os únicos 404 são
+      `mapa/tiles/…png` — o cache raster **opcional** de `mapa/tiles/`, vazio por decisão
+      (`GERAR-TILES.md`), não é defeito.
+- [ ] Na aba Rede, `app.js` de cada módulo vem de `/transportes/app.js` e `/mapa/app.js`
+      (raiz-absoluto), nunca de um caminho com `index.html` no meio.
+
+### Produção
+
+- [ ] `https://pmoc-orcin.vercel.app/transportes` **sem barra** e `…/mapa` sem barra continuam
+      abrindo — é a rota que D-td4-07 protege, e a tag estática resolve igual com ou sem barra.
+- [ ] Ver fonte da página (`Ctrl+U`) em cada um: existe
+      `<script type="module" src="/transportes/app.js">` (ou `/mapa/app.js`) e **não** existe
+      `import(modulo)`.
+
+### Se a decisão mudar
+
+Não há mais nenhum `import(modulo)` no repositório. Se um módulo novo precisar de loader
+dinâmico por algum motivo real, ele tem de tratar as três formas de URL acima — e entrar na
+lista do gate antes, não depois.
