@@ -1986,7 +1986,11 @@ function exportarListaCompraCSV(listaId){
 }
 
 // ══ CONSUMO ══════════════════════════════════════════════
-const fmtR = v => 'R$ ' + Number(v||0).toFixed(2)
+// Dinheiro se lê em português: milhar com ponto, centavos com vírgula. Era
+// `toFixed(2)` — `R$ 14808.57` em 24 pontos de tela — e o leitor numérico de
+// numeros.js já aceita a vírgula na volta, então não há mais motivo para o
+// ponto. Só exibição: nenhum CSV nem impressão passa por aqui.
+const fmtR = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function renderConsumo(){
   const totL   = ABASTS.reduce((s,a)=>s+Number(a.litros||0),0)

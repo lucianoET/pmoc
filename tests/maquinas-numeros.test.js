@@ -308,3 +308,30 @@ test('nenhum campo numérico é preenchido sem passar por paraCampo', () => {
   const crus = APP.match(/id="(ed-atual|ed-minimo|ed-preco|nec-qtd-\$\{[^}]*\})"[^>]*value="\$\{(?!paraCampo)[^}]*\}"/g) || []
   assert.deepEqual(crus, [], `campos preenchidos sem paraCampo: ${crus.join(' | ')}`)
 })
+
+// ── fmtR: dinheiro em pt-BR ─────────────────────────────────────────────
+// `fmtR` era `'R$ ' + Number(v).toFixed(2)` — `R$ 14808.57` em 24 pontos de
+// tela de Máquinas, enquanto o leitor numérico (`lerNumero`) já lia a vírgula
+// e `paraCampo` já escrevia com vírgula. Dois formatos do mesmo número na
+// mesma aba. O caso extrai a função do arquivo e a executa: afirma o fato
+// (milhar com ponto, centavos com vírgula), não a grafia da linha.
+{
+  const testeFmt = require('node:test')
+  const assertFmt = require('node:assert/strict')
+  const fsFmt = require('node:fs')
+  const pathFmt = require('node:path')
+  const vmFmt = require('node:vm')
+  testeFmt('fmtR escreve dinheiro em português — milhar com ponto, centavos com vírgula', () => {
+    const fonte = fsFmt.readFileSync(pathFmt.join(__dirname, '..', 'maquinas', 'app.js'), 'utf8')
+    const linha = fonte.match(/^const fmtR = .*$/m)
+    assertFmt.ok(linha, 'fmtR não encontrada em maquinas/app.js')
+    assertFmt.doesNotMatch(linha[0], /toFixed/, 'fmtR voltou a escrever com ponto decimal (toFixed)')
+    const ctx = {}
+    vmFmt.runInNewContext(linha[0].replace(/^const /, 'globalThis.'), ctx)
+    assertFmt.equal(ctx.fmtR(14808.57), 'R$ 14.808,57')
+    assertFmt.equal(ctx.fmtR(1234.5), 'R$ 1.234,50')
+    assertFmt.equal(ctx.fmtR(0), 'R$ 0,00')
+    assertFmt.equal(ctx.fmtR(null), 'R$ 0,00', 'nulo é zero, como antes')
+    assertFmt.equal(ctx.fmtR('22'), 'R$ 22,00', 'string numérica continua aceita')
+  })
+}

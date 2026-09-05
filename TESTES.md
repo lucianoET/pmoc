@@ -2761,5 +2761,5 @@ ABC (`shared/abc.js`) na aba Estoque de Máquinas. Gate: `tests/adocao-indicador
 
 ### Achado registrado, não corrigido
 
-- `fmtR` de `maquinas/app.js` escreve `R$ 14808.57` (ponto decimal) em 24 pontos; a curva usa o
-  mesmo `fmtR` para não misturar dois formatos na mesma aba. Correção de uma linha, task própria.
+- ~~`fmtR` de `maquinas/app.js` escreve `R$ 14808.57` (ponto decimal) em 24 pontos~~ — corrigido em
+  05/09/2026: conferir na aba Estoque e no Consumo que o dinheiro sai como `R$ 14.808,57`.
