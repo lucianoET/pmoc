@@ -1,6 +1,7 @@
 import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
+import { cartaoIndicador } from '../shared/indicadores.js'
 
 let supa = null
 let auth = null
@@ -228,8 +229,89 @@ function trocarView(id, botao) {
   botao.classList.add('active')
 }
 
+// ── indicadores do painel (Fase 13, Onda C) ──
+// Mesma forma de declaração de INDICADORES_MAQUINAS, deliberadamente: a
+// definição de cada indicador vive no módulo consumidor e o núcleo
+// shared/indicadores.js a recebe como parâmetro, sem conhecer nome nenhum de
+// domínio. Os sete KPIs da fila acima continuam inteiros — estes cartões
+// entram ao lado e só existem porque acrescentam porcentagem, semáforo contra
+// um alvo cadastrado ou tendência ao longo dos meses.
+//
+// META SÓ ONDE O CADASTRO A SUSTENTA, e aqui são duas: `transp_planos.intervalo`
+// declara de quanto em quanto uso a manutenção vence, e `transp_materiais`
+// declara o mínimo de cada peça — nos dois casos o alvo do que passou do limite
+// é zero. Disponibilidade, viagens e manutenções por mês não têm alvo cadastrado
+// em lugar nenhum deste banco e saem com "Sem meta definida", em tom de
+// informação.
+//
+// O plano previa também "documentos a vencer": este módulo não guarda documento
+// de veículo em coluna nenhuma, e um cartão sobre dado que não existe seria pior
+// que cartão nenhum.
+const INDICADORES_TRANSPORTES = [
+  // a unidade só aparece na tela dentro do texto da meta, e este indicador não
+  // tem meta — sem o "%" no rótulo o cartão mostraria o número sem dizer de quê
+  { id: 'disponibilidade', rotulo: 'Disponibilidade da frota (%)', unidade: '%', sentido: 'maior' },
+  { id: 'vencidas', rotulo: 'Manutenções vencidas por uso', unidade: 'planos', sentido: 'menor', meta: 0 },
+  { id: 'estoque_minimo', rotulo: 'Peças abaixo do mínimo', unidade: 'itens', sentido: 'menor', meta: 0 },
+  { id: 'viagens_mes', rotulo: 'Viagens no mês', unidade: 'viagens', sentido: 'maior' },
+  { id: 'manutencoes_mes', rotulo: 'Manutenções no mês', unidade: 'manutenções', sentido: 'menor' },
+]
+
+// Últimos `n` meses em 'AAAA-MM', do mais antigo para o mais novo. Montado do
+// calendário local e nunca por toISOString(): a conversão para UTC empurraria o
+// mês virado para o anterior nas primeiras horas do dia 1º no nosso fuso.
+function ultimosMeses(n) {
+  const hoje = new Date()
+  const lista = []
+  for (let i = n - 1; i >= 0; i--) {
+    const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+    lista.push(`${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}`)
+  }
+  return lista
+}
+
+// Valor e série saem do que carregarTudo() já trouxe — nenhuma consulta nova —
+// e medem sempre a MESMA grandeza: o valor de "Viagens no mês" é a contagem do
+// mês corrente e a série é essa mesma contagem nos seis meses anteriores.
+function metricasIndicadoresTransportes() {
+  const meses = ultimosMeses(6)
+  // veículo indisponível continua no parque; o que a disponibilidade mede é
+  // quanto da frota NÃO está parado na oficina — em uso e sobreaviso contam
+  const noParque = ATIVOS.filter(ativo => ativo.ativo !== false)
+  const prontos = noParque.filter(ativo => !['manutencao', 'indisponivel'].includes(ativo.status)).length
+  const contarPorMes = (lista, campo) => meses.map(mes =>
+    lista.filter(item => String(item[campo] || '').startsWith(mes)).length)
+
+  const viagensPorMes = contarPorMes(VIAGENS, 'data_saida')
+  const manutencoesPorMes = contarPorMes(MANUTENCOES, 'data_manutencao')
+
+  return {
+    valores: {
+      disponibilidade: noParque.length ? Number(((prontos / noParque.length) * 100).toFixed(1)) : null,
+      vencidas: calcVencimentos().filter(item => item.falta <= 0).length,
+      estoque_minimo: materiaisAbaixoDoMinimo().length,
+      viagens_mes: viagensPorMes[viagensPorMes.length - 1],
+      manutencoes_mes: manutencoesPorMes[manutencoesPorMes.length - 1],
+    },
+    series: {
+      viagens_mes: viagensPorMes,
+      manutencoes_mes: manutencoesPorMes,
+    },
+  }
+}
+
+function renderIndicadoresPainel() {
+  const alvo = document.getElementById('painel-indicadores')
+  if (!alvo) return
+  const { valores, series } = metricasIndicadoresTransportes()
+  alvo.innerHTML = INDICADORES_TRANSPORTES
+    .map(def => cartaoIndicador(def, valores[def.id], series[def.id] || []))
+    .join('')
+}
+
 function renderPainel() {
   renderErroPainel()
+  renderIndicadoresPainel()
 
   const disponiveis = ATIVOS.filter(ativo => ativo.status === 'disponivel').length
   const sobreaviso = ATIVOS.filter(ativo => ativo.status === 'sobreaviso').length
