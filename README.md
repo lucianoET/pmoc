@@ -383,6 +383,17 @@ Sem framework: `node:test` e `node:assert` apenas, sem `package.json`.
 node --test tests/*.test.js
 ```
 
-**1540 testes, todos passando em 05/09/2026.** São gates permanentes: cada decisão
+**1543 testes em 86 arquivos, todos passando em 05/09/2026.** São gates permanentes: cada decisão
 travada tem um teste que reprova uma fase futura que a contradiga. O checklist de
 verificação manual fica em `TESTES.md`.
+
+Os gates da Fase 13 (Gestão e Qualidade) provam **comportamento**, não grafia: seis arquivos
+(`grafico-`, `indicadores-`, `gantt-`, `abc-`, `gut-` e `kanban-calendario-compartilhad*`) importam
+os sete núcleos de `shared/` em Node e os executam nos limites que o contrato de UI listou (série vazia, um ponto só, valor não numérico, item sem
+fim, status fora da lista, data inválida, GUT nulo ≠ 0, ABC com um item);
+`estilos-gestao-compartilhados` exige regra na folha para toda classe que os núcleos emitem;
+`gestao-schema` compara as listas fechadas da migração 60 com as do JavaScript;
+`gestao-modulo` carrega `gestao/app.js` com um cliente falso e afirma a sonda `GES_OK`, a
+fronteira de escrita e o escape; `adocao-indicadores` afirma que Máquinas e Transportes
+importam os núcleos em vez de copiá-los. Em cada um, os defeitos foram reintroduzidos de
+propósito e conferidos reprovando antes de o gate entrar.
