@@ -426,11 +426,12 @@ html,body{height:100%}
      mais como script clássico aqui. A aguada continua script clássico porque
      não depende de cliente nenhum (D-01). -->
 
-<script type="module">
-const modulo = location.protocol === 'file:'
-  ? './app.js'
-  : `${location.pathname.endsWith('/') ? location.pathname : `${location.pathname}/`}app.js`
-import(modulo)
-</script>
+<!-- Caminho raiz-absoluto, a regra de D-td4-07 (a mesma de /maquinas, /gestao
+     e, desde 05/09/2026, /transportes): o rewrite do Vercel serve /mapa SEM
+     barra, onde um relativo simples resolveria contra a raiz do site. O loader
+     anterior montava a URL a partir de location.pathname e quebrava em
+     /mapa/index.html (servidor local): virava /mapa/index.html/app.js, 404 e
+     mapa em branco. O ramo file:// era código morto desde D-td4-07. -->
+<script type="module" src="/mapa/app.js"></script>
 </body>
 </html>
