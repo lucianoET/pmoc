@@ -387,9 +387,9 @@ node --test tests/*.test.js
 travada tem um teste que reprova uma fase futura que a contradiga. O checklist de
 verificação manual fica em `TESTES.md`.
 
-Os gates da Fase 13 (Gestão e Qualidade) provam **comportamento**, não grafia: os sete
-`tests/*-compartilhado*.test.js` importam os núcleos de `shared/` em Node e os executam nos
-limites que o contrato de UI listou (série vazia, um ponto só, valor não numérico, item sem
+Os gates da Fase 13 (Gestão e Qualidade) provam **comportamento**, não grafia: seis arquivos
+(`grafico-`, `indicadores-`, `gantt-`, `abc-`, `gut-` e `kanban-calendario-compartilhad*`) importam
+os sete núcleos de `shared/` em Node e os executam nos limites que o contrato de UI listou (série vazia, um ponto só, valor não numérico, item sem
 fim, status fora da lista, data inválida, GUT nulo ≠ 0, ABC com um item);
 `estilos-gestao-compartilhados` exige regra na folha para toda classe que os núcleos emitem;
 `gestao-schema` compara as listas fechadas da migração 60 com as do JavaScript;
