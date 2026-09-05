@@ -25,6 +25,8 @@ import {
 } from './areas-tabela.js'
 import { htmlKanban } from '../shared/kanban.js'
 import { MESES, htmlCalendario } from '../shared/calendario.js'
+import { cartaoIndicador } from '../shared/indicadores.js'
+import { classificarAbc } from '../shared/abc.js'
 
 // ── CONFIG: shared/supabase-config.js descobre a configuração dos outros
 // cinco módulos lendo este arquivo por expressão regular — as duas
@@ -321,6 +323,93 @@ function trocarView(id, btn){
   btn.classList.add('active')
 }
 
+// ── indicadores do painel (Fase 13, Onda C) ──
+// A definição de cada indicador vive AQUI, no módulo consumidor, nunca dentro
+// de shared/indicadores.js — o núcleo recebe `{rotulo, unidade, meta, sentido,
+// faixas}` como parâmetro e não conhece nome nenhum de domínio, a mesma
+// disciplina que impede shared/tabela.js de conhecer "material" ou "reparo".
+//
+// A fila de KPI acima continua sendo a fotografia crua (contagem, sem alvo e
+// sem histórico). Cada cartão abaixo só existe porque acrescenta uma das três
+// coisas que a contagem não dá: uma porcentagem, um semáforo contra um alvo, ou
+// uma tendência. Cartão que repetisse um número da fila sem nenhuma das três
+// seria ruído, não indicador.
+//
+// META SÓ ONDE O CADASTRO A SUSTENTA. Duas têm alvo de verdade e o alvo é zero:
+// `maq_planos.intervalo` declara de quantas em quantas horas a manutenção vence
+// (passar dele é falha pelo próprio plano) e `maq_materiais.estoque_minimo`
+// declara o piso de cada peça (estar abaixo dele é falta pelo próprio
+// cadastro). As outras três não têm alvo cadastrado em lugar nenhum deste banco
+// e por isso saem em tom de informação, com "Sem meta definida" — inventar aqui
+// um número de disponibilidade ou de OS por mês pintaria a tela de verde ou de
+// vermelho sem ninguém ter decidido nada.
+const INDICADORES_MAQUINAS = [
+  // A unidade só aparece na tela dentro do texto da meta ("Meta: 0 planos"),
+  // e este indicador não tem meta — sem o "%" no rótulo o cartão mostraria
+  // "71,4" sem dizer de quê. Nos outros quatro a unidade já está no rótulo.
+  { id: 'disponibilidade',  rotulo: 'Disponibilidade da frota (%)', unidade: '%',    sentido: 'maior' },
+  { id: 'vencidas',         rotulo: 'Manutenções vencidas',       unidade: 'planos', sentido: 'menor', meta: 0 },
+  { id: 'estoque_minimo',   rotulo: 'Materiais abaixo do mínimo', unidade: 'itens',  sentido: 'menor', meta: 0 },
+  { id: 'os_abertas_mes',   rotulo: 'OS abertas no mês',          unidade: 'OS',     sentido: 'menor' },
+  { id: 'os_concluidas_mes',rotulo: 'OS concluídas no mês',       unidade: 'OS',     sentido: 'maior' },
+]
+
+// Últimos `n` meses em 'AAAA-MM', do mais antigo para o mais novo — a ordem que
+// a série do sparkline espera. Montado do calendário local, nunca por
+// toISOString(): a conversão para UTC empurraria o mês virado para o anterior
+// nas primeiras horas do dia 1º no nosso fuso.
+function ultimosMeses(n){
+  const hoje = new Date()
+  const lista = []
+  for(let i = n - 1; i >= 0; i--){
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+    lista.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`)
+  }
+  return lista
+}
+
+// Valor e série de cada indicador, derivados do que carregarTudo() já trouxe —
+// nenhuma consulta nova. Valor e série medem SEMPRE a mesma grandeza: o valor
+// de "OS abertas no mês" é a contagem do mês corrente e a série é essa mesma
+// contagem nos seis meses anteriores. Misturar uma fotografia de agora com uma
+// curva reconstruída de outra grandeza daria um desenho plausível e errado.
+function metricasIndicadoresMaquinas(){
+  const meses = ultimosMeses(6)
+  const mesAtual = meses[meses.length - 1]
+  const noParque = ATIVOS.filter(a => a.status !== 'baixado')
+  const operantes = noParque.filter(a => a.status === 'operante').length
+  const porMes = (campo, filtro) => meses.map(mes =>
+    OS_LIST.filter(o => String(o[campo] || '').startsWith(mes) && (!filtro || filtro(o))).length)
+
+  const abertasPorMes = porMes('data_abertura', null)
+  const concluidasPorMes = porMes('data_conclusao', o => o.status === 'concluida')
+
+  return {
+    valores: {
+      // máquina baixada saiu do parque: contá-la no denominador faria a
+      // disponibilidade cair para sempre por causa de um ato patrimonial
+      disponibilidade: noParque.length ? Number(((operantes / noParque.length) * 100).toFixed(1)) : null,
+      vencidas: calcVencimentos().filter(v => v.falta <= 0).length,
+      estoque_minimo: MATERIAIS.filter(m => m.estoque_atual < m.estoque_minimo).length,
+      os_abertas_mes: abertasPorMes[abertasPorMes.length - 1],
+      os_concluidas_mes: concluidasPorMes[concluidasPorMes.length - 1],
+    },
+    series: {
+      os_abertas_mes: abertasPorMes,
+      os_concluidas_mes: concluidasPorMes,
+    },
+  }
+}
+
+function renderIndicadoresPainel(){
+  const alvo = document.getElementById('painel-indicadores')
+  if(!alvo) return
+  const { valores, series } = metricasIndicadoresMaquinas()
+  alvo.innerHTML = INDICADORES_MAQUINAS
+    .map(def => cartaoIndicador(def, valores[def.id], series[def.id] || []))
+    .join('')
+}
+
 // ── PAINEL ──
 function renderPainel(){
   const total  = ATIVOS.length
@@ -337,6 +426,8 @@ function renderPainel(){
 
   const abertas = OS_LIST.filter(o => !['concluida','cancelada'].includes(o.status))
   document.getElementById('kpi-os-abertas').textContent = abertas.length
+
+  renderIndicadoresPainel()
 
   // O painel é resumo, não relatório: cada bloco mostra os primeiros itens e
   // manda o resto para a aba própria. Sem o corte, com 28 máquinas e 34
@@ -1186,6 +1277,7 @@ function navegarAgenda(direcao){
 function renderMateriais(){
   renderCabecalhoMateriais()
   renderLinhasMateriais()
+  renderAbcEstoque()
 }
 
 // desenha o <thead> do estoque: por coluna, o rótulo e dois botões — um de
@@ -1317,6 +1409,76 @@ function atualizarContagemMateriais(visiveis, total){
   const ativo = MAT_ORD.coluna !== null || Object.values(MAT_FILTROS).some(Boolean)
   if(contagem) contagem.textContent = ativo ? `${visiveis} de ${total}` : ''
   if(btnLimpar) btnLimpar.style.display = ativo ? '' : 'none'
+}
+
+// ── curva ABC do estoque (Fase 13, Onda C) ──
+// Classificação de Pareto por valor imobilizado (saldo × preço unitário) com
+// shared/abc.js — o mesmo núcleo que a aba Ferramentas do /gestao consome, sem
+// uma linha copiada para cá. É estado de tela, exatamente como a ordenação e o
+// filtro da tabela acima: nenhuma consulta ao Supabase, nenhuma chamada a
+// carregarTudo(); a lista já está em MATERIAIS.
+//
+// A curva classifica o catálogo INTEIRO, nunca o recorte visível. Sobre a lista
+// filtrada as porcentagens passariam a ser relativas ao filtro, e a tela
+// responderia "onde está o dinheiro deste filtro" em vez de "onde está o
+// dinheiro do estoque" — mesmo cuidado de D-a8u-04, em que a lista de marcar do
+// menu de coluna lê a seleção ANTES dos filtros de coluna.
+//
+// Material sem preço vale zero e cai em C: é o comportamento do núcleo, e é o
+// certo — item sem preço lançado não pode disputar a classe A com quem tem.
+const ABC_ESTOQUE = m => Number(m.estoque_atual || 0) * Number(m.preco || 0)
+const ABC_TETO = 20
+const ABC_TOM = { A: 'warn', B: 'info', C: 'neutro' }
+
+function renderAbcEstoque(){
+  const alvo = document.getElementById('estoque-abc')
+  if(!alvo) return
+
+  const { linhas, total } = classificarAbc(MATERIAIS, ABC_ESTOQUE)
+
+  // sem material, ou com todo o catálogo sem preço/saldo: nos dois casos não há
+  // valor a repartir, e uma tabela de zeros seria uma curva que não existe
+  if(!linhas.length || total <= 0){
+    alvo.innerHTML = vazio('Nenhum item para classificar', 'Cadastre itens com valor para gerar a curva')
+    return
+  }
+
+  const resumo = ['A','B','C'].map(classe => {
+    const daClasse = linhas.filter(l => l.classe === classe)
+    const valor = daClasse.reduce((soma, l) => soma + l.valor, 0)
+    const parte = total > 0 ? (valor / total) * 100 : 0
+    return `Classe ${classe}: ${daClasse.length} ${daClasse.length === 1 ? 'item' : 'itens'} (${fmtR(valor)}, ${parte.toFixed(1)}% do valor)`
+  }).join(' · ')
+
+  const visiveis = linhas.slice(0, ABC_TETO)
+  const resto = linhas.length - visiveis.length
+
+  // A barra leva a classe no PRÓPRIO elemento e se pinta com `currentColor`:
+  // `.tbl td` declara `color:var(--text2)` e vence `.abc-classe-*` por
+  // especificidade quando a classe fica na linha ou na célula, de modo que a
+  // cor da classe não chegaria à barra. Mesmo mecanismo dos SVG de
+  // shared/grafico.js — o tom resolve na folha, nunca em JavaScript.
+  const corpo = visiveis.map(l => {
+    const nome = esc(l.item.nome || '—')
+    const classe = l.classe.toLowerCase()
+    return `<tr>
+      <td>${pilula('Classe ' + l.classe, ABC_TOM[l.classe])}</td>
+      <td class="hi" title="${nome}">${nome}</td>
+      <td>${esc(l.item.estoque_atual)} ${esc(l.item.unidade || '')}</td>
+      <td class="num">${fmtR(l.valor)}</td>
+      <td class="num">${l.participacao.toFixed(1)}%</td>
+      <td class="num">${l.acumulado.toFixed(1)}%</td>
+      <td style="min-width:110px"><div class="abc-barra abc-classe-${classe}" style="width:${l.acumulado.toFixed(1)}%;background:currentColor"></div></td>
+    </tr>`
+  }).join('')
+
+  alvo.innerHTML = `<div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Classe</th><th>Material</th><th>Saldo</th><th>Valor em estoque</th><th>Participação</th><th>Acumulado</th><th>Curva</th></tr></thead>
+      <tbody>${corpo}</tbody>
+    </table></div>
+    <div class="help">${esc(resumo)}. Total imobilizado: ${fmtR(total)}.${
+      resto > 0 ? ` Listados os ${ABC_TETO} de maior valor — outros ${resto} ${resto === 1 ? 'item ficou' : 'itens ficaram'} de fora da lista, mas entram na classificação e no total.` : ''
+    }</div>`
 }
 
 // ── ordenação e filtro do estoque (D3) — tudo de tela, nada de Supabase ──
