@@ -193,3 +193,17 @@ Nenhum. A única armadilha real — o loop dinâmico de RLS não multiplicar `to
 - `git diff --name-only -- refrigeracao/ mapa/xmap.js` vazio (D-19)
 - `git diff --name-only supabase/` lista só `60_gestao_schema.sql`
 - A migração **não foi aplicada** em produção — pendência registrada acima em "User Setup Required"
+
+## Adendo (05/09/2026) — a migração já estava aplicada, com outro texto
+
+Ao conferir o `/gestao` no navegador contra o banco de produção, a sonda `GES_OK` voltou
+verdadeira: as cinco tabelas `ges_*` já existiam. O log do Postgres mostra o DDL rodando em
+**04/09/2026 23:24 UTC pelo SQL editor do dashboard** (`source: dashboard`), com um texto
+diferente do arquivo desta branch (`bigserial`, policies `r_*`, índices `idx_*`,
+`quanto >= 0`, `uq_ges_indicador_valores_periodo`) e sem registro em `supabase_migrations`.
+Nenhum agente desta execução aplicou nada. Pela lição da migração 28, `supabase/60_gestao_schema.sql`
+passou a ser o **texto que rodou**, com o cabeçalho explicando, e `tests/gestao-schema.test.js`
+deixou de casar a grafia do rascunho (nomes de índice/constraint, `to public` explícito) para
+casar o fato. Conferência em três camadas em 05/09: colunas 19/10/5/9/5, 20 policies `r_*`,
+porta da frente com a chave pública (`select` 200, coluna inexistente 400, `POST` anônimo 401,
+`PATCH` anônimo `[]`). "Não aplicada" acima descreve o estado no momento da execução do plano.

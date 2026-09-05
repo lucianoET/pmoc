@@ -27,6 +27,10 @@ const gutSrc = fs.readFileSync(GUT_JS, 'utf8')
 const TABELAS = ['ges_acoes', 'ges_indicadores', 'ges_indicador_valores', 'ges_pop', 'ges_causas']
 
 // Só o corpo executável: comentários de cabeçalho e o rodapé de
+// Em 05/09/2026 o arquivo passou a ser o TEXTO QUE RODOU em produção (aplicado
+// pelo dashboard em 04/09 23:24 UTC, com nomes de índice/policy/constraint
+// diferentes do rascunho); quatro casos que casavam a grafia do rascunho
+// passaram a casar o fato — nome livre, cláusula `to public` opcional.
 // conferência citam palavras (drop, alter table, anon) de propósito, para
 // explicar por que a migração NÃO as usa — procurar essas palavras no
 // arquivo inteiro reprovaria a própria documentação da decisão. A mesma
@@ -135,7 +139,8 @@ test('ges_causas.categoria tem check com exatamente as seis categorias (6M)', ()
 })
 
 test('ges_indicadores.sentido é lista fechada maior/menor', () => {
-  const m = corpo.match(/sentido text not null check \(sentido in \(([^)]+)\)\)/i)
+  // `default 'maior'` pode vir entre o `not null` e o `check`: o que se afirma é a lista, não a ordem das cláusulas
+  const m = corpo.match(/sentido text not null(?: default '[a-z]+')? check \(sentido in \(([^)]+)\)\)/i)
   assert.ok(m, 'não encontrei o check de sentido em ges_indicadores')
   const valores = m[1].split(',').map((v) => v.trim().replace(/^'|'$/g, '')).sort()
   assert.deepEqual(valores, ['maior', 'menor'].sort())
@@ -144,7 +149,8 @@ test('ges_indicadores.sentido é lista fechada maior/menor', () => {
 // ══════ 7. as duas chaves estrangeiras têm índice ═════════════════════
 
 test('ges_causas.acao_id (FK) tem índice próprio', () => {
-  assert.match(corpo, /create index if not exists ges_causas_acao_id_idx on ges_causas \(acao_id\)/i,
+  // o nome do índice é livre; o fato é existir um índice liderado por acao_id
+  assert.match(corpo, /create index if not exists \S+ on ges_causas \(acao_id\)/i,
     'ges_causas.acao_id não lidera nenhum outro índice — precisa do seu próprio')
 })
 
@@ -156,7 +162,8 @@ test('ges_indicador_valores.indicador_id (FK) tem índice — explícito ou como
 })
 
 test('ges_indicador_valores tem unicidade por (indicador_id, periodo)', () => {
-  assert.match(corpo, /constraint ges_indicador_valores_unico unique \(indicador_id,\s*periodo\)/i,
+  // o nome da constraint é livre; o fato é a unicidade do par
+  assert.match(corpo, /constraint \S+ unique \(indicador_id,\s*periodo\)/i,
     'dois valores para o mesmo indicador no mesmo período seriam duas verdades sobre o mesmo mês')
 })
 
@@ -175,8 +182,9 @@ test('as cinco tabelas ligam RLS', () => {
 
 test('cada tabela tem uma policy de leitura sem restrição de papel', () => {
   for (const t of TABELAS) {
-    const re = new RegExp(`create policy \\S+ on ${t} for select to public using \\(true\\)`, 'i')
-    assert.match(corpo, re, `${t} deveria ter select aberto (to public)`)
+    // sem cláusula `to`, a policy vale para public — as duas grafias dizem o mesmo
+    const re = new RegExp(`create policy \\S+ on ${t} for select (?:to public )?using \\(true\\)`, 'i')
+    assert.match(corpo, re, `${t} deveria ter select aberto (to public, explícito ou implícito)`)
   }
 })
 
