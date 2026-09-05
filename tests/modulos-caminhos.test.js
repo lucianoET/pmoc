@@ -119,3 +119,19 @@ test('refrigeracao/index.html so usa new URL(...) com primeiro argumento absolut
     `about:blank sem base nenhuma. Use caminho absoluto de raiz, ex: '/refrigeracao/<arquivo>'.`
   )
 })
+
+// ── transportes: app.js por tag estática raiz-absoluta ────────────────────
+// O loader dinâmico anterior montava a URL a partir de location.pathname com
+// um `endsWith('/')` que não sabia de `index.html`: em
+// localhost:8000/transportes/index.html virava /transportes/index.html/app.js,
+// 404, módulo em branco — invisível em produção (o rewrite não expõe
+// index.html) e em /transportes/ (com barra), que é onde se costuma conferir.
+// A forma decidida é a de /maquinas e /gestao: tag estática, caminho de raiz.
+test('transportes carrega app.js por tag estatica raiz-absoluta, sem montar URL a partir de location.pathname', () => {
+  const html = fs.readFileSync(path.join(RAIZ, 'transportes', 'index.html'), 'utf8')
+  assert.match(html, /<script type="module" src="\/transportes\/app\.js"><\/script>/,
+    'transportes/index.html deveria carregar app.js por <script type="module" src="/transportes/app.js">')
+  const semComentarios = html.replace(/<!--[\s\S]*?-->/g, '')
+  assert.doesNotMatch(semComentarios, /location\.pathname/,
+    'transportes/index.html voltou a montar o caminho do app.js a partir de location.pathname')
+})
