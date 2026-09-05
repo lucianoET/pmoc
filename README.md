@@ -18,8 +18,8 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 |------|-----|----------|--------|
 | `/` | **Portal** | Índice dos sistemas | ✅ |
 | `/refrigeracao` | **PMOC Refrigeração** v2.8 | 175 unidades · OS unificada por tipo de executor · ARP 04/2024 · carga térmica · estoque · acervo de normas · QR | ✅ |
-| `/maquinas` | **PMOC Máquinas** v1.1 | 28 máquinas · 59 planos · 35 peças · operações · necessidades e compras · contratações | ✅ |
-| `/transportes` | **PMOC Transportes** v1.0 | 43 ativos · 23 viagens · planos, estoque, OS e lista de compras | ✅ |
+| `/maquinas` | **PMOC Máquinas** v1.1 | 28 máquinas · 59 planos · 35 peças · operações · indicadores e curva ABC · necessidades e compras · contratações | ✅ |
+| `/transportes` | **PMOC Transportes** v1.0 | 43 ativos · 23 viagens · planos, estoque, OS, indicadores e lista de compras | ✅ |
 | `/eletrica` | **PMOC Elétrica** v1.0 | 13 ativos · geradores, QGBT, nobreaks, iluminação | ✅ |
 | `/fonoclama` | **PMOC Fonoclama** v1.0 | 15 ativos · PA 70V | ✅ |
 | `/predial` | **PMOC Predial** v1.0 | 3 templates · 223 itens de checklist · GUT · laudos · 20 normas | ✅ |
@@ -383,6 +383,6 @@ Sem framework: `node:test` e `node:assert` apenas, sem `package.json`.
 node --test tests/*.test.js
 ```
 
-**1526 testes, todos passando em 05/09/2026.** São gates permanentes: cada decisão
+**1540 testes, todos passando em 05/09/2026.** São gates permanentes: cada decisão
 travada tem um teste que reprova uma fase futura que a contradiga. O checklist de
 verificação manual fica em `TESTES.md`.

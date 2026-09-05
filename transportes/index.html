@@ -30,6 +30,23 @@
         <div class="kpi kc-red"><div class="kpi-n" id="kpi-vencidas">—</div><div class="kpi-l">Manutenções vencidas (uso)</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-estoque-baixo">—</div><div class="kpi-l">Peças abaixo do mínimo</div></div>
       </div>
+      <!-- Cartões de indicador (Fase 13, Onda C) — shared/indicadores.js, o
+           mesmo componente do /gestao e do /maquinas. Entram AO LADO da fila de
+           KPI acima, não no lugar dela: a fila é a fotografia crua e continua
+           inteira; cada cartão acrescenta o que a contagem não dá —
+           porcentagem, semáforo contra um alvo cadastrado ou tendência ao longo
+           dos meses. A grade é .fgrid, que a folha comum já declara em duas
+           colunas e colapsa em uma abaixo de 700px — nenhuma regra de CSS foi
+           escrita para esta fase. -->
+      <div class="panel-card" style="margin-bottom:20px">
+        <h3>Indicadores</h3>
+        <div class="fgrid" id="painel-indicadores" style="align-items:start"></div>
+        <div class="help">Meta só onde o cadastro a sustenta: o intervalo de cada plano
+          (<code>transp_planos.intervalo</code>) e o mínimo de cada peça
+          (<code>transp_materiais.estoque_minimo</code>) declaram um alvo, e nos dois casos ele é zero.
+          Onde não há alvo cadastrado o cartão diz "Sem meta definida" em tom de informação, em vez de
+          inventar um número.</div>
+      </div>
       <div class="section-split">
         <div class="stack">
           <div class="panel-card">

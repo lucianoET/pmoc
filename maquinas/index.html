@@ -105,6 +105,22 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
         <div class="kpi kc-red"><div class="kpi-n" id="kpi-estoque-baixo">—</div><div class="kpi-l">Estoque abaixo do mín.</div></div>
         <div class="kpi kc-blue"><div class="kpi-n" id="kpi-os-abertas">—</div><div class="kpi-l">OS em aberto</div></div>
       </div>
+      <!-- Cartões de indicador (Fase 13, Onda C) — shared/indicadores.js, o
+           mesmo componente do /gestao. Entram AO LADO da fila de KPI acima, não
+           no lugar dela: a fila é a fotografia crua e continua inteira; cada
+           cartão aqui acrescenta o que a contagem não dá — porcentagem,
+           semáforo contra um alvo cadastrado ou tendência ao longo dos meses.
+           A grade é .fgrid, que a folha comum já declara em duas colunas e
+           colapsa em uma abaixo de 700px (e abaixo de 600px pela @media própria
+           deste módulo) — nenhuma regra de CSS foi escrita para esta fase. -->
+      <div class="panel-card" style="margin-bottom:20px">
+        <h3>Indicadores</h3>
+        <div class="fgrid" id="painel-indicadores" style="align-items:start"></div>
+        <div class="help">Meta só onde o cadastro a sustenta: o intervalo de cada plano
+          (<code>maq_planos.intervalo</code>) e o mínimo de cada peça (<code>maq_materiais.estoque_minimo</code>)
+          declaram um alvo, e nos dois casos ele é zero. Onde não há alvo cadastrado o cartão diz
+          "Sem meta definida" em tom de informação, em vez de inventar um número.</div>
+      </div>
       <!-- Três blocos de resumo, cada um com no máximo 5 linhas e um botão para
            a aba onde a lista inteira mora. O painel responde "o que precisa de
            mim agora", não "tudo que existe" — para isso existem as outras abas. -->
@@ -283,6 +299,18 @@ h3{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
           <thead id="th-materiais"></thead>
           <tbody id="tb-materiais"><tr><td colspan="9" style="text-align:center;padding:24px;color:var(--text3)">Carregando...</td></tr></tbody>
         </table>
+      </div>
+      <!-- Curva ABC (Fase 13, Onda C) — shared/abc.js sobre o valor imobilizado
+           de cada peça. Fica depois da tabela porque a tabela é a ferramenta do
+           dia a dia e a curva é leitura de gestão; classifica o catálogo
+           inteiro, não o recorte filtrado acima. -->
+      <div class="panel-card" style="margin-top:24px">
+        <h3>Curva ABC — peças por valor em estoque</h3>
+        <div id="estoque-abc"></div>
+        <div class="help">Saldo × preço unitário, maior valor primeiro. Classe A concentra os primeiros
+          80% do valor acumulado, B vai até 95% e C é o restante — a classe não é alerta, é onde a
+          gestão do estoque rende mais. Ordenar ou filtrar a tabela acima não muda a curva nem
+          consulta o banco: os dois são estado de tela sobre a lista já carregada.</div>
       </div>
     </div>
 
