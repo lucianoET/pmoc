@@ -133,7 +133,7 @@ const RAIZ = path.join(__dirname, '..')
 
 // Os módulos que consomem o shell. `equipes` está aqui de propósito: ele
 // ficou de fora da lista do gate de 375px, e foi o único que quebrou.
-const CONSOMEM_SHELL = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'mapa', 'equipes']
+const CONSOMEM_SHELL = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'mapa', 'equipes', 'gestao']
 
 function fontesDo(modulo) {
   const dir = path.join(RAIZ, modulo)

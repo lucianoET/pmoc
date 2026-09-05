@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="theme-color" content="#1a1a18"/>
+<script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t!=='claro'&&t!=='escuro'){t=(typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','escuro')}})()/* script classico de proposito: modulo ES e adiado, rodaria depois do primeiro desenho e reintroduziria a piscada de tema */</script>
+<title>PMOC Gestão</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
+<style>
+/* Única cor declarada pelo módulo, como nos outros seis: a de destaque.
+   Nenhum token neutro e nenhum bloco de tema próprio — quem resolve tema
+   é a folha comum, carregada acima, mais o script de pré-desenho. */
+:root{--accent:#8a6fb0}
+
+/* ── grade do Painel ──
+   O cartão de indicador carrega meta, tendência e sparkline: é mais alto
+   que o KPI simples e não cabe na fila `.kpi-row` (que rola na horizontal
+   com colunas de 132px). Duas colunas no computador, uma no celular —
+   mesmo ponto de quebra de `.section-split`. */
+.painel-grade{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+@media (max-width:900px){.painel-grade{grid-template-columns:1fr}}
+
+/* ── kanban de cinco colunas ──
+   `.kanban` da folha comum declara quatro colunas (é o kanban de
+   operações de Máquinas). O fluxo da ação tem cinco estados, e sem esta
+   regra a quinta coluna nasceria com largura automática, menor que as
+   outras quatro. A rolagem horizontal continua sendo a da folha comum. */
+.kanban-acoes{grid-template-columns:repeat(5,minmax(190px,1fr))}
+
+/* ── espinha do Ishikawa ──
+   Seis categorias (6M) em torno de uma espinha central. Não é gráfico:
+   é layout, então mora aqui e não em shared/grafico.js. Rola dentro do
+   próprio cartão, nunca empurrando a página. */
+.ishikawa{overflow-x:auto;padding-bottom:4px}
+.ishikawa-grade{display:grid;grid-template-columns:repeat(3,minmax(150px,1fr));gap:10px}
+.ishikawa-espinha{height:2px;background:var(--border);margin:10px 0;position:relative}
+.ishikawa-espinha::after{content:'';position:absolute;right:0;top:-4px;border-left:8px solid var(--border);
+  border-top:5px solid transparent;border-bottom:5px solid transparent}
+.ishikawa-cat{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:9px 10px}
+.ishikawa-cat h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text2);margin-bottom:6px}
+.ishikawa-causa{font-size:12px;color:var(--text2);line-height:1.45;padding:3px 0;
+  border-top:1px solid color-mix(in srgb,var(--border) 45%,transparent);overflow-wrap:anywhere}
+.ishikawa-cat .ishikawa-causa:first-of-type{border-top:none}
+.ishikawa-vazia{font-size:11px;color:var(--text3);font-style:italic}
+
+/* Texto do POP e da ação: quebra em qualquer ponto para não empurrar a
+   tabela na horizontal (a coluna é estreita e o título é livre). */
+.txt-quebra{overflow-wrap:anywhere}
+
+/* ── Gantt das ações ──
+   O núcleo desenha duas faixas independentes (rótulos à esquerda, barras à
+   direita) e elas só ficam alinhadas enquanto cada rótulo couber numa
+   linha: um rótulo que quebra empurra a própria faixa para baixo e as
+   barras deixam de corresponder à linha que nomeiam — medido no navegador,
+   com "Refazer a vedação da câmara fria do PAIOL D-5…" ocupando quatro
+   linhas. Aqui o rótulo fica em uma linha só; o texto inteiro está a um
+   clique, na Lista e no Kanban, e a tela diz isso. */
+/* `height` fixa, não `min-height`: medido, a linha de rótulo fechava em
+   37px contra 36px da linha de barra, e 1px por linha vira cinco linhas de
+   desalinhamento numa lista de cinco ações. */
+#acoes-gantt .gantt-rotulo{display:block;height:36px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Em tela estreita a coluna de rótulos de 160px deixava 157px de linha do
+   tempo — menos espaço para a barra do que para o nome dela. */
+@media (max-width:600px){#acoes-gantt .gantt{grid-template-columns:96px 1fr}}
+</style>
+</head>
+<body>
+<div id="login-screen"></div>
+
+<!-- O miolo mora aqui, dentro do #app, e NÃO é inserido por JavaScript
+     depois de aplicarShell: o shell põe a barra superior com `afterbegin`
+     e o rodapé com `beforeend`, então tudo que chegasse depois cairia
+     abaixo do rodapé — foi exatamente o que aconteceu em /equipes. -->
+<div id="app">
+  <div class="main">
+
+    <div class="view active" id="view-painel">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Painel</div>
+          <div class="view-sub">Gestão à vista: o que a plataforma inteira mede, num lugar só.</div>
+        </div>
+      </div>
+      <div id="painel-indicadores"></div>
+    </div>
+
+    <div class="view" id="view-acoes">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Ações</div>
+          <div class="view-sub">Plano de ação 5W2H priorizado por GUT, na mesma lista vista de três formas.</div>
+        </div>
+        <div id="acoes-acoes"></div>
+      </div>
+      <div id="acoes-seletor"></div>
+      <div id="acoes-lista"></div>
+      <div class="kanban kanban-acoes hidden" id="acoes-kanban"></div>
+      <div id="acoes-gantt"></div>
+    </div>
+
+    <div class="view" id="view-calendario">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Calendário</div>
+          <div class="view-sub">OS e vencimentos de todos os módulos, consolidados no mês.</div>
+        </div>
+      </div>
+      <div class="panel-card">
+        <div class="calendar-head">
+          <div class="calendar-title" id="calendario-titulo">—</div>
+          <div class="section-row" style="margin-bottom:0">
+            <button class="btn btn-s btn-sm" onclick="navegarMes(-1)">Mês anterior</button>
+            <button class="btn btn-s btn-sm" onclick="irParaMesAtual()">Hoje</button>
+            <button class="btn btn-s btn-sm" onclick="navegarMes(1)">Próximo mês</button>
+          </div>
+        </div>
+        <div class="calendar-grid" id="calendario-consolidado"></div>
+        <div class="help" id="calendario-fontes"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-ferramentas">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Ferramentas</div>
+          <div class="view-sub">Análise da qualidade sobre o dado que os módulos já têm.</div>
+        </div>
+      </div>
+      <div id="ferramentas-seletor"></div>
+      <div class="panel-card" id="ferramentas-pareto"></div>
+      <div class="panel-card" id="ferramentas-controle"></div>
+      <div class="panel-card" id="ferramentas-abc"></div>
+      <div class="panel-card" id="ferramentas-ishikawa"></div>
+      <div class="panel-card" id="ferramentas-pdca"></div>
+      <div class="panel-card" id="ferramentas-5s"></div>
+    </div>
+
+    <div class="view" id="view-pop">
+      <div class="view-head">
+        <div>
+          <div class="view-title">POP</div>
+          <div class="view-sub">Procedimento operacional padrão, ligado a um ativo ou a um plano.</div>
+        </div>
+        <div id="pop-acoes"></div>
+      </div>
+      <div id="pop-lista"></div>
+    </div>
+
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal hidden" id="modal-acao">
+      <div class="modal-hd"><h3 id="modal-acao-titulo">Nova ação</h3></div>
+      <div class="modal-body" id="modal-acao-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="salvarAcao()">Salvar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-pop">
+      <div class="modal-hd"><h3 id="modal-pop-titulo">Novo POP</h3></div>
+      <div class="modal-body" id="modal-pop-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="salvarPop()">Salvar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-causa">
+      <div class="modal-hd"><h3 id="modal-causa-titulo">Nova causa</h3></div>
+      <div class="modal-body" id="modal-causa-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="salvarCausa()">Salvar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-confirmacao">
+      <div class="modal-hd"><h3 id="modal-confirmacao-titulo">Confirmar</h3></div>
+      <div class="modal-body" id="modal-confirmacao-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Voltar</button>
+        <button class="btn btn-d btn-sm" onclick="executarConfirmacao()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/gestao/app.js"></script>
+</body>
+</html>
