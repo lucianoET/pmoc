@@ -94,6 +94,7 @@ test('nenhum módulo declara aba com emoji, e todo nome usado existe no conjunto
     ['predial/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
     ['shared/modulo-manutencao.js', /navItems: \[([\s\S]*?)\n {4}\]/],
     ['equipes/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
+    ['gestao/app.js', /navItems: \[([\s\S]*?)\n {4}\]/],
   ]
   for (const [relativo, expressao] of arquivos) {
     const bloco = ler(path.join(RAIZ, relativo)).match(expressao)
@@ -121,7 +122,7 @@ test('duas abas da MESMA faixa nunca dividem o mesmo ícone', () => {
   // Ofícios já usava, e nada no gate reclamou.
   const faixas = [
     'maquinas/app.js', 'transportes/app.js', 'predial/app.js',
-    'shared/modulo-manutencao.js', 'equipes/app.js',
+    'shared/modulo-manutencao.js', 'equipes/app.js', 'gestao/app.js',
   ]
   for (const relativo of faixas) {
     const bloco = ler(path.join(RAIZ, relativo)).match(/navItems: \[([\s\S]*?)\n {4}\]/)

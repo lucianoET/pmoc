@@ -261,6 +261,56 @@ test('os nove núcleos compartilhados são importados uma vez cada', () => {
   }
 })
 
+// ── 8. leitura do decimal digitado ──────────────────────────────────────
+// Medido no navegador, gravando com um cliente falso que registra a carga:
+// "1.234,56" digitado no campo "Quanto" chegava ao banco como null, sem uma
+// palavra na tela. `null` é indistinguível de "não informado" — é a mesma
+// classe de defeito que a travessia numérica de /maquinas, /refrigeracao e
+// /calibracao já pagou três vezes.
+test('o decimal do 5W2H é lido em português, e o que não é número é recusado com motivo', async () => {
+  const { __teste } = await modulo
+  const { lerDecimal } = __teste
+  assert.deepStrictEqual(lerDecimal(''), { valor: null }, 'campo em branco é ausência de valor, não zero')
+  assert.deepStrictEqual(lerDecimal('   '), { valor: null })
+  assert.deepStrictEqual(lerDecimal('1234'), { valor: 1234 })
+  assert.deepStrictEqual(lerDecimal('1234,56'), { valor: 1234.56 })
+  assert.deepStrictEqual(lerDecimal('1.234,56'), { valor: 1234.56 }, 'ponto de milhar com vírgula decimal é a forma brasileira')
+  assert.ok(lerDecimal('1.234').erro, '"1.234" é ambíguo e tem de ser recusado, nunca adivinhado')
+  assert.ok(lerDecimal('abc').erro)
+  assert.ok(lerDecimal('-5').erro)
+  for (const entrada of ['1.234', 'abc', '-5']) {
+    assert.equal(lerDecimal(entrada).valor, undefined,
+      `"${entrada}" devolveu um valor além do motivo — recusa que também grava é pior que recusa nenhuma`)
+  }
+})
+
+// ── 9. rota e portal ────────────────────────────────────────────────────
+test('a rota /gestao existe no vercel.json e resolve para um arquivo que existe no disco', () => {
+  const vercel = JSON.parse(ler('vercel.json'))
+  const rota = vercel.rewrites.find(r => r.source === '/gestao')
+  assert.ok(rota, 'sem a reescrita, /gestao devolve 404 em produção mesmo com o arquivo no repositório')
+  assert.equal(rota.destination, '/gestao/index.html')
+  assert.ok(fs.existsSync(path.join(RAIZ, rota.destination.slice(1))),
+    'a rota aponta para um arquivo que não existe')
+  assert.equal(vercel.rewrites.length, new Set(vercel.rewrites.map(r => r.source)).size,
+    'duas reescritas para a mesma origem: a segunda nunca seria alcançada')
+})
+
+test('o portal ganhou um card para /gestao, sem mexer nos que já existiam', () => {
+  const portal = ler('index.html')
+  const destinos = [...portal.matchAll(/<a class="card" href="([^"]+)"/g)].map(m => m[1])
+  assert.equal(destinos.filter(d => d === '/gestao').length, 1,
+    'o portal precisa de exatamente um card apontando para /gestao')
+  assert.deepStrictEqual(destinos, ['/refrigeracao', '/maquinas', '/transportes', '/eletrica',
+    '/fonoclama', '/predial', '/mapa', '/equipes', '/gestao', '/calibracao'],
+    'a lista de cards do portal mudou além do acréscimo de /gestao')
+  const cartao = portal.slice(portal.indexOf('href="/gestao"'), portal.indexOf('href="/calibracao"'))
+  for (const classe of ['ico', 'nm', 'ds', 'tags']) {
+    assert.match(cartao, new RegExp(`class="${classe}"`), `o card novo não segue o formato dos outros (falta .${classe})`)
+  }
+  assert.doesNotMatch(cartao, /style="/, 'o card novo introduziu estilo próprio em vez de reusar a classe .card')
+})
+
 test('nenhuma lógica dos núcleos foi copiada para dentro do módulo', () => {
   for (const assinatura of ['export function classificarAbc', 'export function gutTotal', 'export function agruparKanban',
     'export function gradeMes', 'export function linhasGantt', 'export function limitesControle', 'export function avaliar']) {

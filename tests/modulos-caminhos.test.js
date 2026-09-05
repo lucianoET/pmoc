@@ -33,7 +33,7 @@ const RAIZ = path.join(__dirname, '..')
 // o modulo: medida contra os 9 modulos reais, ela devolve exatamente as
 // referencias verdadeiras de cada um, com zero falso positivo -- inclusive na
 // calibracao, que tem uma lib de QR embutida com fragmentos multilinha.
-const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'calibracao', 'refrigeracao']
+const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'calibracao', 'refrigeracao', 'gestao']
 
 function referenciasLocais(html) {
   const refs = []

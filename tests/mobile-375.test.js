@@ -22,7 +22,7 @@ const FOLHA = path.join(RAIZ, 'shared', 'pmoc.css')
 // nasceu, e foi o único que quebrou o shell — abrindo o #app como flex-row e
 // inserindo o miolo depois do rodapé. Ausência de um módulo numa lista de
 // gate é a forma mais barata de um defeito passar.
-const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'equipes']
+const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'equipes', 'gestao']
 
 // Renderizadores dos 4 módulos no escopo da fase. maquinas e transportes não
 // entram aqui: o critério de sucesso 5 pede que eles não regridam, não que
