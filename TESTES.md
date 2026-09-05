@@ -2731,3 +2731,35 @@ produção ele não aparece mais. O que só o navegador prova:
       `r_ins_*`/`r_upd_*`/`r_del_*` authenticated).
 - [ ] Porta da frente com a chave pública: `select` 200, coluna inexistente 400, `POST` anônimo
       401, `PATCH` anônimo `[]`.
+
+## Gestão e Qualidade — Onda C: indicadores nos painéis e curva ABC (05/09/2026)
+
+Sem migração. O que entrou é leitura e cálculo sobre dado já carregado: cartões de indicador
+(`shared/indicadores.js`) ao lado da fila de KPIs em `/maquinas` e `/transportes`, e a curva
+ABC (`shared/abc.js`) na aba Estoque de Máquinas. Gate: `tests/adocao-indicadores.test.js`.
+
+### Máquinas
+
+- [ ] Painel: os seis KPIs antigos (Máquinas, Operantes, Inoperantes, Manutenções vencendo,
+      Estoque abaixo do mín., OS em aberto) continuam com número; abaixo deles, cinco cartões de
+      indicador — dois com sparkline e seta de tendência, três em azul "Sem meta definida".
+- [ ] Estoque: abaixo da tabela de materiais, a curva ABC por valor em estoque
+      (`estoque_atual × preço`), com pílula A/B/C e barra de acumulado; item sem preço fica em C.
+- [ ] Editar preço inline de um material e salvar → a curva se redesenha com a nova posição.
+- [ ] Filtrar a tabela de materiais não apaga a curva (ela lê o catálogo inteiro, não o filtrado).
+
+### Transportes
+
+- [ ] Painel: os sete KPIs antigos continuam com número; abaixo, cinco cartões de indicador com a
+      série de manutenções por mês.
+
+### Nos dois módulos
+
+- [ ] Tema claro e escuro; 375 px: grade de cartões em 1 coluna, sem rolagem horizontal da
+      página; a tabela da curva rola dentro do próprio `.tbl-wrap`.
+- [ ] Console sem erro ao abrir Painel e Estoque.
+
+### Achado registrado, não corrigido
+
+- `fmtR` de `maquinas/app.js` escreve `R$ 14808.57` (ponto decimal) em 24 pontos; a curva usa o
+  mesmo `fmtR` para não misturar dois formatos na mesma aba. Correção de uma linha, task própria.
