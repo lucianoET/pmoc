@@ -127,11 +127,16 @@ test('refrigeracao/index.html so usa new URL(...) com primeiro argumento absolut
 // 404, módulo em branco — invisível em produção (o rewrite não expõe
 // index.html) e em /transportes/ (com barra), que é onde se costuma conferir.
 // A forma decidida é a de /maquinas e /gestao: tag estática, caminho de raiz.
-test('transportes carrega app.js por tag estatica raiz-absoluta, sem montar URL a partir de location.pathname', () => {
-  const html = fs.readFileSync(path.join(RAIZ, 'transportes', 'index.html'), 'utf8')
-  assert.match(html, /<script type="module" src="\/transportes\/app\.js"><\/script>/,
-    'transportes/index.html deveria carregar app.js por <script type="module" src="/transportes/app.js">')
-  const semComentarios = html.replace(/<!--[\s\S]*?-->/g, '')
-  assert.doesNotMatch(semComentarios, /location\.pathname/,
-    'transportes/index.html voltou a montar o caminho do app.js a partir de location.pathname')
-})
+// `mapa` tinha o mesmo loader e o mesmo defeito (corrigido em 05/09/2026, logo
+// depois do transportes) — os dois entram no mesmo caso, para que um terceiro
+// módulo que copie o loader antigo seja pego pela lista, não pela sorte.
+for (const modulo of ['transportes', 'mapa']) {
+  test(`${modulo} carrega app.js por tag estatica raiz-absoluta, sem montar URL a partir de location.pathname`, () => {
+    const html = fs.readFileSync(path.join(RAIZ, modulo, 'index.html'), 'utf8')
+    assert.match(html, new RegExp(`<script type="module" src="/${modulo}/app\\.js"></script>`),
+      `${modulo}/index.html deveria carregar app.js por <script type="module" src="/${modulo}/app.js">`)
+    const semComentarios = html.replace(/<!--[\s\S]*?-->/g, '')
+    assert.doesNotMatch(semComentarios, /location\.pathname/,
+      `${modulo}/index.html voltou a montar o caminho do app.js a partir de location.pathname`)
+  })
+}
