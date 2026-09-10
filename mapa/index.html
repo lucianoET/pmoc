@@ -123,6 +123,11 @@ html,body{height:100%}
 .nl-contagem{font-size:11px;color:var(--text3);flex-shrink:0}
 .lg-item{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:var(--text2)}
 .lg-cor{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+/* Distintivo de OS aberta no marcador (mapa/xmap-marcadores.js#distintivoOS).
+   Mora aqui e não em xmap.css (travado). Cores fixas como as dos marcadores:
+   fica sobre o mapa, que é escuro nos dois temas (D-01 do tema). */
+.xmap-os-badge{position:absolute;top:-5px;left:-5px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;color:rgba(7,17,31,.94);font:700 9px/15px var(--ff);text-align:center;box-shadow:0 0 0 1.5px rgba(7,17,31,.94);pointer-events:none}
+.lg-item .xmap-os-badge{position:static;flex-shrink:0}
 
 /* Seções colapsáveis da barra lateral: o marcador nativo sai (a seta feia
    do navegador) e entra um sinal próprio, alinhado com o título. */

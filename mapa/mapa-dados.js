@@ -94,7 +94,7 @@ export async function carregarAreas() {
   const supa = obterCliente()
   const { data, error } = await supa
     .from('maq_areas')
-    .select('id, codigo, nome, tipo, area_m2, geom, flora, inclinacao, limpeza')
+    .select('id, codigo, nome, tipo, area_m2, periodicidade_dias, geom, flora, inclinacao, limpeza')
     .eq('ativo', true)
     .order('nome')
   if (error) {
@@ -103,6 +103,27 @@ export async function carregarAreas() {
     return []
   }
   return data || []
+}
+
+// maq_operacoes por zona (Map area_id → operações), para o balão dizer a
+// última execução e o vencimento (situacaoDaZona, núcleo puro). Só as
+// colunas de data e estado: tempo e área executada ficam de fora por D-04.
+export async function carregarOperacoesPorZona() {
+  const supa = obterCliente()
+  const porZona = new Map()
+  const { data, error } = await supa
+    .from('maq_operacoes')
+    .select('area_id, status, data_programada, concluido_em')
+  if (error) {
+    console.warn('mapa-dados: operações de corte indisponíveis —', error.message)
+    return porZona
+  }
+  for (const op of data || []) {
+    if (op?.area_id == null) continue
+    if (!porZona.has(op.area_id)) porZona.set(op.area_id, [])
+    porZona.get(op.area_id).push(op)
+  }
+  return porZona
 }
 
 // cmasm_locais — a ÁRVORE inteira de locais ativos, devolvida como mapa de
@@ -227,6 +248,12 @@ const CONFIG_POR_MODULO = {
     colunaDetalhe: 'codigo',
     colunaSubtipo: 'categoria',
     colunaEstado: 'status',
+    // De onde vêm as OS ABERTAS deste ativo (distintivo no marcador). Os
+    // estados terminais são os do vocabulário REAL de cada tabela,
+    // conferidos no banco em 09/09/2026 — em maq_os são 6 estados e só
+    // dois encerram; em logs_manutencao (Refrigeração) três fluxos
+    // encerram em três palavras diferentes mais CANCELADA.
+    os: { tabela: 'maq_os', colunaAtivo: 'ativo_id', colunaStatus: 'status', terminais: ['concluida', 'cancelada'] },
   },
   eletrica: {
     tabela: 'elet_ativos',
@@ -237,6 +264,7 @@ const CONFIG_POR_MODULO = {
     colunaDetalhe: 'codigo',
     colunaSubtipo: 'tipo',
     colunaEstado: 'status',
+    os: { tabela: 'elet_os', colunaAtivo: 'ativo_id', colunaStatus: 'status', terminais: ['concluida', 'cancelada'] },
   },
   transportes: {
     tabela: 'transp_ativos',
@@ -247,6 +275,10 @@ const CONFIG_POR_MODULO = {
     colunaDetalhe: 'identificacao',
     colunaSubtipo: 'tipo',
     colunaEstado: 'status',
+    // transp_manutencoes: status nulo vale "concluída" para o próprio
+    // módulo (transportes/app.js), e o `not.in` do PostgREST já deixa o
+    // nulo de fora — só o que tem estado e não é terminal conta.
+    os: { tabela: 'transp_manutencoes', colunaAtivo: 'ativo_id', colunaStatus: 'status', terminais: ['concluida', 'cancelada'] },
   },
   fonoclama: {
     tabela: 'fono_ativos',
@@ -257,6 +289,7 @@ const CONFIG_POR_MODULO = {
     colunaDetalhe: 'codigo',
     colunaSubtipo: 'tipo',
     colunaEstado: 'status',
+    os: { tabela: 'fono_os', colunaAtivo: 'ativo_id', colunaStatus: 'status', terminais: ['concluida', 'cancelada'] },
   },
   climatizacao: {
     tabela: 'equipamentos',
@@ -273,6 +306,7 @@ const CONFIG_POR_MODULO = {
     // colunaSituacao — as outras quatro famílias não ganham nada aqui.
     colunaSituacao: 'situacao',
     situacaoVisivel: 'instalado',
+    os: { tabela: 'logs_manutencao', colunaAtivo: 'equip_id', colunaStatus: 'status', terminais: ['CONCLUIDA', 'CONFERIDA', 'ENCERRADA', 'CANCELADA'] },
   },
 }
 
@@ -293,7 +327,39 @@ export function configDoModulo(modulo) {
   return config
 }
 
+// OS abertas por ativo: Map id → quantas não estão em estado terminal.
+// Falha aqui NÃO derruba a camada (aviso no console, contagem vazia):
+// um distintivo a menos é melhor que 171 marcadores sumindo porque uma
+// tabela de OS não respondeu.
+export async function carregarOsAbertas(modulo) {
+  const { os } = configDoModulo(modulo)
+  const contagem = new Map()
+  if (!os) return contagem
+  const supa = obterCliente()
+  const { data, error } = await supa
+    .from(os.tabela)
+    .select(`${os.colunaAtivo}, ${os.colunaStatus}`)
+    .not(os.colunaStatus, 'in', `(${os.terminais.join(',')})`)
+  if (error) {
+    console.warn(`mapa-dados: OS abertas de ${modulo} indisponíveis (${os.tabela}) —`, error.message)
+    return contagem
+  }
+  for (const linha of data || []) {
+    const id = linha?.[os.colunaAtivo]
+    if (id == null) continue
+    contagem.set(id, (contagem.get(id) || 0) + 1)
+  }
+  return contagem
+}
+
+// Ativos da família mais `osAbertas` resolvido em cada linha — uma leitura
+// a mais, em paralelo, e as camadas não precisam saber de onde veio.
 export async function carregarAtivosDoModulo(modulo) {
+  const [ativos, osAbertas] = await Promise.all([_consultarAtivos(modulo), carregarOsAbertas(modulo)])
+  return ativos.map((a) => ({ ...a, osAbertas: osAbertas.get(a?.id) || 0 }))
+}
+
+async function _consultarAtivos(modulo) {
   const config = configDoModulo(modulo)
   const supa = obterCliente()
   let consulta = supa.from(config.tabela).select(config.colunas)

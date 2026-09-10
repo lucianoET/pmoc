@@ -16,7 +16,7 @@
 
 import { carregarAtivosEletricos, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
 import { linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
-import { desenharAtivosAgrupados } from './xmap-marcadores.js'
+import { desenharAtivosAgrupados, linhaOS } from './xmap-marcadores.js'
 
 // Os mesmos quatro tipos de eletrica/app.js:8-13, duplicados aqui de
 // propósito: importar eletrica/app.js executaria o boot inteiro daquele
@@ -93,6 +93,8 @@ function balaoEletrico(a, tipo, info) {
     ['Uso',     (a.uso_atual || 0) + ' ' + (a.unidade_uso || 'h')],
     ['Posição', a.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${a.localPosicao || 'local'}`, 'info'],
   ];
+  const os = linhaOS(a);
+  if (os) rows.splice(1, 0, os);
   // O link nunca é concatenado — sai só de linkDoModulo, que valida
   // módulo por lista fechada e identificador por forma (T-10-22). Se a
   // função devolver nulo, a linha simplesmente não aparece.

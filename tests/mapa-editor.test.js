@@ -144,7 +144,12 @@ test('as escritas em maq_areas moram em mapa-dados.js — mapa-editor.js chama s
 // de ativo passaram a viver na configuração — uma varredura só de .from(
 // continuaria PASSANDO enquanto tivesse ficado cega para a metade que
 // mais cresce. As duas origens são lidas juntas, de propósito.
-test('mapa-dados.js só fala com as tabelas previstas (maq_areas, cmasm_locais e as cinco tabelas de ativo)', () => {
+// Desde 09/09/2026 a porta única também LÊ (nunca grava) a tabela de OS de
+// cada família — `os.tabela` em CONFIG_POR_MODULO, capturada pelo mesmo
+// regex de `tabela:` — e maq_operacoes, para o balão da zona. As dez
+// entram na lista de propósito; a próxima tabela que aparecer aqui continua
+// tendo de ser declarada.
+test('mapa-dados.js só fala com as tabelas previstas (maq_areas, cmasm_locais, as cinco de ativo, as cinco de OS e maq_operacoes)', () => {
   const dados = ler(DADOS)
   const literais = [...dados.matchAll(/\.from\(\s*['"]([a-z_]+)['"]/g)].map((m) => m[1])
   const configuradas = [...dados.matchAll(/tabela:\s*['"]([a-z_]+)['"]/g)].map((m) => m[1])
@@ -163,6 +168,14 @@ test('mapa-dados.js só fala com as tabelas previstas (maq_areas, cmasm_locais e
     'transp_ativos',
     'fono_ativos',
     'equipamentos',
+    // leitura de OS aberta por família (09/09/2026)
+    'maq_os',
+    'elet_os',
+    'transp_manutencoes',
+    'fono_os',
+    'logs_manutencao',
+    // última execução e vencimento da zona (09/09/2026)
+    'maq_operacoes',
   ])
   for (const tabela of tabelas) {
     assert.ok(permitidas.has(tabela), `mapa-dados.js referencia tabela inesperada: ${tabela}`)

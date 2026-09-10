@@ -26,7 +26,7 @@
 
 import { carregarAtivosDoModulo, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
 import { linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
-import { desenharAtivosAgrupados } from './xmap-marcadores.js'
+import { desenharAtivosAgrupados, linhaOS } from './xmap-marcadores.js'
 
 // Só apresentação — rótulo de camada e emoji do marcador. O nome de
 // tabela e as colunas ficam em CONFIG_POR_MODULO (mapa-dados.js); aqui não
@@ -62,6 +62,8 @@ function ativoSVG(emoji, estado) {
 // Balão de um ativo só — o de sempre.
 function balaoDoAtivo(a, modulo, info) {
   const rows = [['Estado', rotuloDoEstado(a.estado), classeDoEstado(a.estado)]]
+  const os = linhaOS(a)
+  if (os) rows.push(os)
   if (a.detalhe) rows.push(['Identificação', esc(a.detalhe)])
   // Horímetro/odômetro não existe em equipamentos (refrigeração) — a
   // linha só entra quando a coluna veio, em vez de mostrar "0 h" para

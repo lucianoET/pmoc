@@ -72,13 +72,29 @@ test('mapa/xmap-layers-aguada.js continua declarando os dados fixos de infraestr
 // decisão preserva: as colunas continuam existindo no banco desde a
 // migração 12, e quando a estimativa vier ela vai sair de execução real
 // em vez de constante arbitrária.
-test('nenhum arquivo JavaScript de mapa/ referencia a tabela de execução de operação de máquina (D-04)', () => {
+// 09/09/2026: o balão da zona passou a dizer a última execução e o
+// vencimento, e para isso a porta única lê maq_operacoes — só data e
+// estado. D-04 continua valendo no que ela decide: nenhuma estimativa de
+// tempo/custo, nenhuma leitura das duas colunas de rendimento (caso
+// seguinte). A tabela fica permitida em UM arquivo, mapa-dados.js, e o
+// select dela é conferido aqui pelo nome das colunas que carrega.
+test('só mapa-dados.js referencia maq_operacoes, e só lê data e estado — nunca as colunas de rendimento (D-04)', () => {
   for (const arquivo of arquivosJsDeMapa()) {
     const conteudo = fs.readFileSync(arquivo, 'utf8')
+    if (path.basename(arquivo) === 'mapa-dados.js') {
+      const sel = conteudo.match(/\.from\('maq_operacoes'\)\s*\.select\('([^']*)'\)/)
+      assert.ok(sel, 'mapa-dados.js deveria ler maq_operacoes por um .from().select() com colunas nomeadas')
+      assert.deepEqual(
+        sel[1].split(',').map((c) => c.trim()).sort(),
+        ['area_id', 'concluido_em', 'data_programada', 'status'],
+        'a leitura de maq_operacoes é só o que o vencimento precisa'
+      )
+      continue
+    }
     assert.doesNotMatch(
       conteudo,
       /maq_operacoes/,
-      `${path.basename(arquivo)} referencia maq_operacoes — estimativa de tempo/custo por zona é D-04, fora desta fase`
+      `${path.basename(arquivo)} referencia maq_operacoes — só a porta única (mapa-dados.js) lê essa tabela`
     )
   }
 })

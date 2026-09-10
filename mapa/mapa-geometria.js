@@ -380,6 +380,57 @@ export function destinoDaUrl(search) {
   return { modulo, id }
 }
 
+// ── Bloco 9 — situação de execução da zona ─────────────────────────────
+// A periodicidade da zona (`maq_areas.periodicidade_dias`) e a data de
+// conclusão de cada operação de corte existem desde as migrações 12 e 13,
+// e o balão da zona não os mostrava: dizia a
+// flora e as máquinas, não "vencida há 7 dias", que é a pergunta do
+// controle vegetal. A regra mora aqui, sem API de navegador, e a camada
+// só formata. Data-só ('2026-08-18', `data_programada`) é lida como dia
+// LOCAL: `new Date('2026-08-18')` é meia-noite UTC, que neste fuso é o dia
+// 17 às 21h — um corte programado para o dia 18 apareceria no 17.
+export const JANELA_A_VENCER_DIAS = 7
+
+function _diaLocal(valor) {
+  if (valor == null || valor === '') return null
+  if (valor instanceof Date) return Number.isNaN(valor.getTime()) ? null : new Date(valor.getFullYear(), valor.getMonth(), valor.getDate())
+  const so = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(valor))
+  if (so) return new Date(Number(so[1]), Number(so[2]) - 1, Number(so[3]))
+  const d = new Date(valor)
+  return Number.isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+/**
+ * @returns {{estado:'sem_registro'|'sem_periodicidade'|'em_dia'|'a_vencer'|'vencida',
+ *   ultimo:Date|null, proximo:Date|null, dias:number|null, programada:Date|null, emExecucao:boolean}}
+ * `dias` é quantos faltam para a próxima (negativo = vencida há N dias).
+ */
+export function situacaoDaZona(area, operacoes, hoje = new Date()) {
+  let ultimo = null
+  let programada = null
+  let emExecucao = false
+  for (const op of Array.isArray(operacoes) ? operacoes : []) {
+    if (op?.status === 'concluida') {
+      const d = _diaLocal(op.concluido_em)
+      if (d && (!ultimo || d > ultimo)) ultimo = d
+    } else if (op?.status === 'em_execucao') {
+      emExecucao = true
+    } else if (op?.status === 'programada') {
+      const d = _diaLocal(op.data_programada)
+      if (d && (!programada || d < programada)) programada = d
+    }
+  }
+  const base = { ultimo, programada, emExecucao, proximo: null, dias: null }
+  if (!ultimo) return { ...base, estado: 'sem_registro' }
+  const periodicidade = Number(area?.periodicidade_dias)
+  if (!Number.isFinite(periodicidade) || periodicidade <= 0) return { ...base, estado: 'sem_periodicidade' }
+  const proximo = new Date(ultimo.getFullYear(), ultimo.getMonth(), ultimo.getDate() + periodicidade)
+  const dia0 = _diaLocal(hoje) || _diaLocal(new Date())
+  const dias = Math.round((proximo - dia0) / 86400000)
+  const estado = dias < 0 ? 'vencida' : dias <= JANELA_A_VENCER_DIAS ? 'a_vencer' : 'em_dia'
+  return { ...base, proximo, dias, estado }
+}
+
 // ── Bloco 8 — vocabulário de estado do ativo ───────────────────────────
 // Cada tabela de ativo fala o estado com palavras próprias, e até agora
 // cada camada trazia a própria ponte: statusParaExibicao em
@@ -411,6 +462,12 @@ export const ESTADOS = {
 // Cor de quem não casou com a lista fechada — nunca a cor de "operante",
 // para um valor desconhecido não passar por máquina boa na tela.
 export const COR_ESTADO_DESCONHECIDO = '#8fa8c8'
+
+// Cor do distintivo de OS aberta (mapa/xmap-marcadores.js#distintivoOS e
+// a legenda). Não é estado — é a outra pergunta, "alguém deve serviço
+// aqui?" — e por isso não entra em ESTADOS; mora ao lado da paleta pela
+// mesma regra: hex escrito uma vez, em JavaScript, nunca na marcação.
+export const COR_OS_ABERTA = '#f97316'
 
 // Um dicionário por módulo, cada um com os valores REAIS da coluna que
 // aquela tabela usa (verificados no banco de produção em 18/08/2026):

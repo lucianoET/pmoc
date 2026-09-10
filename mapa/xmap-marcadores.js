@@ -26,6 +26,7 @@ import {
   rotuloDoEstado,
   classeDoEstado,
   linkDoModulo,
+  COR_OS_ABERTA,
 } from './mapa-geometria.js'
 
 function esc(valor) {
@@ -72,6 +73,30 @@ function grupoSVG(emoji, estado, quantos) {
   </svg>`
 }
 
+// ── OS aberta no marcador ──
+// A cor do marcador vem do ESTADO do ativo; OS aberta é outra pergunta
+// ("alguém está devendo serviço aqui?") e ganha o próprio sinal, um
+// distintivo no canto, para não disputar a cor com o estado. No grupo é
+// a SOMA: vinte máquinas num ponto com três OS abertas mostram 3.
+export function osAbertasDe(ativos) {
+  let total = 0
+  for (const a of ativos || []) total += Number(a?.osAbertas) || 0
+  return total
+}
+
+export function distintivoOS(quantas) {
+  const n = Number(quantas) || 0
+  if (n <= 0) return ''
+  return `<span class="xmap-os-badge" style="background:${COR_OS_ABERTA}" title="${n} OS aberta(s)">${n > 9 ? '9+' : n}</span>`
+}
+
+// Linha do balão de um ativo só — as três camadas a inserem, cada uma no
+// balão que já desenha; sem OS, nada (nulo), para o balão não dizer "0".
+export function linhaOS(ativo) {
+  const n = Number(ativo?.osAbertas) || 0
+  return n > 0 ? ['OS abertas', String(n), 'warn'] : null
+}
+
 // Corta em 15 e ANUNCIA o resto, mesmo idioma das listas da barra lateral:
 // truncar em silêncio faria o balão mentir sobre o próprio tamanho.
 const LIMITE_LISTA_GRUPO = 15
@@ -85,7 +110,9 @@ function balaoDoGrupo(grupo, modulo, apresentacao) {
     const nome = link
       ? `<a href="${link}" class="xmap-popup-link">${esc(ativo.rotulo)}</a>`
       : esc(ativo.rotulo)
-    return [nome, rotuloDoEstado(ativo.estado), classeDoEstado(ativo.estado)]
+    const os = Number(ativo.osAbertas) || 0
+    const estado = rotuloDoEstado(ativo.estado) + (os > 0 ? ` · ${os} OS` : '')
+    return [nome, estado, classeDoEstado(ativo.estado)]
   })
   const sobrando = grupo.ativos.length - linhas.length
   if (sobrando > 0) linhas.push([`+${sobrando} neste ponto`, 'refine pela lista do módulo', 'info'])
@@ -115,9 +142,10 @@ export function desenharAtivosAgrupados(group, ativos, opcoes) {
     const varios = ponto.ativos.length > 1
     const primeiro = ponto.ativos[0]
     const lado = varios ? 34 : ladoDeUm
+    const desenho = varios ? grupoSVG(emoji, estadoMaisGrave(ponto.ativos), ponto.ativos.length) : svgDeUm(primeiro)
     const marker = L.marker([ponto.lat, ponto.lon], {
       icon: L.divIcon({
-        html: varios ? grupoSVG(emoji, estadoMaisGrave(ponto.ativos), ponto.ativos.length) : svgDeUm(primeiro),
+        html: desenho + distintivoOS(osAbertasDe(ponto.ativos)),
         className: '',
         iconSize: [lado, lado],
         iconAnchor: [lado / 2, lado / 2],

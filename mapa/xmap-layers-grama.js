@@ -10,9 +10,9 @@
  * cliente só existe depois do login.
  */
 
-import { carregarAreas, carregarMaquinas, carregarArvoreDeLocais, posicionarAtivos } from './mapa-dados.js'
-import { maquinasParaZona, normalizarCategoria, linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado } from './mapa-geometria.js'
-import { desenharAtivosAgrupados } from './xmap-marcadores.js'
+import { carregarAreas, carregarMaquinas, carregarArvoreDeLocais, carregarOperacoesPorZona, posicionarAtivos } from './mapa-dados.js'
+import { maquinasParaZona, normalizarCategoria, linkDoModulo, corDoEstado, rotuloDoEstado, classeDoEstado, situacaoDaZona } from './mapa-geometria.js'
+import { desenharAtivosAgrupados, linhaOS } from './xmap-marcadores.js'
 
 /* ── Estilo por VEGETAÇÃO ──
    A zona de maq_areas é o que ela sempre foi na prática e agora está dito
@@ -99,14 +99,38 @@ function resolverCoordenadasArea(area) {
    compatíveis com cada zona (maquinasParaZona, núcleo puro) — não há
    coluna maquinas_compativeis no banco (decisão do plano 10-01: seria
    segunda fonte de verdade). */
-function renderAreas(group, areas, maquinas) {
+/* ── Execução da zona no balão ──
+   Última execução, periodicidade e vencimento saem de situacaoDaZona
+   (núcleo puro); aqui só se formata. Cada ausência é dita com a palavra
+   certa — "sem registro" e "não cadastrada" são dois problemas diferentes,
+   e hoje 13 das 17 zonas estão no segundo. Zona VENCIDA sai tracejada no
+   mapa: é o único estado que pede ação de quem olha de longe. */
+const fmtDia = (d) => (d ? d.toLocaleDateString('pt-BR') : '—');
+
+function linhasDeExecucao(area, sit) {
+  const rows = [];
+  if (sit.emExecucao) rows.push(['Execução', 'em andamento', 'info']);
+  else if (sit.programada) rows.push(['Programada', fmtDia(sit.programada), 'info']);
+  const periodicidade = Number(area.periodicidade_dias);
+  rows.push(['Periodicidade', periodicidade > 0 ? `a cada ${periodicidade} dias` : 'não cadastrada', periodicidade > 0 ? '' : 'warn']);
+  rows.push(['Última execução', sit.ultimo ? fmtDia(sit.ultimo) : 'sem registro', sit.ultimo ? '' : 'warn']);
+  if (sit.estado === 'vencida') rows.push(['Próxima', `${fmtDia(sit.proximo)} · vencida há ${-sit.dias} dia(s)`, 'error']);
+  else if (sit.estado === 'a_vencer') rows.push(['Próxima', sit.dias === 0 ? `${fmtDia(sit.proximo)} · vence hoje` : `${fmtDia(sit.proximo)} · em ${sit.dias} dia(s)`, 'warn']);
+  else if (sit.estado === 'em_dia') rows.push(['Próxima', `${fmtDia(sit.proximo)} · em ${sit.dias} dias`, 'ok']);
+  return rows;
+}
+
+function renderAreas(group, areas, maquinas, operacoesPorZona) {
   areas.forEach(area => {
     const coords = resolverCoordenadasArea(area);
     if (!coords || !coords.length) return;
 
     const s = estiloDaVegetacao(area.flora);
+    const sit = situacaoDaZona(area, operacoesPorZona?.get(area.id), new Date());
+    const vencida = sit.estado === 'vencida';
     const poly = L.polygon(coords, {
-      color: s.color, fillColor: s.fill, fillOpacity: 0.13, weight: 2,
+      color: s.color, fillColor: s.fill, fillOpacity: vencida ? 0.22 : 0.13,
+      weight: vencida ? 3 : 2, dashArray: vencida ? '6 4' : null,
     });
 
     const { compativeis, semMapeamento } = maquinasParaZona(area, maquinas);
@@ -122,6 +146,7 @@ function renderAreas(group, areas, maquinas) {
     if (area.flora)      rows.push(['Flora',      floraLabel(area.flora)]);
     if (area.inclinacao) rows.push(['Inclinação', inclLabels[area.inclinacao] || area.inclinacao]);
     if (area.limpeza)    rows.push(['Limpeza',    limpLabels[area.limpeza] || area.limpeza]);
+    rows.push(...linhasDeExecucao(area, sit));
     if (compativeis.length) rows.push(['Máquinas', maqStr, 'info']);
     // Resposta ao risco de a lista de compatíveis vir vazia sem
     // explicação: sempre que houver categoria fora da regra de
@@ -161,6 +186,8 @@ function balaoDaMaquina(m, categoria) {
     ['Uso',      (m.uso_atual || 0) + ' ' + (m.unidade_uso || 'h')],
     ['Posição',  m.origemPosicao === 'propria' ? 'Própria' : `Herdada de ${m.localPosicao || 'local'}`, 'info'],
   ];
+  const os = linhaOS(m);
+  if (os) rows.splice(1, 0, os);
 
   // O link nunca é concatenado — sai só de linkDoModulo, que valida
   // módulo por lista fechada e identificador por forma (T-10-22). Se a
@@ -184,10 +211,11 @@ function renderMaquinas(group, maquinas) {
 }
 
 export async function registrarCamadasGrama() {
-  const [areas, maquinasBrutas, locais] = await Promise.all([
+  const [areas, maquinasBrutas, locais, operacoesPorZona] = await Promise.all([
     carregarAreas(),
     carregarMaquinas(),
     carregarArvoreDeLocais(),
+    carregarOperacoesPorZona(),
   ]);
   const maquinasPosicionadas = posicionarAtivos(maquinasBrutas, locais, 'maquinas');
 
@@ -197,7 +225,7 @@ export async function registrarCamadasGrama() {
       label: 'Vegetação e áreas externas',
       color: ESTILO_VEGETACAO_PADRAO.color,
       render(group) {
-        renderAreas(group, areas, maquinasBrutas);
+        renderAreas(group, areas, maquinasBrutas, operacoesPorZona);
       },
     },
 
