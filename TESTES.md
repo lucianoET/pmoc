@@ -2812,3 +2812,32 @@ As **três formas de URL** têm de abrir o módulo — a do meio era a que quebr
 Não há mais nenhum `import(modulo)` no repositório. Se um módulo novo precisar de loader
 dinâmico por algum motivo real, ele tem de tratar as três formas de URL acima — e entrar na
 lista do gate antes, não depois.
+
+## Mapa — caminho de volta ficha → mapa (09/09/2026)
+
+Até aqui o deep link só ia do mapa para a ficha. Agora a ficha de Máquinas, a linha de ativo
+de Elétrica/Fonoclama e a de Transportes têm **"Ver no mapa"** (`verNoMapa`,
+`shared/componentes.js`), e `/mapa?modulo=<chave>&ativo=<id>` voa até o ativo
+(`destinoDaUrl`, `mapa/mapa-geometria.js`, consumida por `mapa/app.js` depois da carga).
+Coberto por gate (`tests/mapa-link-ficha.test.js`): ida e volta por comportamento, lista
+fechada, nenhum consumidor escrevendo a rota à mão, leitura só depois de `POSICIONADOS`
+existir. O que só o navegador prova é o voo e o aviso:
+
+### Local (`python -m http.server 8000`)
+
+- [ ] `/maquinas/index.html` → clicar numa máquina → a ficha tem **Ver no mapa** ao lado de
+      "Editar cadastro", sem sublinhado e com a mesma altura dos botões vizinhos.
+- [ ] Clicar em **Ver no mapa** → `/mapa?modulo=maquinas&ativo=N` abre em zoom 19 com a máquina
+      no centro e um halo de 2,5 s na cor do estado; a barra lateral fica fechada.
+- [ ] `/eletrica/index.html` e `/transportes/index.html` → aba Ativos: toda linha tem **Ver no
+      mapa** (13 e 43 linhas hoje), inclusive para o cargo **Livre** — é leitura, não escrita.
+- [ ] `/mapa?modulo=climatizacao&ativo=<id de um item da lista "Não localizados">` → o mapa
+      abre no enquadramento normal, mostra o aviso "<nome> ainda não tem posição no mapa." e a
+      barra lateral abre na seção "Não localizados".
+- [ ] `/mapa?modulo=refrigeracao&ativo=1`, `?modulo=maquinas&ativo=-1`, `?modulo=maquinas`,
+      `?ativo=1` → o mapa abre como sempre, sem aviso e sem erro no console.
+
+### Produção
+
+- [ ] `https://pmoc-orcin.vercel.app/mapa?modulo=maquinas&ativo=1` **sem barra** → o rewrite
+      preserva a query e o mapa voa até a máquina 1.

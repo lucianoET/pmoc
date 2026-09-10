@@ -110,3 +110,24 @@ export function regua(etapas, passo) {
 export function vazio(mensagem, dica) {
   return `<div class="vazio"><p>${esc(mensagem)}</p>${dica ? `<p class="vazio-dica">${esc(dica)}</p>` : ''}</div>`
 }
+
+// ── link para o mapa ─────────────────────────────────────────────────
+/**
+ * Botão "Ver no mapa" da ficha de ativo — a metade de ORIGEM do caminho
+ * ficha → mapa, a volta de `linkDoModulo` (mapa/mapa-geometria.js), que
+ * só sabia ir do mapa para a ficha. Três consumidores (Máquinas, o motor
+ * compartilhado de Elétrica/Fonoclama, Transportes), uma rota escrita
+ * aqui. Lista fechada: os módulos que o mapa carrega E que têm ficha para
+ * ligar daqui — climatização fica de fora porque o app de Refrigeração é
+ * congelado e não importa deste arquivo. Módulo fora da lista ou id que
+ * não é inteiro devolve vazio: sem âncora é melhor que âncora para rota
+ * inventada. A leitura do outro lado é `destinoDaUrl`, no núcleo puro do
+ * mapa; o gate fecha ida e volta por comportamento.
+ */
+export const MODULOS_NO_MAPA = ['maquinas', 'eletrica', 'transportes', 'fonoclama']
+
+export function verNoMapa(modulo, id) {
+  if (!MODULOS_NO_MAPA.includes(modulo)) return ''
+  if (typeof id !== 'number' || !Number.isSafeInteger(id) || id < 0) return ''
+  return `<a class="btn btn-s btn-sm" href="/mapa?modulo=${modulo}&amp;ativo=${id}">Ver no mapa</a>`
+}

@@ -121,6 +121,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100
 .b-gold{background:color-mix(in srgb,var(--orange) 15%,transparent);color:var(--orange)}
 
 .btn{border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff);transition:.15s}
+/* âncora vestida de botão ("Ver no mapa"): sem isto sai sublinhada, inline e mais alta que o <button> vizinho — line-height normal é o que o <button> já usa */
+a.btn{display:inline-block;text-decoration:none;line-height:normal}
 .btn-p{background:var(--accent);color:#0f1214}.btn-p:hover{opacity:.88}
 .btn-s{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
 .btn-s:hover{border-color:var(--accent-texto);color:var(--accent-texto)}

@@ -2,7 +2,7 @@ import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
 import { COLUNAS_ESTOQUE, proximaOrdem, aplicarOrdemEFiltro } from './estoque-tabela.js'
-import { pilula, seletor, chips as chipsHTML, regua, vazio } from '../shared/componentes.js'
+import { pilula, seletor, chips as chipsHTML, regua, vazio, verNoMapa } from '../shared/componentes.js'
 import { FLUXO_CONTRATACAO } from './contratacoes.js'
 import { lerNumero, lerNumeroTexto, paraCampo } from './numeros.js'
 import {
@@ -3008,6 +3008,8 @@ function abrirFichaAtivo(id){
   const btnCadastro = document.getElementById('ficha-btn-cadastro')
   btnCadastro.style.display = podeEditarCadastro() ? '' : 'none'
   btnCadastro.onclick = () => { fecharModal('modal-ficha'); abrirModalAtivo(id) }
+  // volta do deep link do mapa: onde esta máquina está (ou onde posicioná-la)
+  document.getElementById('ficha-btn-mapa').innerHTML = verNoMapa('maquinas', id)
 
   // instruções — só aparecem quando existem
   const insWrap = document.getElementById('ficha-instrucoes-wrap')

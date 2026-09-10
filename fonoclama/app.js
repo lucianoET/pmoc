@@ -15,6 +15,7 @@ const TIPOS = {
 
 iniciarModulo({
   prefixo: 'fono',
+  chaveMapa: 'fonoclama',   // chave deste módulo no /mapa — liga "Ver no mapa" na linha do ativo
   nome: 'Fonoclama',
   icone: '📢',
   iconeAba: 'som',   // nome do conjunto comum; `icone` acima segue sendo o emoji da tela de login

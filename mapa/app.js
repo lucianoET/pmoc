@@ -18,7 +18,7 @@ import { registrarCamadaPredios } from './xmap-layers-predios.js'
 import { iniciarEditorZonas, iniciarEditorAtivos } from './mapa-editor.js'
 import { iniciarPlantaDeReferencia } from './mapa-planta.js'
 import { montarGeoJSON, baixarGeoJSON } from './mapa-exportar.js'
-import { ESTADOS, corDoEstado } from './mapa-geometria.js'
+import { ESTADOS, corDoEstado, destinoDaUrl } from './mapa-geometria.js'
 import { CARGOS_ZONA } from './mapa-editor.js'
 
 // Rótulo de exibição por módulo de origem — o mesmo vocabulário fechado de
@@ -161,6 +161,7 @@ async function registrarCamadasDoBanco() {
     // ponto.
     renderNaoLocalizados()
     enquadrarNoQueExiste()
+    _irParaAtivoDaUrl()
     await renderZonasSemContorno()
   } catch (error) {
     mostrarErroMapa(error)
@@ -545,10 +546,10 @@ function ligarBuscaDeAtivo() {
 // desenhado pela camada do módulo — este círculo só diz "é este aqui" e
 // some sozinho, para não virar um segundo marcador permanente competindo
 // com o da camada.
-function voarAte(ativo) {
+function voarAte(ativo, { animar = true } = {}) {
   const mapa = xMap.getLeafletMap()
   if (!mapa) return
-  mapa.flyTo([ativo.lat, ativo.lon], 19, { duration: 0.6 })
+  mapa.flyTo([ativo.lat, ativo.lon], 19, { duration: 0.6, animate: animar })
   const halo = L.circleMarker([ativo.lat, ativo.lon], {
     radius: 22,
     color: corDoEstado(ativo.estado),
@@ -557,6 +558,44 @@ function voarAte(ativo) {
   }).addTo(mapa)
   setTimeout(() => mapa.removeLayer(halo), 2500)
   _mostrarBarraModulos(false)
+}
+
+// ── chegada por deep link (ficha → mapa) ───────────────────────────────
+// A volta de linkDoModulo: `verNoMapa` (shared/componentes.js) monta
+// `/mapa?modulo=&ativo=` na ficha, e aqui o mapa voa até o ativo. Roda
+// UMA vez por carregamento, depois de posicionarAtivos ter povoado as
+// duas listas — antes disso não há o que achar. Sem animação, de
+// propósito: flyTo roda em requestAnimationFrame, que não dispara com a
+// aba fora de foco, e a chegada por link é justamente o caso da aba
+// recém-aberta (a mesma lição do fitBounds de enquadrarNoQueExiste).
+// Ativo sem posição não é ignorado em silêncio: o aviso diz o nome e a
+// barra abre na lista onde ele pode ser posicionado — quem veio da ficha
+// para ver onde está é a pessoa certa para dizer onde está.
+let DEEP_LINK_CONSUMIDO = false
+
+function _irParaAtivoDaUrl() {
+  if (DEEP_LINK_CONSUMIDO) return
+  DEEP_LINK_CONSUMIDO = true
+  const destino = destinoDaUrl(window.location.search)
+  if (!destino) return
+  const mesmo = (a) => a.origemModulo === destino.modulo && a.id === destino.id
+  const posicionado = POSICIONADOS.find(mesmo)
+  if (posicionado) {
+    voarAte(posicionado, { animar: false })
+    return
+  }
+  const semPosicao = NAO_LOCALIZADOS.find(mesmo)
+  if (!semPosicao) return
+  // Rótulo mais detalhe: em climatização o rótulo é o tipo ("SPLIT"), e
+  // só o local diz qual das 177 é.
+  const nome = [semPosicao.rotulo, semPosicao.detalhe].filter(Boolean).join(' · ')
+  mostrarAviso(`${nome} ainda não tem posição no mapa.`)
+  const secao = document.getElementById('nao-localizados-titulo')?.closest('details')
+  if (secao) {
+    secao.open = true
+    secao.scrollIntoView({ block: 'start' })
+  }
+  _mostrarBarraModulos(true)
 }
 
 // ── legenda ────────────────────────────────────────────────────────────
