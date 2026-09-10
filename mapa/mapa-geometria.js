@@ -361,6 +361,25 @@ export function linkDoModulo(modulo, id) {
   return `${rota}?ativo=${id}`
 }
 
+// A volta: o que a barra de endereço traz quando alguém chega ao mapa a
+// partir de uma ficha (`verNoMapa`, shared/componentes.js). Mesma
+// disciplina de linkDoModulo — módulo em lista fechada (a de
+// ESTADO_POR_MODULO, que é a lista do que o mapa desenha), id só de
+// dígitos e inteiro seguro; qualquer outra forma devolve null, sem erro e
+// sem mensagem, que é o que os módulos de destino já fazem com `?ativo=`.
+// URLSearchParams é padrão WHATWG, existe em Node — o núcleo continua
+// testável sem navegador.
+export function destinoDaUrl(search) {
+  const params = new URLSearchParams(search || '')
+  const modulo = params.get('modulo')
+  const bruto = params.get('ativo')
+  if (!Object.prototype.hasOwnProperty.call(ESTADO_POR_MODULO, modulo)) return null
+  if (bruto === null || !/^\d+$/.test(bruto)) return null
+  const id = Number(bruto)
+  if (!Number.isSafeInteger(id)) return null
+  return { modulo, id }
+}
+
 // ── Bloco 8 — vocabulário de estado do ativo ───────────────────────────
 // Cada tabela de ativo fala o estado com palavras próprias, e até agora
 // cada camada trazia a própria ponte: statusParaExibicao em

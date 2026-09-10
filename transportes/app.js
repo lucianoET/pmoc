@@ -2,6 +2,7 @@ import { Auth } from '../shared/auth.js'
 import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
 import { cartaoIndicador } from '../shared/indicadores.js'
+import { verNoMapa } from '../shared/componentes.js'
 
 let supa = null
 let auth = null
@@ -415,6 +416,7 @@ function renderAtivos() {
           ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalViagem(${ativo.id})">+ Viagem</button>` : ''}
           ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalManutencao(${ativo.id})">+ Manut.</button>` : ''}
           ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalAtivo(${ativo.id})">Editar</button>` : ''}
+          ${verNoMapa('transportes', ativo.id)}
         </div>
       </td>
     </tr>

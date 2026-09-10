@@ -17,6 +17,7 @@ import { montarArvore } from './arvore.js'
 import { gravar } from './persistencia.js'
 import { calcularOcorrencia } from './vencimento.js'
 import { aplicarShell } from './shell.js'
+import { verNoMapa } from './componentes.js'
 
 const ROLES_ESCRITA = ['admin', 'gestor', 'tecnico']
 
@@ -535,7 +536,7 @@ function renderAtivos() {
         <td class="num">${fmtNum(ativo.uso_atual)} ${esc(ativo.unidade_uso)}</td>
         <td><span class="badge ${BADGE_ATIVO[ativo.status]}">${STATUS_ATIVO[ativo.status]}</span></td>
         <td>${pendentes ? `<span class="badge b-warn">${pendentes}</span>` : '<span class="badge b-ok">0</span>'}</td>
-        <td>${botaoEscrita('Editar', `abrirModalAtivo(${ativo.id})`, 'btn-s')}</td>
+        <td><div style="display:flex;gap:6px;flex-wrap:wrap">${botaoEscrita('Editar', `abrirModalAtivo(${ativo.id})`, 'btn-s')}${verNoMapa(CFG.chaveMapa, ativo.id)}</div></td>
       </tr>`
   }).join('')
 
@@ -1153,6 +1154,8 @@ function exporNoWindow() {
  * @param {string} config.descricao  Subtítulo do painel.
  * @param {object} config.tipos      { CHAVE: { nome, emoji } } — tipos de ativo.
  * @param {string} [config.unidadeUso='h'] Unidade do horímetro.
+ * @param {string} [config.chaveMapa]  Chave deste módulo no /mapa (ex.: 'eletrica'); com ela
+ *                                    a linha do ativo ganha "Ver no mapa". Sem ela, nada.
  * @param {string} [config.versao]   Versão do módulo, exibida no rodapé do shell comum;
  *                                    quando ausente, config.versao simplesmente não aparece.
  */
