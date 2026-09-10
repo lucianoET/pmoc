@@ -19,6 +19,7 @@ import { iniciarEditorZonas, iniciarEditorAtivos } from './mapa-editor.js'
 import { iniciarPlantaDeReferencia } from './mapa-planta.js'
 import { montarGeoJSON, baixarGeoJSON } from './mapa-exportar.js'
 import { ESTADOS, corDoEstado, destinoDaUrl } from './mapa-geometria.js'
+import { distintivoOS } from './xmap-marcadores.js'
 import { CARGOS_ZONA } from './mapa-editor.js'
 
 // Rótulo de exibição por módulo de origem — o mesmo vocabulário fechado de
@@ -606,12 +607,18 @@ function _irParaAtivoDaUrl() {
 function renderLegenda() {
   const container = document.getElementById('legenda-estados')
   if (!container) return
-  container.innerHTML = Object.entries(ESTADOS)
-    .map(
-      ([chave, info]) =>
-        `<div class="lg-item"><span class="lg-cor" style="background:${esc(info.cor)}"></span>${esc(info.rotulo)}</div>`
-    )
-    .join('')
+  container.innerHTML =
+    Object.entries(ESTADOS)
+      .map(
+        ([chave, info]) =>
+          `<div class="lg-item"><span class="lg-cor" style="background:${esc(info.cor)}"></span>${esc(info.rotulo)}</div>`
+      )
+      .join('') +
+    // Os dois sinais que não são cor de estado: OS aberta (distintivo do
+    // marcador, mapa/xmap-marcadores.js) e zona com execução vencida
+    // (contorno tracejado, mapa/xmap-layers-grama.js).
+    `<div class="lg-item">${distintivoOS(2)}OS abertas no ativo</div>` +
+    '<div class="lg-item"><span class="lg-cor" style="background:none;border:2px dashed currentColor"></span>Zona com execução vencida</div>'
 }
 
 // ── módulos ──

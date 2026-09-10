@@ -2841,3 +2841,35 @@ existir. O que só o navegador prova é o voo e o aviso:
 
 - [ ] `https://pmoc-orcin.vercel.app/mapa?modulo=maquinas&ativo=1` **sem barra** → o rewrite
       preserva a query e o mapa voa até a máquina 1.
+
+## Mapa — OS aberta no marcador e vencimento da zona (09/09/2026)
+
+Itens 2 e 3 do levantamento de 09/09. Coberto por gate (`tests/mapa-os-zonas.test.js`): o
+cálculo de vencimento por comportamento, a contagem de OS com cliente falso, a configuração
+das cinco famílias, e as três camadas consumindo o compartilhado. O que só o navegador prova:
+
+### Local (`python -m http.server 8000`)
+
+- [ ] `/mapa/` → marcadores com OS aberta têm um **distintivo laranja** no canto superior
+      esquerdo com a contagem; a legenda explica ("OS abertas no ativo"). Hoje: **7
+      distintivos** — "8" no grupo das roçadeiras do Apoio (4 máquinas, 8 OS) e 1/1/1/2/1/1 nas
+      seis CENTRAL do F21 (7 OS de Refrigeração). Conferir contra
+      `select ativo_id, count(*) from maq_os where status not in ('concluida','cancelada') group by 1`
+      e o equivalente em `logs_manutencao` (`equip_id`, terminais `CONCLUIDA`, `CONFERIDA`,
+      `ENCERRADA`, `CANCELADA`).
+- [ ] Clicar no grupo "8" → cada linha do balão mostra "Operante · N OS"; clicar numa CENTRAL
+      → linha "OS abertas · 2" (ou 1) logo abaixo do estado.
+- [ ] Clicar na zona **Entorno apoio** → "Periodicidade · a cada 30 dias", "Última execução ·
+      18/08/2026", "Próxima · 17/09/2026 · em N dias" (verde). Clicar em **Campo futebol A** →
+      "Execução · em andamento", "Periodicidade · a cada 7 dias", "Última execução · sem
+      registro" (amarelo). Clicar em **jardim brasao** → "Periodicidade · não cadastrada".
+- [ ] Zona vencida (não há nenhuma hoje — registrar uma operação concluída com data antiga numa
+      zona com periodicidade, em `/maquinas` › OS-Corte, para provocar): contorno **tracejado**
+      e mais grosso, linha "Próxima · dd/mm/aaaa · vencida há N dia(s)" em vermelho; a legenda
+      tem "Zona com execução vencida".
+- [ ] Console sem erro. Se uma tabela de OS não responder, o console mostra
+      `mapa-dados: OS abertas de <módulo> indisponíveis` e os marcadores continuam — sem distintivo.
+
+### Produção
+
+- [ ] `https://pmoc-orcin.vercel.app/mapa` → os mesmos 7 distintivos (enquanto as OS não mudarem).

@@ -104,8 +104,10 @@ test('só climatizacao (equipamentos) tem colunaAtivo nula — as outras quatro 
 
 // ── 3. o filtro de arquivamento é condicional, não incondicional ────────
 test('carregarAtivosDoModulo só aplica .eq(colunaAtivo) quando a coluna existe', () => {
-  const corpo = corpoDaFuncao(ler(DADOS), 'carregarAtivosDoModulo')
-  assert.ok(corpo, 'carregarAtivosDoModulo não encontrada')
+  // A consulta de ativos mora em _consultarAtivos desde 09/09/2026;
+  // carregarAtivosDoModulo virou a junção dela com as OS abertas.
+  const corpo = corpoDaFuncao(ler(DADOS), '_consultarAtivos')
+  assert.ok(corpo, '_consultarAtivos não encontrada')
   assert.match(
     corpo,
     /if\s*\(config\.colunaAtivo\)/,
@@ -364,10 +366,21 @@ test('só climatizacao declara colunaSituacao — as outras quatro famílias nã
 
 // Fake chainable supabase client: conta quantas vezes `.from(` inicia uma
 // consulta nova (o que uma retentativa faz) e devolve a resposta da fila.
+// Desde 09/09/2026 carregarAtivosDoModulo também lê a tabela de OS da
+// família (carregarOsAbertas, `.not(status, in, terminais)`), em paralelo.
+// Essa leitura NÃO conta como tentativa de consulta de ativo — o que os
+// casos abaixo medem é o recuo da consulta de `situacao` —, então o falso
+// responde vazio a ela e conta só o resto.
+const TABELAS_DE_OS = new Set(['maq_os', 'elet_os', 'fono_os', 'transp_manutencoes', 'logs_manutencao'])
+
 function criarSupaFalso(respostas) {
   let chamadas = 0
   const supa = {
-    from() {
+    from(tabela) {
+      if (TABELAS_DE_OS.has(tabela)) {
+        const os = { select() { return os }, not() { return Promise.resolve({ data: [], error: null }) } }
+        return os
+      }
       const idx = Math.min(chamadas, respostas.length - 1)
       chamadas++
       const builder = {
@@ -381,6 +394,10 @@ function criarSupaFalso(respostas) {
   return { supa, contarChamadas: () => chamadas }
 }
 
+// Cada ativo sai de carregarAtivosDoModulo com `osAbertas` resolvido (0
+// quando a tabela de OS não tem linha) — o fato que a leitura de 09/09 trouxe.
+const comOsZerada = (linhas) => linhas.map((l) => ({ ...l, osAbertas: 0 }))
+
 // ── 15. carregarAtivosDoModulo recua uma vez sem a coluna de situação ───
 test('carregarAtivosDoModulo repete a consulta sem situacao uma única vez quando a primeira erra, e devolve as linhas da segunda', async () => {
   const { definirCliente, carregarAtivosDoModulo } = await import('../mapa/mapa-dados.js')
@@ -392,7 +409,7 @@ test('carregarAtivosDoModulo repete a consulta sem situacao uma única vez quand
   definirCliente(supa)
   const resultado = await carregarAtivosDoModulo('climatizacao')
   assert.equal(contarChamadas(), 2, 'deveria ter tentado exatamente duas vezes')
-  assert.deepEqual(resultado, linhas)
+  assert.deepEqual(resultado, comOsZerada(linhas))
 })
 
 test('carregarAtivosDoModulo não repete quando a primeira consulta funciona', async () => {
@@ -402,7 +419,7 @@ test('carregarAtivosDoModulo não repete quando a primeira consulta funciona', a
   definirCliente(supa)
   const resultado = await carregarAtivosDoModulo('climatizacao')
   assert.equal(contarChamadas(), 1, 'não deveria ter repetido a consulta')
-  assert.deepEqual(resultado, linhas)
+  assert.deepEqual(resultado, comOsZerada(linhas))
 })
 
 test('carregarAtivosDoModulo de um módulo sem colunaSituacao não recua no erro — devolve lista vazia direto', async () => {
