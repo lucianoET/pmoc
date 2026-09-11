@@ -50,6 +50,12 @@ const MODULOS_INICIAIS = ['predios', 'grama', 'eletrica', 'transportes', 'fonocl
 const ZOOM_ESTRUTURA = 15
 const ZOOM_DETALHE = 17
 
+// Balão aberto perto do topo nascia debaixo dos controles flutuantes
+// (Módulos, coordenada, Camadas: top 10px, 33px de altura) e o título dele
+// sumia atrás deles. O Leaflet afasta o balão só 5px da borda; 56 põe o
+// topo abaixo da faixa dos controles, para todo bindPopup do módulo.
+L.Popup.mergeOptions({ autoPanPaddingTopLeft: [10, 56] })
+
 // Quantos itens a lista de prédios mostra antes de exigir o filtro. São
 // centenas de locais; despejar todos na barra transforma a seção num
 // rolamento infinito onde nada é encontrado.

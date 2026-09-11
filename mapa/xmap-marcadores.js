@@ -143,18 +143,7 @@ export function desenharAtivosAgrupados(group, ativos, opcoes) {
     const primeiro = ponto.ativos[0]
     const lado = varios ? 34 : ladoDeUm
     const desenho = varios ? grupoSVG(emoji, estadoMaisGrave(ponto.ativos), ponto.ativos.length) : svgDeUm(primeiro)
-    const marker = L.marker([ponto.lat, ponto.lon], {
-      icon: L.divIcon({
-        html: desenho + distintivoOS(osAbertasDe(ponto.ativos)),
-        className: '',
-        iconSize: [lado, lado],
-        iconAnchor: [lado / 2, lado / 2],
-        popupAnchor: [0, -lado / 2],
-      }),
-    })
-    marker.bindPopup(varios ? balaoDoGrupo(ponto, modulo, { emoji, nome }) : popupDeUm(primeiro), {
-      maxWidth: 260,
-    })
+    const os = osAbertasDe(ponto.ativos)
     // Rótulo permanente, escondido por CSS abaixo do zoom de detalhe
     // (mapa/index.html): sem nome nenhum, o mapa era um campo de ícones
     // iguais; com todos os nomes sempre visíveis, seria um campo de texto
@@ -164,10 +153,32 @@ export function desenharAtivosAgrupados(group, ativos, opcoes) {
     // enquanto "F21 (16)" responde as duas perguntas de uma vez — onde é e
     // quantos há. Sem local herdado (posição própria), cai para o nome da
     // camada, que é a única identidade que o grupo tem.
-    const texto = varios
+    const texto = String((varios
       ? `${primeiro.localPosicao || nome} (${ponto.ativos.length})`
-      : (rotuloDeUm ? rotuloDeUm(primeiro) : primeiro.rotulo)
-    marker.bindTooltip(String(texto ?? ''), {
+      : (rotuloDeUm ? rotuloDeUm(primeiro) : primeiro.rotulo)) ?? '')
+    const marker = L.marker([ponto.lat, ponto.lon], {
+      icon: L.divIcon({
+        html: desenho + distintivoOS(os),
+        className: '',
+        iconSize: [lado, lado],
+        iconAnchor: [lado / 2, lado / 2],
+        popupAnchor: [0, -lado / 2],
+      }),
+      // Nome acessível: o Leaflet torna todo marcador role="button"
+      // focável, e sem `title` o leitor de tela anunciava "botão" 221 vezes.
+      // O distintivo tem pointer-events:none, então o título dele nunca
+      // aparecia — a contagem de OS vai no título do marcador.
+      title: os > 0 ? `${texto} · ${os} OS aberta(s)` : texto,
+      // Marcador com OS aberta sobe na pilha. A ordem do Leaflet é por
+      // latitude, e no Apoio (zoom 19, onde "Ver no mapa" abre) os Tobatas
+      // de posição própria cobriam o grupo de 14 e o distintivo "8" —
+      // medido pelo elemento no topo de cada ponto.
+      zIndexOffset: os > 0 ? 1000 : 0,
+    })
+    marker.bindPopup(varios ? balaoDoGrupo(ponto, modulo, { emoji, nome }) : popupDeUm(primeiro), {
+      maxWidth: 260,
+    })
+    marker.bindTooltip(texto, {
       permanent: true,
       direction: 'right',
       offset: [lado / 2 - 2, 0],
