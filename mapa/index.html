@@ -231,6 +231,28 @@ html,body{height:100%}
    junto com o painel dele, pelo mesmo motivo. */
 .map-area:has(#editor-painel.aberto) #btn-camadas{right:calc(min(300px,90vw) + 10px)}
 .xmap-toolbar{top:auto;bottom:38px;left:10px;transform:none}
+/* Com a barra lateral aberta, a barra de basemap e a escala (z-index 1000,
+   do componente e do Leaflet) ficavam POR CIMA dela e tapavam as duas
+   últimas linhas da legenda — justamente "OS abertas no ativo" e "Zona com
+   execução vencida". Deslizam junto com a barra, como #btn-modulos. Em
+   tela estreita a barra de basemap não cabe ao lado dela (220px + ~170px)
+   e sai de cena enquanto ela está aberta. #btn-camadas também: em 375px o
+   #btn-modulos deslizado cai embaixo dele (z-index 1001 contra 810), e
+   a barra ficava sem o botão que a fecha. */
+.body-layout:has(.sidebar.aberta) .xmap-toolbar{left:calc(min(220px,80vw) + 10px)}
+.body-layout:has(.sidebar.aberta) .leaflet-bottom.leaflet-left{left:min(220px,80vw)}
+@media (max-width:480px){.body-layout:has(.sidebar.aberta) .xmap-toolbar,.body-layout:has(.sidebar.aberta) #btn-camadas{display:none}}
+/* Balão (pele do componente, mapa/xmap.css travado): chaves e subtítulo em
+   --xm-text3 davam 2,9:1 sobre o fundo do balão, com letra de 9-10px.
+   --xm-text2 dá 6,9:1. O vermelho de erro ("Inoperante") ficava em 4,5:1,
+   no limite; clareado um quarto em direção ao branco, 6:1. */
+.xmap-popup-key,.xmap-popup-sub{color:var(--xm-text2)}
+.xmap-popup-key,.xmap-popup-val{font-size:11px}
+.xmap-popup-sub{font-size:10px}
+.xmap-popup-val.error{color:color-mix(in srgb,var(--xm-red) 75%,white)}
+/* Foco por teclado no marcador: o Leaflet torna cada um focável e o
+   navegador desenhava 1px quase preto sobre um ícone escuro — invisível. */
+.leaflet-marker-icon:focus-visible{outline:2px solid var(--xm-acc);outline-offset:2px}
 /* A escala métrica ocupa o canto inferior esquerdo nativo do Leaflet; a
    barra de basemap subiu 26px para não sentar em cima dela. */
 .leaflet-control-scale{margin-bottom:10px!important}

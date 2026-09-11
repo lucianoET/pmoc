@@ -141,7 +141,9 @@ function renderAreas(group, areas, maquinas, operacoesPorZona) {
 
     const rows = [
       ['Serviço',    tipoLabel(area.tipo)],
-      ['Área',       (area.area_m2 || 0).toLocaleString('pt-BR') + ' m²'],
+      // Sem casa decimal, como a tabela de Áreas de Máquinas: a área geodésica
+      // saía "1.479,216 m²", que se lê tanto mil e quatrocentos quanto um e meio.
+      ['Área',       Math.round(area.area_m2 || 0).toLocaleString('pt-BR') + ' m²'],
     ];
     if (area.flora)      rows.push(['Flora',      floraLabel(area.flora)]);
     if (area.inclinacao) rows.push(['Inclinação', inclLabels[area.inclinacao] || area.inclinacao]);

@@ -2873,3 +2873,29 @@ das cinco famílias, e as três camadas consumindo o compartilhado. O que só o 
 ### Produção
 
 - [ ] `https://pmoc-orcin.vercel.app/mapa` → os mesmos 7 distintivos (enquanto as OS não mudarem).
+
+## Mapa — auditoria de UI (11/09/2026)
+
+Sete defeitos da tela, medidos com o dado real depois da #70. Coberto por gate
+(`tests/mapa-auditoria-ui.test.js`): o marcador por comportamento, o contraste por conta, a
+presença das regras. O que só o navegador prova — **o que fica por cima do quê**:
+
+### Local (`python -m http.server 8000`)
+
+- [ ] `/mapa/?modulo=maquinas&ativo=1` (zoom 19, Apoio) → o grupo "Máquinas (14)" com o
+      distintivo laranja "8" fica **por cima** dos Tobatas vizinhos, não embaixo.
+- [ ] Passar o mouse sobre esse grupo → dica nativa "Máquinas (14) · 8 OS aberta(s)".
+- [ ] ☰ Módulos → abrir a seção Legenda: "OS abertas no ativo" e "Zona com execução vencida"
+      legíveis; a barra Mapa/Satélite e a escala ficam **ao lado** da barra lateral.
+- [ ] Em 375px, com a barra lateral aberta: sem barra Mapa/Satélite e sem botão Camadas; o
+      botão Módulos, ao lado da barra, a fecha.
+- [ ] Clicar num marcador perto do topo do mapa → o balão desce até o título ficar abaixo de
+      Módulos, da coordenada e de Camadas.
+- [ ] No balão, as chaves ("Status", "Periodicidade") em cinza-claro, não azul-escuro;
+      "Inoperante" em vermelho claro.
+- [ ] Tab a partir de Camadas → o marcador focado ganha contorno ciano de 2px.
+- [ ] Balão de uma zona → "Área · 1.479 m²" (Entorno apoio), sem casa decimal.
+
+### Produção
+
+- [ ] Mesmo roteiro em `https://pmoc-orcin.vercel.app/mapa`.
