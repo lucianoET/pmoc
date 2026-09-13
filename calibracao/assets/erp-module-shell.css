@@ -378,8 +378,12 @@ body.erp-bridge-body .bridge-pill.error { color: #ef4444; background: rgba(239,6
    4. CALIBRAÇÃO  (body.erp-calibracao-body)
    Dark-theme override for the React calibration module.
    Remaps its :root light vars to ERP dark palette.
+   Só vale fora do tema claro (13/09/2026): sem o `html:not(...)` este
+   bloco redefinia as variáveis no <body> e vencia o
+   html[data-theme="light"] do próprio módulo — o botão de tema trocava o
+   rótulo e a tela continuava escura, desde a importação em 11/08.
 ──────────────────────────────────────────────────────────────────── */
-body.erp-calibracao-body {
+html:not([data-theme="light"]) body.erp-calibracao-body {
   --bg:        #07111f;
   --sf:        #0c1a2e;
   --sf2:       #112240;
@@ -404,31 +408,31 @@ body.erp-calibracao-body {
   font-family: 'DM Sans', -apple-system, sans-serif;
   color: var(--tx);
 }
-body.erp-calibracao-body .sb {
+html:not([data-theme="light"]) body.erp-calibracao-body .sb {
   background: rgba(5, 13, 24, 0.98);
   border-right: 1px solid rgba(100, 180, 255, 0.10);
 }
-body.erp-calibracao-body .topbar {
+html:not([data-theme="light"]) body.erp-calibracao-body .topbar {
   background: rgba(12, 26, 46, 0.96);
   border-bottom-color: rgba(100, 180, 255, 0.10);
   backdrop-filter: blur(12px);
 }
-body.erp-calibracao-body .card  { background: rgba(12, 26, 46, 0.85); border-color: var(--bd); }
-body.erp-calibracao-body .kpi   { background: rgba(12, 26, 46, 0.85); border-color: var(--bd); }
-body.erp-calibracao-body .twrap { border-color: var(--bd); }
-body.erp-calibracao-body thead tr { background: rgba(17, 34, 64, 0.80); }
-body.erp-calibracao-body tbody tr:hover { background: rgba(59, 130, 246, 0.05); }
-body.erp-calibracao-body .mod  { background: rgba(12, 26, 46, 0.98); border: 1px solid var(--bd); }
-body.erp-calibracao-body input,
-body.erp-calibracao-body select,
-body.erp-calibracao-body textarea {
+html:not([data-theme="light"]) body.erp-calibracao-body .card  { background: rgba(12, 26, 46, 0.85); border-color: var(--bd); }
+html:not([data-theme="light"]) body.erp-calibracao-body .kpi   { background: rgba(12, 26, 46, 0.85); border-color: var(--bd); }
+html:not([data-theme="light"]) body.erp-calibracao-body .twrap { border-color: var(--bd); }
+html:not([data-theme="light"]) body.erp-calibracao-body thead tr { background: rgba(17, 34, 64, 0.80); }
+html:not([data-theme="light"]) body.erp-calibracao-body tbody tr:hover { background: rgba(59, 130, 246, 0.05); }
+html:not([data-theme="light"]) body.erp-calibracao-body .mod  { background: rgba(12, 26, 46, 0.98); border: 1px solid var(--bd); }
+html:not([data-theme="light"]) body.erp-calibracao-body input,
+html:not([data-theme="light"]) body.erp-calibracao-body select,
+html:not([data-theme="light"]) body.erp-calibracao-body textarea {
   background: rgba(17, 34, 64, 0.72);
   border-color: var(--bd2);
   color: var(--tx);
 }
-body.erp-calibracao-body input:focus,
-body.erp-calibracao-body select:focus,
-body.erp-calibracao-body textarea:focus {
+html:not([data-theme="light"]) body.erp-calibracao-body input:focus,
+html:not([data-theme="light"]) body.erp-calibracao-body select:focus,
+html:not([data-theme="light"]) body.erp-calibracao-body textarea:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px var(--blue-bg);
 }
@@ -457,6 +461,6 @@ body.erp-calibracao-body .calib-home:hover {
   border-color: rgba(59, 130, 246, 0.40);
   background: rgba(59, 130, 246, 0.10);
 }
-body.erp-calibracao-body ::-webkit-scrollbar        { width: 4px; height: 4px; }
-body.erp-calibracao-body ::-webkit-scrollbar-track   { background: var(--sf); }
-body.erp-calibracao-body ::-webkit-scrollbar-thumb   { background: var(--bd2); border-radius: 3px; }
+html:not([data-theme="light"]) body.erp-calibracao-body ::-webkit-scrollbar        { width: 4px; height: 4px; }
+html:not([data-theme="light"]) body.erp-calibracao-body ::-webkit-scrollbar-track   { background: var(--sf); }
+html:not([data-theme="light"]) body.erp-calibracao-body ::-webkit-scrollbar-thumb   { background: var(--bd2); border-radius: 3px; }

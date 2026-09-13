@@ -2899,3 +2899,40 @@ presença das regras. O que só o navegador prova — **o que fica por cima do q
 ### Produção
 
 - [ ] Mesmo roteiro em `https://pmoc-orcin.vercel.app/mapa`.
+
+## Calibração — status vencido, Sair, observador e tema claro (13/09/2026)
+
+Coberto por gate (`tests/calibracao-status-vencido.test.js`): a regra do status efetivo, a
+guarda do observador em toda porta de escrita, o aviso único, o escopo do tema claro. O que
+só o navegador prova:
+
+### Local (`python3 -m http.server 8000`, abrir `/calibracao/`)
+
+- [ ] Entrar como **Livre** → Dashboard com sete indicadores; "Cal. vencida" conta os
+      Calibrado cuja próxima calibração já passou, e "Calibrados" só os que estão no prazo.
+- [ ] Equipamentos → o filtro de status oferece "Cal. vencida"; a linha mostra o badge
+      vermelho "Cal. vencida" ao lado de "Venc. Nd".
+- [ ] ✏️ num instrumento vencido → o select Status mostra "Calibrado" (o status gravado) e
+      **não** oferece "Cal. vencida".
+- [ ] Relatório → conformidade conta só o que está no prazo; coluna "Vencidas" na tabela por
+      divisão; o CSV exportado traz a linha "Cal. vencida".
+- [ ] Topo: "👁 somente leitura" legível; "⇚ Portal" e "↩ Livre" lado a lado; Sair volta à
+      tela de login, e a pílula "⇚ CMASM" reaparece só ali.
+- [ ] Catálogo (observador) → campos travados, sem "+ Equipamento" e "Restaurar ATA", aviso
+      "Somente leitura"; nenhum alerta ao tentar digitar.
+- [ ] Qualquer Salvar como observador → **um** aviso "Modo observador — somente leitura. Nada
+      foi gravado…", não o erro do Postgres; a aba Rede do DevTools sem POST/PATCH.
+- [ ] Botão de tema → a tela inteira fica clara (fundo, cartões, barra); de volta ao escuro,
+      igual a antes.
+- [ ] Em 375px: barra com ☰, título, ☀️, 👁, ⇚ e ↩ Livre, nada cortado; o sétimo indicador
+      ocupa a linha inteira.
+
+### Como gestor (senha)
+
+- [ ] Concluir o PS de calibração de um instrumento vencido → ele volta a "Calibrado" com a
+      nova data, sem ninguém gravar o status derivado.
+- [ ] Editar um preço do Catálogo → grava; o texto diz "cada alteração é gravada no banco".
+
+### Produção
+
+- [ ] Mesmo roteiro em `https://pmoc-orcin.vercel.app/calibracao` depois do deploy.
