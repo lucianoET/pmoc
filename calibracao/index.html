@@ -42,11 +42,11 @@ nav{flex:1;padding:8px;overflow-y:auto}
 .topbar{background:var(--sf);border-bottom:1px solid var(--bd);padding:10px 20px;display:flex;align-items:center;gap:6px;font-size:13px;flex-shrink:0}
 .tb-c{color:var(--tx3)}
 .tb-s{color:var(--bd2)}
-.tb-p{font-weight:600}
+.tb-p{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .content{flex:1;overflow-y:auto;padding:20px}
 .card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--rl);padding:16px 20px}
 .ct{font-size:11px;font-weight:600;color:var(--tx2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
-.kpi-g{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:20px}
+.kpi-g{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:20px}
 .kpi{border-radius:var(--rl);padding:14px 16px;cursor:pointer;transition:all .15s;border:1px solid transparent}
 .kpi:hover{box-shadow:0 4px 12px rgba(0,0,0,.1)}
 .kv{font-size:28px;font-weight:700;line-height:1}
@@ -138,8 +138,10 @@ html[data-theme="light"]{
   --purple:#6d28d9;--purple-bg:#ede9fe;
 }}
 .hbg{display:none;background:none;border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-size:16px;cursor:pointer;padding:2px 9px;margin-right:4px}
-.thm{margin-left:auto;background:none;border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-size:13px;cursor:pointer;padding:3px 10px;white-space:nowrap}
+.thm{margin-left:auto;background:none;border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-size:13px;cursor:pointer;padding:3px 10px;white-space:nowrap;flex-shrink:0}
 .thm:hover{background:var(--sf2)}
+.tb-a{margin-left:0;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+.tb-ro{flex-shrink:0;cursor:help;gap:4px}
 .tipw{position:relative;display:inline-flex;margin-left:5px;vertical-align:middle}
 .tipq{width:14px;height:14px;border-radius:50%;background:var(--blue-bg);color:var(--blue);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;cursor:help;border:1px solid var(--blue-lt);line-height:1}
 .tipbox{display:none;position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:var(--sf);border:1px solid var(--bd2);border-radius:8px;padding:8px 11px;font-size:11px;font-weight:400;color:var(--tx2);width:250px;z-index:150;box-shadow:0 8px 24px rgba(0,0,0,.3);line-height:1.5;text-transform:none;letter-spacing:0;white-space:normal}
@@ -147,7 +149,7 @@ html[data-theme="light"]{
 .hlp-term{font-weight:700;color:var(--tx);font-size:13px}
 .hlp-def{font-size:12.5px;color:var(--tx2);line-height:1.6;margin:2px 0 10px}
 .mbk{display:none}
-@media(max-width:900px){.kpi-g{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr}}
+@media(max-width:900px){.kpi-g{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:1fr}}
 @media(max-width:768px){
 .hbg{display:inline-flex}
 .sb{position:fixed;left:0;top:0;bottom:0;z-index:60;width:240px;transform:translateX(-100%);transition:transform .2s;box-shadow:4px 0 24px rgba(0,0,0,.35)}
@@ -156,6 +158,9 @@ html[data-theme="light"]{
 .mbk.on{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:55}
 .content{padding:12px}
 .kpi-g{grid-template-columns:repeat(2,1fr)}
+.kpi-g .kpi:last-child:nth-child(odd){grid-column:1/-1}
+.topbar{padding:8px 12px}
+.tb-c,.tb-s,.tb-lbl{display:none}
 .fr,.fr.c3{grid-template-columns:1fr}
 .filt{flex-direction:column}
 .sw{min-width:0}
@@ -2826,6 +2831,12 @@ const STATUS_CFG = {
     lbl: 'Calibrado',
     cls: 'b-ok'
   },
+  // Derivado por stEf(), nunca gravado — o formulário não o oferece.
+  VENCIDO: {
+    lbl: 'Cal. vencida',
+    cls: 'b-d',
+    derivado: true
+  },
   DESCALIBRADO: {
     lbl: 'Descalibrado',
     cls: 'b-d'
@@ -2901,6 +2912,26 @@ function dv(d) {
   if (!d) return null;
   const [a, m, y] = d.split('/');
   return Math.floor((new Date(+y, +m - 1, +a) - Date.now()) / 86400000);
+}
+// ── status que a tela mostra e conta ──
+// O status gravado é o que alguém escolheu no formulário ou o que a
+// conclusão de um PS escreveu, e ele não envelhece sozinho. Medido em
+// 13/09/2026: os 21 instrumentos "Calibrado" do banco tinham a próxima
+// calibração no passado (218 a 550 dias), e o Relatório dava 55% de
+// conformidade listando esses mesmos 21 em "Cal. vencida" logo abaixo.
+// Pela data, Calibrado com a próxima calibração vencida é calibração
+// vencida — é assim que a importação de planilha já classifica
+// (statusFromRow). VENCIDO é DERIVADO e nunca vai para o banco:
+// cal_equipamentos.status não tem check, então um VENCIDO gravado
+// entraria sem erro e não voltaria a Calibrado quando o próximo PS
+// concluísse. Por isso o formulário continua editando o status gravado
+// (e.status), e só exibição e contagem passam por aqui.
+function stEf(e) {
+  if (e && e.status === 'CALIBRADO') {
+    const d = dv(e.prox);
+    if (d !== null && d < 0) return 'VENCIDO';
+  }
+  return e ? e.status : e;
 }
 function fmt(v) {
   return v > 0 ? v.toLocaleString('pt-BR', {
@@ -4518,14 +4549,6 @@ const money = n => 'R$ ' + (+n || 0).toLocaleString('pt-BR', {
 const money0 = n => 'R$ ' + (+n || 0).toLocaleString('pt-BR', {
   maximumFractionDigits: 0
 });
-const CAT_KEY = 'cmasm_erp_catalog_v1';
-function loadCatalog() {
-  try {
-    const r = localStorage.getItem(CAT_KEY);
-    if (r) return JSON.parse(r);
-  } catch (e) {}
-  return JSON.parse(JSON.stringify(CATALOG_DEFAULT));
-}
 
 // ============================================================
 // MÓDULO: SALDO DA ATA
@@ -4705,11 +4728,6 @@ function Catalogo({
   const [, force] = useState(0);
   const rerender = () => force(x => x + 1);
   const cat = s.catalog;
-  const save = () => {
-    try {
-      localStorage.setItem(CAT_KEY, JSON.stringify(cat));
-    } catch (e) {}
-  };
   // O ramo de `preco` que morava aqui — `parseFloat(String(v).replace(',',
   // '.'))` mais `if (isNaN(v) || v < 0) v = 0` — era CÓDIGO MORTO: quem
   // escreveu já esperava a vírgula, mas `type="number"` a descartava antes,
@@ -4721,7 +4739,6 @@ function Catalogo({
     s.setCatalog({
       ...cat
     });
-    save();
     rerender();
   };
   const addProv = eq => {
@@ -4736,7 +4753,6 @@ function Catalogo({
     s.setCatalog({
       ...cat
     });
-    save();
     rerender();
   };
   const rmProv = (eq, idx) => {
@@ -4744,7 +4760,6 @@ function Catalogo({
     s.setCatalog({
       ...cat
     });
-    save();
     rerender();
   };
   const rmEq = eq => {
@@ -4753,7 +4768,6 @@ function Catalogo({
       s.setCatalog({
         ...cat
       });
-      save();
       rerender();
     }
   };
@@ -4770,16 +4784,12 @@ function Catalogo({
     s.setCatalog({
       ...cat
     });
-    save();
     rerender();
   };
   const reset = () => {
     if (confirm('Restaurar padrão da ATA?')) {
       const d = JSON.parse(JSON.stringify(CATALOG_DEFAULT));
       s.setCatalog(d);
-      try {
-        localStorage.setItem(CAT_KEY, JSON.stringify(d));
-      } catch (e) {}
       rerender();
     }
   };
@@ -4806,24 +4816,31 @@ function Catalogo({
       fontSize: 12,
       color: 'var(--tx3)'
     }
-  }, "Edit\xE1vel \xB7 salvo localmente neste navegador")), /*#__PURE__*/React.createElement("div", {
+  }, somenteLeitura() ? 'Somente leitura — para editar, saia e entre com um cargo com senha' : 'Editável · cada alteração é gravada no banco')), /*#__PURE__*/React.createElement("div", {
     style: {
       display: 'flex',
       gap: 8
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, !somenteLeitura() && /*#__PURE__*/React.createElement("button", {
     className: "btn sm pr",
     onClick: addEq
   }, "+ Equipamento"), /*#__PURE__*/React.createElement("button", {
     className: "btn sm",
     onClick: expt
-  }, "Exportar JSON"), /*#__PURE__*/React.createElement("button", {
+  }, "Exportar JSON"), !somenteLeitura() && /*#__PURE__*/React.createElement("button", {
     className: "btn sm dr",
     onClick: reset
   }, "Restaurar ATA"))), /*#__PURE__*/React.createElement("div", {
     className: "card"
   }, /*#__PURE__*/React.createElement("div", {
     className: "twrap"
+  },
+  // O catálogo grava a cada tecla; para o observador, que não pode gravar,
+  // um fieldset desabilitado trava todos os campos e botões da tabela de
+  // uma vez, pelo próprio navegador.
+  /*#__PURE__*/React.createElement("fieldset", {
+    disabled: somenteLeitura(),
+    style: { border: 0, padding: 0, margin: 0, minWidth: 0 }
   }, /*#__PURE__*/React.createElement("table", null, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", null, "Equipamento"), /*#__PURE__*/React.createElement("th", null, "Fornecedor"), /*#__PURE__*/React.createElement("th", null, "Contrato/ATA"), /*#__PURE__*/React.createElement("th", null, "Tipo"), /*#__PURE__*/React.createElement("th", {
     style: {
       textAlign: 'right'
@@ -4932,7 +4949,7 @@ function Catalogo({
         onClick: () => rmProv(eq, idx)
       }, "\xD7")));
     });
-  }))))));
+  })))))));
 }
 
 // ============================================================
@@ -4957,7 +4974,7 @@ function Lotes({
   }
   let list = s.eqs.filter(e => e.ativo).filter(e => {
     if (fDiv && e.div !== fDiv) return false;
-    if (fSt && e.status !== fSt) return false;
+    if (fSt && stEf(e) !== fSt) return false;
     if (q) {
       const h = (e.tipo + ' ' + (e.fab || '') + ' ' + (e.pat || '') + ' ' + (e.sn || '')).toLowerCase();
       if (!h.includes(q.toLowerCase())) return false;
@@ -4966,11 +4983,12 @@ function Lotes({
   });
   const ord = {
     DESCALIBRADO: 0,
+    VENCIDO: 0,
     EM_REPARO: 1,
     SEM_CERTIFICADO: 2,
     CALIBRADO: 3
   };
-  list.sort((a, b) => (ord[a.status] ?? 9) - (ord[b.status] ?? 9));
+  list.sort((a, b) => (ord[stEf(a)] ?? 9) - (ord[stEf(b)] ?? 9));
   function add(eqId) {
     if (inSel.has(eqId)) return;
     setSel(p => [...p, {
@@ -5011,6 +5029,7 @@ function Lotes({
   });
   const stBdg = st => ({
     CALIBRADO: 'b-ok',
+    VENCIDO: 'b-d',
     DESCALIBRADO: 'b-d',
     EM_REPARO: 'b-w',
     SEM_CERTIFICADO: 'b-o'
@@ -5097,6 +5116,8 @@ function Lotes({
   }, "Situa\xE7\xE3o"), /*#__PURE__*/React.createElement("option", {
     value: "DESCALIBRADO"
   }, "Descalibrado"), /*#__PURE__*/React.createElement("option", {
+    value: "VENCIDO"
+  }, "Cal. vencida"), /*#__PURE__*/React.createElement("option", {
     value: "CALIBRADO"
   }, "Calibrado"), /*#__PURE__*/React.createElement("option", {
     value: "EM_REPARO"
@@ -5154,11 +5175,11 @@ function Lotes({
       color: 'var(--tx3)'
     }
   }, e.div, " \xB7 ", e.pat || e.sn || 's/ id', " \xB7 ", e.fab)), /*#__PURE__*/React.createElement("span", {
-    className: 'bdg ' + stBdg(e.status),
+    className: 'bdg ' + stBdg(stEf(e)),
     style: {
       fontSize: 9
     }
-  }, e.status), !inSel.has(e.id) && /*#__PURE__*/React.createElement("button", {
+  }, STATUS_CFG[stEf(e)]?.lbl || e.status), !inSel.has(e.id) && /*#__PURE__*/React.createElement("button", {
     className: "btn sm pr",
     style: {
       padding: '2px 9px'
@@ -5697,6 +5718,28 @@ function daLinha(linha, campos, datas = []) {
 // try/catch não pega isso; só prazo pega. Sem ele o módulo ficava preso
 // em "Carregando dados do banco…" para sempre e uma gravação perdida
 // jamais avisava — a tela mostrando salvo e o banco sem receber nada.
+// ── porta de gravação: modo observador e aviso único ──
+// O cargo Livre entra sem senha e continua sendo anon; desde a migração 39
+// o Postgres recusa a escrita dele. Medido em 13/09/2026: um preço editado
+// no Catálogo pelo observador disparava UMA gravação e UM alerta por tecla
+// — sete alertas para digitar "999,99", todos com o texto cru do Postgres
+// ("new row violates row-level security policy"). No modo observador nada
+// sai para a rede, e o mesmo aviso não se repete em menos de 5 s.
+const somenteLeitura = () => window.CAL_USUARIO?.role === 'observador';
+const AVISO_OBSERVADOR = 'Modo observador — somente leitura. Nada foi gravado. Para editar, saia (↩) e entre com um cargo com senha.';
+let _ultimoAviso = { msg: '', t: 0 };
+function avisar(msg) {
+  if (msg === _ultimoAviso.msg && Date.now() - _ultimoAviso.t < 5000) return;
+  alert(msg);
+  // Depois do alert, que é modal: o prazo conta de quando a pessoa fechou.
+  _ultimoAviso = { msg, t: Date.now() };
+}
+function mensagemErro(oque, erro) {
+  const texto = erro && erro.message ? erro.message : String(erro);
+  if ((erro && erro.code === '42501') || /row-level security/i.test(texto))
+    return 'O banco recusou gravar ' + oque + ': este acesso não tem permissão de escrita. Saia e entre com um cargo com senha.';
+  return 'Erro ao salvar ' + oque + ': ' + texto;
+}
 const PRAZO_MS = 15000;
 function comPrazo(p) {
   return Promise.race([
@@ -5787,13 +5830,17 @@ function useStore() {
   // 11 páginas React, que consomem estes mutators de forma síncrona.
   function gravar(q, oque) {
     if (!supa) return;
+    // O builder do supabase-js só dispara a requisição no .then(): voltar
+    // aqui antes de comPrazo(q) é não mandar nada para a rede. O
+    // recarregar desfaz a mudança otimista que a tela já mostrou.
+    if (somenteLeitura()) { avisar(AVISO_OBSERVADOR); carregarTudo(); return; }
     comPrazo(q).then(({ error }) => {
-      if (error) { alert(`Erro ao salvar ${oque}: ${error.message}`); carregarTudo(); }
+      if (error) { avisar(mensagemErro(oque, error)); carregarTudo(); }
     }).catch(e => {
       // Rede fora rejeita em vez de devolver {error}. Sem este catch a
       // rejeição era engolida: a tela mostrava a alteração salva e o
       // banco nunca recebia nada — a pior falha possível aqui.
-      alert(`Erro ao salvar ${oque}: ${e && e.message ? e.message : e}`);
+      avisar(mensagemErro(oque, e));
       carregarTudo();
     });
   }
@@ -5997,6 +6044,8 @@ function useStore() {
       }));
     }
     if (!supa) return;
+    // Antes do upsert E da limpeza abaixo, que não passa por gravar().
+    if (somenteLeitura()) { avisar(AVISO_OBSERVADOR); carregarTudo(); return; }
     gravar(supa.from('cal_catalogo').upsert(linhas, { onConflict: 'equip_tipo,ord' }), 'o catálogo');
     Promise.resolve(
       supa.from('cal_catalogo').select('equip_tipo,ord')
@@ -6031,6 +6080,7 @@ function useStore() {
   // confirmação própria.
   async function replaceState(d) {
     if (!supa) return;
+    if (somenteLeitura()) { avisar(AVISO_OBSERVADOR); return; }
     const passos = [];
     if (Array.isArray(d.labs)) passos.push(['cal_labs', d.labs.map(l => paraLinha(l, CAMPOS_LAB)), 'id']);
     if (Array.isArray(d.eqs)) passos.push(['cal_equipamentos', d.eqs.map(e => paraLinha(e, CAMPOS_EQ, DATAS.eq)), 'id']);
@@ -6050,6 +6100,7 @@ function useStore() {
   // aviso está no texto do confirm, na tela Dados.
   async function resetAll() {
     if (!supa) return;
+    if (somenteLeitura()) { avisar(AVISO_OBSERVADOR); return; }
     for (const t of ['cal_ps', 'cal_lotes', 'cal_equipamentos', 'cal_labs', 'cal_catalogo']) {
       const { error } = await supa.from(t).delete().not('id', 'is', null);
       if (error && t !== 'cal_catalogo') { alert(`Erro ao limpar ${t}: ${error.message}`); return; }
@@ -6129,16 +6180,13 @@ function Dashboard({
   const at = eqs.filter(e => e.ativo);
   const cnt = {};
   Object.keys(STATUS_CFG).forEach(k => {
-    cnt[k] = at.filter(e => e.status === k).length;
+    cnt[k] = at.filter(e => stEf(e) === k).length;
   });
   const v30 = at.filter(e => {
     const d = dv(e.prox);
     return d !== null && d >= 0 && d <= 30;
   });
-  const vcd = at.filter(e => {
-    const d = dv(e.prox);
-    return d !== null && d < 0 && e.status === 'CALIBRADO';
-  });
+  const vcd = at.filter(e => stEf(e) === 'VENCIDO');
   const rst = at.filter(e => e.rest);
   const psAb = pss.filter(p => !['CONCLUIDO', 'CANCELADO'].includes(p.status));
   const ct = at.reduce((s, e) => s + (e.cC || 0), 0);
@@ -6149,12 +6197,18 @@ function Dashboard({
       ok: 0
     };
     dm[e.div].t++;
-    if (e.status === 'CALIBRADO') dm[e.div].ok++;
+    if (stEf(e) === 'CALIBRADO') dm[e.div].ok++;
   });
   const mx = Math.max(...Object.values(dm).map(d => d.t));
   const kpis = [{
     lbl: 'Descalibrados',
     v: cnt.DESCALIBRADO,
+    bg: 'var(--red-bg)',
+    fg: 'var(--red)',
+    p: 'equipamentos'
+  }, {
+    lbl: 'Cal. vencida',
+    v: cnt.VENCIDO,
     bg: 'var(--red-bg)',
     fg: 'var(--red)',
     p: 'equipamentos'
@@ -6292,7 +6346,7 @@ function Dashboard({
       opacity: .85
     }
   }, e.rest)), /*#__PURE__*/React.createElement(SBdg, {
-    s: e.status
+    s: stEf(e)
   }))), vcd.map(e => /*#__PURE__*/React.createElement("div", {
     key: e.id,
     className: "ai ai-w",
@@ -6448,7 +6502,7 @@ function FichaCorpo({ sel, lm, hist, updEq }) {
       ['Incerteza da \u00FAltima calibra\u00E7\u00E3o', sel.uCal]
     ]),
     sec('Calibra\u00E7\u00E3o', [
-      ['Status', h(SBdg, { s: sel.status })],
+      ['Status', h(SBdg, { s: stEf(sel) })],
       ['Periodicidade', sel.per ? sel.per + ' meses' : null],
       ['Verifica\u00E7\u00E3o intermedi\u00E1ria', sel.verifInt],
       ['\u00DAltima calibra\u00E7\u00E3o', sel.ult],
@@ -6520,7 +6574,7 @@ function Equipamentos({
   const at = useMemo(() => eqs.filter(e => {
     if (!e.ativo) return false;
     if (fD && e.div !== fD) return false;
-    if (fS && e.status !== fS) return false;
+    if (fS && stEf(e) !== fS) return false;
     if (fL && e.labId !== fL) return false;
     if (srch) {
       const q = srch.toLowerCase();
@@ -6687,7 +6741,7 @@ function Equipamentos({
     }, LAB_TIPO[lab.tipo])), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(VBdg, {
       d: e.prox
     })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement(SBdg, {
-      s: e.status
+      s: stEf(e)
     })), /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12
@@ -6901,7 +6955,7 @@ function Equipamentos({
   }, /*#__PURE__*/React.createElement("label", null, "Status"), /*#__PURE__*/React.createElement("select", {
     value: fm.status,
     onChange: e => sf('status', e.target.value)
-  }, Object.entries(STATUS_CFG).map(([k, v]) => /*#__PURE__*/React.createElement("option", {
+  }, Object.entries(STATUS_CFG).filter(([, v]) => !v.derivado).map(([k, v]) => /*#__PURE__*/React.createElement("option", {
     key: k,
     value: k
   }, v.lbl)))), /*#__PURE__*/React.createElement("div", {
@@ -7130,17 +7184,19 @@ function printRelatorioISO(s) {
   const BRL = n => 'R$ ' + (+n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
   const ano = new Date().getFullYear();
   const at = eqs.filter(e => e.ativo);
-  const conf = at.filter(e => e.status === 'CALIBRADO').length;
+  const conf = at.filter(e => stEf(e) === 'CALIBRADO').length;
   const pct = at.length ? Math.round(conf / at.length * 100) : 0;
   const psConcl = pss.filter(p => p.status === 'CONCLUIDO' && (p.cal || '').endsWith('/' + ano));
   const custoExec = psConcl.reduce((a, p) => a + (+p.vE || 0), 0);
   const porDiv = {};
   at.forEach(e => {
-    const d = porDiv[e.div] = porDiv[e.div] || { t: 0, ok: 0, desc: 0, sc: 0 };
+    const d = porDiv[e.div] = porDiv[e.div] || { t: 0, ok: 0, venc: 0, desc: 0, sc: 0 };
+    const st = stEf(e);
     d.t++;
-    if (e.status === 'CALIBRADO') d.ok++;
-    if (e.status === 'DESCALIBRADO') d.desc++;
-    if (e.status === 'SEM_CERTIFICADO') d.sc++;
+    if (st === 'CALIBRADO') d.ok++;
+    if (st === 'VENCIDO') d.venc++;
+    if (st === 'DESCALIBRADO') d.desc++;
+    if (st === 'SEM_CERTIFICADO') d.sc++;
   });
   const ncs = [];
   psConcl.forEach(p => {
@@ -7155,13 +7211,13 @@ function printRelatorioISO(s) {
   const compMed = comps.length ? Math.round(comps.reduce((a, b) => a + b, 0) / comps.length) : 0;
   const fracas = at.filter(e => completudeFicha(e).pct < 70);
   const linhaDiv = Object.entries(porDiv).sort((a, b) => b[1].t - a[1].t).map(([d, v]) =>
-    `<tr><td>${esc(d)}</td><td>${v.t}</td><td>${v.ok}</td><td>${v.t ? Math.round(v.ok / v.t * 100) : 0}%</td><td>${v.desc}</td><td>${v.sc}</td></tr>`).join('');
+    `<tr><td>${esc(d)}</td><td>${v.t}</td><td>${v.ok}</td><td>${v.t ? Math.round(v.ok / v.t * 100) : 0}%</td><td>${v.venc}</td><td>${v.desc}</td><td>${v.sc}</td></tr>`).join('');
   const linhaCal = psConcl.sort((a, b) => (a.cal || '').split('/').reverse().join('').localeCompare((b.cal || '').split('/').reverse().join(''))).map(p => {
     const eq = eqs.find(e => e.id === p.eqId) || {};
     return `<tr><td>${esc(p.cal)}</td><td>${esc(eq.pat || eq.sn)}</td><td>${esc([eq.tipo, eq.mod].filter(Boolean).join(' '))}</td><td>${esc((lm[p.labId] || {}).code)}</td><td>${esc(p.cert)}</td><td>${esc(p.res === 'reprovado' ? 'REPROVADO' : p.res === 'aprovado' ? 'Aprovado' : null)}</td><td>${p.vE ? BRL(p.vE) : '—'}</td></tr>`;
   }).join('');
   const linhaNc = ncs.map(n => `<tr><td>${esc(n.p.cal)}</td><td>${esc(n.eq.pat || n.eq.sn)}</td><td>${esc([n.eq.tipo, n.eq.mod].filter(Boolean).join(' '))}</td><td>${esc(n.p.num)}</td><td>${esc(n.motivo)}</td></tr>`).join('');
-  const linhaDesc = at.filter(e => e.status === 'DESCALIBRADO').map(e => `<tr><td>${esc(e.pat || e.sn)}</td><td>${esc([e.tipo, e.mod].filter(Boolean).join(' '))}</td><td>${esc(e.div)}</td><td>${esc(e.prox)}</td></tr>`).join('');
+  const linhaDesc = at.filter(e => ['VENCIDO', 'DESCALIBRADO'].includes(stEf(e))).map(e => `<tr><td>${esc(e.pat || e.sn)}</td><td>${esc([e.tipo, e.mod].filter(Boolean).join(' '))}</td><td>${esc(e.div)}</td><td>${esc(e.prox)}</td></tr>`).join('');
   const linhaFraca = fracas.map(e => { const c = completudeFicha(e); return `<tr><td>${esc(e.pat || e.sn)}</td><td>${esc([e.tipo, e.mod].filter(Boolean).join(' '))}</td><td>${c.pct}%</td><td>${esc(c.faltam.join(' · '))}</td></tr>`; }).join('');
   const w = window.open('', '_blank');
   w.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório Anual ${ano} — CMASM Calibração</title>
@@ -7185,24 +7241,25 @@ th{background:#e8e8e8}
 <h2>1. Resumo executivo</h2>
 <div class="kpis">
 <div class="kpi"><b>${at.length}</b>instrumentos ativos</div>
-<div class="kpi"><b>${pct}%</b>conformidade (${conf} calibrados)</div>
-<div class="kpi"><b>${at.filter(e => e.status === 'DESCALIBRADO').length}</b>descalibrados</div>
+<div class="kpi"><b>${pct}%</b>conformidade (${conf} no prazo)</div>
+<div class="kpi"><b>${at.filter(e => stEf(e) === 'VENCIDO').length}</b>com calibração vencida</div>
+<div class="kpi"><b>${at.filter(e => stEf(e) === 'DESCALIBRADO').length}</b>descalibrados</div>
 <div class="kpi"><b>${psConcl.length}</b>calibrações em ${ano}</div>
 <div class="kpi"><b>${BRL(custoExec)}</b>custo executado ${ano}</div>
 <div class="kpi"><b>${compMed}%</b>completude média das fichas</div>
 </div>
 <h2>2. Conformidade por divisão</h2>
-<table><tr><th>Divisão</th><th>Total</th><th>Calibrados</th><th>%</th><th>Descalibrados</th><th>Sem certificado</th></tr>${linhaDiv}</table>
+<table><tr><th>Divisão</th><th>Total</th><th>Calibrados</th><th>%</th><th>Cal. vencida</th><th>Descalibrados</th><th>Sem certificado</th></tr>${linhaDiv}</table>
 <h2>3. Calibrações concluídas em ${ano} (${psConcl.length})</h2>
 <table><tr><th>Data</th><th>PAT/SN</th><th>Instrumento</th><th>Lab.</th><th>Certificado</th><th>Resultado</th><th>Valor</th></tr>${linhaCal || '<tr><td colspan="7">Nenhuma</td></tr>'}</table>
 <h2>4. Não conformidades do período (${ncs.length})</h2>
 <table><tr><th>Data</th><th>PAT/SN</th><th>Instrumento</th><th>PS</th><th>Motivo</th></tr>${linhaNc || '<tr><td colspan="5">Nenhuma registrada</td></tr>'}</table>
-<h2>5. Instrumentos descalibrados na data de emissão</h2>
+<h2>5. Instrumentos descalibrados ou com calibração vencida na data de emissão</h2>
 <table><tr><th>PAT/SN</th><th>Instrumento</th><th>Divisão</th><th>Venceu em</th></tr>${linhaDesc || '<tr><td colspan="4">Nenhum</td></tr>'}</table>
 <h2>6. Fichas com completude &lt; 70% (ISO 17025 §6.4.13)</h2>
 <table><tr><th>PAT/SN</th><th>Instrumento</th><th>Completude</th><th>Pendências</th></tr>${linhaFraca || '<tr><td colspan="4">Nenhuma — todos os registros adequados</td></tr>'}</table>
 <div class="assin"><div>Responsável pela Metrologia</div><div>Encarregado da Divisão</div><div>Chefe do Departamento</div></div>
-<div class="meta">Gerado automaticamente pelo sistema CMASM Calibração. Critérios: conformidade = status CALIBRADO/instrumentos ativos; não conformidade = resultado reprovado ou erro as-found &gt; EMA; completude = 13 itens da ISO/IEC 17025 §6.4.13.</div>
+<div class="meta">Gerado automaticamente pelo sistema CMASM Calibração. Critérios: conformidade = status CALIBRADO com a próxima calibração ainda no prazo / instrumentos ativos; não conformidade = resultado reprovado ou erro as-found &gt; EMA; completude = 13 itens da ISO/IEC 17025 §6.4.13.</div>
 <script>window.print();</` + `script></body></html>`);
   w.document.close();
 }
@@ -8481,7 +8538,7 @@ function Certificados({
       marginTop: 4
     }
   }, /*#__PURE__*/React.createElement(SBdg, {
-    s: e.status
+    s: stEf(e)
   })))))), /*#__PURE__*/React.createElement("div", {
     className: "filt"
   }, /*#__PURE__*/React.createElement("div", {
@@ -8570,7 +8627,7 @@ function Relatorio({
   const ano = new Date().getFullYear();
   const cnt = {};
   Object.keys(STATUS_CFG).forEach(k => {
-    cnt[k] = at.filter(e => e.status === k).length;
+    cnt[k] = at.filter(e => stEf(e) === k).length;
   });
   const total = at.length;
   const conf = cnt.CALIBRADO || 0;
@@ -8587,13 +8644,16 @@ function Relatorio({
       desc: 0,
       sc: 0,
       rep: 0,
+      venc: 0,
       custo: 0
     };
     porDiv[e.div].t++;
-    if (e.status === 'CALIBRADO') porDiv[e.div].ok++;
-    if (e.status === 'DESCALIBRADO') porDiv[e.div].desc++;
-    if (e.status === 'SEM_CERTIFICADO') porDiv[e.div].sc++;
-    if (e.status === 'EM_REPARO' || e.status === 'AGUARDANDO_CALIBRACAO') porDiv[e.div].rep++;
+    const st = stEf(e);
+    if (st === 'CALIBRADO') porDiv[e.div].ok++;
+    if (st === 'VENCIDO') porDiv[e.div].venc++;
+    if (st === 'DESCALIBRADO') porDiv[e.div].desc++;
+    if (st === 'SEM_CERTIFICADO') porDiv[e.div].sc++;
+    if (st === 'EM_REPARO' || st === 'AGUARDANDO_CALIBRACAO') porDiv[e.div].rep++;
     porDiv[e.div].custo += e.cC || 0;
   });
   const rst = at.filter(e => e.rest);
@@ -8606,7 +8666,7 @@ function Relatorio({
     return d !== null && d < 0;
   });
   function exportCSV() {
-    const rows = [['RELATÓRIO DE CONFORMIDADE — CMASM', `Gerado em ${new Date().toLocaleDateString('pt-BR')}`, '', '', '', ''], ['', '', '', '', '', ''], ['RESUMO EXECUTIVO', '', '', '', '', ''], ['Total de instrumentos', total, '', 'Conformidade geral', `${pctConf}%`, ''], ['Calibrados', conf, '', 'Descalibrados', cnt.DESCALIBRADO, ''], ['Em reparo', cnt.EM_REPARO, '', 'Sem certificado', cnt.SEM_CERTIFICADO, ''], ['Custo estimado (pregão)', custoMax.toFixed(2), '', 'Custo executado ' + ano, custoTotal.toFixed(2), ''], ['', '', '', '', '', ''], ['STATUS POR DIVISÃO', '', '', '', '', ''], ['Divisão', 'Total', 'Calibrados', 'Descalibrados', 'Sem Cert.', 'Em Reparo'], ...Object.entries(porDiv).sort((a, b) => b[1].t - a[1].t).map(([d, v]) => [d, v.t, v.ok, v.desc, v.sc, v.rep]), ['', '', '', '', '', ''], ['INSTRUMENTOS DESCALIBRADOS', '', '', '', '', ''], ['PAT', 'Tipo', 'Fabricante/Modelo', 'Divisão', 'Laboratório', 'Obs.'], ...at.filter(e => e.status === 'DESCALIBRADO').map(e => [e.pat || '', e.tipo, `${e.fab} ${e.mod}`, e.div, lm[e.labId]?.code || '', e.obs || '']), ['', '', '', '', '', ''], ['RESTRIÇÕES ESPECIAIS', '', '', '', '', ''], ['PAT', 'Tipo', 'Modelo', 'Divisão', 'Status', 'Restrição'], ...rst.map(e => [e.pat || '', e.tipo, e.mod, e.div, STATUS_CFG[e.status]?.lbl || '', e.rest || ''])];
+    const rows = [['RELATÓRIO DE CONFORMIDADE — CMASM', `Gerado em ${new Date().toLocaleDateString('pt-BR')}`, '', '', '', ''], ['', '', '', '', '', ''], ['RESUMO EXECUTIVO', '', '', '', '', ''], ['Total de instrumentos', total, '', 'Conformidade geral', `${pctConf}%`, ''], ['Calibrados (no prazo)', conf, '', 'Descalibrados', cnt.DESCALIBRADO, ''], ['Cal. vencida', cnt.VENCIDO, '', '', '', ''], ['Em reparo', cnt.EM_REPARO, '', 'Sem certificado', cnt.SEM_CERTIFICADO, ''], ['Custo estimado (pregão)', custoMax.toFixed(2), '', 'Custo executado ' + ano, custoTotal.toFixed(2), ''], ['', '', '', '', '', ''], ['STATUS POR DIVISÃO', '', '', '', '', ''], ['Divisão', 'Total', 'Calibrados', 'Cal. vencida', 'Descalibrados', 'Sem Cert.', 'Em Reparo'], ...Object.entries(porDiv).sort((a, b) => b[1].t - a[1].t).map(([d, v]) => [d, v.t, v.ok, v.venc, v.desc, v.sc, v.rep]), ['', '', '', '', '', ''], ['INSTRUMENTOS DESCALIBRADOS OU COM CALIBRAÇÃO VENCIDA', '', '', '', '', ''], ['PAT', 'Tipo', 'Fabricante/Modelo', 'Divisão', 'Laboratório', 'Situação', 'Obs.'], ...at.filter(e => ['VENCIDO', 'DESCALIBRADO'].includes(stEf(e))).map(e => [e.pat || '', e.tipo, `${e.fab} ${e.mod}`, e.div, lm[e.labId]?.code || '', STATUS_CFG[stEf(e)].lbl, e.obs || '']), ['', '', '', '', '', ''], ['RESTRIÇÕES ESPECIAIS', '', '', '', '', ''], ['PAT', 'Tipo', 'Modelo', 'Divisão', 'Status', 'Restrição'], ...rst.map(e => [e.pat || '', e.tipo, e.mod, e.div, STATUS_CFG[stEf(e)]?.lbl || '', e.rest || ''])];
     const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const a = document.createElement('a');
     a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
@@ -8640,7 +8700,7 @@ function Relatorio({
     lbl: 'Conformidade geral',
     v: `${pctConf}%`,
     cor: cor(pctConf),
-    sub: `${conf} de ${total} calibrados`
+    sub: `${conf} de ${total} no prazo · ${cnt.VENCIDO} com calibração vencida`
   }, {
     lbl: 'Descalibrados',
     v: cnt.DESCALIBRADO,
@@ -8700,7 +8760,7 @@ function Relatorio({
       borderCollapse: 'collapse',
       fontSize: 13
     }
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Divisão', 'Total', 'Calibrados', 'Desc.', 'Sem Cert.', 'Em Reparo', 'Conformidade', 'Custo máx.'].map(h => /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, ['Divisão', 'Total', 'Calibrados', 'Vencidas', 'Desc.', 'Sem Cert.', 'Em Reparo', 'Conformidade', 'Custo máx.'].map(h => /*#__PURE__*/React.createElement("th", {
     key: h,
     style: {
       textAlign: 'left',
@@ -8738,6 +8798,15 @@ function Relatorio({
         fontWeight: 600
       }
     }, d.ok)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: '8px 10px'
+      }
+    }, d.venc > 0 ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: 'var(--red)',
+        fontWeight: 600
+      }
+    }, d.venc) : '—'), /*#__PURE__*/React.createElement("td", {
       style: {
         padding: '8px 10px'
       }
@@ -8870,7 +8939,7 @@ function Relatorio({
       fontSize: 11
     }
   }, e.rest)), /*#__PURE__*/React.createElement(SBdg, {
-    s: e.status
+    s: stEf(e)
   }))), rst.length === 0 && /*#__PURE__*/React.createElement("div", {
     className: "emp"
   }, "Nenhuma restri\xE7\xE3o"))), /*#__PURE__*/React.createElement("div", {
@@ -8886,7 +8955,7 @@ function Relatorio({
   }, labs.filter(l => l.ativo).map(l => {
     const tot = at.filter(e => e.labId === l.id).length;
     if (tot === 0) return null;
-    const ok = at.filter(e => e.labId === l.id && e.status === 'CALIBRADO').length;
+    const ok = at.filter(e => e.labId === l.id && stEf(e) === 'CALIBRADO').length;
     return /*#__PURE__*/React.createElement("div", {
       key: l.id,
       style: {
@@ -9348,7 +9417,7 @@ function App() {
       try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
     }
   }, []);
-  const bdEq = s.eqs.filter(e => e.ativo && ['DESCALIBRADO', 'EM_REPARO', 'SEM_CERTIFICADO'].includes(e.status)).length;
+  const bdEq = s.eqs.filter(e => e.ativo && ['DESCALIBRADO', 'VENCIDO', 'EM_REPARO', 'SEM_CERTIFICADO'].includes(stEf(e))).length;
   const bdPS = s.pss.filter(p => !['CONCLUIDO', 'CANCELADO'].includes(p.status)).length;
   function onPS(eq) {
     setEqPS(eq);
@@ -9409,20 +9478,41 @@ function App() {
   }, PAGES.find(p => p.id === pg)?.lbl), /*#__PURE__*/React.createElement("button", {
     className: "thm",
     title: "Alternar tema",
+    "aria-label": theme === 'dark' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro',
     onClick: () => setTheme(t => t === 'dark' ? 'light' : 'dark')
-  }, theme === 'dark' ? '☀️ Claro' : '🌙 Escuro'),
+  }, theme === 'dark' ? '☀️' : '🌙', /*#__PURE__*/React.createElement("span", {
+    className: "tb-lbl"
+  }, theme === 'dark' ? ' Claro' : ' Escuro')),
   // O cargo Livre é observador: entra sem senha, logo continua sendo anon,
   // e desde a migração 39 o Postgres recusa a escrita dele. Dizer isso aqui
-  // custa uma linha; descobrir clicando em Salvar custa um alerta de erro
-  // de banco no meio do trabalho.
-  window.CAL_USUARIO?.role === 'observador' && /*#__PURE__*/React.createElement("span", {
-    className: "tb-s",
+  // custa uma linha; descobrir clicando em Salvar custa um alerta no meio
+  // do trabalho. Era um span "tb-s" — a classe do separador "›", cor com
+  // opacidade 0,18 —, medido praticamente invisível em 13/09/2026; agora é
+  // a pílula informativa que as telas já usam.
+  somenteLeitura() && /*#__PURE__*/React.createElement("span", {
+    className: "bdg b-i tb-ro",
     title: 'Entrou como observador — pode consultar, não pode gravar. Saia e escolha um cargo com senha para editar.'
-  }, "somente leitura"), /*#__PURE__*/React.createElement("button", {
-    className: "thm",
-    title: window.CAL_USUARIO?.nome || 'Sair',
+  }, "👁", /*#__PURE__*/React.createElement("span", {
+    className: "tb-lbl"
+  }, " somente leitura")),
+  // A volta ao portal mora na barra, ao lado de Sair. Antes era só a pílula
+  // fixa "⇚ CMASM" (position:fixed, z-index 9999) no canto superior
+  // direito — exatamente em cima do botão Sair: medido em 13/09/2026, o
+  // clique no centro de Sair caía na pílula e levava ao portal sem
+  // encerrar a sessão. A pílula fica na tela de login e sai quando o app
+  // monta (__calIniciar).
+  /*#__PURE__*/React.createElement("a", {
+    className: "thm tb-a",
+    href: "/",
+    title: "Voltar ao portal CMASM",
+    "aria-label": "Portal"
+  }, "⇚", /*#__PURE__*/React.createElement("span", {
+    className: "tb-lbl"
+  }, " Portal")), /*#__PURE__*/React.createElement("button", {
+    className: "thm tb-a",
+    title: 'Sair' + (window.CAL_USUARIO?.nome ? ' — ' + window.CAL_USUARIO.nome : ''),
     onClick: () => window.__calSair()
-  }, "\u21A9 ", window.CAL_USUARIO?.cargo || window.CAL_USUARIO?.funcao || 'Sair')), /*#__PURE__*/React.createElement("div", {
+  }, "↩ ", window.CAL_USUARIO?.cargo || window.CAL_USUARIO?.funcao || 'Sair')), /*#__PURE__*/React.createElement("div", {
     className: "content"
   },
   // Sem as migrações 35/36 aplicadas, ou com a rede fora, o módulo diz o
@@ -9481,6 +9571,9 @@ function App() {
 // isso as consultas sairiam antes do signIn e a tela abriria vazia.
 window.__calIniciar = function (usuario) {
   window.CAL_USUARIO = usuario || null;
+  // A pílula fixa "⇚ CMASM" serve à tela de login; com o app montado ela
+  // cobria o botão Sair, e a barra superior passa a ter o próprio Portal.
+  document.querySelector('.calib-home')?.remove();
   ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
 };
 window.__calSair = async function () {
