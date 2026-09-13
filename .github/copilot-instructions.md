@@ -1,16 +1,23 @@
-# PMOC Workspace Instructions
+# Instruções Do Workspace PMOC
 
-## Workspace boundaries
+## Limites
 
-- Treat `/home/luc/Downloads/pmoc-overlay` as the only development target.
-- Treat `/home/luc/DEV_ERP` and every descendant directory or repository as strictly read-only reference material.
-- Access `DEV_ERP` only with read and search tools. Do not edit, create, delete, rename, format, generate, install, build, test, start services, run migrations, or perform Git operations in that tree.
-- You may adapt patterns and domain knowledge from `DEV_ERP`, but write all code, documentation, generated files, and command side effects only inside `pmoc-overlay`.
-- If completing a request appears to require a change in `DEV_ERP`, stop and request explicit authorization.
+- O único alvo de desenvolvimento é `/home/luc/cmms-monorepo/pmoc-overlay`.
+- Tudo fora desse diretório é somente referência: use leitura e busca, sem editar, gerar arquivos, instalar dependências, executar testes, iniciar serviços, rodar migrações ou fazer operações Git.
+- Nunca altere `DEV_ERP` nem outro repositório de referência. Se a tarefa exigir isso, pare e peça autorização explícita.
 
-## Project conventions
+## Regras do projeto
 
-- Keep code identifiers, comments, UI strings, and documentation in Portuguese.
-- Preserve the zero-build HTML, vanilla JavaScript, and Supabase architecture unless the user approves a new design.
-- Keep Supabase migrations additive; never drop production tables or columns.
-- Read [CLAUDE.md](../CLAUDE.md) for architecture, commands, and domain-specific conventions.
+- Use português em identificadores, comentários, interface, commits e documentação.
+- Preserve a arquitetura HTML + JavaScript vanilla + Supabase por CDN, sem build e sem npm, salvo aprovação explícita do usuário.
+- Para banco, crie uma nova migração numerada e aditiva em `supabase/`; nunca use `DROP` em tabelas ou colunas de produção. Arquive registros em vez de apagá-los.
+- Reutilize `shared/` e os padrões dos módulos existentes. O `/refrigeracao` é congelado por decisão; não o altere sem solicitação explícita.
+- No `/mapa`, somente `mapa/mapa-dados.js` fala com o Supabase; mantenha os núcleos puros testáveis em Node separados da borda DOM.
+
+## Comandos e referências
+
+- Testes automatizados: `node --test`.
+- Servidor local: `python3 -m http.server` na raiz; caminhos raiz-absolutos não funcionam via `file://`.
+- Não há build, pacote npm, linter ou formatador configurado. Validações manuais estão em [TESTES.md](../TESTES.md).
+- Consulte [CLAUDE.md](../CLAUDE.md) para arquitetura, convenções, decisões e pendências; consulte [README.md](../README.md) para módulos, estrutura e estado do sistema.
+- Considere `docs/historico/` arquivado: não o use como fonte atual sem confirmar contra os arquivos acima.
