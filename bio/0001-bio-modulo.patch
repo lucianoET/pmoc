@@ -1,0 +1,2228 @@
+From 8b119d7914284a8e8543ee71ade69d0537468491 Mon Sep 17 00:00:00 2001
+From: luc <luc@local>
+Date: Sun, 13 Sep 2026 16:41:23 +0000
+Subject: [PATCH] =?UTF-8?q?feat(bio):=20m=C3=B3dulo=20/bio=20=E2=80=94=20f?=
+ =?UTF-8?q?ichas,=20=C3=A1rvores=20com=20QR,=20presen=C3=A7as=20e=20servi?=
+ =?UTF-8?q?=C3=A7os=20peri=C3=B3dicos=20(migra=C3=A7=C3=B5es=2061=E2=80=93?=
+ =?UTF-8?q?62)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ CLAUDE.md                       |   3 +
+ README.md                       |   6 +-
+ bio/app.js                      | 856 ++++++++++++++++++++++++++++++++
+ bio/dominio.js                  | 205 ++++++++
+ bio/index.html                  | 209 ++++++++
+ bio/vendor/qrcode.js            |   1 +
+ index.html                      |   6 +
+ supabase/61_bio_schema.sql      | 294 +++++++++++
+ supabase/62_bio_seed_fichas.sql | 141 ++++++
+ tests/bio-modulo.test.js        | 198 ++++++++
+ tests/bio-schema.test.js        | 111 +++++
+ tests/gestao-modulo.test.js     |   5 +-
+ tests/mobile-375.test.js        |   2 +-
+ tests/modulos-caminhos.test.js  |   2 +-
+ tests/shell.test.js             |   2 +-
+ vercel.json                     |   3 +-
+ 16 files changed, 2036 insertions(+), 8 deletions(-)
+ create mode 100644 bio/app.js
+ create mode 100644 bio/dominio.js
+ create mode 100644 bio/index.html
+ create mode 100644 bio/vendor/qrcode.js
+ create mode 100644 supabase/61_bio_schema.sql
+ create mode 100644 supabase/62_bio_seed_fichas.sql
+ create mode 100644 tests/bio-modulo.test.js
+ create mode 100644 tests/bio-schema.test.js
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 94abfe4..95219f0 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -159,6 +159,9 @@ Consequências no texto, num lugar só: sobra **uma** dependência externa de ve
+ 
+ **Auditoria de UI do mapa (`/mapa`, 11/09/2026):** o checklist de UI/UX (contraste, alvo de toque, foco, o que fica por cima do quê) rodado sobre a tela real depois da #70, com o dado de produção no cargo Livre, em 1280 e 375 px e nos dois temas. Sete defeitos medidos e corrigidos: dois **criados pela própria #70** (1 e 2), que tinha passado por "medido no navegador" sem ninguém conferir o que cobria o quê, e dois que atingem justamente o que ela acrescentou (3 e 4). **(1)** O grupo das roçadeiras do Apoio — 14 máquinas, **8 OS abertas** — ficava por baixo dos Tobatas de posição própria no zoom 19, que é onde "Ver no mapa" abre: a ordem do Leaflet é por latitude, e `elementFromPoint` no centro do distintivo devolvia o ⚡ vizinho. Marcador com OS aberta ganha `zIndexOffset: 1000`; entre iguais a pilha segue por latitude. **(2)** A barra Mapa/Satélite e a escala (z-index 1000, do componente e do Leaflet) ficavam **por cima** da barra lateral aberta e tapavam as duas últimas linhas da legenda — exatamente as duas que a #70 acrescentou. Deslizam com a barra, como `#btn-modulos` já fazia; em ≤480px a barra de basemap sai de cena. A remedição achou o vizinho do mesmo defeito: em 375px o `#btn-modulos` deslizado caía **embaixo** de `#btn-camadas` (1001 contra 810) e a barra lateral ficava sem o botão que a fecha — `#btn-camadas` sai de cena junto. **(3)** Balão aberto perto do topo nascia com o título atrás de Módulos, da coordenada ou de Camadas (o Leaflet afasta o balão 5px da borda); `L.Popup.mergeOptions({ autoPanPaddingTopLeft: [10, 56] })` em `app.js` vale para os dez `bindPopup` do módulo de uma vez. **(4)** Chave e subtítulo do balão em `--xm-text3` davam **2,9:1** sobre o fundo, com letra de 9–10px; passam a `--xm-text2` (6,9:1) e 11px, e o vermelho de erro, que ficava em 4,5:1, clareia um quarto por `color-mix` — sem hex, que o gate da legenda proíbe em `mapa/index.html`. **(5)** O foco de teclado no marcador era 1px quase preto sobre ícone escuro; agora 2px em `--xm-acc`. **(6)** Os 221 marcadores eram `role="button"` sem nome e o leitor de tela dizia "botão" 221 vezes; o marcador recebe `title` com o rótulo e, no grupo, a contagem de OS — o `title` do distintivo nunca aparecia, porque ele é `pointer-events:none`. **(7)** A área da zona saía "1.479,216 m²", o defeito que a tabela de Áreas de Máquinas já corrigiu em 19/08, e passa a inteiro. **Tudo no `index.html` e em três pontos de JavaScript; `xmap.js` e `xmap.css` seguem intocados**, pelo precedente da escala e das linhas do painel de camadas. **Medido depois, no mesmo roteiro:** o distintivo "8" é o elemento no topo do próprio ponto, zero marcador sem `title`, os dois balões com o título visível em 1280 e em 375, nenhuma linha da legenda coberta, contorno ciano de 2px no marcador focado, rolagem horizontal 0 e zero erro de página. **Ficou de fora, registrado:** rótulos permanentes (o painel de tooltip do Leaflet fica acima do de marcadores) ainda cruzam marcadores vizinhos no zoom 19; o balão da zona despeja 22 nomes de máquina repetidos em vez de agrupar por modelo; alvos de toque abaixo de 44px em 375 (zoom 26×26, Mapa/Satélite 63×20, Módulos/Camadas com 33px de altura); e os ícones de marcador são caracteres (✂⚡⚙❄🚚), a mesma classe do `☰` que virou bloco preto. **Sem migração.** Gate: `tests/mapa-auditoria-ui.test.js` (7 casos — o marcador por comportamento com Leaflet falso, o contraste por conta sobre os tokens do componente, as regras por presença; cinco defeitos conferidos reprovando de verdade ao serem reintroduzidos).
+ 
++
++**Módulo `/bio` — gestão biológica do terreno (13/09/2026, migrações 61 e 62 **aplicadas em produção pelo MCP do Supabase em 13/09/2026**, antes do deploy do frontend — a ordem inversa de D-cf8-25 é segura aqui porque nenhuma tela publicada lê `bio_*`; verificada nas três camadas: 12 policies e 8 travas lidas em `pg_policies`/`pg_constraint`, **14 recusas e 4 aceitações** exercidas num bloco desfeito — código fora do formato, par lat/lon trocado e pela metade, `data_remocao` em árvore ativa, código duplicado, polígono de 2 vértices, quantidade negativa, serviço sem alvo / com dois / realizado sem data / com data sem realizado / periodicidade 0 e 121 / tipo fora da lista — com zero resíduo depois, e porta da frente com a anon key publicada: `select` 200 com 29 fichas, coluna inexistente 400, `POST` anônimo 401, `PATCH` anônimo `[]`):** fichas de espécie (guia de campo: animal, praga, árvore — o que é, que risco, o que fazer), árvores etiquetadas com código `ARV-0000` e QR, presenças (onde animal/praga ocorre hoje) e serviços de poda/controle com periodicidade. **Não é sistema de ocorrências** (decisão do usuário na spec): árvore e praga são coisas conhecidas do terreno, o eixo é catálogo + posição + manutenção, o mesmo do PMOC. **Local é `cmasm_locais`**, lido e nunca alterado; posição em `lat`/`lon` com as duas travas da migração 25 copiadas coluna a coluna, e polígono de praga em `geom jsonb` no formato `[[lat,lon],…]` de `maq_areas`/`cmasm_locais` — não GeoJSON, para o `/mapa` desenhar sem converter na fronteira. **Sem policy de DELETE** (o projeto arquiva: árvore removida é `ativo=false` + `data_remocao`, presença ausente é `ativo=false`, serviço é `cancelado`). RBAC pelo padrão de `transp_pode_escrever()` (migração 22), em dois níveis: `bio_pode_escrever()` (técnico+: presença e serviço) e `bio_pode_gerir()` (gestor+: ficha e árvore). Serviço aponta para **uma árvore ou uma presença** (`check` de exclusividade) e `realizado ⇔ data_realizada`. **Periodicidade é regra do cliente:** marcar realizado com `periodicidade_meses` insere o próximo `programado` a partir da data REALIZADA (não da programada — senão um atraso vira adiantamento), com o dia preso ao fim do mês (`somarMeses`: 31/01 + 1 = 28/02); são duas escritas, não transação — se a segunda falhar a tela avisa para programar à mão, mesma dívida conhecida da conclusão de OS de Máquinas. "Vencido" é leitura da tela (programado com data no passado), nunca estado do banco. Sonda `BIO_OK` (uma leitura sobre `bio_fichas`, antes e fora do `Promise.all`): sem a migração o módulo abre, diz "Migração 61 não aplicada" e nenhum botão de escrita entra — toda função de escrita começa por `if (!BIO_OK || !podeX())`, e o gate afirma isso pela PRIMEIRA linha da função (foi assim que pegou `confirmarRealizado` com a guarda na segunda). Etiqueta A6 em `@media print` (só o `#etiqueta` imprime, preto e branco) com QR do **código**, nunca do id — `/bio?codigo=ARV-0012` abre a ficha da árvore; `qrcode.js` (qrcode-generator, MIT) copiado de `/refrigeracao` para `bio/vendor/`, caminho raiz-absoluto (D-td4-07). Fotos vão para `bio/<pasta>/` no bucket `os-fotos`, reduzidas a 1280 px no cliente — o bucket é público por dívida conhecida, e este módulo não muda isso. Não usa `shared/modulo-manutencao.js` (motor por horímetro; o Bio é por calendário) — base comum direto, como `/gestao`. **O que o navegador mostrou e o teste não:** em 375px o cartão "Serviços vencidos" transbordava 44px, porque item de grid nasce com `min-width:auto` e a tabela o empurrava — `min-width:0` no cartão, e quem rola é o `.tbl-wrap`; medido depois, transbordo 0 nas duas larguras, zero erro de página, e o modo observador com zero botão de escrita habilitado. Seed (62): 29 fichas com conduta genérica de espécie; **nenhuma árvore, presença ou serviço é semeado** (D-eq-06 — é dado do terreno da OM). **Fica para a próxima task:** camada `mapa/xmap-layers-bio.js` (árvores e presenças no `/mapa`, via `mapa-dados.js` e `CONFIG_POR_MODULO`; `bio_arvores` já tem a forma que a config genérica espera — `ativo`, `codigo`, `local_id`, `lat`, `lon`) e o desenho de polígono pelo `mapa-editor.js`; hoje a presença aceita coordenada pelo formulário e a área só pelo mapa, que ainda não a desenha. Repo próprio `cmms.bioControl` como produto Luctronics: **depois** do MVP validado no CMASM, não antes. Gates: `tests/bio-schema.test.js` (listas fechadas × `check` nas duas direções, envelope, alvo exclusivo, sem DELETE, seed só com valores da lista) e `tests/bio-modulo.test.js` (núcleo puro por comportamento, sonda, papéis, fronteira de escrita `bio_*` sem delete/upsert); `bio` entrou nas listas de `mobile-375`, `modulos-caminhos` e `shell`, e o gate do portal em `gestao-modulo` aprendeu o card — nenhum caso apagado. 1600 testes passando.
++
+ ## Conventions
+ 
+ - Globals `UPPER_CASE`, functions `camelCase`, private helpers `_prefixed`, HTML ids `kebab-case`.
+diff --git a/README.md b/README.md
+index 74e635a..65e81c0 100644
+--- a/README.md
++++ b/README.md
+@@ -28,8 +28,9 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
+ | `/equipes` | **PMOC Equipes** v1.0 | 8 ofícios · 2 turnos · escala semanal e capacidade | ⚠️ sem pessoas cadastradas |
+ | `/gestao` | **PMOC Gestão** v1.0 | Painel NBR 5674 · ações 5W2H com GUT · calendário consolidado · ferramentas da qualidade · POP | ✅ |
+ | `/mapa` | **Mapa CMASM** v1.0 | Leaflet · 5 camadas de ativos · zonas, prédios e planta vetorial | ✅ |
++| `/bio` | **CMASM Bio** v0.1 | Fichas de fauna, pragas e árvores · árvores etiquetadas com QR · presenças · serviços de poda e controle com periodicidade | ✅ migrações 61–62 aplicadas · aguarda deploy |
+ 
+-O portal lista onze rotas; `/reparos` não aparece nele por decisão de projeto — o catálogo
++O portal lista doze rotas; `/reparos` não aparece nele por decisão de projeto — o catálogo
+ de diagnóstico é alcançado de dentro de `/maquinas`, que é onde a OS corretiva é aberta.
+ 
+ ### Refrigeração
+@@ -219,7 +220,8 @@ pmoc/
+ │   ├── 52–53  acervo de documentos (normas, formulários, conceitos)
+ │   ├── 54–55  refrigeração: serviços do plano e regra por tipo
+ │   ├── 56–59  checks de faixa e de grandezas físicas; deriva do /calibracao
+-│   └── 60     gestão e qualidade (ges_acoes, ges_indicadores, ges_pop, ges_causas)
++│   ├── 60     gestão e qualidade (ges_acoes, ges_indicadores, ges_pop, ges_causas)
++│   └── 61–62  bio: schema e RLS; seed de 29 fichas
+ ├── tests/                     Gates automatizados (node --test tests/*.test.js)
+ ├── ref/                       Fontes legadas: planilhas, PDFs, HTMLs originais
+ └── docs/historico/            Registros já resolvidos, e os artefatos GSD aposentados
+diff --git a/bio/app.js b/bio/app.js
+new file mode 100644
+index 0000000..edc8e41
+--- /dev/null
++++ b/bio/app.js
+@@ -0,0 +1,856 @@
++// ══════════════════════════════════════════════════════════════════
++// CMASM Bio — gestão biológica do terreno (13/09/2026).
++//
++// (1) O que é: guia de campo (fichas de espécie), inventário de árvores
++// etiquetadas com QR, onde animais e pragas ocorrem (presenças) e os
++// serviços de poda e controle com periodicidade. Não é um sistema de
++// ocorrências: árvore e praga são coisas CONHECIDAS do terreno, e o
++// modelo é catálogo + posição + manutenção — o mesmo eixo do PMOC.
++//
++// (2) Fronteira de escrita: este módulo escreve SÓ nas quatro tabelas
++// `bio_*` da migração 61. Lê `cmasm_locais` (migração 19) para o seletor
++// de local e nunca a altera — quem posiciona prédio é o /mapa.
++//
++// (3) Sonda `BIO_OK`, uma leitura sobre `bio_fichas`, antes e fora do
++// carregamento principal: publicável antes da migração rodar (D-cf8-25).
++// Com a sonda falsa a tela diz que a migração 61 não foi aplicada e
++// nenhum botão de escrita entra — "sem migração, sem botão" (D-6wy-07).
++//
++// (4) Dois níveis de papel, espelhando as duas funções da migração 61:
++// técnico+ registra presença e serviço (campo); gestor+ cadastra ficha e
++// árvore (cadastro). A checagem aqui é UX; a RLS é a autoridade.
++//
++// (5) Nada é apagado. Árvore removida é `ativo=false` + `data_remocao`;
++// presença que sumiu é `ativo=false`; serviço que não vai acontecer é
++// `cancelado`. Não existe policy de DELETE e não existe botão.
++// ══════════════════════════════════════════════════════════════════
++
++import { Auth } from '../shared/auth.js'
++import { aplicarShell } from '../shared/shell.js'
++import { criarClienteSupabase } from '../shared/supabase-config.js'
++import { pilula, seletor, chips, vazio } from '../shared/componentes.js'
++import { montarArvore } from '../shared/arvore.js'
++import {
++  CATEGORIAS, GRUPOS, RISCOS, TIPOS_SERVICO, TIPOS_POR_ALVO, STATUS_SERVICO,
++  hojeIso, somarMeses, fmtData, proximoCodigo, situacaoServico, proximoServico,
++  validarServico, validarArvore, validarPresenca, resumoPainel, proximoDoAlvo, urlDaEtiqueta,
++} from './dominio.js'
++
++// ── estado global ──────────────────────────────────────────────────────
++let supa = null
++let auth = null
++let USUARIO = null
++let BIO_OK = false
++
++let FICHAS = []
++let ARVORES = []
++let PRESENCAS = []
++let SERVICOS = []
++let LOCAIS = []
++let LOCAIS_POR_ID = new Map()
++
++let FICHAS_CAT = 'todas'
++let SERVICOS_VISTA = 'vencidos'
++
++let FICHA_EDIT_ID = null
++let ARVORE_EDIT_ID = null
++let PRESENCA_EDIT_ID = null
++let SERVICO_EDIT_ID = null
++let SERVICO_A_REALIZAR = null
++let SERVICO_ALVO_FIXO = null
++let CONFIRMACAO = null
++
++const el = id => document.getElementById(id)
++const esc = valor => String(valor ?? '').replace(/[&<>'"]/g, c => ({
++  '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;',
++})[c])
++const val = id => (el(id)?.value ?? '').trim()
++const numOuNull = id => { const t = val(id).replace(',', '.'); return t === '' ? null : Number(t) }
++
++// ── permissões ─────────────────────────────────────────────────────────
++const podeRegistrar = () => ['admin', 'gestor', 'tecnico'].includes(USUARIO?.role)
++const podeGerir = () => ['admin', 'gestor'].includes(USUARIO?.role)
++
++// ── sonda ──────────────────────────────────────────────────────────────
++async function sondarBio() {
++  try {
++    const { error } = await supa.from('bio_fichas').select('id').limit(1)
++    BIO_OK = !error
++  } catch (_erro) {
++    BIO_OK = false
++  }
++  return BIO_OK
++}
++
++// ── carga ──────────────────────────────────────────────────────────────
++async function carregarTudo() {
++  await sondarBio()
++
++  // Locais vêm de outro módulo: falha aqui não derruba o Bio — o seletor
++  // fica vazio e a tela diz "sem local".
++  try {
++    const { data } = await supa.from('cmasm_locais').select('id,nome,tipo,parent_id,lat,lon').eq('ativo', true)
++    LOCAIS = data || []
++  } catch (_erro) {
++    LOCAIS = []
++  }
++  LOCAIS_POR_ID = new Map(LOCAIS.map(l => [l.id, l]))
++
++  if (!BIO_OK) { FICHAS = []; ARVORES = []; PRESENCAS = []; SERVICOS = []; return }
++
++  const [f, a, p, s] = await Promise.all([
++    supa.from('bio_fichas').select('*').eq('ativo', true).order('nome_comum'),
++    supa.from('bio_arvores').select('*').order('codigo'),
++    supa.from('bio_presencas').select('*').order('data_registro', { ascending: false }),
++    supa.from('bio_servicos').select('*').order('data_programada'),
++  ])
++  for (const r of [f, a, p, s]) if (r.error) throw new Error(r.error.message)
++  FICHAS = f.data || []
++  ARVORES = a.data || []
++  PRESENCAS = p.data || []
++  SERVICOS = s.data || []
++}
++
++async function recarregar() {
++  try { await carregarTudo() } catch (erro) { alert('Erro: ' + erro.message); return }
++  renderTudo()
++}
++
++// ── lookups ────────────────────────────────────────────────────────────
++const fichaPorId = id => FICHAS.find(f => f.id === id) || null
++const arvorePorId = id => ARVORES.find(a => a.id === id) || null
++const presencaPorId = id => PRESENCAS.find(p => p.id === id) || null
++const servicoPorId = id => SERVICOS.find(s => s.id === id) || null
++const localNome = id => LOCAIS_POR_ID.get(id)?.nome || '—'
++const nomeFicha = id => fichaPorId(id)?.nome_comum || '—'
++
++function rotuloAlvo(s) {
++  if (s.arvore_id) {
++    const a = arvorePorId(s.arvore_id)
++    return a ? `🌳 ${a.codigo} · ${nomeFicha(a.ficha_id)}` : `🌳 árvore #${s.arvore_id}`
++  }
++  const p = presencaPorId(s.presenca_id)
++  return p ? `${CATEGORIAS[fichaPorId(p.ficha_id)?.categoria]?.icone || ''} ${nomeFicha(p.ficha_id)} · ${localNome(p.local_id)}` : `presença #${s.presenca_id}`
++}
++
++function opcoesLocais(selecionado = null) {
++  const opcoes = montarArvore(LOCAIS).map(l =>
++    `<option value="${l.id}" ${l.id === selecionado ? 'selected' : ''}>${'— '.repeat(l.nivel)}${esc(l.nome)}</option>`)
++  return '<option value="">Sem local</option>' + opcoes.join('')
++}
++
++function opcoesFichas(categorias, selecionado = null) {
++  return '<option value="">Escolha…</option>' + FICHAS
++    .filter(f => categorias.includes(f.categoria))
++    .map(f => `<option value="${f.id}" ${f.id === selecionado ? 'selected' : ''}>${esc(f.nome_comum)}</option>`)
++    .join('')
++}
++
++function avisoMigracao() {
++  return `<div class="callout co-warn" style="margin-bottom:16px"><strong>Migração 61 não aplicada.</strong>
++    As tabelas <code>bio_*</code> ainda não existem neste banco — o módulo abre em modo de leitura vazia.</div>`
++}
++
++function pilulaRisco(risco) {
++  const r = RISCOS[risco] || { rotulo: risco || '—', tom: 'neutro' }
++  return pilula(`Risco ${r.rotulo.toLowerCase()}`, r.tom)
++}
++
++function pilulaSituacao(s, hoje) {
++  const sit = situacaoServico(s, hoje)
++  if (sit === 'vencido') return pilula('Vencido', 'erro')
++  const st = STATUS_SERVICO[sit] || { rotulo: sit, tom: 'neutro' }
++  return pilula(st.rotulo, st.tom)
++}
++
++// ── início ─────────────────────────────────────────────────────────────
++function renderInicio() {
++  const hoje = hojeIso()
++  const r = resumoPainel({ arvores: ARVORES, presencas: PRESENCAS, servicos: SERVICOS }, hoje)
++  el('inicio-kpis').innerHTML = `
++    <div class="kpi kc-accent"><div class="kpi-n">${r.arvores}</div><div class="kpi-l">Árvores etiquetadas</div></div>
++    <div class="kpi kc-blue"><div class="kpi-n">${r.presencas}</div><div class="kpi-l">Presenças ativas</div></div>
++    <div class="kpi ${r.vencidos ? 'kc-red' : 'kc-ok'}"><div class="kpi-n">${r.vencidos}</div><div class="kpi-l">Serviços vencidos</div></div>
++    <div class="kpi kc-warn"><div class="kpi-n">${r.noMes}</div><div class="kpi-l">Serviços no mês</div></div>`
++  el('inicio-aviso').innerHTML = BIO_OK ? '' : avisoMigracao()
++
++  const vencidos = SERVICOS.filter(s => situacaoServico(s, hoje) === 'vencido').slice(0, 8)
++  el('inicio-vencidos').innerHTML = vencidos.length
++    ? `<div class="tbl-wrap"><table class="tbl"><tbody>${vencidos.map(s => `<tr>
++        <td class="hi">${esc(TIPOS_SERVICO[s.tipo] || s.tipo)}</td>
++        <td>${esc(rotuloAlvo(s))}</td>
++        <td class="num">${fmtData(s.data_programada)}</td>
++        <td><button class="btn btn-s btn-sm" onclick="abrirRealizar(${s.id})" ${podeRegistrar() ? '' : 'disabled'}>Realizar</button></td>
++      </tr>`).join('')}</tbody></table></div>`
++    : vazio('Nenhum serviço vencido.', 'Os programados aparecem na aba Serviços.')
++
++  const risco = PRESENCAS.filter(p => p.ativo !== false && fichaPorId(p.ficha_id)?.risco === 'alto').slice(0, 8)
++  el('inicio-risco').innerHTML = risco.length
++    ? `<div class="tbl-wrap"><table class="tbl"><tbody>${risco.map(p => `<tr onclick="abrirPresenca(${p.id})" style="cursor:pointer">
++        <td class="hi">${esc(nomeFicha(p.ficha_id))}</td>
++        <td>${esc(localNome(p.local_id))}</td>
++        <td class="num">${fmtData(p.data_registro)}</td>
++      </tr>`).join('')}</tbody></table></div>`
++    : vazio('Nenhuma presença de risco alto registrada.')
++}
++
++// ── fichas ─────────────────────────────────────────────────────────────
++function renderFichas() {
++  el('fichas-acoes').innerHTML = BIO_OK && podeGerir()
++    ? `<button class="btn btn-p btn-sm" onclick="abrirFicha()">Nova ficha</button>` : ''
++  const contagem = cat => FICHAS.filter(f => cat === 'todas' || f.categoria === cat).length
++  el('fichas-chips').innerHTML = chips([
++    { id: 'todas', rotulo: 'Todas', contagem: contagem('todas') },
++    ...Object.entries(CATEGORIAS).map(([id, c]) => ({ id, rotulo: c.rotulo, contagem: contagem(id) })),
++  ], FICHAS_CAT, 'filtrarFichas')
++
++  const busca = val('fichas-busca').toLowerCase()
++  const lista = FICHAS.filter(f => (FICHAS_CAT === 'todas' || f.categoria === FICHAS_CAT)
++    && (!busca || `${f.nome_comum} ${f.nome_cientifico || ''}`.toLowerCase().includes(busca)))
++
++  el('fichas-lista').innerHTML = lista.length ? lista.map(f => `
++    <div class="ficha-card" onclick="abrirDetalheFicha(${f.id})">
++      <div class="ficha-foto">${f.foto_url ? `<img src="${esc(f.foto_url)}" alt="" loading="lazy"/>` : CATEGORIAS[f.categoria]?.icone || ''}</div>
++      <div class="ficha-corpo">
++        <div class="ficha-nome">${esc(f.nome_comum)}</div>
++        <div class="ficha-cient">${esc(f.nome_cientifico || '')}</div>
++        <div class="ficha-linha">${pilulaRisco(f.risco)}${f.peconhenta ? pilula('Peçonhenta', 'erro') : ''}<span class="badge b-accent">${esc(GRUPOS[f.grupo] || f.grupo)}</span></div>
++      </div>
++    </div>`).join('')
++    : `<div style="grid-column:1/-1">${BIO_OK ? vazio('Nenhuma ficha encontrada.') : avisoMigracao()}</div>`
++}
++
++function filtrarFichas(cat) { FICHAS_CAT = cat; renderFichas() }
++
++function abrirDetalheFicha(id) {
++  const f = fichaPorId(id)
++  if (!f) return
++  const arvores = ARVORES.filter(a => a.ficha_id === id && a.ativo !== false)
++  const presencas = PRESENCAS.filter(p => p.ficha_id === id && p.ativo !== false)
++  const onde = [
++    ...arvores.map(a => `<li><a href="#" onclick="abrirArvore(${a.id});return false">${esc(a.codigo)}</a> · ${esc(localNome(a.local_id))}</li>`),
++    ...presencas.map(p => `<li><a href="#" onclick="abrirPresenca(${p.id});return false">${esc(localNome(p.local_id))}</a> · ${fmtData(p.data_registro)}${p.quantidade_estimada != null ? ` · ~${p.quantidade_estimada}` : ''}</li>`),
++  ]
++  el('modal-detalhe-titulo').textContent = f.nome_comum
++  el('modal-detalhe-corpo').innerHTML = `
++    ${f.foto_url ? `<img class="det-foto" src="${esc(f.foto_url)}" alt=""/>` : ''}
++    <div class="ficha-linha" style="margin-bottom:12px">${pilulaRisco(f.risco)}${f.peconhenta ? pilula('Peçonhenta', 'erro') : ''}
++      <span class="badge b-accent">${esc(CATEGORIAS[f.categoria]?.rotulo)} · ${esc(GRUPOS[f.grupo] || f.grupo)}</span></div>
++    <div class="det-bloco"><div class="det-rotulo">Nome científico</div><div class="det-texto"><em>${esc(f.nome_cientifico || '—')}</em></div></div>
++    <div class="det-bloco"><div class="det-rotulo">Descrição</div><div class="det-texto">${esc(f.descricao || '—')}</div></div>
++    <div class="det-bloco"><div class="det-rotulo">O que fazer ao encontrar</div><div class="det-texto">${esc(f.o_que_fazer || '—')}</div></div>
++    <div class="det-bloco"><div class="det-rotulo">Controle / manejo</div><div class="det-texto">${esc(f.controle || '—')}</div></div>
++    <div class="det-bloco"><div class="det-rotulo">Onde está no CMASM</div>
++      ${onde.length ? `<ul class="det-texto" style="padding-left:18px">${onde.join('')}</ul>` : '<div class="det-texto">Nenhum registro no terreno.</div>'}</div>`
++  el('modal-detalhe-acoes').innerHTML = `
++    <button class="btn btn-s btn-sm" onclick="fecharModal()">Fechar</button>
++    ${podeGerir() ? `<button class="btn btn-p btn-sm" onclick="abrirFicha(${f.id})">Editar</button>` : ''}`
++  abrirModal('modal-detalhe')
++}
++
++function abrirFicha(id = null) {
++  if (!BIO_OK || !podeGerir()) return
++  FICHA_EDIT_ID = id
++  const f = fichaPorId(id) || {}
++  el('modal-ficha-titulo').textContent = f.id ? `Editar ${f.nome_comum}` : 'Nova ficha'
++  el('modal-ficha-corpo').innerHTML = `
++    <div class="fgrid">
++      <div class="frow"><label for="fi-nome">Nome comum</label><input id="fi-nome" value="${esc(f.nome_comum || '')}"/></div>
++      <div class="frow"><label for="fi-cient">Nome científico</label><input id="fi-cient" value="${esc(f.nome_cientifico || '')}"/></div>
++      <div class="frow"><label for="fi-categoria">Categoria</label><select id="fi-categoria">
++        ${Object.entries(CATEGORIAS).map(([k, c]) => `<option value="${k}" ${f.categoria === k ? 'selected' : ''}>${c.rotulo}</option>`).join('')}</select></div>
++      <div class="frow"><label for="fi-grupo">Grupo</label><select id="fi-grupo">
++        ${Object.entries(GRUPOS).map(([k, r]) => `<option value="${k}" ${f.grupo === k ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
++      <div class="frow"><label for="fi-risco">Risco</label><select id="fi-risco">
++        ${Object.entries(RISCOS).map(([k, r]) => `<option value="${k}" ${(f.risco || 'baixo') === k ? 'selected' : ''}>${r.rotulo}</option>`).join('')}</select></div>
++      <div class="frow"><label><input type="checkbox" id="fi-peconhenta" ${f.peconhenta ? 'checked' : ''} style="width:auto;margin-right:6px"/>Peçonhenta / venenosa</label>
++        <label><input type="checkbox" id="fi-presente" ${f.presente_no_cmasm !== false ? 'checked' : ''} style="width:auto;margin-right:6px"/>Presente no CMASM</label></div>
++    </div>
++    <div class="frow"><label for="fi-descricao">Descrição (como reconhecer)</label><textarea id="fi-descricao">${esc(f.descricao || '')}</textarea></div>
++    <div class="frow"><label for="fi-fazer">O que fazer ao encontrar</label><textarea id="fi-fazer">${esc(f.o_que_fazer || '')}</textarea></div>
++    <div class="frow"><label for="fi-controle">Controle / manejo</label><textarea id="fi-controle">${esc(f.controle || '')}</textarea></div>
++    <div class="frow"><label for="fi-foto">Foto</label><input type="file" id="fi-foto" accept="image/*"/>
++      <div class="help">${f.foto_url ? 'Já tem foto; escolher outra substitui.' : 'Opcional. Redimensionada para 1280 px antes de subir.'}</div></div>
++    <div class="help" id="fi-erro" style="color:var(--red)"></div>`
++  abrirModal('modal-ficha')
++}
++
++async function salvarFicha() {
++  if (!BIO_OK || !podeGerir()) return
++  const registro = {
++    nome_comum: val('fi-nome'), nome_cientifico: val('fi-cient') || null,
++    categoria: val('fi-categoria'), grupo: val('fi-grupo'), risco: val('fi-risco'),
++    peconhenta: el('fi-peconhenta').checked, presente_no_cmasm: el('fi-presente').checked,
++    descricao: val('fi-descricao') || null, o_que_fazer: val('fi-fazer') || null, controle: val('fi-controle') || null,
++  }
++  if (!registro.nome_comum) { el('fi-erro').textContent = 'Nome comum obrigatório.'; return }
++  const arquivo = el('fi-foto').files?.[0]
++  if (arquivo) {
++    try { registro.foto_url = await enviarFoto(arquivo, 'fichas') } catch (erro) { el('fi-erro').textContent = 'Foto: ' + erro.message; return }
++  }
++  const consulta = FICHA_EDIT_ID
++    ? supa.from('bio_fichas').update(registro).eq('id', FICHA_EDIT_ID)
++    : supa.from('bio_fichas').insert(registro)
++  const { error } = await consulta
++  if (error) { alert('Erro: ' + error.message); return }
++  fecharModal()
++  await recarregar()
++}
++
++// ── árvores ────────────────────────────────────────────────────────────
++function renderArvores() {
++  el('arvores-acoes').innerHTML = BIO_OK && podeGerir()
++    ? `<button class="btn btn-p btn-sm" onclick="abrirArvoreForm()">Nova árvore</button>` : ''
++  const hoje = hojeIso()
++  const ativas = ARVORES.filter(a => a.ativo !== false)
++  el('arvores-lista').innerHTML = ativas.length ? `<div class="tbl-wrap"><table class="tbl">
++    <thead><tr><th>Código</th><th>Espécie</th><th>Local</th><th>Próximo serviço</th><th></th></tr></thead>
++    <tbody>${ativas.map(a => {
++      const prox = proximoDoAlvo(SERVICOS, 'arvore_id', a.id)
++      return `<tr>
++        <td class="hi"><a href="#" onclick="abrirArvore(${a.id});return false">${esc(a.codigo)}</a>${a.apelido ? ` <span class="help" style="display:inline">${esc(a.apelido)}</span>` : ''}</td>
++        <td>${esc(nomeFicha(a.ficha_id))}</td>
++        <td>${esc(localNome(a.local_id))}${a.lat != null ? ' 📍' : ''}</td>
++        <td>${prox ? `${esc(TIPOS_SERVICO[prox.tipo])} · ${fmtData(prox.data_programada)} ${pilulaSituacao(prox, hoje)}` : '<span class="help">nenhum programado</span>'}</td>
++        <td><button class="btn btn-s btn-sm" onclick="abrirArvore(${a.id})">Ficha</button></td>
++      </tr>`
++    }).join('')}</tbody></table></div>`
++    : (BIO_OK ? vazio('Nenhuma árvore cadastrada.', 'Gestor+ cadastra em "Nova árvore"; a etiqueta sai da ficha.') : avisoMigracao())
++}
++
++function abrirArvore(id) {
++  const a = arvorePorId(id)
++  if (!a) return
++  const f = fichaPorId(a.ficha_id)
++  const hoje = hojeIso()
++  const historico = SERVICOS.filter(s => s.arvore_id === id).sort((x, y) => (y.data_realizada || y.data_programada).localeCompare(x.data_realizada || x.data_programada))
++  const url = urlDaEtiqueta(location.origin, a.codigo)
++  el('modal-detalhe-titulo').textContent = `${a.codigo} · ${f?.nome_comum || '—'}`
++  el('modal-detalhe-corpo').innerHTML = `
++    <div class="qr-caixa">${svgQr(url)}<div>
++      <div class="det-bloco"><div class="det-rotulo">Espécie</div><div class="det-texto"><a href="#" onclick="abrirDetalheFicha(${a.ficha_id});return false">${esc(f?.nome_comum || '—')}</a> <em>${esc(f?.nome_cientifico || '')}</em></div></div>
++      <div class="det-bloco"><div class="det-rotulo">Local</div><div class="det-texto">${esc(localNome(a.local_id))}${a.lat != null ? `<br><span class="help">${a.lat.toFixed(5)}, ${a.lon.toFixed(5)}</span>` : ''}</div></div>
++      ${a.apelido ? `<div class="det-bloco"><div class="det-rotulo">Apelido</div><div class="det-texto">${esc(a.apelido)}</div></div>` : ''}
++      ${a.ativo === false ? `<div class="det-bloco">${pilula(`Removida${a.data_remocao ? ' em ' + fmtData(a.data_remocao) : ''}`, 'erro')}</div>` : ''}
++    </div></div>
++    ${a.obs ? `<div class="det-bloco" style="margin-top:12px"><div class="det-rotulo">Observações</div><div class="det-texto">${esc(a.obs)}</div></div>` : ''}
++    <div class="det-bloco" style="margin-top:12px"><div class="det-rotulo">Serviços</div>
++      ${historico.length ? `<table class="tbl"><tbody>${historico.map(s => `<tr>
++        <td class="hi">${esc(TIPOS_SERVICO[s.tipo] || s.tipo)}</td>
++        <td class="num">${fmtData(s.data_realizada || s.data_programada)}</td>
++        <td>${pilulaSituacao(s, hoje)}</td>
++        <td>${esc(s.executor || '')}</td>
++      </tr>`).join('')}</tbody></table>` : '<div class="det-texto">Nenhum serviço registrado.</div>'}</div>`
++  el('modal-detalhe-acoes').innerHTML = `
++    <button class="btn btn-s btn-sm" onclick="fecharModal()">Fechar</button>
++    <button class="btn btn-s btn-sm" onclick="imprimirEtiqueta(${a.id})">Imprimir etiqueta</button>
++    ${podeRegistrar() && a.ativo !== false ? `<button class="btn btn-p btn-sm" onclick="abrirServico(null,'arvore',${a.id})">Registrar serviço</button>` : ''}
++    ${podeGerir() ? `<button class="btn btn-s btn-sm" onclick="abrirArvoreForm(${a.id})">Editar</button>` : ''}
++    ${podeGerir() && a.ativo !== false ? `<button class="btn btn-d btn-sm" onclick="pedirRemocaoArvore(${a.id})">Remover</button>` : ''}`
++  abrirModal('modal-detalhe')
++}
++
++function abrirArvoreForm(id = null) {
++  if (!BIO_OK || !podeGerir()) return
++  ARVORE_EDIT_ID = id
++  const a = arvorePorId(id) || { codigo: proximoCodigo(ARVORES) }
++  el('modal-arvore-titulo').textContent = a.id ? `Editar ${a.codigo}` : 'Nova árvore'
++  el('modal-arvore-corpo').innerHTML = `
++    <div class="fgrid">
++      <div class="frow"><label for="ar-codigo">Código</label><input id="ar-codigo" value="${esc(a.codigo)}"/><div class="help">Sequencial; o banco recusa duplicado.</div></div>
++      <div class="frow"><label for="ar-ficha">Espécie</label><select id="ar-ficha">${opcoesFichas(['arvore'], a.ficha_id)}</select></div>
++      <div class="frow"><label for="ar-apelido">Apelido</label><input id="ar-apelido" value="${esc(a.apelido || '')}" placeholder="Mangueira do portão"/></div>
++      <div class="frow"><label for="ar-local">Local</label><select id="ar-local">${opcoesLocais(a.local_id ?? null)}</select></div>
++      <div class="frow"><label for="ar-lat">Latitude</label><input id="ar-lat" inputmode="decimal" value="${a.lat ?? ''}" placeholder="-22,8396"/></div>
++      <div class="frow"><label for="ar-lon">Longitude</label><input id="ar-lon" inputmode="decimal" value="${a.lon ?? ''}" placeholder="-43,1094"/></div>
++      <div class="frow"><label for="ar-plantio">Data de plantio</label><input id="ar-plantio" type="date" value="${a.data_plantio || ''}"/></div>
++    </div>
++    <div class="frow"><label for="ar-obs">Observações</label><textarea id="ar-obs">${esc(a.obs || '')}</textarea></div>
++    <div class="help">Sem coordenada, a árvore herda a posição do local no mapa. Posicionar no ponto exato é feito no /mapa.</div>
++    <div class="help" id="ar-erro" style="color:var(--red)"></div>`
++  abrirModal('modal-arvore')
++}
++
++async function salvarArvore() {
++  if (!BIO_OK || !podeGerir()) return
++  const registro = {
++    codigo: val('ar-codigo').toUpperCase(), ficha_id: Number(val('ar-ficha')) || null,
++    apelido: val('ar-apelido') || null, local_id: Number(val('ar-local')) || null,
++    lat: numOuNull('ar-lat'), lon: numOuNull('ar-lon'),
++    data_plantio: val('ar-plantio') || null, obs: val('ar-obs') || null,
++  }
++  const erros = validarArvore(registro)
++  if (erros.length) { el('ar-erro').textContent = erros.join(' '); return }
++  if (!ARVORE_EDIT_ID) registro.criado_por = USUARIO?.nome || USUARIO?.role || null
++  const consulta = ARVORE_EDIT_ID
++    ? supa.from('bio_arvores').update(registro).eq('id', ARVORE_EDIT_ID)
++    : supa.from('bio_arvores').insert(registro)
++  const { error } = await consulta
++  if (error) { el('ar-erro').textContent = 'Erro: ' + error.message; return }
++  fecharModal()
++  await recarregar()
++}
++
++function pedirRemocaoArvore(id) {
++  const a = arvorePorId(id)
++  if (!a || !podeGerir()) return
++  pedirConfirmacao(`Remover ${a.codigo}?`,
++    'A árvore sai do inventário ativo e o histórico fica. Nada é apagado.',
++    async () => {
++      const { error } = await supa.from('bio_arvores').update({ ativo: false, data_remocao: hojeIso() }).eq('id', id)
++      if (error) { alert('Erro: ' + error.message); return }
++      await recarregar()
++    })
++}
++
++function svgQr(texto) {
++  if (typeof qrcode !== 'function' || !texto) return ''
++  const q = qrcode(0, 'M')
++  q.addData(texto)
++  q.make()
++  return q.createSvgTag({ cellSize: 3, margin: 2, scalable: true })
++}
++
++function imprimirEtiqueta(id) {
++  const a = arvorePorId(id)
++  if (!a) return
++  const f = fichaPorId(a.ficha_id)
++  el('etiqueta').innerHTML = `
++    <div class="et-codigo">${esc(a.codigo)}</div>
++    <div class="et-nome">${esc(f?.nome_comum || '')}</div>
++    <div class="et-cient">${esc(f?.nome_cientifico || '')}</div>
++    ${svgQr(urlDaEtiqueta(location.origin, a.codigo))}
++    <div class="et-rodape">CMASM · DME — aponte a câmera para abrir a ficha</div>`
++  window.print()
++}
++
++// ── presenças ──────────────────────────────────────────────────────────
++function renderPresencas() {
++  el('presencas-acoes').innerHTML = BIO_OK && podeRegistrar()
++    ? `<button class="btn btn-p btn-sm" onclick="abrirPresencaForm()">Nova presença</button>` : ''
++  const ativas = PRESENCAS.filter(p => p.ativo !== false)
++  el('presencas-lista').innerHTML = ativas.length ? `<div class="tbl-wrap"><table class="tbl">
++    <thead><tr><th>Espécie</th><th>Local</th><th>Registro</th><th>Qtd.</th><th>Risco</th><th></th></tr></thead>
++    <tbody>${ativas.map(p => {
++      const f = fichaPorId(p.ficha_id)
++      return `<tr>
++        <td class="hi">${CATEGORIAS[f?.categoria]?.icone || ''} <a href="#" onclick="abrirPresenca(${p.id});return false">${esc(f?.nome_comum || '—')}</a></td>
++        <td>${esc(localNome(p.local_id))}${p.geom ? ' ⬡' : p.lat != null ? ' 📍' : ''}</td>
++        <td class="num">${fmtData(p.data_registro)}</td>
++        <td class="num">${p.quantidade_estimada ?? '—'}</td>
++        <td>${pilulaRisco(f?.risco)}</td>
++        <td><button class="btn btn-s btn-sm" onclick="abrirPresenca(${p.id})">Ver</button></td>
++      </tr>`
++    }).join('')}</tbody></table></div>`
++    : (BIO_OK ? vazio('Nenhuma presença registrada.', 'Técnico+ registra onde viu o animal ou a praga.') : avisoMigracao())
++}
++
++function abrirPresenca(id) {
++  const p = presencaPorId(id)
++  if (!p) return
++  const f = fichaPorId(p.ficha_id)
++  const hoje = hojeIso()
++  const servicos = SERVICOS.filter(s => s.presenca_id === id)
++  el('modal-detalhe-titulo').textContent = `${f?.nome_comum || '—'} · ${localNome(p.local_id)}`
++  el('modal-detalhe-corpo').innerHTML = `
++    <div class="ficha-linha" style="margin-bottom:12px">${pilulaRisco(f?.risco)}${p.ativo === false ? pilula('Inativa', 'neutro') : ''}</div>
++    <div class="det-bloco"><div class="det-rotulo">Ficha</div><div class="det-texto"><a href="#" onclick="abrirDetalheFicha(${p.ficha_id});return false">${esc(f?.nome_comum || '—')}</a> — ${esc(f?.o_que_fazer || '')}</div></div>
++    <div class="det-bloco"><div class="det-rotulo">Registro</div><div class="det-texto">${fmtData(p.data_registro)}${p.registrado_por ? ` · ${esc(p.registrado_por)}` : ''}${p.quantidade_estimada != null ? ` · ~${p.quantidade_estimada}` : ''}</div></div>
++    ${p.lat != null ? `<div class="det-bloco"><div class="det-rotulo">Posição</div><div class="det-texto">${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</div></div>` : ''}
++    ${p.geom ? `<div class="det-bloco"><div class="det-rotulo">Área</div><div class="det-texto">Polígono com ${p.geom.length} vértices (ver no mapa).</div></div>` : ''}
++    ${p.obs ? `<div class="det-bloco"><div class="det-rotulo">Observações</div><div class="det-texto">${esc(p.obs)}</div></div>` : ''}
++    <div class="det-bloco"><div class="det-rotulo">Serviços de controle</div>
++      ${servicos.length ? `<table class="tbl"><tbody>${servicos.map(s => `<tr>
++        <td class="hi">${esc(TIPOS_SERVICO[s.tipo] || s.tipo)}</td><td class="num">${fmtData(s.data_realizada || s.data_programada)}</td>
++        <td>${pilulaSituacao(s, hoje)}</td><td>${esc(s.materiais || '')}</td></tr>`).join('')}</tbody></table>` : '<div class="det-texto">Nenhum.</div>'}</div>`
++  el('modal-detalhe-acoes').innerHTML = `
++    <button class="btn btn-s btn-sm" onclick="fecharModal()">Fechar</button>
++    ${podeRegistrar() && p.ativo !== false ? `<button class="btn btn-p btn-sm" onclick="abrirServico(null,'presenca',${p.id})">Registrar serviço</button>` : ''}
++    ${podeRegistrar() ? `<button class="btn btn-s btn-sm" onclick="abrirPresencaForm(${p.id})">Editar</button>` : ''}
++    ${podeRegistrar() && p.ativo !== false ? `<button class="btn btn-d btn-sm" onclick="pedirDesativarPresenca(${p.id})">Não está mais aqui</button>` : ''}`
++  abrirModal('modal-detalhe')
++}
++
++function abrirPresencaForm(id = null) {
++  if (!BIO_OK || !podeRegistrar()) return
++  PRESENCA_EDIT_ID = id
++  const p = presencaPorId(id) || { data_registro: hojeIso() }
++  el('modal-presenca-titulo').textContent = p.id ? 'Editar presença' : 'Nova presença'
++  el('modal-presenca-corpo').innerHTML = `
++    <div class="fgrid">
++      <div class="frow"><label for="pr-ficha">Espécie</label><select id="pr-ficha">${opcoesFichas(['animal', 'praga'], p.ficha_id)}</select></div>
++      <div class="frow"><label for="pr-local">Local</label><select id="pr-local">${opcoesLocais(p.local_id ?? null)}</select></div>
++      <div class="frow"><label for="pr-data">Data do registro</label><input id="pr-data" type="date" value="${p.data_registro || ''}"/></div>
++      <div class="frow"><label for="pr-qtd">Quantidade estimada</label><input id="pr-qtd" inputmode="numeric" value="${p.quantidade_estimada ?? ''}"/></div>
++      <div class="frow"><label for="pr-lat">Latitude</label><input id="pr-lat" inputmode="decimal" value="${p.lat ?? ''}"/></div>
++      <div class="frow"><label for="pr-lon">Longitude</label><input id="pr-lon" inputmode="decimal" value="${p.lon ?? ''}"/></div>
++    </div>
++    <div class="frow"><label for="pr-obs">Observações</label><textarea id="pr-obs">${esc(p.obs || '')}</textarea></div>
++    <div class="help">Área (polígono) é desenhada no /mapa, não aqui.</div>
++    <div class="help" id="pr-erro" style="color:var(--red)"></div>`
++  abrirModal('modal-presenca')
++}
++
++async function salvarPresenca() {
++  if (!BIO_OK || !podeRegistrar()) return
++  const registro = {
++    ficha_id: Number(val('pr-ficha')) || null, local_id: Number(val('pr-local')) || null,
++    data_registro: val('pr-data') || hojeIso(),
++    quantidade_estimada: val('pr-qtd') === '' ? null : Number(val('pr-qtd')),
++    lat: numOuNull('pr-lat'), lon: numOuNull('pr-lon'), obs: val('pr-obs') || null,
++  }
++  const erros = validarPresenca(registro)
++  if (erros.length) { el('pr-erro').textContent = erros.join(' '); return }
++  if (!PRESENCA_EDIT_ID) registro.registrado_por = USUARIO?.nome || USUARIO?.role || null
++  const consulta = PRESENCA_EDIT_ID
++    ? supa.from('bio_presencas').update(registro).eq('id', PRESENCA_EDIT_ID)
++    : supa.from('bio_presencas').insert(registro)
++  const { error } = await consulta
++  if (error) { el('pr-erro').textContent = 'Erro: ' + error.message; return }
++  fecharModal()
++  await recarregar()
++}
++
++function pedirDesativarPresenca(id) {
++  if (!podeRegistrar()) return
++  pedirConfirmacao('Marcar como ausente?', 'A presença sai do mapa e da lista; o registro fica.', async () => {
++    const { error } = await supa.from('bio_presencas').update({ ativo: false }).eq('id', id)
++    if (error) { alert('Erro: ' + error.message); return }
++    await recarregar()
++  })
++}
++
++// ── serviços ───────────────────────────────────────────────────────────
++function renderServicos() {
++  el('servicos-acoes').innerHTML = BIO_OK && podeRegistrar()
++    ? `<button class="btn btn-p btn-sm" onclick="abrirServico()">Novo serviço</button>` : ''
++  const hoje = hojeIso()
++  const conta = v => SERVICOS.filter(s => filtroServico(s, v, hoje)).length
++  el('servicos-seletor').innerHTML = seletor([
++    { id: 'vencidos', rotulo: `Vencidos (${conta('vencidos')})` },
++    { id: 'programados', rotulo: `Programados (${conta('programados')})` },
++    { id: 'realizados', rotulo: `Realizados (${conta('realizados')})` },
++  ], SERVICOS_VISTA, 'trocarVistaServicos')
++
++  const lista = SERVICOS.filter(s => filtroServico(s, SERVICOS_VISTA, hoje))
++  el('servicos-lista').innerHTML = lista.length ? `<div class="tbl-wrap" style="margin-top:12px"><table class="tbl">
++    <thead><tr><th>Serviço</th><th>Alvo</th><th>Data</th><th>Situação</th><th>Executor / materiais</th><th></th></tr></thead>
++    <tbody>${lista.map(s => `<tr>
++      <td class="hi">${esc(TIPOS_SERVICO[s.tipo] || s.tipo)}${s.periodicidade_meses ? ` <span class="badge b-blue">a cada ${s.periodicidade_meses} m</span>` : ''}</td>
++      <td>${esc(rotuloAlvo(s))}</td>
++      <td class="num">${fmtData(s.data_realizada || s.data_programada)}</td>
++      <td>${pilulaSituacao(s, hoje)}</td>
++      <td>${esc([s.executor, s.materiais].filter(Boolean).join(' · '))}</td>
++      <td style="white-space:nowrap">${s.status === 'programado' && podeRegistrar()
++        ? `<button class="btn btn-p btn-sm" onclick="abrirRealizar(${s.id})">Realizar</button> <button class="btn btn-s btn-sm" onclick="abrirServico(${s.id})">Editar</button> <button class="btn btn-d btn-sm" onclick="pedirCancelarServico(${s.id})">Cancelar</button>`
++        : ''}</td>
++    </tr>`).join('')}</tbody></table></div>`
++    : (BIO_OK ? vazio('Nada aqui.', SERVICOS_VISTA === 'vencidos' ? 'Bom sinal: nenhum serviço atrasado.' : '') : avisoMigracao())
++}
++
++function filtroServico(s, vista, hoje) {
++  const sit = situacaoServico(s, hoje)
++  if (vista === 'vencidos') return sit === 'vencido'
++  if (vista === 'programados') return sit === 'programado'
++  return sit === 'realizado'
++}
++
++function trocarVistaServicos(v) { SERVICOS_VISTA = v; renderServicos() }
++
++/** `alvo`/`alvoId` fixam o alvo quando o formulário abre de dentro de uma
++ *  ficha de árvore ou presença; sem eles, o usuário escolhe. */
++function abrirServico(id = null, alvo = null, alvoId = null) {
++  if (!BIO_OK || !podeRegistrar()) return
++  SERVICO_EDIT_ID = id
++  const s = servicoPorId(id) || { data_programada: hojeIso() }
++  if (s.arvore_id) { alvo = 'arvore'; alvoId = s.arvore_id }
++  if (s.presenca_id) { alvo = 'presenca'; alvoId = s.presenca_id }
++  SERVICO_ALVO_FIXO = alvo && alvoId ? { alvo, alvoId } : null
++  el('modal-servico-titulo').textContent = s.id ? 'Editar serviço' : 'Novo serviço'
++  const arvores = ARVORES.filter(a => a.ativo !== false)
++  const presencas = PRESENCAS.filter(p => p.ativo !== false)
++  const opAlvo = SERVICO_ALVO_FIXO
++    ? `<div class="frow"><label>Alvo</label><div class="det-texto">${esc(rotuloAlvo({ arvore_id: alvo === 'arvore' ? alvoId : null, presenca_id: alvo === 'presenca' ? alvoId : null }))}</div></div>`
++    : `<div class="frow"><label for="sv-alvo">Alvo</label><select id="sv-alvo" onchange="atualizarTiposServico()">
++        <option value="">Escolha…</option>
++        <optgroup label="Árvores">${arvores.map(a => `<option value="arvore:${a.id}">${esc(a.codigo)} · ${esc(nomeFicha(a.ficha_id))}</option>`).join('')}</optgroup>
++        <optgroup label="Presenças">${presencas.map(p => `<option value="presenca:${p.id}">${esc(nomeFicha(p.ficha_id))} · ${esc(localNome(p.local_id))}</option>`).join('')}</optgroup>
++      </select></div>`
++  el('modal-servico-corpo').innerHTML = `
++    ${opAlvo}
++    <div class="fgrid">
++      <div class="frow"><label for="sv-tipo">Serviço</label><select id="sv-tipo"></select></div>
++      <div class="frow"><label for="sv-data">Data programada</label><input id="sv-data" type="date" value="${s.data_programada || ''}"/></div>
++      <div class="frow"><label for="sv-periodo">Periodicidade (meses)</label><input id="sv-periodo" inputmode="numeric" value="${s.periodicidade_meses ?? ''}" placeholder="vazio = avulso"/></div>
++      <div class="frow"><label for="sv-materiais">Materiais previstos</label><input id="sv-materiais" value="${esc(s.materiais || '')}" placeholder="isca granulada 500 g"/></div>
++    </div>
++    <div class="frow"><label for="sv-obs">Observações</label><textarea id="sv-obs">${esc(s.obs || '')}</textarea></div>
++    <div class="help" id="sv-erro" style="color:var(--red)"></div>`
++  atualizarTiposServico(s.tipo)
++  abrirModal('modal-servico')
++}
++
++function alvoSelecionado() {
++  if (SERVICO_ALVO_FIXO) return SERVICO_ALVO_FIXO
++  const [alvo, id] = val('sv-alvo').split(':')
++  return alvo && id ? { alvo, alvoId: Number(id) } : null
++}
++
++function atualizarTiposServico(selecionado = null) {
++  const a = alvoSelecionado()
++  const tipos = a ? TIPOS_POR_ALVO[a.alvo] : Object.keys(TIPOS_SERVICO)
++  el('sv-tipo').innerHTML = tipos.map(t => `<option value="${t}" ${t === selecionado ? 'selected' : ''}>${TIPOS_SERVICO[t]}</option>`).join('')
++}
++
++async function salvarServico() {
++  if (!BIO_OK || !podeRegistrar()) return
++  const a = alvoSelecionado()
++  const registro = {
++    tipo: val('sv-tipo'),
++    arvore_id: a?.alvo === 'arvore' ? a.alvoId : null,
++    presenca_id: a?.alvo === 'presenca' ? a.alvoId : null,
++    data_programada: val('sv-data'),
++    periodicidade_meses: val('sv-periodo') === '' ? null : Number(val('sv-periodo')),
++    materiais: val('sv-materiais') || null, obs: val('sv-obs') || null,
++  }
++  const erros = validarServico(registro)
++  if (erros.length) { el('sv-erro').textContent = erros.join(' '); return }
++  if (!SERVICO_EDIT_ID) registro.criado_por = USUARIO?.nome || USUARIO?.role || null
++  const consulta = SERVICO_EDIT_ID
++    ? supa.from('bio_servicos').update(registro).eq('id', SERVICO_EDIT_ID)
++    : supa.from('bio_servicos').insert(registro)
++  const { error } = await consulta
++  if (error) { el('sv-erro').textContent = 'Erro: ' + error.message; return }
++  fecharModal()
++  await recarregar()
++}
++
++function abrirRealizar(id) {
++  const s = servicoPorId(id)
++  if (!BIO_OK || !podeRegistrar() || !s || s.status !== 'programado') return
++  SERVICO_A_REALIZAR = id
++  el('modal-realizar-corpo').innerHTML = `
++    <div class="det-texto" style="margin-bottom:12px"><strong>${esc(TIPOS_SERVICO[s.tipo])}</strong> — ${esc(rotuloAlvo(s))}</div>
++    <div class="fgrid">
++      <div class="frow"><label for="re-data">Data realizada</label><input id="re-data" type="date" value="${hojeIso()}"/></div>
++      <div class="frow"><label for="re-executor">Executor</label><input id="re-executor" value="${esc(USUARIO?.nome || '')}"/></div>
++    </div>
++    <div class="frow"><label for="re-materiais">Materiais usados</label><input id="re-materiais" value="${esc(s.materiais || '')}"/></div>
++    <div class="frow"><label for="re-obs">Observações</label><textarea id="re-obs"></textarea></div>
++    <div class="frow"><label for="re-foto">Foto (opcional)</label><input type="file" id="re-foto" accept="image/*"/></div>
++    ${s.periodicidade_meses ? `<div class="help">Periódico: o próximo será programado ${s.periodicidade_meses} meses após a data realizada.</div>` : ''}
++    <div class="help" id="re-erro" style="color:var(--red)"></div>`
++  abrirModal('modal-realizar')
++}
++
++/** Duas escritas em sequência, NÃO uma transação: se a segunda falhar, o
++ *  realizado fica e o próximo não nasce — a tela avisa para programar à
++ *  mão. Um RPC transacional é dívida conhecida da plataforma (CLAUDE.md,
++ *  Dívida de segurança), não deste módulo. */
++async function confirmarRealizado() {
++  if (!BIO_OK || !podeRegistrar()) return
++  const s = servicoPorId(SERVICO_A_REALIZAR)
++  if (!s) return
++  const dataRealizada = val('re-data')
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataRealizada)) { el('re-erro').textContent = 'Data obrigatória.'; return }
++  const patch = {
++    status: 'realizado', data_realizada: dataRealizada,
++    executor: val('re-executor') || null, materiais: val('re-materiais') || null,
++    obs: [s.obs, val('re-obs')].filter(Boolean).join('\n') || null,
++  }
++  const arquivo = el('re-foto').files?.[0]
++  if (arquivo) {
++    try { patch.foto_url = await enviarFoto(arquivo, 'servicos') } catch (erro) { el('re-erro').textContent = 'Foto: ' + erro.message; return }
++  }
++  const { error } = await supa.from('bio_servicos').update(patch).eq('id', s.id)
++  if (error) { el('re-erro').textContent = 'Erro: ' + error.message; return }
++
++  const proximo = proximoServico(s, dataRealizada)
++  if (proximo) {
++    proximo.criado_por = USUARIO?.nome || USUARIO?.role || null
++    const { error: erroProximo } = await supa.from('bio_servicos').insert(proximo)
++    if (erroProximo) alert(`Realizado gravado, mas o próximo (${fmtData(proximo.data_programada)}) não foi programado: ${erroProximo.message}. Programe à mão.`)
++  }
++  fecharModal()
++  await recarregar()
++}
++
++function pedirCancelarServico(id) {
++  const s = servicoPorId(id)
++  if (!s || !podeRegistrar()) return
++  pedirConfirmacao('Cancelar serviço?', 'Ele fica no histórico como cancelado. Um periódico cancelado não gera o próximo.', async () => {
++    const { error } = await supa.from('bio_servicos').update({ status: 'cancelado' }).eq('id', id)
++    if (error) { alert('Erro: ' + error.message); return }
++    await recarregar()
++  })
++}
++
++// ── fotos ──────────────────────────────────────────────────────────────
++/** Redimensiona no cliente (≤1280 px, JPEG 0,82) e sobe para o bucket
++ *  `os-fotos` da plataforma, em `bio/<pasta>/`. O bucket é público por
++ *  dívida conhecida; este módulo não muda isso. */
++async function enviarFoto(arquivo, pasta) {
++  const blob = await reduzirImagem(arquivo, 1280)
++  const caminho = `bio/${pasta}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`
++  const { error } = await supa.storage.from('os-fotos').upload(caminho, blob, { contentType: 'image/jpeg' })
++  if (error) throw new Error(error.message)
++  return supa.storage.from('os-fotos').getPublicUrl(caminho).data.publicUrl
++}
++
++function reduzirImagem(arquivo, maximo) {
++  return new Promise((resolver, rejeitar) => {
++    const img = new Image()
++    const url = URL.createObjectURL(arquivo)
++    img.onload = () => {
++      const escala = Math.min(1, maximo / Math.max(img.width, img.height))
++      const c = document.createElement('canvas')
++      c.width = Math.round(img.width * escala)
++      c.height = Math.round(img.height * escala)
++      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
++      URL.revokeObjectURL(url)
++      c.toBlob(b => b ? resolver(b) : rejeitar(new Error('não foi possível converter a imagem')), 'image/jpeg', 0.82)
++    }
++    img.onerror = () => { URL.revokeObjectURL(url); rejeitar(new Error('arquivo não é uma imagem legível')) }
++    img.src = url
++  })
++}
++
++// ── modais e navegação ─────────────────────────────────────────────────
++function abrirModal(id) {
++  for (const modal of document.querySelectorAll('.overlay .modal')) modal.classList.add('hidden')
++  el(id).classList.remove('hidden')
++  el('overlay').classList.add('open')
++}
++
++function fecharModal() {
++  el('overlay').classList.remove('open')
++  CONFIRMACAO = null
++}
++
++function pedirConfirmacao(titulo, texto, acao) {
++  CONFIRMACAO = acao
++  el('modal-confirmacao-titulo').textContent = titulo
++  el('modal-confirmacao-corpo').innerHTML = `<p class="det-texto">${esc(texto)}</p>`
++  abrirModal('modal-confirmacao')
++}
++
++async function executarConfirmacao() {
++  const acao = CONFIRMACAO
++  fecharModal()
++  if (acao) await acao()
++}
++
++function trocarView(id, botao) {
++  for (const v of document.querySelectorAll('.view')) v.classList.remove('active')
++  el(`view-${id}`)?.classList.add('active')
++  for (const b of document.querySelectorAll('.nav-btn')) b.classList.remove('active')
++  botao?.classList.add('active')
++}
++
++function renderTudo() {
++  renderInicio(); renderFichas(); renderArvores(); renderPresencas(); renderServicos()
++}
++
++/** Deep link da etiqueta (`?codigo=ARV-0001`) e dos outros módulos
++ *  (`?arvore=<id>`, `?ficha=<id>`). Código inválido é ignorado em silêncio,
++ *  como os módulos fazem com `?ativo=`. */
++function abrirPorUrl() {
++  const p = new URLSearchParams(location.search)
++  const codigo = (p.get('codigo') || '').toUpperCase()
++  if (codigo) {
++    const a = ARVORES.find(x => x.codigo === codigo)
++    if (a) { trocarView('arvores', document.querySelector('.nav-btn[data-view="arvores"]')); abrirArvore(a.id) }
++    return
++  }
++  const arvore = Number(p.get('arvore'))
++  if (Number.isInteger(arvore) && arvorePorId(arvore)) { trocarView('arvores', document.querySelector('.nav-btn[data-view="arvores"]')); abrirArvore(arvore); return }
++  const ficha = Number(p.get('ficha'))
++  if (Number.isInteger(ficha) && fichaPorId(ficha)) { trocarView('fichas', document.querySelector('.nav-btn[data-view="fichas"]')); abrirDetalheFicha(ficha) }
++}
++
++function mostrarApp() {
++  el('login-screen').style.display = 'none'
++  el('app').style.display = 'block'
++  const cargo = USUARIO?.role || '—'
++  el('user-chip').textContent = podeRegistrar() ? cargo : `${cargo} · somente leitura`
++  renderTudo()
++  abrirPorUrl()
++}
++
++function mostrarLogin() {
++  el('login-screen').style.display = 'flex'
++  el('app').style.display = 'none'
++}
++
++async function sair() {
++  await supa.auth.signOut()
++  location.reload()
++}
++
++function exporNoWindow() {
++  Object.assign(window, {
++    trocarView, sair, fecharModal, executarConfirmacao,
++    renderFichas, filtrarFichas, abrirDetalheFicha, abrirFicha, salvarFicha,
++    abrirArvore, abrirArvoreForm, salvarArvore, pedirRemocaoArvore, imprimirEtiqueta,
++    abrirPresenca, abrirPresencaForm, salvarPresenca, pedirDesativarPresenca,
++    trocarVistaServicos, abrirServico, atualizarTiposServico, salvarServico,
++    abrirRealizar, confirmarRealizado, pedirCancelarServico,
++  })
++}
++
++async function boot() {
++  exporNoWindow()
++
++  aplicarShell({
++    nome: 'Bio',
++    versao: '0.1',
++    navItems: [
++      { id: 'inicio', label: 'Início', icone: 'painel', ativo: true },
++      { id: 'fichas', label: 'Fichas', icone: 'relatorio' },
++      { id: 'arvores', label: 'Árvores', icone: 'corte' },
++      { id: 'presencas', label: 'Presenças', icone: 'mapa' },
++      { id: 'servicos', label: 'Serviços', icone: 'agenda' },
++    ],
++  })
++
++  try {
++    supa = await criarClienteSupabase()
++  } catch (erro) {
++    el('login-screen').innerHTML = `
++      <div class="callout co-red" style="max-width:min(560px,92vw);margin:40px auto">
++        <strong>Falha ao iniciar o módulo Bio.</strong><br>${esc(erro.message)}
++      </div>`
++    el('login-screen').style.display = 'flex'
++    return
++  }
++
++  auth = new Auth(supa, { appNome: 'Bio', appIcone: '🌿' })
++  auth.onLogin(async usuario => {
++    USUARIO = usuario
++    try {
++      await carregarTudo()
++    } catch (erro) {
++      el('login-screen').innerHTML = `
++        <div class="callout co-red" style="max-width:min(560px,92vw);margin:40px auto">
++          <strong>Não foi possível carregar os dados do Bio.</strong><br>${esc(erro.message || '')}
++        </div>`
++      el('login-screen').style.display = 'flex'
++      return
++    }
++    mostrarApp()
++  })
++  auth.mount('#login-screen')
++
++  const { data: { session } } = await supa.auth.getSession()
++  if (!session) mostrarLogin()
++}
++
++if (typeof document !== 'undefined') boot()
++
++// ── porta de teste ─────────────────────────────────────────────────────
++export const __teste = {
++  definirSupa: cliente => { supa = cliente },
++  definirUsuario: usuario => { USUARIO = usuario },
++  estado: () => ({ BIO_OK, FICHAS, ARVORES, PRESENCAS, SERVICOS, LOCAIS }),
++  sondarBio, carregarTudo, podeRegistrar, podeGerir, rotuloAlvo, filtroServico,
++}
+diff --git a/bio/dominio.js b/bio/dominio.js
+new file mode 100644
+index 0000000..2bdcfb8
+--- /dev/null
++++ b/bio/dominio.js
+@@ -0,0 +1,205 @@
++// ══════════════════════════════════════════════════════════════════
++// CMASM Bio — núcleo puro. Sem DOM, sem Supabase, sem Date.now():
++// tudo que decide recebe a data como parâmetro, para o gate rodar em
++// Node com data fixa. Mesmo corte de predial/dominio.js e equipes/nucleo.js.
++//
++// As listas fechadas espelham os `check` da migração 61 — o gate
++// tests/bio-schema.test.js compara as duas fontes e reprova a divergência
++// nas duas direções, porque um valor fora do check é gravação recusada
++// com erro opaco, e um valor do check que a tela não oferece é opção
++// que ninguém alcança.
++// ══════════════════════════════════════════════════════════════════
++
++export const CATEGORIAS = {
++  animal: { rotulo: 'Animal', icone: '🐾' },
++  praga: { rotulo: 'Praga', icone: '🐜' },
++  arvore: { rotulo: 'Árvore', icone: '🌳' },
++}
++
++export const GRUPOS = {
++  mamifero: 'Mamífero', ave: 'Ave', peixe: 'Peixe', reptil: 'Réptil', anfibio: 'Anfíbio',
++  inseto: 'Inseto', aracnideo: 'Aracnídeo', molusco: 'Molusco', roedor: 'Roedor',
++  arvore: 'Árvore', outro: 'Outro',
++}
++
++export const RISCOS = {
++  baixo: { rotulo: 'Baixo', tom: 'ok' },
++  medio: { rotulo: 'Médio', tom: 'warn' },
++  alto: { rotulo: 'Alto', tom: 'erro' },
++}
++
++export const TIPOS_SERVICO = {
++  poda: 'Poda', supressao: 'Supressão', dedetizacao: 'Dedetização', desratizacao: 'Desratização',
++  armadilha: 'Armadilha', isca: 'Isca', monitoramento: 'Monitoramento', outro: 'Outro',
++}
++
++// Tipos que fazem sentido para cada alvo. Um serviço de árvore não é
++// dedetização; um controle de praga não é poda. A tela filtra por aqui;
++// o banco aceita qualquer combinação — a exclusividade que ele trava é
++// "um alvo só", não o tipo (migração 61, item 4).
++export const TIPOS_POR_ALVO = {
++  arvore: ['poda', 'supressao', 'monitoramento', 'outro'],
++  presenca: ['dedetizacao', 'desratizacao', 'armadilha', 'isca', 'monitoramento', 'outro'],
++}
++
++export const STATUS_SERVICO = {
++  programado: { rotulo: 'Programado', tom: 'info' },
++  realizado: { rotulo: 'Realizado', tom: 'ok' },
++  cancelado: { rotulo: 'Cancelado', tom: 'neutro' },
++}
++
++export const PREFIXO_ARVORE = 'ARV'
++export const FORMATO_CODIGO = /^ARV-[0-9]{4}$/
++
++// ── datas ──────────────────────────────────────────────────────────────
++// Sempre `aaaa-mm-dd` LOCAL, nunca `toISOString()`: a conversão para UTC
++// empurra para o dia anterior tudo antes das 21h no nosso fuso — a lição
++// de `agendaChave` em /refrigeracao.
++
++export function hojeIso(data = new Date()) {
++  const y = data.getFullYear()
++  const m = String(data.getMonth() + 1).padStart(2, '0')
++  const d = String(data.getDate()).padStart(2, '0')
++  return `${y}-${m}-${d}`
++}
++
++/** Soma meses a uma data ISO, prendendo o dia ao fim do mês quando não
++ *  existe (31/01 + 1 mês = 28/02, não 03/03 — que é o que `setMonth`
++ *  sozinho devolve e faria uma poda anual "andar" a cada ciclo). */
++export function somarMeses(iso, meses) {
++  const [y, m, d] = String(iso).split('-').map(Number)
++  if (!y || !m || !d) return null
++  const alvo = new Date(y, m - 1 + meses, 1)
++  const ultimoDia = new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate()
++  alvo.setDate(Math.min(d, ultimoDia))
++  return hojeIso(alvo)
++}
++
++export function fmtData(iso) {
++  if (!iso) return '—'
++  const [y, m, d] = String(iso).slice(0, 10).split('-')
++  return y && m && d ? `${d}/${m}/${y}` : String(iso)
++}
++
++// ── código da árvore ───────────────────────────────────────────────────
++/** Próximo código livre a partir dos já existentes. É contagem no cliente,
++ *  e por isso `bio_arvores.codigo` é `unique`: duas pessoas cadastrando ao
++ *  mesmo tempo produzem o mesmo número, e o banco recusa a segunda — o
++ *  app recalcula e tenta de novo. Nunca guardar o contador. */
++export function proximoCodigo(arvores) {
++  let maior = 0
++  for (const a of arvores || []) {
++    const m = FORMATO_CODIGO.exec(a?.codigo || '')
++    if (m) maior = Math.max(maior, Number(a.codigo.slice(4)))
++  }
++  return `${PREFIXO_ARVORE}-${String(maior + 1).padStart(4, '0')}`
++}
++
++// ── serviços ───────────────────────────────────────────────────────────
++/** Situação de um serviço numa data: `vencido` é programado com data no
++ *  passado — não é estado do banco, é leitura da tela. */
++export function situacaoServico(servico, hoje) {
++  if (!servico) return null
++  if (servico.status !== 'programado') return servico.status
++  return servico.data_programada < hoje ? 'vencido' : 'programado'
++}
++
++/** O serviço seguinte que um realizado periódico gera — ou null quando é
++ *  avulso. Mesmo tipo, mesmo alvo, mesma periodicidade; data a partir da
++ *  REALIZAÇÃO (não da programada), senão um atraso de dois meses viraria
++ *  dois meses de adiantamento no ciclo seguinte. */
++export function proximoServico(servico, dataRealizada) {
++  const meses = Number(servico?.periodicidade_meses)
++  if (!Number.isInteger(meses) || meses < 1) return null
++  const data = somarMeses(dataRealizada, meses)
++  if (!data) return null
++  return {
++    tipo: servico.tipo,
++    arvore_id: servico.arvore_id ?? null,
++    presenca_id: servico.presenca_id ?? null,
++    status: 'programado',
++    data_programada: data,
++    periodicidade_meses: meses,
++    materiais: servico.materiais ?? null,
++    obs: null,
++  }
++}
++
++/** Validação da tela — espelha as travas da migração 61 para o erro
++ *  aparecer no formulário e não como erro opaco do Postgres. */
++export function validarServico(s) {
++  const erros = []
++  if (!TIPOS_SERVICO[s?.tipo]) erros.push('Tipo de serviço inválido.')
++  const temArvore = s?.arvore_id != null
++  const temPresenca = s?.presenca_id != null
++  if (temArvore === temPresenca) erros.push('O serviço precisa de exatamente um alvo: uma árvore ou uma presença.')
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(s?.data_programada || '')) erros.push('Data programada obrigatória.')
++  const p = s?.periodicidade_meses
++  if (p != null && p !== '' && !(Number.isInteger(Number(p)) && Number(p) >= 1 && Number(p) <= 120)) {
++    erros.push('Periodicidade deve ser um inteiro de 1 a 120 meses.')
++  }
++  return erros
++}
++
++export function validarArvore(a) {
++  const erros = []
++  if (!a?.ficha_id) erros.push('Escolha a espécie (ficha).')
++  if (!FORMATO_CODIGO.test(a?.codigo || '')) erros.push('Código no formato ARV-0000.')
++  const lat = a?.lat, lon = a?.lon
++  if ((lat == null) !== (lon == null)) erros.push('Latitude e longitude andam juntas.')
++  if (lat != null && !(lat >= -23.2 && lat <= -22.5 && lon >= -43.5 && lon <= -42.7)) {
++    erros.push('Coordenada fora da região do CMASM.')
++  }
++  return erros
++}
++
++export function validarPresenca(p) {
++  const erros = []
++  if (!p?.ficha_id) erros.push('Escolha a espécie (ficha).')
++  const lat = p?.lat, lon = p?.lon
++  if ((lat == null) !== (lon == null)) erros.push('Latitude e longitude andam juntas.')
++  if (lat != null && !(lat >= -23.2 && lat <= -22.5 && lon >= -43.5 && lon <= -42.7)) {
++    erros.push('Coordenada fora da região do CMASM.')
++  }
++  if (p?.quantidade_estimada != null && p.quantidade_estimada !== '' && !(Number(p.quantidade_estimada) >= 0)) {
++    erros.push('Quantidade não pode ser negativa.')
++  }
++  return erros
++}
++
++// ── painel ─────────────────────────────────────────────────────────────
++/** Os quatro números da tela inicial. Serviço do mês = programado com
++ *  data dentro do mês de `hoje`, vencido ou não. */
++export function resumoPainel({ arvores = [], presencas = [], servicos = [] }, hoje) {
++  const mes = String(hoje).slice(0, 7)
++  let vencidos = 0
++  let noMes = 0
++  for (const s of servicos) {
++    if (s.status !== 'programado') continue
++    if (s.data_programada < hoje) vencidos += 1
++    if (String(s.data_programada).slice(0, 7) === mes) noMes += 1
++  }
++  return {
++    arvores: arvores.filter(a => a.ativo !== false).length,
++    presencas: presencas.filter(p => p.ativo !== false).length,
++    vencidos,
++    noMes,
++  }
++}
++
++/** Próximo serviço programado de um alvo (a data mais próxima), ou null. */
++export function proximoDoAlvo(servicos, chave, id) {
++  let melhor = null
++  for (const s of servicos || []) {
++    if (s.status !== 'programado' || s[chave] !== id) continue
++    if (!melhor || s.data_programada < melhor.data_programada) melhor = s
++  }
++  return melhor
++}
++
++/** Endereço de deep link que a etiqueta carrega — só o código, nunca o
++ *  id: o código está impresso e sobrevive a uma reimportação. */
++export function urlDaEtiqueta(origem, codigo) {
++  if (!FORMATO_CODIGO.test(codigo || '')) return null
++  return `${origem}/bio?codigo=${codigo}`
++}
+diff --git a/bio/index.html b/bio/index.html
+new file mode 100644
+index 0000000..f1959ce
+--- /dev/null
++++ b/bio/index.html
+@@ -0,0 +1,209 @@
++<!DOCTYPE html>
++<html lang="pt-br">
++<head>
++<meta charset="utf-8"/>
++<meta name="viewport" content="width=device-width,initial-scale=1"/>
++<meta name="theme-color" content="#1a1a18"/>
++<script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t!=='claro'&&t!=='escuro'){t=(typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','escuro')}})()/* script classico de proposito: modulo ES e adiado, rodaria depois do primeiro desenho e reintroduziria a piscada de tema */</script>
++<title>PMOC Bio</title>
++<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
++<!-- Gerador de QR hospedado (qrcode-generator, MIT) — cópia do que
++     /refrigeracao já embarca, servido daqui pela regra de caminho raiz-absoluto. -->
++<script src="/bio/vendor/qrcode.js"></script>
++<link rel="stylesheet" href="../shared/pmoc.css"/>
++<style>
++/* Única cor declarada pelo módulo: a de destaque. Tema é da folha comum. */
++:root{--accent:#4f9a5c}
++
++/* ── painel do Início ──
++   Item de grid nasce com min-width:auto e cresce até o conteúdo: a tabela
++   de vencidos empurrava o cartão 44px para fora dos 375px, medido. Com
++   min-width:0 quem rola é o .tbl-wrap, como nas outras listas. */
++#view-inicio .section-split>.panel-card{min-width:0}
++
++/* ── grade de fichas ──
++   Cartão por espécie, foto em cima. Três colunas no computador, uma no
++   celular — mesma quebra de .section-split. */
++.fichas-grade{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
++@media (max-width:900px){.fichas-grade{grid-template-columns:repeat(2,minmax(0,1fr))}}
++@media (max-width:600px){.fichas-grade{grid-template-columns:1fr}}
++.ficha-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer}
++.ficha-card:hover{border-color:var(--accent)}
++.ficha-foto{height:120px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}
++.ficha-foto img{width:100%;height:100%;object-fit:cover}
++.ficha-corpo{padding:10px 12px}
++.ficha-nome{font-weight:600;color:var(--text);font-size:14px}
++.ficha-cient{font-size:11px;color:var(--text3);font-style:italic;margin-bottom:6px}
++.ficha-linha{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
++
++/* ── detalhe (ficha, árvore, presença) ──
++   Bloco de texto com rótulo em caixa alta; quebra em qualquer ponto
++   porque o texto de "o que fazer" é livre. */
++.det-bloco{margin-bottom:14px}
++.det-rotulo{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:4px}
++.det-texto{font-size:13px;color:var(--text2);line-height:1.5;overflow-wrap:anywhere}
++.det-foto{max-width:100%;max-height:240px;border-radius:8px;display:block;margin-bottom:12px}
++
++/* ── QR na tela ── */
++.qr-caixa{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
++.qr-caixa svg{width:120px;height:120px;background:#fff;padding:6px;border-radius:6px}
++
++/* ── etiqueta A6 ──
++   Só existe na impressão. Preto e branco, sem fundo, como os formulários
++   PMOC. Fora de @media print o bloco fica escondido; dentro, é a ÚNICA
++   coisa que imprime. */
++#etiqueta{display:none}
++@media print{
++  @page{size:A6;margin:6mm}
++  body>*:not(#etiqueta){display:none!important}
++  #etiqueta{display:block;font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;text-align:center}
++  #etiqueta .et-codigo{font-size:26pt;font-weight:700;letter-spacing:.04em;margin-top:4mm}
++  #etiqueta .et-nome{font-size:14pt;font-weight:600;margin-top:2mm}
++  #etiqueta .et-cient{font-size:10pt;font-style:italic}
++  #etiqueta svg{width:48mm;height:48mm;margin:5mm auto;display:block}
++  #etiqueta .et-rodape{font-size:8pt;margin-top:3mm}
++}
++</style>
++</head>
++<body>
++<div id="login-screen"></div>
++
++<!-- O miolo mora aqui, dentro do #app, antes de aplicarShell — o shell
++     põe o topo com afterbegin e o rodapé com beforeend. -->
++<div id="app">
++  <div class="main">
++
++    <div class="view active" id="view-inicio">
++      <div class="view-head">
++        <div>
++          <div class="view-title">Gestão biológica</div>
++          <div class="view-sub">Árvores etiquetadas, animais e pragas do terreno, e os serviços de poda e controle.</div>
++        </div>
++        <div class="section-row" style="margin-bottom:0">
++          <a class="btn btn-s btn-sm" href="/mapa">Abrir mapa</a>
++        </div>
++      </div>
++      <div id="inicio-kpis" class="kpi-row"></div>
++      <div id="inicio-aviso"></div>
++      <div class="section-split">
++        <div class="panel-card"><h3>Serviços vencidos</h3><div id="inicio-vencidos"></div></div>
++        <div class="panel-card"><h3>Presenças de risco alto</h3><div id="inicio-risco"></div></div>
++      </div>
++    </div>
++
++    <div class="view" id="view-fichas">
++      <div class="view-head">
++        <div>
++          <div class="view-title">Fichas</div>
++          <div class="view-sub">Guia de campo: o que é, que risco oferece, o que fazer ao encontrar.</div>
++        </div>
++        <div id="fichas-acoes"></div>
++      </div>
++      <div class="section-row">
++        <input id="fichas-busca" type="search" placeholder="Buscar por nome…" oninput="renderFichas()" style="flex:1;min-width:160px"/>
++        <div id="fichas-chips"></div>
++      </div>
++      <div id="fichas-lista" class="fichas-grade"></div>
++    </div>
++
++    <div class="view" id="view-arvores">
++      <div class="view-head">
++        <div>
++          <div class="view-title">Árvores</div>
++          <div class="view-sub">Inventário etiquetado. Cada árvore tem código, QR e histórico de poda.</div>
++        </div>
++        <div id="arvores-acoes"></div>
++      </div>
++      <div id="arvores-lista"></div>
++    </div>
++
++    <div class="view" id="view-presencas">
++      <div class="view-head">
++        <div>
++          <div class="view-title">Presenças</div>
++          <div class="view-sub">Onde os animais e as pragas ocorrem hoje. Estado do terreno, não histórico.</div>
++        </div>
++        <div id="presencas-acoes"></div>
++      </div>
++      <div id="presencas-lista"></div>
++    </div>
++
++    <div class="view" id="view-servicos">
++      <div class="view-head">
++        <div>
++          <div class="view-title">Serviços</div>
++          <div class="view-sub">Poda, controle de praga e monitoramento. Realizado com periodicidade gera o próximo.</div>
++        </div>
++        <div id="servicos-acoes"></div>
++      </div>
++      <div id="servicos-seletor"></div>
++      <div id="servicos-lista"></div>
++    </div>
++
++  </div>
++
++  <div class="overlay" id="overlay">
++    <div class="modal hidden" id="modal-ficha">
++      <div class="modal-hd"><h3 id="modal-ficha-titulo">Nova ficha</h3></div>
++      <div class="modal-body" id="modal-ficha-corpo"></div>
++      <div class="modal-ft">
++        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
++        <button class="btn btn-p btn-sm" onclick="salvarFicha()">Salvar</button>
++      </div>
++    </div>
++    <div class="modal hidden" id="modal-arvore">
++      <div class="modal-hd"><h3 id="modal-arvore-titulo">Nova árvore</h3></div>
++      <div class="modal-body" id="modal-arvore-corpo"></div>
++      <div class="modal-ft">
++        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
++        <button class="btn btn-p btn-sm" onclick="salvarArvore()">Salvar</button>
++      </div>
++    </div>
++    <div class="modal hidden" id="modal-presenca">
++      <div class="modal-hd"><h3 id="modal-presenca-titulo">Nova presença</h3></div>
++      <div class="modal-body" id="modal-presenca-corpo"></div>
++      <div class="modal-ft">
++        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
++        <button class="btn btn-p btn-sm" onclick="salvarPresenca()">Salvar</button>
++      </div>
++    </div>
++    <div class="modal hidden" id="modal-servico">
++      <div class="modal-hd"><h3 id="modal-servico-titulo">Novo serviço</h3></div>
++      <div class="modal-body" id="modal-servico-corpo"></div>
++      <div class="modal-ft">
++        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
++        <button class="btn btn-p btn-sm" onclick="salvarServico()">Salvar</button>
++      </div>
++    </div>
++    <div class="modal hidden" id="modal-realizar">
++      <div class="modal-hd"><h3>Marcar como realizado</h3></div>
++      <div class="modal-body" id="modal-realizar-corpo"></div>
++      <div class="modal-ft">
++        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
++        <button class="btn btn-p btn-sm" onclick="confirmarRealizado()">Confirmar</button>
++      </div>
++    </div>
++    <div class="modal hidden" id="modal-detalhe">
++      <div class="modal-hd"><h3 id="modal-detalhe-titulo">Detalhe</h3></div>
++      <div class="modal-body" id="modal-detalhe-corpo"></div>
++      <div class="modal-ft" id="modal-detalhe-acoes">
++        <button class="btn btn-s btn-sm" onclick="fecharModal()">Fechar</button>
++      </div>
++    </div>
++    <div class="modal hidden" id="modal-confirmacao">
++      <div class="modal-hd"><h3 id="modal-confirmacao-titulo">Confirmar</h3></div>
++      <div class="modal-body" id="modal-confirmacao-corpo"></div>
++      <div class="modal-ft">
++        <button class="btn btn-s btn-sm" onclick="fecharModal()">Voltar</button>
++        <button class="btn btn-d btn-sm" onclick="executarConfirmacao()">Confirmar</button>
++      </div>
++    </div>
++  </div>
++</div>
++
++<!-- Etiqueta: preenchida por imprimirEtiqueta(), visível só na impressão. -->
++<div id="etiqueta"></div>
++
++<script type="module" src="/bio/app.js"></script>
++</body>
++</html>
+diff --git a/bio/vendor/qrcode.js b/bio/vendor/qrcode.js
+new file mode 100644
+index 0000000..b5d7792
+--- /dev/null
++++ b/bio/vendor/qrcode.js
+@@ -0,0 +1 @@
++var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],f={},c=function(t,r){o=function(t){for(var r=new Array(t),e=0;e<t;e+=1){r[e]=new Array(t);for(var n=0;n<t;n+=1)r[e][n]=null}return r}(i=4*e+17),l(0,0),l(i-7,0),l(0,i-7),s(),h(),d(t,r),e>=7&&v(t),null==a&&(a=p(e,n,u)),w(a,r)},l=function(t,r){for(var e=-1;e<=7;e+=1)if(!(t+e<=-1||i<=t+e))for(var n=-1;n<=7;n+=1)r+n<=-1||i<=r+n||(o[t+e][r+n]=0<=e&&e<=6&&(0==n||6==n)||0<=n&&n<=6&&(0==e||6==e)||2<=e&&e<=4&&2<=n&&n<=4)},h=function(){for(var t=8;t<i-8;t+=1)null==o[t][6]&&(o[t][6]=t%2==0);for(var r=8;r<i-8;r+=1)null==o[6][r]&&(o[6][r]=r%2==0)},s=function(){for(var t=B.getPatternPosition(e),r=0;r<t.length;r+=1)for(var n=0;n<t.length;n+=1){var i=t[r],a=t[n];if(null==o[i][a])for(var u=-2;u<=2;u+=1)for(var f=-2;f<=2;f+=1)o[i+u][a+f]=-2==u||2==u||-2==f||2==f||0==u&&0==f}},v=function(t){for(var r=B.getBCHTypeNumber(e),n=0;n<18;n+=1){var a=!t&&1==(r>>n&1);o[Math.floor(n/3)][n%3+i-8-3]=a}for(n=0;n<18;n+=1){a=!t&&1==(r>>n&1);o[n%3+i-8-3][Math.floor(n/3)]=a}},d=function(t,r){for(var e=n<<3|r,a=B.getBCHTypeInfo(e),u=0;u<15;u+=1){var f=!t&&1==(a>>u&1);u<6?o[u][8]=f:u<8?o[u+1][8]=f:o[i-15+u][8]=f}for(u=0;u<15;u+=1){f=!t&&1==(a>>u&1);u<8?o[8][i-u-1]=f:u<9?o[8][15-u-1+1]=f:o[8][15-u-1]=f}o[i-8][8]=!t},w=function(t,r){for(var e=-1,n=i-1,a=7,u=0,f=B.getMaskFunction(r),c=i-1;c>0;c-=2)for(6==c&&(c-=1);;){for(var g=0;g<2;g+=1)if(null==o[n][c-g]){var l=!1;u<t.length&&(l=1==(t[u]>>>a&1)),f(n,c-g)&&(l=!l),o[n][c-g]=l,-1==(a-=1)&&(u+=1,a=7)}if((n+=e)<0||i<=n){n-=e,e=-e;break}}},p=function(t,r,e){for(var n=A.getRSBlocks(t,r),o=b(),i=0;i<e.length;i+=1){var a=e[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var u=0;for(i=0;i<n.length;i+=1)u+=n[i].dataCount;if(o.getLengthInBits()>8*u)throw"code length overflow. ("+o.getLengthInBits()+">"+8*u+")";for(o.getLengthInBits()+4<=8*u&&o.put(0,4);o.getLengthInBits()%8!=0;)o.putBit(!1);for(;!(o.getLengthInBits()>=8*u||(o.put(236,8),o.getLengthInBits()>=8*u));)o.put(17,8);return function(t,r){for(var e=0,n=0,o=0,i=new Array(r.length),a=new Array(r.length),u=0;u<r.length;u+=1){var f=r[u].dataCount,c=r[u].totalCount-f;n=Math.max(n,f),o=Math.max(o,c),i[u]=new Array(f);for(var g=0;g<i[u].length;g+=1)i[u][g]=255&t.getBuffer()[g+e];e+=f;var l=B.getErrorCorrectPolynomial(c),h=k(i[u],l.getLength()-1).mod(l);for(a[u]=new Array(l.getLength()-1),g=0;g<a[u].length;g+=1){var s=g+h.getLength()-a[u].length;a[u][g]=s>=0?h.getAt(s):0}}var v=0;for(g=0;g<r.length;g+=1)v+=r[g].totalCount;var d=new Array(v),w=0;for(g=0;g<n;g+=1)for(u=0;u<r.length;u+=1)g<i[u].length&&(d[w]=i[u][g],w+=1);for(g=0;g<o;g+=1)for(u=0;u<r.length;u+=1)g<a[u].length&&(d[w]=a[u][g],w+=1);return d}(o,n)};f.addData=function(t,r){var e=null;switch(r=r||"Byte"){case"Numeric":e=M(t);break;case"Alphanumeric":e=x(t);break;case"Byte":e=m(t);break;case"Kanji":e=L(t);break;default:throw"mode:"+r}u.push(e),a=null},f.isDark=function(t,r){if(t<0||i<=t||r<0||i<=r)throw t+","+r;return o[t][r]},f.getModuleCount=function(){return i},f.make=function(){if(e<1){for(var t=1;t<40;t++){for(var r=A.getRSBlocks(t,n),o=b(),i=0;i<u.length;i++){var a=u[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var g=0;for(i=0;i<r.length;i++)g+=r[i].dataCount;if(o.getLengthInBits()<=8*g)break}e=t}c(!1,function(){for(var t=0,r=0,e=0;e<8;e+=1){c(!0,e);var n=B.getLostPoint(f);(0==e||t>n)&&(t=n,r=e)}return r}())},f.createTableTag=function(t,r){t=t||2;var e="";e+='<table style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: "+(r=void 0===r?4*t:r)+"px;",e+='">',e+="<tbody>";for(var n=0;n<f.getModuleCount();n+=1){e+="<tr>";for(var o=0;o<f.getModuleCount();o+=1)e+='<td style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: 0px;",e+=" width: "+t+"px;",e+=" height: "+t+"px;",e+=" background-color: ",e+=f.isDark(n,o)?"#000000":"#ffffff",e+=";",e+='"/>';e+="</tr>"}return e+="</tbody>",e+="</table>"},f.createSvgTag=function(t,r,e,n){var o={};"object"==typeof arguments[0]&&(t=(o=arguments[0]).cellSize,r=o.margin,e=o.alt,n=o.title),t=t||2,r=void 0===r?4*t:r,(e="string"==typeof e?{text:e}:e||{}).text=e.text||null,e.id=e.text?e.id||"qrcode-description":null,(n="string"==typeof n?{text:n}:n||{}).text=n.text||null,n.id=n.text?n.id||"qrcode-title":null;var i,a,u,c,g=f.getModuleCount()*t+2*r,l="";for(c="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",l+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',l+=o.scalable?"":' width="'+g+'px" height="'+g+'px"',l+=' viewBox="0 0 '+g+" "+g+'" ',l+=' preserveAspectRatio="xMinYMin meet"',l+=n.text||e.text?' role="img" aria-labelledby="'+y([n.id,e.id].join(" ").trim())+'"':"",l+=">",l+=n.text?'<title id="'+y(n.id)+'">'+y(n.text)+"</title>":"",l+=e.text?'<description id="'+y(e.id)+'">'+y(e.text)+"</description>":"",l+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',l+='<path d="',a=0;a<f.getModuleCount();a+=1)for(u=a*t+r,i=0;i<f.getModuleCount();i+=1)f.isDark(a,i)&&(l+="M"+(i*t+r)+","+u+c);return l+='" stroke="transparent" fill="black"/>',l+="</svg>"},f.createDataURL=function(t,r){t=t||2,r=void 0===r?4*t:r;var e=f.getModuleCount()*t+2*r,n=r,o=e-r;return I(e,e,function(r,e){if(n<=r&&r<o&&n<=e&&e<o){var i=Math.floor((r-n)/t),a=Math.floor((e-n)/t);return f.isDark(a,i)?0:1}return 1})},f.createImgTag=function(t,r,e){t=t||2,r=void 0===r?4*t:r;var n=f.getModuleCount()*t+2*r,o="";return o+="<img",o+=' src="',o+=f.createDataURL(t,r),o+='"',o+=' width="',o+=n,o+='"',o+=' height="',o+=n,o+='"',e&&(o+=' alt="',o+=y(e),o+='"'),o+="/>"};var y=function(t){for(var r="",e=0;e<t.length;e+=1){var n=t.charAt(e);switch(n){case"<":r+="&lt;";break;case">":r+="&gt;";break;case"&":r+="&amp;";break;case'"':r+="&quot;";break;default:r+=n}}return r};return f.createASCII=function(t,r){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var r,e,n,o,i,a=1*f.getModuleCount()+2*t,u=t,c=a-t,g={"██":"█","█ ":"▀"," █":"▄","  ":" "},l={"██":"▀","█ ":"▀"," █":" ","  ":" "},h="";for(r=0;r<a;r+=2){for(n=Math.floor((r-u)/1),o=Math.floor((r+1-u)/1),e=0;e<a;e+=1)i="█",u<=e&&e<c&&u<=r&&r<c&&f.isDark(n,Math.floor((e-u)/1))&&(i=" "),u<=e&&e<c&&u<=r+1&&r+1<c&&f.isDark(o,Math.floor((e-u)/1))?i+=" ":i+="█",h+=t<1&&r+1>=c?l[i]:g[i];h+="\n"}return a%2&&t>0?h.substring(0,h.length-a-1)+Array(a+1).join("▀"):h.substring(0,h.length-1)}(r);t-=1,r=void 0===r?2*t:r;var e,n,o,i,a=f.getModuleCount()*t+2*r,u=r,c=a-r,g=Array(t+1).join("██"),l=Array(t+1).join("  "),h="",s="";for(e=0;e<a;e+=1){for(o=Math.floor((e-u)/t),s="",n=0;n<a;n+=1)i=1,u<=n&&n<c&&u<=e&&e<c&&f.isDark(o,Math.floor((n-u)/t))&&(i=0),s+=i?g:l;for(o=0;o<t;o+=1)h+=s+"\n"}return h.substring(0,h.length-1)},f.renderTo2dContext=function(t,r){r=r||2;for(var e=f.getModuleCount(),n=0;n<e;n++)for(var o=0;o<e;o++)t.fillStyle=f.isDark(n,o)?"black":"white",t.fillRect(n*r,o*r,r,r)},f};t.stringToBytes=(t.stringToBytesFuncs={default:function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);r.push(255&n)}return r}}).default,t.createStringToBytes=function(t,r){var e=function(){for(var e=S(t),n=function(){var t=e.read();if(-1==t)throw"eof";return t},o=0,i={};;){var a=e.read();if(-1==a)break;var u=n(),f=n()<<8|n();i[String.fromCharCode(a<<8|u)]=f,o+=1}if(o!=r)throw o+" != "+r;return i}(),n="?".charCodeAt(0);return function(t){for(var r=[],o=0;o<t.length;o+=1){var i=t.charCodeAt(o);if(i<128)r.push(i);else{var a=e[t.charAt(o)];"number"==typeof a?(255&a)==a?r.push(a):(r.push(a>>>8),r.push(255&a)):r.push(n)}}return r}};var r,e,n,o,i,a=1,u=2,f=4,c=8,g={L:1,M:0,Q:3,H:2},l=0,h=1,s=2,v=3,d=4,w=5,p=6,y=7,B=(r=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],e=1335,n=7973,i=function(t){for(var r=0;0!=t;)r+=1,t>>>=1;return r},(o={}).getBCHTypeInfo=function(t){for(var r=t<<10;i(r)-i(e)>=0;)r^=e<<i(r)-i(e);return 21522^(t<<10|r)},o.getBCHTypeNumber=function(t){for(var r=t<<12;i(r)-i(n)>=0;)r^=n<<i(r)-i(n);return t<<12|r},o.getPatternPosition=function(t){return r[t-1]},o.getMaskFunction=function(t){switch(t){case l:return function(t,r){return(t+r)%2==0};case h:return function(t,r){return t%2==0};case s:return function(t,r){return r%3==0};case v:return function(t,r){return(t+r)%3==0};case d:return function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0};case w:return function(t,r){return t*r%2+t*r%3==0};case p:return function(t,r){return(t*r%2+t*r%3)%2==0};case y:return function(t,r){return(t*r%3+(t+r)%2)%2==0};default:throw"bad maskPattern:"+t}},o.getErrorCorrectPolynomial=function(t){for(var r=k([1],0),e=0;e<t;e+=1)r=r.multiply(k([1,C.gexp(e)],0));return r},o.getLengthInBits=function(t,r){if(1<=r&&r<10)switch(t){case a:return 10;case u:return 9;case f:case c:return 8;default:throw"mode:"+t}else if(r<27)switch(t){case a:return 12;case u:return 11;case f:return 16;case c:return 10;default:throw"mode:"+t}else{if(!(r<41))throw"type:"+r;switch(t){case a:return 14;case u:return 13;case f:return 16;case c:return 12;default:throw"mode:"+t}}},o.getLostPoint=function(t){for(var r=t.getModuleCount(),e=0,n=0;n<r;n+=1)for(var o=0;o<r;o+=1){for(var i=0,a=t.isDark(n,o),u=-1;u<=1;u+=1)if(!(n+u<0||r<=n+u))for(var f=-1;f<=1;f+=1)o+f<0||r<=o+f||0==u&&0==f||a==t.isDark(n+u,o+f)&&(i+=1);i>5&&(e+=3+i-5)}for(n=0;n<r-1;n+=1)for(o=0;o<r-1;o+=1){var c=0;t.isDark(n,o)&&(c+=1),t.isDark(n+1,o)&&(c+=1),t.isDark(n,o+1)&&(c+=1),t.isDark(n+1,o+1)&&(c+=1),0!=c&&4!=c||(e+=3)}for(n=0;n<r;n+=1)for(o=0;o<r-6;o+=1)t.isDark(n,o)&&!t.isDark(n,o+1)&&t.isDark(n,o+2)&&t.isDark(n,o+3)&&t.isDark(n,o+4)&&!t.isDark(n,o+5)&&t.isDark(n,o+6)&&(e+=40);for(o=0;o<r;o+=1)for(n=0;n<r-6;n+=1)t.isDark(n,o)&&!t.isDark(n+1,o)&&t.isDark(n+2,o)&&t.isDark(n+3,o)&&t.isDark(n+4,o)&&!t.isDark(n+5,o)&&t.isDark(n+6,o)&&(e+=40);var g=0;for(o=0;o<r;o+=1)for(n=0;n<r;n+=1)t.isDark(n,o)&&(g+=1);return e+=Math.abs(100*g/r/r-50)/5*10},o),C=function(){for(var t=new Array(256),r=new Array(256),e=0;e<8;e+=1)t[e]=1<<e;for(e=8;e<256;e+=1)t[e]=t[e-4]^t[e-5]^t[e-6]^t[e-8];for(e=0;e<255;e+=1)r[t[e]]=e;var n={glog:function(t){if(t<1)throw"glog("+t+")";return r[t]},gexp:function(r){for(;r<0;)r+=255;for(;r>=256;)r-=255;return t[r]}};return n}();function k(t,r){if(void 0===t.length)throw t.length+"/"+r;var e=function(){for(var e=0;e<t.length&&0==t[e];)e+=1;for(var n=new Array(t.length-e+r),o=0;o<t.length-e;o+=1)n[o]=t[o+e];return n}(),n={getAt:function(t){return e[t]},getLength:function(){return e.length},multiply:function(t){for(var r=new Array(n.getLength()+t.getLength()-1),e=0;e<n.getLength();e+=1)for(var o=0;o<t.getLength();o+=1)r[e+o]^=C.gexp(C.glog(n.getAt(e))+C.glog(t.getAt(o)));return k(r,0)},mod:function(t){if(n.getLength()-t.getLength()<0)return n;for(var r=C.glog(n.getAt(0))-C.glog(t.getAt(0)),e=new Array(n.getLength()),o=0;o<n.getLength();o+=1)e[o]=n.getAt(o);for(o=0;o<t.getLength();o+=1)e[o]^=C.gexp(C.glog(t.getAt(o))+r);return k(e,0).mod(t)}};return n}var A=function(){var t=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],r=function(t,r){var e={};return e.totalCount=t,e.dataCount=r,e},e={};return e.getRSBlocks=function(e,n){var o=function(r,e){switch(e){case g.L:return t[4*(r-1)+0];case g.M:return t[4*(r-1)+1];case g.Q:return t[4*(r-1)+2];case g.H:return t[4*(r-1)+3];default:return}}(e,n);if(void 0===o)throw"bad rs block @ typeNumber:"+e+"/errorCorrectionLevel:"+n;for(var i=o.length/3,a=[],u=0;u<i;u+=1)for(var f=o[3*u+0],c=o[3*u+1],l=o[3*u+2],h=0;h<f;h+=1)a.push(r(c,l));return a},e}(),b=function(){var t=[],r=0,e={getBuffer:function(){return t},getAt:function(r){var e=Math.floor(r/8);return 1==(t[e]>>>7-r%8&1)},put:function(t,r){for(var n=0;n<r;n+=1)e.putBit(1==(t>>>r-n-1&1))},getLengthInBits:function(){return r},putBit:function(e){var n=Math.floor(r/8);t.length<=n&&t.push(0),e&&(t[n]|=128>>>r%8),r+=1}};return e},M=function(t){var r=a,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+2<r.length;)t.put(o(r.substring(n,n+3)),10),n+=3;n<r.length&&(r.length-n==1?t.put(o(r.substring(n,n+1)),4):r.length-n==2&&t.put(o(r.substring(n,n+2)),7))}},o=function(t){for(var r=0,e=0;e<t.length;e+=1)r=10*r+i(t.charAt(e));return r},i=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return n},x=function(t){var r=u,e=t,n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=e,n=0;n+1<r.length;)t.put(45*o(r.charAt(n))+o(r.charAt(n+1)),11),n+=2;n<r.length&&t.put(o(r.charAt(n)),6)}},o=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return n},m=function(r){var e=f,n=t.stringToBytes(r),o={getMode:function(){return e},getLength:function(t){return n.length},write:function(t){for(var r=0;r<n.length;r+=1)t.put(n[r],8)}};return o},L=function(r){var e=c,n=t.stringToBytesFuncs.SJIS;if(!n)throw"sjis not supported.";!function(){var t=n("友");if(2!=t.length||38726!=(t[0]<<8|t[1]))throw"sjis not supported."}();var o=n(r),i={getMode:function(){return e},getLength:function(t){return~~(o.length/2)},write:function(t){for(var r=o,e=0;e+1<r.length;){var n=(255&r[e])<<8|255&r[e+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(e+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),e+=2}if(e<r.length)throw"illegal char at "+(e+1)}};return i},D=function(){var t=[],r={writeByte:function(r){t.push(255&r)},writeShort:function(t){r.writeByte(t),r.writeByte(t>>>8)},writeBytes:function(t,e,n){e=e||0,n=n||t.length;for(var o=0;o<n;o+=1)r.writeByte(t[o+e])},writeString:function(t){for(var e=0;e<t.length;e+=1)r.writeByte(t.charCodeAt(e))},toByteArray:function(){return t},toString:function(){var r="";r+="[";for(var e=0;e<t.length;e+=1)e>0&&(r+=","),r+=t[e];return r+="]"}};return r},S=function(t){var r=t,e=0,n=0,o=0,i={read:function(){for(;o<8;){if(e>=r.length){if(0==o)return-1;throw"unexpected end of file./"+o}var t=r.charAt(e);if(e+=1,"="==t)return o=0,-1;t.match(/^\s$/)||(n=n<<6|a(t.charCodeAt(0)),o+=6)}var i=n>>>o-8&255;return o-=8,i}},a=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return i},I=function(t,r,e){for(var n=function(t,r){var e=t,n=r,o=new Array(t*r),i={setPixel:function(t,r,n){o[r*e+t]=n},write:function(t){t.writeString("GIF87a"),t.writeShort(e),t.writeShort(n),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(e),t.writeShort(n),t.writeByte(0);var r=a(2);t.writeByte(2);for(var o=0;r.length-o>255;)t.writeByte(255),t.writeBytes(r,o,255),o+=255;t.writeByte(r.length-o),t.writeBytes(r,o,r.length-o),t.writeByte(0),t.writeString(";")}},a=function(t){for(var r=1<<t,e=1+(1<<t),n=t+1,i=u(),a=0;a<r;a+=1)i.add(String.fromCharCode(a));i.add(String.fromCharCode(r)),i.add(String.fromCharCode(e));var f,c,g,l=D(),h=(f=l,c=0,g=0,{write:function(t,r){if(t>>>r!=0)throw"length over";for(;c+r>=8;)f.writeByte(255&(t<<c|g)),r-=8-c,t>>>=8-c,g=0,c=0;g|=t<<c,c+=r},flush:function(){c>0&&f.writeByte(g)}});h.write(r,n);var s=0,v=String.fromCharCode(o[s]);for(s+=1;s<o.length;){var d=String.fromCharCode(o[s]);s+=1,i.contains(v+d)?v+=d:(h.write(i.indexOf(v),n),i.size()<4095&&(i.size()==1<<n&&(n+=1),i.add(v+d)),v=d)}return h.write(i.indexOf(v),n),h.write(e,n),h.flush(),l.toByteArray()},u=function(){var t={},r=0,e={add:function(n){if(e.contains(n))throw"dup key:"+n;t[n]=r,r+=1},size:function(){return r},indexOf:function(r){return t[r]},contains:function(r){return void 0!==t[r]}};return e};return i}(t,r),o=0;o<r;o+=1)for(var i=0;i<t;i+=1)n.setPixel(i,o,e(i,o));var a=D();n.write(a);for(var u=function(){var t=0,r=0,e=0,n="",o={},i=function(t){n+=String.fromCharCode(a(63&t))},a=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return o.writeByte=function(n){for(t=t<<8|255&n,r+=8,e+=1;r>=6;)i(t>>>r-6),r-=6},o.flush=function(){if(r>0&&(i(t<<6-r),t=0,r=0),e%3!=0)for(var o=3-e%3,a=0;a<o;a+=1)n+="="},o.toString=function(){return n},o}(),f=a.toByteArray(),c=0;c<f.length;c+=1)u.writeByte(f[c]);return u.flush(),"data:image/gif;base64,"+u};return t}();qrcode.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var r=[],e=0;e<t.length;e++){var n=t.charCodeAt(e);n<128?r.push(n):n<2048?r.push(192|n>>6,128|63&n):n<55296||n>=57344?r.push(224|n>>12,128|n>>6&63,128|63&n):(e++,n=65536+((1023&n)<<10|1023&t.charCodeAt(e)),r.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return r}(t)},function(t){"function"==typeof define&&define.amd?define([],t):"object"==typeof exports&&(module.exports=t())}(function(){return qrcode});
+diff --git a/index.html b/index.html
+index c5462bd..394ef5c 100644
+--- a/index.html
++++ b/index.html
+@@ -123,6 +123,12 @@ h1{font-size:24px;font-weight:700;margin-bottom:6px}
+       <div class="ds">Gestão à vista com os indicadores da NBR 5674, plano de ação 5W2H priorizado por GUT, calendário de todos os módulos e as ferramentas da qualidade.</div>
+       <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-wip">aguarda a migração 60</span></div>
+     </a>
++    <a class="card" href="/bio">
++      <div class="ico">🌿</div>
++      <div class="nm">Bio</div>
++      <div class="ds">Gestão biológica do terreno: fichas de fauna, pragas e árvores, árvores etiquetadas com QR, onde animais e pragas ocorrem, e os serviços de poda e controle com periodicidade.</div>
++      <div class="tags"><span class="t t-ok">v0.1</span><span class="t t-wip">sem árvore cadastrada</span></div>
++    </a>
+     <a class="card" href="/calibracao">
+       <div class="ico">🔬</div>
+       <div class="nm">Calibração</div>
+diff --git a/supabase/61_bio_schema.sql b/supabase/61_bio_schema.sql
+new file mode 100644
+index 0000000..590be4a
+--- /dev/null
++++ b/supabase/61_bio_schema.sql
+@@ -0,0 +1,294 @@
++-- ═══════════════════════════════════════════════════════════════════
++-- 61 — CMASM Bio: fichas de espécies, árvores, presenças e serviços
++-- ═══════════════════════════════════════════════════════════════════
++-- Módulo /bio — gestão biológica do terreno: guia de campo (fichas),
++-- inventário de árvores etiquetadas, onde animais e pragas ocorrem, e os
++-- serviços de controle e poda com periodicidade.
++--
++-- Decisões de forma (spec de 13/09/2026):
++--
++-- (1) Quatro tabelas, prefixo `bio_`. Árvore é ATIVO (cadastro, etiqueta,
++--     posição), não evento: existe, é conhecida, é podada. Animal e praga
++--     não têm cadastro individual — o que existe é a FICHA da espécie e a
++--     PRESENÇA (onde ocorre), que é estado do terreno e não histórico.
++--
++-- (2) Local vem de `cmasm_locais` (migração 19), nunca texto livre: é a
++--     árvore unificada que Predial, Máquinas e o Mapa já leem, e uma
++--     árvore sem coordenada própria herda a posição do local pela mesma
++--     regra de `resolverPosicao` (mapa-geometria.js).
++--
++-- (3) Posição no PAR `lat`/`lon` com as duas travas da migração 25
++--     (envelope do CMASM e "nunca pela metade"), coluna a coluna como lá.
++--     Polígono de praga em `geom jsonb` no formato `[[lat,lon], …]` — o
++--     MESMO de `maq_areas.geom` e `cmasm_locais.geom` — e não GeoJSON,
++--     porque é o formato que `mapa-editor.js` grava e `xmap` desenha; um
++--     segundo formato obrigaria a converter na fronteira e inverteria
++--     lat/lon no primeiro descuido (a lição de `mapa-exportar.js`).
++--
++-- (4) Serviço aponta para UMA árvore OU UMA presença — `check` de
++--     exclusividade, mesmo idioma de `maq_contratacoes` (migração 38).
++--     `periodicidade_meses` nulo é avulso; preenchido, o app gera o
++--     próximo ao marcar realizado (regra no cliente, como o PMOC).
++--
++-- (5) Sem policy de DELETE, de propósito: o projeto arquiva
++--     (`ativo = false`), nunca apaga — e uma policy que ninguém usa é
++--     superfície de escrita sobrando. Se um dia o módulo precisar apagar,
++--     a policy nasce junto com o caminho de tela, não antes.
++--
++-- (6) RBAC pelo padrão de `transp_pode_escrever()` (migração 22): função
++--     `security definer` que resolve o papel por `usuarios.auth_id`.
++--     Duas funções, dois níveis — presença e serviço são registro de
++--     campo (técnico+); ficha e árvore são cadastro (gestor+).
++--
++-- Aditiva e reexecutável: `if not exists`, `drop policy if exists` antes
++-- de cada `create policy`, e as constraints nomeadas guardadas por
++-- `pg_constraint`. Nunca `drop table`.
++-- ═══════════════════════════════════════════════════════════════════
++
++-- ── funções de papel ──────────────────────────────────────────────────
++
++create or replace function bio_pode_escrever()
++returns boolean
++language sql
++security definer
++stable
++set search_path = public
++as $$
++  select exists (
++    select 1 from usuarios u
++    where u.auth_id = (select auth.uid())
++      and u.ativo = true
++      and u.role in ('admin', 'gestor', 'tecnico')
++  )
++$$;
++
++create or replace function bio_pode_gerir()
++returns boolean
++language sql
++security definer
++stable
++set search_path = public
++as $$
++  select exists (
++    select 1 from usuarios u
++    where u.auth_id = (select auth.uid())
++      and u.ativo = true
++      and u.role in ('admin', 'gestor')
++  )
++$$;
++
++revoke execute on function bio_pode_escrever() from public, anon;
++revoke execute on function bio_pode_gerir() from public, anon;
++grant execute on function bio_pode_escrever() to authenticated;
++grant execute on function bio_pode_gerir() to authenticated;
++
++-- ── bio_fichas — guia de campo ────────────────────────────────────────
++
++create table if not exists bio_fichas (
++  id                 bigint generated always as identity primary key,
++  nome_comum         text not null check (length(trim(nome_comum)) > 0),
++  nome_cientifico    text,
++  categoria          text not null check (categoria in ('animal', 'praga', 'arvore')),
++  grupo              text not null check (grupo in (
++                       'mamifero', 'ave', 'peixe', 'reptil', 'anfibio', 'inseto',
++                       'aracnideo', 'molusco', 'roedor', 'arvore', 'outro')),
++  foto_url           text,
++  descricao          text,
++  risco              text not null default 'baixo' check (risco in ('baixo', 'medio', 'alto')),
++  peconhenta         boolean not null default false,
++  o_que_fazer        text,
++  controle           text,
++  presente_no_cmasm  boolean not null default true,
++  ativo              boolean not null default true,
++  criado_em          timestamptz not null default now()
++);
++
++comment on table bio_fichas is
++  'Guia de campo: uma ficha por espécie (animal, praga ou árvore). `presente_no_cmasm` filtra o catálogo genérico para a OM sem apagar o resto.';
++
++-- ── bio_arvores — ativos ──────────────────────────────────────────────
++
++create table if not exists bio_arvores (
++  id            bigint generated always as identity primary key,
++  codigo        text not null unique check (codigo ~ '^ARV-[0-9]{4}$'),
++  ficha_id      bigint not null references bio_fichas(id),
++  apelido       text,
++  local_id      integer references cmasm_locais(id),
++  lat           double precision,
++  lon           double precision,
++  data_plantio  date,
++  data_remocao  date,
++  obs           text,
++  ativo         boolean not null default true,
++  criado_por    text,
++  criado_em     timestamptz not null default now()
++);
++
++comment on table bio_arvores is
++  'Uma linha por árvore etiquetada (código ARV-0000 + QR). Removida = ativo false + data_remocao; nunca apagada.';
++
++do $$
++begin
++  if not exists (select 1 from pg_constraint where conname = 'bio_arvores_posicao_envelope_chk') then
++    alter table bio_arvores add constraint bio_arvores_posicao_envelope_chk
++      check (
++        (lat is null or lat between -23.2 and -22.5)
++        and (lon is null or lon between -43.5 and -42.7)
++      );
++  end if;
++  if not exists (select 1 from pg_constraint where conname = 'bio_arvores_posicao_par_chk') then
++    alter table bio_arvores add constraint bio_arvores_posicao_par_chk
++      check (num_nulls(lat, lon) <> 1);
++  end if;
++  if not exists (select 1 from pg_constraint where conname = 'bio_arvores_remocao_chk') then
++    -- Data de remoção só existe em árvore removida; o inverso não é
++    -- exigido (remoção antiga sem data conhecida é um fato honesto).
++    alter table bio_arvores add constraint bio_arvores_remocao_chk
++      check (data_remocao is null or ativo = false);
++  end if;
++end $$;
++
++create index if not exists bio_arvores_ficha_idx  on bio_arvores (ficha_id);
++create index if not exists bio_arvores_local_idx  on bio_arvores (local_id);
++create index if not exists bio_arvores_ativas_idx on bio_arvores (codigo) where ativo;
++
++-- ── bio_presencas — onde animais e pragas ocorrem ─────────────────────
++
++create table if not exists bio_presencas (
++  id                   bigint generated always as identity primary key,
++  ficha_id             bigint not null references bio_fichas(id),
++  local_id             integer references cmasm_locais(id),
++  lat                  double precision,
++  lon                  double precision,
++  geom                 jsonb,
++  data_registro        date not null default current_date,
++  quantidade_estimada  integer check (quantidade_estimada is null or quantidade_estimada >= 0),
++  obs                  text,
++  ativo                boolean not null default true,
++  registrado_por       text,
++  criado_em            timestamptz not null default now()
++);
++
++comment on table bio_presencas is
++  'Estado do terreno: a espécie X ocorre no ponto (lat/lon) ou na área (geom [[lat,lon],…]). Editar ou desativar, não acumular — histórico é v2.';
++
++do $$
++begin
++  if not exists (select 1 from pg_constraint where conname = 'bio_presencas_posicao_envelope_chk') then
++    alter table bio_presencas add constraint bio_presencas_posicao_envelope_chk
++      check (
++        (lat is null or lat between -23.2 and -22.5)
++        and (lon is null or lon between -43.5 and -42.7)
++      );
++  end if;
++  if not exists (select 1 from pg_constraint where conname = 'bio_presencas_posicao_par_chk') then
++    alter table bio_presencas add constraint bio_presencas_posicao_par_chk
++      check (num_nulls(lat, lon) <> 1);
++  end if;
++  if not exists (select 1 from pg_constraint where conname = 'bio_presencas_geom_forma_chk') then
++    -- Mesma trava de `cmasm_locais.geom` (migração 37): lista com pelo
++    -- menos 3 vértices, ou nulo. A forma de cada vértice fica de fora —
++    -- é o Leaflet que a valida ao desenhar.
++    alter table bio_presencas add constraint bio_presencas_geom_forma_chk
++      check (geom is null or (jsonb_typeof(geom) = 'array' and jsonb_array_length(geom) >= 3));
++  end if;
++end $$;
++
++create index if not exists bio_presencas_ficha_idx  on bio_presencas (ficha_id) where ativo;
++create index if not exists bio_presencas_local_idx  on bio_presencas (local_id);
++
++-- ── bio_servicos — poda e controle ────────────────────────────────────
++
++create table if not exists bio_servicos (
++  id                   bigint generated always as identity primary key,
++  tipo                 text not null check (tipo in (
++                         'poda', 'supressao', 'dedetizacao', 'desratizacao',
++                         'armadilha', 'isca', 'monitoramento', 'outro')),
++  arvore_id            bigint references bio_arvores(id),
++  presenca_id          bigint references bio_presencas(id),
++  status               text not null default 'programado'
++                         check (status in ('programado', 'realizado', 'cancelado')),
++  data_programada      date not null,
++  data_realizada       date,
++  executor             text,
++  materiais            text,
++  periodicidade_meses  integer check (periodicidade_meses is null or periodicidade_meses between 1 and 120),
++  obs                  text,
++  foto_url             text,
++  criado_por           text,
++  criado_em            timestamptz not null default now()
++);
++
++comment on table bio_servicos is
++  'Serviço de poda (árvore) ou controle (presença). Realizado com periodicidade gera o próximo programado — regra no cliente.';
++
++do $$
++begin
++  if not exists (select 1 from pg_constraint where conname = 'bio_servicos_alvo_chk') then
++    -- Exatamente um alvo: árvore OU presença. Nem os dois, nem nenhum.
++    alter table bio_servicos add constraint bio_servicos_alvo_chk
++      check ((arvore_id is null) <> (presenca_id is null));
++  end if;
++  if not exists (select 1 from pg_constraint where conname = 'bio_servicos_realizado_chk') then
++    -- Realizado exige a data em que foi feito; os outros estados não a têm.
++    alter table bio_servicos add constraint bio_servicos_realizado_chk
++      check ((status = 'realizado') = (data_realizada is not null));
++  end if;
++end $$;
++
++create index if not exists bio_servicos_agenda_idx   on bio_servicos (status, data_programada);
++create index if not exists bio_servicos_arvore_idx   on bio_servicos (arvore_id);
++create index if not exists bio_servicos_presenca_idx on bio_servicos (presenca_id);
++
++-- ── grants ────────────────────────────────────────────────────────────
++-- Leitura pública (cargo Livre é `anon`), escrita autenticada — quem
++-- decide o papel é a policy, não o grant.
++
++grant select on bio_fichas, bio_arvores, bio_presencas, bio_servicos to anon, authenticated;
++grant insert, update on bio_fichas, bio_arvores, bio_presencas, bio_servicos to authenticated;
++grant usage, select on sequence bio_fichas_id_seq, bio_arvores_id_seq,
++  bio_presencas_id_seq, bio_servicos_id_seq to anon, authenticated;
++
++-- ── RLS ───────────────────────────────────────────────────────────────
++
++alter table bio_fichas    enable row level security;
++alter table bio_arvores   enable row level security;
++alter table bio_presencas enable row level security;
++alter table bio_servicos  enable row level security;
++
++-- fichas e árvores: cadastro → gestor+
++drop policy if exists sel_bio_fichas on bio_fichas;
++drop policy if exists ins_bio_fichas on bio_fichas;
++drop policy if exists upd_bio_fichas on bio_fichas;
++create policy sel_bio_fichas on bio_fichas for select using (true);
++create policy ins_bio_fichas on bio_fichas for insert to authenticated with check ((select bio_pode_gerir()));
++create policy upd_bio_fichas on bio_fichas for update to authenticated using ((select bio_pode_gerir()));
++
++drop policy if exists sel_bio_arvores on bio_arvores;
++drop policy if exists ins_bio_arvores on bio_arvores;
++drop policy if exists upd_bio_arvores on bio_arvores;
++create policy sel_bio_arvores on bio_arvores for select using (true);
++create policy ins_bio_arvores on bio_arvores for insert to authenticated with check ((select bio_pode_gerir()));
++create policy upd_bio_arvores on bio_arvores for update to authenticated using ((select bio_pode_gerir()));
++
++-- presenças e serviços: registro de campo → técnico+
++drop policy if exists sel_bio_presencas on bio_presencas;
++drop policy if exists ins_bio_presencas on bio_presencas;
++drop policy if exists upd_bio_presencas on bio_presencas;
++create policy sel_bio_presencas on bio_presencas for select using (true);
++create policy ins_bio_presencas on bio_presencas for insert to authenticated with check ((select bio_pode_escrever()));
++create policy upd_bio_presencas on bio_presencas for update to authenticated using ((select bio_pode_escrever()));
++
++drop policy if exists sel_bio_servicos on bio_servicos;
++drop policy if exists ins_bio_servicos on bio_servicos;
++drop policy if exists upd_bio_servicos on bio_servicos;
++create policy sel_bio_servicos on bio_servicos for select using (true);
++create policy ins_bio_servicos on bio_servicos for insert to authenticated with check ((select bio_pode_escrever()));
++create policy upd_bio_servicos on bio_servicos for update to authenticated using ((select bio_pode_escrever()));
++
++-- ── verificação (rodar depois, à mão) ─────────────────────────────────
++--   select tablename, policyname, cmd from pg_policies
++--    where tablename like 'bio_%' order by 1, 3;             -- 3 por tabela
++--   select conname, pg_get_constraintdef(oid) from pg_constraint
++--    where conrelid::regclass::text like 'bio_%';            -- as travas
++--   Pela porta da frente (anon key): select 200, POST 401, PATCH [].
+diff --git a/supabase/62_bio_seed_fichas.sql b/supabase/62_bio_seed_fichas.sql
+new file mode 100644
+index 0000000..3aee580
+--- /dev/null
++++ b/supabase/62_bio_seed_fichas.sql
+@@ -0,0 +1,141 @@
++-- ═══════════════════════════════════════════════════════════════════
++-- 62 — CMASM Bio: seed das fichas de campo
++-- ═══════════════════════════════════════════════════════════════════
++-- O que é semeado e o que NÃO é, pela regra de D-eq-06: entra o que é
++-- conhecimento público de espécie (nome, grupo, risco, orientação
++-- genérica); NÃO entra árvore, presença nem serviço — são dados do
++-- terreno da OM, registrados em campo, nunca inventados para a tela não
++-- ficar vazia. `foto_url` fica nula: foto entra pela tela.
++--
++-- Idempotente pelo nome comum: rodar duas vezes não duplica.
++-- Textos de "o que fazer" são orientação de conduta do observador, não
++-- procedimento técnico — o procedimento é o serviço, registrado com
++-- executor e materiais.
++-- ═══════════════════════════════════════════════════════════════════
++
++insert into bio_fichas
++  (nome_comum, nome_cientifico, categoria, grupo, risco, peconhenta, descricao, o_que_fazer, controle)
++select * from (values
++  -- ── animais ──
++  ('Capivara', 'Hydrochoerus hydrochaeris', 'animal', 'mamifero', 'baixo', false,
++   'Maior roedor do mundo; vive em grupo perto de água. Hospedeiro do carrapato-estrela.',
++   'Não alimentar nem se aproximar dos filhotes. Evitar a vegetação rasteira onde os grupos descansam (carrapatos).',
++   'Sem controle direto. Roçada das áreas de descanso reduz o carrapato; ver ficha do carrapato-estrela.'),
++  ('Jacaré-de-papo-amarelo', 'Caiman latirostris', 'animal', 'reptil', 'alto', false,
++   'Jacaré de médio porte, comum em lagoas e canais do litoral fluminense.',
++   'Manter distância. Não entrar na água. Avisar a DME e isolar o acesso à margem.',
++   'Só resgate por equipe habilitada (Corpo de Bombeiros / órgão ambiental). Nunca capturar.'),
++  ('Gambá', 'Didelphis aurita', 'animal', 'mamifero', 'baixo', false,
++   'Marsupial noturno; entra em forros e depósitos atrás de comida.',
++   'Não encurralar. Fecha-se o acesso depois que ele sai à noite.',
++   'Vedar frestas de forro e depósito; lixo fechado. Captura só se ficar preso.'),
++  ('Garça-branca', 'Ardea alba', 'animal', 'ave', 'baixo', false,
++   'Ave pernalta de margens de água; indicador de lagoa saudável.',
++   'Nenhuma ação. Não perturbar ninhos.',
++   'Não se aplica.'),
++  ('Urubu', 'Coragyps atratus', 'animal', 'ave', 'baixo', false,
++   'Ave de rapina necrófaga; concentra-se onde há resíduo orgânico exposto.',
++   'Não alimentar. Presença em bando indica resíduo mal acondicionado.',
++   'Acondicionamento do lixo orgânico; retirada de carcaças.'),
++  ('Bem-te-vi', 'Pitangus sulphuratus', 'animal', 'ave', 'baixo', false,
++   'Ave comum e territorial; ninho em árvores e estruturas.',
++   'Nenhuma ação.',
++   'Não se aplica.'),
++  ('Tilápia', 'Oreochromis niloticus', 'animal', 'peixe', 'baixo', false,
++   'Peixe exótico de água doce, muito comum em lagoas e reservatórios.',
++   'Nenhuma ação.',
++   'Controle populacional só com orientação do órgão ambiental.'),
++  ('Jararaca', 'Bothrops jararaca', 'animal', 'reptil', 'alto', true,
++   'Serpente peçonhenta mais comum do Sudeste. Marrom com desenhos em V invertido; ativa ao entardecer.',
++   'Afastar-se devagar. Não tentar matar nem capturar. Isolar a área e avisar a DME. Em caso de picada: imobilizar, não fazer torniquete, levar ao hospital com soro.',
++   'Roçada e retirada de entulho (abrigo de roedores, que são o alimento). Captura por equipe habilitada.'),
++  ('Cobra-cipó', 'Chironius spp.', 'animal', 'reptil', 'baixo', false,
++   'Serpente arborícola fina e ágil, verde ou marrom. Não peçonhenta; morde se manuseada.',
++   'Deixar seguir. Não manusear.',
++   'Não se aplica.'),
++  ('Cobra-coral-verdadeira', 'Micrurus corallinus', 'animal', 'reptil', 'alto', true,
++   'Anéis vermelhos, pretos e brancos. Peçonhenta; peçonha neurotóxica. Dócil, mas morde se pisada ou manuseada.',
++   'Não tocar em hipótese alguma. Isolar e avisar a DME. Picada: hospital imediato.',
++   'Captura por equipe habilitada.'),
++  ('Teiú', 'Salvator merianae', 'animal', 'reptil', 'medio', false,
++   'Lagarto grande (até 1,5 m). Mordida forte e chicotada de cauda quando acuado. Come ovos e restos.',
++   'Não encurralar. Manter distância; ele foge se tiver saída.',
++   'Vedar acesso a depósitos de alimento e lixo.'),
++  ('Morcego', 'Chiroptera (diversos)', 'animal', 'mamifero', 'medio', false,
++   'Colônias em forros, casas de máquinas e estruturas fechadas. Guano e risco de raiva em animal caído.',
++   'Não tocar em morcego caído ou com comportamento estranho (raiva). Avisar a DME.',
++   'Vedar acesso após saída noturna; nunca aplicar veneno (é fauna protegida). Limpeza do guano com EPI.'),
++  -- ── pragas ──
++  ('Carrapato-estrela', 'Amblyomma sculptum', 'praga', 'aracnideo', 'alto', false,
++   'Vetor da febre maculosa. Associado às áreas de descanso de capivaras e a vegetação rasteira.',
++   'Após passar por área de risco, inspecionar corpo e roupa. Retirar carrapato com pinça, sem esmagar. Febre e manchas dias depois: procurar médico e citar a exposição.',
++   'Roçada e manutenção das áreas de descanso das capivaras; acaricida só por empresa habilitada.'),
++  ('Cupim', 'Isoptera (diversos)', 'praga', 'inseto', 'medio', false,
++   'Cupim de madeira seca (túneis dentro da peça) e cupim subterrâneo (túneis de terra nas paredes).',
++   'Não mexer no ninho. Marcar a peça e avisar a DME.',
++   'Descupinização por empresa habilitada; substituição de madeira comprometida.'),
++  ('Formiga-cortadeira', 'Atta sexdens / Acromyrmex', 'praga', 'inseto', 'medio', false,
++   'Saúva e quenquém. Cortam folhas de árvores e gramado; olheiros e panelas visíveis no solo.',
++   'Nenhuma ação individual. Registrar o formigueiro no mapa.',
++   'Isca granulada no olheiro ativo em dia seco; termonebulização em formigueiro grande. Empresa habilitada.'),
++  ('Rato', 'Rattus rattus / Rattus norvegicus', 'praga', 'roedor', 'alto', false,
++   'Rato-de-telhado (forro, árvores) e ratazana (esgoto, solo). Vetor de leptospirose e atrai serpentes.',
++   'Não tocar em fezes e urina sem luva. Registrar trilhas e fezes.',
++   'Desratização por empresa habilitada (isca em porta-isca); vedação e lixo fechado.'),
++  ('Vespa / marimbondo', 'Vespidae (diversos)', 'praga', 'inseto', 'alto', true,
++   'Ninho de papel em beirais, árvores e caixas elétricas. Ataca em grupo quando o ninho é perturbado.',
++   'Afastar-se sem movimentos bruscos. Nunca bater no ninho. Alérgico picado: hospital.',
++   'Remoção do ninho à noite por equipe com EPI; inseticida só por empresa habilitada.'),
++  ('Abelha (colmeia)', 'Apis mellifera', 'praga', 'inseto', 'alto', true,
++   'Enxame ou colmeia estabelecida em oco de árvore, forro ou caixa. Africanizada: defensiva.',
++   'Isolar 50 m. Não usar inseticida nem fumaça. Avisar a DME.',
++   'Remoção por apicultor (a colmeia é reaproveitada, não morta). Bombeiros só em risco imediato.'),
++  ('Caramujo-africano', 'Lissachatina fulica', 'praga', 'molusco', 'medio', false,
++   'Caramujo grande, concha listrada. Hospedeiro de parasitas; nunca manusear sem luva.',
++   'Não tocar sem luva. Não esmagar com o pé.',
++   'Coleta manual com luva, imersão em salmoura, descarte fechado. Sem veneno (afeta fauna).'),
++  ('Mosquito Aedes', 'Aedes aegypti', 'praga', 'inseto', 'alto', false,
++   'Vetor de dengue, zika e chikungunya. Cria em água parada limpa: ralos, calhas, pneus, bandejas de ar-condicionado.',
++   'Eliminar o foco visto. Registrar o ponto.',
++   'Vistoria semanal de criadouros; larvicida em ralo e caixa d''água por equipe treinada.'),
++  ('Barata', 'Periplaneta americana / Blattella germanica', 'praga', 'inseto', 'medio', false,
++   'Barata americana (esgoto, caixas de passagem) e alemã (cozinha, rancho).',
++   'Registrar onde aparece em quantidade.',
++   'Desinsetização por empresa habilitada; gel em fresta; vedação de ralos.'),
++  ('Pombo', 'Columba livia', 'praga', 'ave', 'medio', false,
++   'Pomba doméstica em beirais e forros. Fezes corroem estrutura e carregam fungos (criptococose).',
++   'Não alimentar. Limpeza de fezes só com EPI e umedecendo antes.',
++   'Barreira física (rede, espícula); nunca veneno. Retirada de ninho por equipe.'),
++  -- ── árvores ──
++  ('Mangueira', 'Mangifera indica', 'arvore', 'arvore', 'baixo', false,
++   'Copa larga e densa; frutos no verão. Galhos pesados quebram em vendaval.',
++   'Manter distância em ventania. Fruto no chão atrai fauna.',
++   'Poda de limpeza anual antes do verão; poda de galho seco ou rachado.'),
++  ('Amendoeira-da-praia', 'Terminalia catappa', 'arvore', 'arvore', 'medio', false,
++   'Galhos horizontais em andares; madeira quebradiça. Muito comum em orla.',
++   'Não estacionar sob galhos grandes em ventania.',
++   'Poda de redução e limpeza a cada 12 meses; avaliar galhos sobre passagem.'),
++  ('Ficus', 'Ficus benjamina', 'arvore', 'arvore', 'medio', false,
++   'Raízes agressivas levantam calçada e entram em rede de esgoto e fundação.',
++   'Registrar calçada levantada perto do tronco.',
++   'Poda de contenção; barreira de raiz; avaliar supressão perto de edificação.'),
++  ('Jaqueira', 'Artocarpus heterophyllus', 'arvore', 'arvore', 'medio', false,
++   'Frutos de até 30 kg presos ao tronco; queda causa acidente.',
++   'Não permanecer sob a copa na época de fruto (verão).',
++   'Retirada dos frutos antes de maduros; poda de limpeza.'),
++  ('Palmeira-imperial', 'Roystonea oleracea', 'arvore', 'arvore', 'medio', false,
++   'Folhas de até 5 m e 20 kg caem inteiras ao secar.',
++   'Registrar folha seca pendente sobre passagem.',
++   'Retirada de folhas secas e cachos a cada 6 meses.'),
++  ('Ipê', 'Handroanthus spp.', 'arvore', 'arvore', 'baixo', false,
++   'Floração amarela, rosa ou roxa no inverno; madeira resistente.',
++   'Nenhuma ação.',
++   'Poda de formação só nos primeiros anos; depois só limpeza.'),
++  ('Flamboyant', 'Delonix regia', 'arvore', 'arvore', 'medio', false,
++   'Copa larga, raízes superficiais; tomba em solo encharcado e vento forte.',
++   'Registrar inclinação do tronco ou raiz exposta.',
++   'Poda de redução de copa; avaliar estabilidade após temporal.')
++) as v(nome_comum, nome_cientifico, categoria, grupo, risco, peconhenta, descricao, o_que_fazer, controle)
++where not exists (select 1 from bio_fichas f where f.nome_comum = v.nome_comum);
++
++-- verificação: select categoria, count(*) from bio_fichas group by 1;  → animal 12 · praga 10 · arvore 7
+diff --git a/tests/bio-modulo.test.js b/tests/bio-modulo.test.js
+new file mode 100644
+index 0000000..796a5c2
+--- /dev/null
++++ b/tests/bio-modulo.test.js
+@@ -0,0 +1,198 @@
++// Gate do módulo /bio — comportamento, não grafia.
++//
++// Importa o núcleo puro em Node e o exercita nos limites que a spec fixou:
++// próximo código com lista vazia e com buracos; periodicidade a partir da
++// REALIZAÇÃO e presa ao fim do mês; vencido é leitura da tela, não estado;
++// validação espelhando as travas da 61. Depois carrega bio/app.js com um
++// cliente falso e afirma a sonda, a fronteira de escrita e a leitura sem
++// migração. Cada defeito abaixo foi reintroduzido de propósito e visto
++// reprovando antes de o gate entrar.
++const test = require('node:test')
++const assert = require('node:assert/strict')
++const fs = require('node:fs')
++const path = require('node:path')
++
++const RAIZ = path.join(__dirname, '..')
++let d, app
++
++test.before(async () => {
++  d = await import(path.join(RAIZ, 'bio', 'dominio.js'))
++  app = await import(path.join(RAIZ, 'bio', 'app.js'))
++})
++
++// ── núcleo puro ────────────────────────────────────────────────────────
++
++test('proximoCodigo: vazio dá ARV-0001; com buraco continua do maior; ignora código fora do formato', () => {
++  assert.equal(d.proximoCodigo([]), 'ARV-0001')
++  assert.equal(d.proximoCodigo([{ codigo: 'ARV-0001' }, { codigo: 'ARV-0007' }, { codigo: 'ARV-0003' }]), 'ARV-0008')
++  assert.equal(d.proximoCodigo([{ codigo: 'ARV-0002' }, { codigo: 'X-9999' }, { codigo: null }]), 'ARV-0003')
++})
++
++test('somarMeses prende o dia ao fim do mês — uma poda anual não anda', () => {
++  assert.equal(d.somarMeses('2026-01-31', 1), '2026-02-28')
++  assert.equal(d.somarMeses('2028-01-31', 1), '2028-02-29')
++  assert.equal(d.somarMeses('2026-03-15', 12), '2027-03-15')
++  assert.equal(d.somarMeses('2026-11-30', 3), '2027-02-28')
++  assert.equal(d.somarMeses('lixo', 1), null)
++})
++
++test('proximoServico parte da data REALIZADA, copia tipo/alvo/periodicidade, e é null para avulso', () => {
++  const base = { tipo: 'poda', arvore_id: 4, presenca_id: null, periodicidade_meses: 6, materiais: 'motosserra', data_programada: '2026-01-10', obs: 'antiga' }
++  const p = d.proximoServico(base, '2026-03-01')
++  assert.deepEqual(p, {
++    tipo: 'poda', arvore_id: 4, presenca_id: null, status: 'programado',
++    data_programada: '2026-09-01', periodicidade_meses: 6, materiais: 'motosserra', obs: null,
++  })
++  assert.equal(d.proximoServico({ ...base, periodicidade_meses: null }, '2026-03-01'), null)
++  assert.equal(d.proximoServico({ ...base, periodicidade_meses: 0 }, '2026-03-01'), null)
++  assert.equal(d.proximoServico({ ...base, periodicidade_meses: '6' }, '2026-03-01').data_programada, '2026-09-01')
++})
++
++test('situacaoServico: vencido só para programado com data no passado; hoje não é vencido', () => {
++  const hoje = '2026-09-13'
++  assert.equal(d.situacaoServico({ status: 'programado', data_programada: '2026-09-12' }, hoje), 'vencido')
++  assert.equal(d.situacaoServico({ status: 'programado', data_programada: '2026-09-13' }, hoje), 'programado')
++  assert.equal(d.situacaoServico({ status: 'realizado', data_programada: '2026-01-01' }, hoje), 'realizado')
++  assert.equal(d.situacaoServico({ status: 'cancelado', data_programada: '2026-01-01' }, hoje), 'cancelado')
++  assert.equal(d.situacaoServico(null, hoje), null)
++})
++
++test('resumoPainel conta vencidos e serviços do mês, e ignora inativos', () => {
++  const r = d.resumoPainel({
++    arvores: [{ ativo: true }, { ativo: false }, {}],
++    presencas: [{ ativo: true }, { ativo: false }],
++    servicos: [
++      { status: 'programado', data_programada: '2026-09-01' }, // vencido e no mês
++      { status: 'programado', data_programada: '2026-09-20' }, // no mês
++      { status: 'programado', data_programada: '2026-08-01' }, // vencido, fora do mês
++      { status: 'realizado', data_programada: '2026-09-02' },  // não conta
++      { status: 'cancelado', data_programada: '2026-09-02' },  // não conta
++    ],
++  }, '2026-09-13')
++  assert.deepEqual(r, { arvores: 2, presencas: 1, vencidos: 2, noMes: 2 })
++})
++
++test('proximoDoAlvo devolve o programado mais próximo daquele alvo, ou null', () => {
++  const servicos = [
++    { status: 'programado', arvore_id: 1, data_programada: '2026-12-01' },
++    { status: 'programado', arvore_id: 1, data_programada: '2026-10-01' },
++    { status: 'realizado', arvore_id: 1, data_programada: '2026-01-01' },
++    { status: 'programado', arvore_id: 2, data_programada: '2026-09-01' },
++  ]
++  assert.equal(d.proximoDoAlvo(servicos, 'arvore_id', 1).data_programada, '2026-10-01')
++  assert.equal(d.proximoDoAlvo(servicos, 'arvore_id', 9), null)
++  assert.equal(d.proximoDoAlvo(servicos, 'presenca_id', 1), null)
++})
++
++test('validarServico espelha a trava de alvo exclusivo e a faixa de periodicidade', () => {
++  const ok = { tipo: 'poda', arvore_id: 1, presenca_id: null, data_programada: '2026-10-01', periodicidade_meses: 12 }
++  assert.deepEqual(d.validarServico(ok), [])
++  assert.ok(d.validarServico({ ...ok, presenca_id: 2 }).some(e => /exatamente um alvo/.test(e)))
++  assert.ok(d.validarServico({ ...ok, arvore_id: null }).some(e => /exatamente um alvo/.test(e)))
++  assert.ok(d.validarServico({ ...ok, periodicidade_meses: 121 }).some(e => /1 a 120/.test(e)))
++  assert.ok(d.validarServico({ ...ok, periodicidade_meses: 1.5 }).some(e => /1 a 120/.test(e)))
++  assert.deepEqual(d.validarServico({ ...ok, periodicidade_meses: null }), [])
++  assert.ok(d.validarServico({ ...ok, tipo: 'banho' }).some(e => /Tipo/.test(e)))
++  assert.ok(d.validarServico({ ...ok, data_programada: '' }).some(e => /Data/.test(e)))
++})
++
++test('validarArvore e validarPresenca espelham envelope e par de coordenadas', () => {
++  assert.deepEqual(d.validarArvore({ ficha_id: 1, codigo: 'ARV-0001', lat: -22.84, lon: -43.11 }), [])
++  assert.deepEqual(d.validarArvore({ ficha_id: 1, codigo: 'ARV-0001', lat: null, lon: null }), [])
++  assert.ok(d.validarArvore({ ficha_id: 1, codigo: 'ARV-0001', lat: -22.84, lon: null }).some(e => /andam juntas/.test(e)))
++  // par trocado: latitude na coluna de longitude cai fora do envelope
++  assert.ok(d.validarArvore({ ficha_id: 1, codigo: 'ARV-0001', lat: -43.11, lon: -22.84 }).some(e => /fora da região/.test(e)))
++  assert.ok(d.validarArvore({ ficha_id: 1, codigo: 'arv-1' }).some(e => /ARV-0000/.test(e)))
++  assert.ok(d.validarArvore({ codigo: 'ARV-0001' }).some(e => /ficha/.test(e)))
++  assert.ok(d.validarPresenca({ ficha_id: 1, quantidade_estimada: -1 }).some(e => /negativa/.test(e)))
++  assert.deepEqual(d.validarPresenca({ ficha_id: 1, quantidade_estimada: 0 }), [])
++})
++
++test('urlDaEtiqueta carrega o CÓDIGO, nunca o id, e recusa código fora do formato', () => {
++  assert.equal(d.urlDaEtiqueta('https://pmoc-orcin.vercel.app', 'ARV-0012'), 'https://pmoc-orcin.vercel.app/bio?codigo=ARV-0012')
++  assert.equal(d.urlDaEtiqueta('https://x', '12'), null)
++})
++
++test('fmtData e hojeIso não passam por UTC', () => {
++  assert.equal(d.fmtData('2026-09-13'), '13/09/2026')
++  assert.equal(d.fmtData(null), '—')
++  assert.equal(d.hojeIso(new Date(2026, 0, 5, 23, 30)), '2026-01-05')
++})
++
++// ── fronteira de escrita e sonda, com cliente falso ────────────────────
++
++function clienteFalso({ semMigracao = false } = {}) {
++  const chamadas = []
++  const resposta = (tabela) => {
++    if (semMigracao && tabela.startsWith('bio_')) return { data: null, error: { message: 'relation does not exist' } }
++    return { data: [], error: null }
++  }
++  const construir = (tabela) => {
++    const q = {
++      select() { return q }, eq() { return q }, order() { return q }, limit() { return q },
++      insert(r) { chamadas.push({ tabela, op: 'insert', r }); return Promise.resolve({ error: null }) },
++      update(r) { chamadas.push({ tabela, op: 'update', r }); return q },
++      then(res) { return Promise.resolve(resposta(tabela)).then(res) },
++    }
++    return q
++  }
++  return { chamadas, from: (t) => construir(t) }
++}
++
++test('a sonda é uma leitura sobre bio_fichas, fica FALSA sem a migração e a carga continua sem lançar', async () => {
++  const cliente = clienteFalso({ semMigracao: true })
++  app.__teste.definirSupa(cliente)
++  await app.__teste.carregarTudo()
++  const e = app.__teste.estado()
++  assert.equal(e.BIO_OK, false)
++  assert.deepEqual([e.FICHAS, e.ARVORES, e.PRESENCAS, e.SERVICOS], [[], [], [], []])
++})
++
++test('com a migração a sonda fica verde e as quatro tabelas são lidas', async () => {
++  const cliente = clienteFalso()
++  app.__teste.definirSupa(cliente)
++  assert.equal(await app.__teste.sondarBio(), true)
++})
++
++test('papéis: técnico registra mas não gere; gestor e admin fazem os dois; observador nada', () => {
++  const t = app.__teste
++  t.definirUsuario({ role: 'tecnico' }); assert.equal(t.podeRegistrar(), true); assert.equal(t.podeGerir(), false)
++  t.definirUsuario({ role: 'gestor' }); assert.equal(t.podeRegistrar(), true); assert.equal(t.podeGerir(), true)
++  t.definirUsuario({ role: 'admin' }); assert.equal(t.podeGerir(), true)
++  t.definirUsuario({ role: 'observador' }); assert.equal(t.podeRegistrar(), false); assert.equal(t.podeGerir(), false)
++  t.definirUsuario(null); assert.equal(t.podeRegistrar(), false)
++})
++
++test('o módulo só escreve nas quatro tabelas bio_ e nunca chama delete', () => {
++  const fonte = fs.readFileSync(path.join(RAIZ, 'bio', 'app.js'), 'utf8').replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
++  const escritas = [...fonte.matchAll(/\.from\('([^']+)'\)\s*\.(insert|update|delete|upsert)\(/g)]
++  assert.ok(escritas.length > 0)
++  for (const [, tabela, op] of escritas) {
++    assert.ok(tabela.startsWith('bio_'), `escrita em ${tabela} — o Bio lê cmasm_locais, nunca a altera`)
++    assert.notEqual(op, 'delete', `delete em ${tabela} — o projeto arquiva`)
++    assert.notEqual(op, 'upsert', `upsert em ${tabela} — não há caminho de escrita duplo`)
++  }
++  assert.doesNotMatch(fonte, /\.delete\(/)
++})
++
++test('toda função de escrita passa pela sonda e pelo papel — "sem migração, sem botão"', () => {
++  const fonte = fs.readFileSync(path.join(RAIZ, 'bio', 'app.js'), 'utf8')
++  for (const nome of ['salvarFicha', 'salvarArvore', 'salvarPresenca', 'salvarServico', 'confirmarRealizado']) {
++    const corpo = new RegExp(`async function ${nome}\\(\\) \\{\\n([^\\n]*)`).exec(fonte)
++    assert.ok(corpo, `função ${nome} não encontrada`)
++    assert.match(corpo[0], /if \(!BIO_OK \|\| !pode(Registrar|Gerir)\(\)/, `${nome} não começa pela guarda de sonda+papel`)
++  }
++})
++
++test('index.html: miolo dentro do #app, abre em block, etiqueta fora do #app e sem cor além do accent', () => {
++  const html = fs.readFileSync(path.join(RAIZ, 'bio', 'index.html'), 'utf8')
++  const js = fs.readFileSync(path.join(RAIZ, 'bio', 'app.js'), 'utf8')
++  assert.match(html, /<div id="app">\s*<div class="main">/)
++  assert.match(js, /el\('app'\)\.style\.display = 'block'/)
++  assert.match(html, /<\/div>\s*<!-- Etiqueta[\s\S]*<div id="etiqueta"><\/div>/)
++  const cores = [...html.matchAll(/#[0-9a-f]{6}\b/gi)].map(m => m[0].toLowerCase())
++  const foraDoPrint = cores.filter(c => c !== '#4f9a5c' && c !== '#1a1a18')
++  // dentro do @media print o preto/branco da etiqueta é legítimo — é papel
++  assert.ok(foraDoPrint.every(c => ['#000', '#fff', '#000000', '#ffffff'].includes(c) || /theme-color/.test(html)),
++    `cores fora do accent: ${foraDoPrint.join(', ')}`)
++})
+diff --git a/tests/bio-schema.test.js b/tests/bio-schema.test.js
+new file mode 100644
+index 0000000..4f51021
+--- /dev/null
++++ b/tests/bio-schema.test.js
+@@ -0,0 +1,111 @@
++// Gate do módulo /bio — a forma da migração 61 e das listas fechadas.
++//
++// O que ele prova: cada lista fechada do domínio (categoria, grupo, risco,
++// tipo e status de serviço) é IGUAL, nas duas direções, ao `check` da
++// migração 61. Um valor a mais na tela é gravação recusada com erro opaco;
++// um valor a mais no banco é opção que ninguém alcança. O seed (62) só usa
++// valores das listas. E as decisões de forma que o texto explica existem
++// mesmo no SQL: sem DELETE, envelope de posição, alvo exclusivo, coluna
++// `lon` (nunca `lng`) e geom no formato da plataforma.
++//
++// Lê o SQL de verdade, não uma cópia: a lição de mapa-editor.test.js.
++const test = require('node:test')
++const assert = require('node:assert/strict')
++const fs = require('node:fs')
++const path = require('node:path')
++
++const RAIZ = path.join(__dirname, '..')
++const SQL = fs.readFileSync(path.join(RAIZ, 'supabase', '61_bio_schema.sql'), 'utf8')
++const SEED = fs.readFileSync(path.join(RAIZ, 'supabase', '62_bio_seed_fichas.sql'), 'utf8')
++
++// Corpo de uma tabela, sem os comentários — nome de coluna se repete entre
++// tabelas e um comentário em prosa cita valores que não são código.
++function corpoDaTabela(nome) {
++  const semComentario = SQL.replace(/--[^\n]*/g, '')
++  const m = new RegExp(`create table if not exists ${nome} \\(([\\s\\S]*?)\\n\\);`).exec(semComentario)
++  assert.ok(m, `migração 61 sem a tabela ${nome}`)
++  return m[1]
++}
++
++function listaDoCheck(corpo, coluna) {
++  const m = new RegExp(`${coluna}\\s+text[^,]*?check \\(${coluna} in \\(([^)]*)\\)`, 's').exec(corpo)
++  assert.ok(m, `coluna ${coluna} sem check de lista`)
++  return m[1].split(',').map(v => v.trim().replace(/^'|'$/g, '')).filter(Boolean).sort()
++}
++
++let dominio
++test.before(async () => {
++  dominio = await import(path.join(RAIZ, 'bio', 'dominio.js'))
++})
++
++test('categoria, grupo e risco da ficha espelham os checks nas duas direções', () => {
++  const corpo = corpoDaTabela('bio_fichas')
++  assert.deepEqual(Object.keys(dominio.CATEGORIAS).sort(), listaDoCheck(corpo, 'categoria'))
++  assert.deepEqual(Object.keys(dominio.GRUPOS).sort(), listaDoCheck(corpo, 'grupo'))
++  assert.deepEqual(Object.keys(dominio.RISCOS).sort(), listaDoCheck(corpo, 'risco'))
++})
++
++test('tipo e status do serviço espelham os checks; TIPOS_POR_ALVO só cita tipos que existem', () => {
++  const corpo = corpoDaTabela('bio_servicos')
++  assert.deepEqual(Object.keys(dominio.TIPOS_SERVICO).sort(), listaDoCheck(corpo, 'tipo'))
++  assert.deepEqual(Object.keys(dominio.STATUS_SERVICO).sort(), listaDoCheck(corpo, 'status'))
++  for (const [alvo, tipos] of Object.entries(dominio.TIPOS_POR_ALVO)) {
++    for (const t of tipos) assert.ok(dominio.TIPOS_SERVICO[t], `TIPOS_POR_ALVO.${alvo} cita "${t}", que não está em TIPOS_SERVICO`)
++  }
++})
++
++test('o formato do código da árvore é o mesmo no domínio e no check', () => {
++  const corpo = corpoDaTabela('bio_arvores')
++  assert.match(corpo, /codigo\s+text not null unique check \(codigo ~ '\^ARV-\[0-9\]\{4\}\$'\)/)
++  assert.equal(dominio.FORMATO_CODIGO.source, '^ARV-[0-9]{4}$')
++})
++
++test('posição é lat/lon com envelope e par, nas duas tabelas posicionáveis — nunca "lng"', () => {
++  assert.doesNotMatch(SQL, /\blng\b/, 'a plataforma escreve `lon` (migração 25); `lng` seria uma segunda grafia')
++  for (const t of ['bio_arvores', 'bio_presencas']) {
++    assert.match(SQL, new RegExp(`${t}_posicao_envelope_chk[\\s\\S]*?lat between -23\\.2 and -22\\.5[\\s\\S]*?lon between -43\\.5 and -42\\.7`))
++    assert.match(SQL, new RegExp(`${t}_posicao_par_chk[\\s\\S]*?num_nulls\\(lat, lon\\) <> 1`))
++  }
++})
++
++test('o serviço tem exatamente um alvo, e realizado exige data', () => {
++  assert.match(SQL, /check \(\(arvore_id is null\) <> \(presenca_id is null\)\)/)
++  assert.match(SQL, /check \(\(status = 'realizado'\) = \(data_realizada is not null\)\)/)
++})
++
++test('sem policy de DELETE em nenhuma tabela bio_ — o projeto arquiva', () => {
++  assert.doesNotMatch(SQL, /for delete/i)
++  assert.doesNotMatch(SQL, /grant[^;]*\bdelete\b/i)
++})
++
++test('duas funções de papel, security definer, negadas ao anon', () => {
++  for (const f of ['bio_pode_escrever', 'bio_pode_gerir']) {
++    assert.match(SQL, new RegExp(`create or replace function ${f}\\(\\)[\\s\\S]*?security definer`))
++    assert.match(SQL, new RegExp(`revoke execute on function ${f}\\(\\) from public, anon`))
++  }
++  // ficha e árvore são cadastro (gerir); presença e serviço são campo (escrever)
++  assert.match(SQL, /ins_bio_fichas[\s\S]*?bio_pode_gerir/)
++  assert.match(SQL, /ins_bio_arvores[\s\S]*?bio_pode_gerir/)
++  assert.match(SQL, /ins_bio_presencas[\s\S]*?bio_pode_escrever/)
++  assert.match(SQL, /ins_bio_servicos[\s\S]*?bio_pode_escrever/)
++})
++
++test('o seed só usa valores das listas fechadas e não semeia árvore, presença nem serviço', () => {
++  const linhas = [...SEED.matchAll(/^\s*\('([^']+)',\s*'[^']*',\s*'(\w+)',\s*'(\w+)',\s*'(\w+)',/gm)]
++  assert.ok(linhas.length >= 25, `seed com ${linhas.length} fichas — esperava pelo menos 25`)
++  for (const [, nome, categoria, grupo, risco] of linhas) {
++    assert.ok(dominio.CATEGORIAS[categoria], `${nome}: categoria "${categoria}" fora da lista`)
++    assert.ok(dominio.GRUPOS[grupo], `${nome}: grupo "${grupo}" fora da lista`)
++    assert.ok(dominio.RISCOS[risco], `${nome}: risco "${risco}" fora da lista`)
++  }
++  assert.doesNotMatch(SEED, /insert into bio_(arvores|presencas|servicos)/)
++  assert.match(SEED, /where not exists \(select 1 from bio_fichas/, 'seed precisa ser idempotente pelo nome')
++})
++
++test('rota, card no portal e vendor do QR existem', () => {
++  const vercel = JSON.parse(fs.readFileSync(path.join(RAIZ, 'vercel.json'), 'utf8'))
++  assert.ok(vercel.rewrites.some(r => r.source === '/bio' && r.destination === '/bio/index.html'))
++  const portal = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8')
++  assert.match(portal, /href="\/bio"/)
++  assert.ok(fs.existsSync(path.join(RAIZ, 'bio', 'vendor', 'qrcode.js')))
++})
+diff --git a/tests/gestao-modulo.test.js b/tests/gestao-modulo.test.js
+index 6e5e4bf..0115dff 100644
+--- a/tests/gestao-modulo.test.js
++++ b/tests/gestao-modulo.test.js
+@@ -302,8 +302,9 @@ test('o portal ganhou um card para /gestao, sem mexer nos que já existiam', ()
+   assert.equal(destinos.filter(d => d === '/gestao').length, 1,
+     'o portal precisa de exatamente um card apontando para /gestao')
+   assert.deepStrictEqual(destinos, ['/refrigeracao', '/maquinas', '/transportes', '/eletrica',
+-    '/fonoclama', '/predial', '/mapa', '/equipes', '/gestao', '/calibracao'],
+-    'a lista de cards do portal mudou além do acréscimo de /gestao')
++    '/fonoclama', '/predial', '/mapa', '/equipes', '/gestao', '/bio', '/calibracao'],
++    // /bio entrou em 13/09/2026 — o gate aprendeu o fato novo, nenhum caso apagado.
++    'a lista de cards do portal mudou além dos acréscimos de /gestao e /bio')
+   const cartao = portal.slice(portal.indexOf('href="/gestao"'), portal.indexOf('href="/calibracao"'))
+   for (const classe of ['ico', 'nm', 'ds', 'tags']) {
+     assert.match(cartao, new RegExp(`class="${classe}"`), `o card novo não segue o formato dos outros (falta .${classe})`)
+diff --git a/tests/mobile-375.test.js b/tests/mobile-375.test.js
+index 3627660..cacbdb5 100644
+--- a/tests/mobile-375.test.js
++++ b/tests/mobile-375.test.js
+@@ -22,7 +22,7 @@ const FOLHA = path.join(RAIZ, 'shared', 'pmoc.css')
+ // nasceu, e foi o único que quebrou o shell — abrindo o #app como flex-row e
+ // inserindo o miolo depois do rodapé. Ausência de um módulo numa lista de
+ // gate é a forma mais barata de um defeito passar.
+-const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'equipes', 'gestao']
++const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'equipes', 'gestao', 'bio']
+ 
+ // Renderizadores dos 4 módulos no escopo da fase. maquinas e transportes não
+ // entram aqui: o critério de sucesso 5 pede que eles não regridam, não que
+diff --git a/tests/modulos-caminhos.test.js b/tests/modulos-caminhos.test.js
+index 6926aae..74f0706 100644
+--- a/tests/modulos-caminhos.test.js
++++ b/tests/modulos-caminhos.test.js
+@@ -33,7 +33,7 @@ const RAIZ = path.join(__dirname, '..')
+ // o modulo: medida contra os 9 modulos reais, ela devolve exatamente as
+ // referencias verdadeiras de cada um, com zero falso positivo -- inclusive na
+ // calibracao, que tem uma lib de QR embutida com fragmentos multilinha.
+-const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'calibracao', 'refrigeracao', 'gestao']
++const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'calibracao', 'refrigeracao', 'gestao', 'bio']
+ 
+ function referenciasLocais(html) {
+   const refs = []
+diff --git a/tests/shell.test.js b/tests/shell.test.js
+index 4a3bfb6..01cffd1 100644
+--- a/tests/shell.test.js
++++ b/tests/shell.test.js
+@@ -133,7 +133,7 @@ const RAIZ = path.join(__dirname, '..')
+ 
+ // Os módulos que consomem o shell. `equipes` está aqui de propósito: ele
+ // ficou de fora da lista do gate de 375px, e foi o único que quebrou.
+-const CONSOMEM_SHELL = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'mapa', 'equipes', 'gestao']
++const CONSOMEM_SHELL = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'mapa', 'equipes', 'gestao', 'bio']
+ 
+ function fontesDo(modulo) {
+   const dir = path.join(RAIZ, modulo)
+diff --git a/vercel.json b/vercel.json
+index 34ebbf0..1f626d8 100644
+--- a/vercel.json
++++ b/vercel.json
+@@ -12,6 +12,7 @@
+     { "source": "/mapa",         "destination": "/mapa/index.html" },
+     { "source": "/calibracao",   "destination": "/calibracao/index.html" },
+     { "source": "/equipes",      "destination": "/equipes/index.html" },
+-    { "source": "/gestao",       "destination": "/gestao/index.html" }
++    { "source": "/gestao",       "destination": "/gestao/index.html" },
++    { "source": "/bio",          "destination": "/bio/index.html" }
+   ]
+ }
+-- 
+2.43.0
+

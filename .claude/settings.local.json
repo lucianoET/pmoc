@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c 'import json;print\\(json.load\\(open\\('\\\\''/tmp/claude-1000/-home-luc-Downloads-pmoc-overlay/15989243-7481-4662-8048-c9b7ef8b48f9/scratchpad/tok.json'\\\\''\\)\\)['\\\\''access_token'\\\\'']\\)')",
+      "Bash(python3 -c ' *)",
+      "mcp__aef383c6-a30d-4b6f-bbf6-3f5881f6b412__list_tables"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
+}

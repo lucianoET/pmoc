@@ -28,10 +28,12 @@ import { MESES, htmlCalendario } from '../shared/calendario.js'
 import { cartaoIndicador } from '../shared/indicadores.js'
 import { classificarAbc } from '../shared/abc.js'
 
-// ── CONFIG: shared/supabase-config.js descobre a configuração dos outros
-// cinco módulos lendo este arquivo por expressão regular — as duas
-// constantes abaixo continuam declaradas por isso, mesmo que o cliente
-// Supabase deste módulo seja criado por criarClienteSupabase().
+// ── CONFIG: o endereço do banco passou a ser DECLARADO em
+// shared/supabase-env.js — as duas constantes abaixo são espelho, mantido
+// porque este módulo é o resgate de shared/supabase-config.js se aquele
+// arquivo chegar vazio num deploy parcial. tests/supabase-env.test.js
+// compara os literais caractere a caractere: trocar a chave aqui e não lá
+// (ou o contrário) falha o gate em vez de falhar em produção.
 const SUPA_URL = 'https://thoaqipyhfmromsgzmjs.supabase.co'
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRob2FxaXB5aGZtcm9tc2d6bWpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwNjk5NTksImV4cCI6MjEwMTY0NTk1OX0.1Ig6ijb6SKgeQRgGwM54MyzlVr-n_feSAxaFTwbHRGY'
 // ─────────────────────────────────────────────────────────────────

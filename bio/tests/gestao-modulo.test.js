@@ -302,15 +302,10 @@ test('o portal ganhou um card para /gestao, sem mexer nos que já existiam', () 
   assert.equal(destinos.filter(d => d === '/gestao').length, 1,
     'o portal precisa de exatamente um card apontando para /gestao')
   assert.deepStrictEqual(destinos, ['/refrigeracao', '/maquinas', '/transportes', '/eletrica',
-    '/fonoclama', '/predial', '/mapa', '/equipes', '/gestao', '/paiois', '/calibracao'],
-    'a lista de cards do portal mudou além do acréscimo de /gestao')
-  // O recorte termina no PRÓXIMO card, não num destino nomeado: com o
-  // nome fixo, entrar um módulo entre /gestao e /calibracao fazia o
-  // trecho verificado passar a conter dois cards em silêncio — foi o que
-  // aconteceu quando /paiois entrou.
-  const inicio = portal.indexOf('href="/gestao"')
-  const proximo = portal.indexOf('<a class="card"', inicio)
-  const cartao = portal.slice(inicio, proximo === -1 ? portal.length : proximo)
+    '/fonoclama', '/predial', '/mapa', '/equipes', '/gestao', '/bio', '/calibracao'],
+    // /bio entrou em 13/09/2026 — o gate aprendeu o fato novo, nenhum caso apagado.
+    'a lista de cards do portal mudou além dos acréscimos de /gestao e /bio')
+  const cartao = portal.slice(portal.indexOf('href="/gestao"'), portal.indexOf('href="/calibracao"'))
   for (const classe of ['ico', 'nm', 'ds', 'tags']) {
     assert.match(cartao, new RegExp(`class="${classe}"`), `o card novo não segue o formato dos outros (falta .${classe})`)
   }

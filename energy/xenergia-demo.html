@@ -1,0 +1,1866 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>xEnergia — Painel de Eficiência Energética e Hídrica | CMASM</title>
+<style>
+/* ─────────────────────────────────────────────────────────────────────────
+   Tokens do Padrão Digital de Governo (DSGOV / govbr-ds v3.7.0)
+   Reimplementados localmente para operação sem dependência de CDN.
+   Ver nota "Por que sem CDN" na aba Conceitos.
+   ───────────────────────────────────────────────────────────────────────── */
+:root{
+  --color-primary:#1351b4;
+  --color-primary-dark:#0c326f;
+  --color-primary-light:#2670e8;
+  --color-highlight:#ffcd07;
+  --color-success:#168821;
+  --color-warning:#fa7d1e;
+  --color-danger:#e52207;
+  --color-info:#155bcb;
+
+  --pure-100:#ffffff;
+  --gray-1:#fbfbfb;
+  --gray-2:#f8f8f8;
+  --gray-3:#ededed;
+  --gray-5:#cccccc;
+  --gray-7:#888888;
+  --gray-9:#333333;
+
+  --agua:#1c7293;
+  --energia:#c8791e;
+
+  --font-family-base:'Rawline','Raleway',system-ui,-apple-system,'Segoe UI',Arial,sans-serif;
+  --font-size-base:14px;
+
+  --spacing-1x:8px; --spacing-2x:16px; --spacing-3x:24px; --spacing-4x:32px;
+  --radius:8px;
+  --shadow:0 1px 4px rgba(0,0,0,.10);
+}
+*{box-sizing:border-box}
+html{font-size:var(--font-size-base)}
+body{
+  margin:0;background:var(--gray-2);color:var(--gray-9);
+  font-family:var(--font-family-base);line-height:1.5;
+}
+a{color:var(--color-primary)}
+:focus-visible{outline:3px solid var(--color-highlight);outline-offset:2px}
+
+/* ── header ── */
+.hdr{background:var(--pure-100);border-bottom:1px solid var(--gray-5)}
+.hdr-in{max-width:1280px;margin:0 auto;padding:var(--spacing-2x) var(--spacing-3x);
+  display:flex;align-items:center;gap:var(--spacing-2x);flex-wrap:wrap}
+.hdr-mark{width:38px;height:38px;border-radius:6px;background:var(--color-primary);
+  color:#fff;display:grid;place-items:center;font-weight:800;font-size:15px;letter-spacing:.5px;flex-shrink:0}
+.hdr-title{font-weight:700;font-size:1.15rem;line-height:1.2}
+.hdr-sub{font-size:.8rem;color:var(--gray-7)}
+.hdr-spacer{flex:1}
+.tag{display:inline-block;padding:3px 10px;border-radius:100px;font-size:.72rem;
+  font-weight:700;letter-spacing:.4px;text-transform:uppercase}
+.tag-demo{background:#fff3e0;color:#8a4a06;border:1px solid var(--color-warning)}
+
+/* ── layout ── */
+.wrap{max-width:1280px;margin:0 auto;padding:var(--spacing-3x)}
+.tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:2px solid var(--gray-5);margin-bottom:var(--spacing-3x)}
+.tab{appearance:none;border:0;background:transparent;padding:12px 18px;font:inherit;
+  font-weight:600;color:var(--gray-7);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+.tab:hover{color:var(--color-primary)}
+.tab[aria-selected="true"]{color:var(--color-primary-dark);border-bottom-color:var(--color-primary)}
+.panel[hidden]{display:none}
+
+.card{background:var(--pure-100);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:var(--spacing-3x);margin-bottom:var(--spacing-3x)}
+.card h2{margin:0 0 4px;font-size:1.05rem}
+.card h3{margin:var(--spacing-3x) 0 4px;font-size:.95rem}
+.card .hint{margin:0 0 var(--spacing-2x);font-size:.85rem;color:var(--gray-7)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--spacing-3x)}
+@media(max-width:960px){.grid2{grid-template-columns:1fr}}
+
+/* ── KPIs ── */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:var(--spacing-2x)}
+.kpi{background:var(--pure-100);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:16px 18px;border-left:4px solid var(--color-primary);position:relative;text-align:left;
+  font:inherit;cursor:pointer;width:100%;border-top:0;border-right:0;border-bottom:0}
+.kpi:hover{box-shadow:0 3px 10px rgba(0,0,0,.14)}
+.kpi.agua{border-left-color:var(--agua)}
+.kpi.energia{border-left-color:var(--energia)}
+.kpi.danger{border-left-color:var(--color-danger)}
+.kpi.success{border-left-color:var(--color-success)}
+.kpi-label{display:block;font-size:.72rem;color:var(--gray-7);text-transform:uppercase;letter-spacing:.4px;
+  font-weight:700;padding-right:20px;min-height:2.1em}
+.kpi-value{display:block;font-size:1.7rem;font-weight:800;line-height:1.15;margin-top:2px;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.kpi-value small{display:inline;font-size:.8rem;font-weight:600;color:var(--gray-7);white-space:normal}
+.kpi-sub{display:block;font-size:.78rem;color:var(--gray-7);margin-top:6px;line-height:1.35}
+.kpi-sub.alerta{color:var(--color-danger);font-weight:600}
+.kpi-sub.ok{color:var(--color-success);font-weight:600}
+.kpi-q{position:absolute;top:12px;right:12px;width:18px;height:18px;border-radius:50%;
+  background:var(--gray-3);color:var(--gray-7);font-size:11px;font-weight:800;display:grid;place-items:center}
+.kpi:hover .kpi-q{background:var(--color-primary);color:#fff}
+
+/* ── mensagens ── */
+.msg{display:flex;gap:12px;border-radius:var(--radius);padding:14px 16px;margin-bottom:var(--spacing-3x);
+  font-size:.88rem;align-items:flex-start}
+.msg b{display:block;margin-bottom:2px}
+.msg-warning{background:#fff4e5;border-left:4px solid var(--color-warning)}
+.msg-danger{background:#fdecea;border-left:4px solid var(--color-danger)}
+.msg-info{background:#e8f0fb;border-left:4px solid var(--color-info)}
+.msg-icon{font-weight:800;font-size:1.1rem;line-height:1.3}
+
+/* ── controles ── */
+.ctrl{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;
+  background:var(--gray-1);border:1px solid var(--gray-3);border-radius:var(--radius);
+  padding:14px 16px;margin-bottom:var(--spacing-2x)}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:.75rem;font-weight:700;color:var(--gray-7);text-transform:uppercase;letter-spacing:.3px}
+.field input[type=number]{width:110px;padding:7px 9px;border:1px solid var(--gray-5);
+  border-radius:4px;font:inherit;background:#fff}
+.chks{display:flex;gap:14px;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:6px;font-size:.86rem;font-weight:600;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--color-primary)}
+
+/* ── tabela ── */
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{border:1px solid var(--gray-5);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--gray-3);font-weight:700}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.alerta td{background:#fdecea}
+
+/* ── gráficos ── */
+.chart{width:100%;height:auto;display:block}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:.8rem;margin-top:8px;color:var(--gray-9)}
+.legend span{display:flex;align-items:center;gap:6px}
+.swatch{width:14px;height:4px;border-radius:2px;display:inline-block}
+.swatch.dot{width:10px;height:10px;border-radius:50%}
+
+/* ── conceitos ── */
+.conc{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--spacing-2x)}
+.conc article{background:var(--pure-100);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 20px}
+.conc h3{margin:0 0 6px;font-size:.98rem;color:var(--color-primary-dark)}
+.formula{font-family:ui-monospace,'Cascadia Code',Consolas,monospace;font-size:.82rem;
+  background:var(--gray-2);border:1px solid var(--gray-3);border-radius:4px;padding:7px 10px;margin:8px 0}
+.conc p{margin:6px 0;font-size:.86rem}
+.origem{font-size:.78rem;color:var(--gray-7);border-top:1px solid var(--gray-3);padding-top:8px;margin-top:10px}
+
+/* ── painel lateral de conceito ── */
+.drawer{position:fixed;top:0;right:0;width:min(420px,92vw);height:100%;background:#fff;
+  box-shadow:-4px 0 20px rgba(0,0,0,.2);padding:24px;overflow-y:auto;z-index:50;
+  transform:translateX(100%);transition:transform .22s ease}
+.drawer.open{transform:translateX(0)}
+.drawer h3{margin:0 0 2px;font-size:1.05rem;color:var(--color-primary-dark)}
+.drawer .close{position:absolute;top:14px;right:14px;border:1px solid var(--gray-5);background:#fff;
+  border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;line-height:1}
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}
+.backdrop.open{display:block}
+@media(prefers-reduced-motion:reduce){.drawer{transition:none}}
+
+pre{background:var(--gray-9);color:#e8e8e8;border-radius:6px;padding:14px;overflow-x:auto;
+  font-size:.78rem;line-height:1.55;font-family:ui-monospace,'Cascadia Code',Consolas,monospace}
+details{border:1px solid var(--gray-5);border-radius:var(--radius);padding:12px 16px;background:#fff}
+summary{font-weight:700;cursor:pointer}
+footer{max-width:1280px;margin:0 auto;padding:0 var(--spacing-3x) var(--spacing-4x);
+  font-size:.78rem;color:var(--gray-7)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-in">
+    <div class="hdr-mark" aria-hidden="true">xE</div>
+    <div>
+      <div class="hdr-title">xEnergia — Eficiência Energética e Hídrica</div>
+      <div class="hdr-sub">CMASM · Divisão de Manutenção Especializada</div>
+    </div>
+    <div class="hdr-spacer"></div>
+    <span class="tag tag-demo">Demonstração</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="msg msg-warning" role="note">
+    <span class="msg-icon" aria-hidden="true">!</span>
+    <div>
+      <b>Este painel é uma demonstração. Nem todo número aqui é real.</b>
+      <span id="proc-dados"></span>
+    </div>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Seções do painel">
+    <button class="tab" role="tab" id="t-geral"  aria-controls="p-geral"  aria-selected="true">Visão geral</button>
+    <button class="tab" role="tab" id="t-energia" aria-controls="p-energia" aria-selected="false">Energia</button>
+    <button class="tab" role="tab" id="t-agua"   aria-controls="p-agua"   aria-selected="false">Água</button>
+    <button class="tab" role="tab" id="t-clima"  aria-controls="p-clima"  aria-selected="false">Climatização</button>
+    <button class="tab" role="tab" id="t-conc"   aria-controls="p-conc"   aria-selected="false">Conceitos e integração</button>
+  </div>
+
+  <!-- ═══════════════ VISÃO GERAL ═══════════════ -->
+  <section class="panel" id="p-geral" role="tabpanel" aria-labelledby="t-geral">
+    <div class="kpis" id="kpis-geral"></div>
+
+    <div class="card" style="margin-top:24px">
+      <h2>Consumo bruto × consumo normalizado</h2>
+      <p class="hint">Marque as variáveis de normalização e observe a conclusão mudar. É o ponto central do método:
+        comparar consumo bruto entre meses mede clima e efetivo, não eficiência.</p>
+
+      <div class="ctrl">
+        <div class="field">
+          <label id="lbl-norm">Normalizar por</label>
+          <div class="chks" role="group" aria-labelledby="lbl-norm">
+            <label class="chk"><input type="checkbox" id="n-area">Área útil (m²)</label>
+            <label class="chk"><input type="checkbox" id="n-gd">Graus-dia de refrigeração</label>
+            <label class="chk"><input type="checkbox" id="n-efet">Efetivo presente</label>
+            <label class="chk"><input type="checkbox" id="n-dias">Dias úteis</label>
+          </div>
+        </div>
+      </div>
+
+      <svg class="chart" id="cht-norm" viewBox="0 0 760 300" role="img"
+           aria-label="Série de consumo bruto e consumo normalizado, base 100"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--energia)"></i> Consumo bruto (índice)</span>
+        <span><i class="swatch" style="background:var(--color-primary)"></i> Consumo normalizado (índice)</span>
+      </div>
+      <div class="msg msg-info" id="veredito-norm" style="margin-top:18px" role="status"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Situação por frente</h2>
+        <p class="hint">O que já é calculável e o que está bloqueado por falta de medição.</p>
+        <table>
+          <caption class="sr">Situação dos indicadores por frente</caption>
+          <thead><tr><th scope="col">Indicador</th><th scope="col">Situação</th></tr></thead>
+          <tbody id="tb-situacao"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Parque de climatização</h2>
+        <p class="hint">Inventário real do PMOC Refrigeração — 183 registros, exportação de 29/08/2026.</p>
+        <svg class="chart" id="cht-parque" viewBox="0 0 380 230" role="img"
+             aria-label="Equipamentos de climatização por tipo"></svg>
+        <div class="legend">
+          <span><i class="swatch dot" style="background:var(--color-primary)"></i> Operante</span>
+          <span><i class="swatch dot" style="background:var(--gray-5)"></i> Inoperante</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ ENERGIA ═══════════════ -->
+  <section class="panel" id="p-energia" role="tabpanel" aria-labelledby="t-energia" hidden>
+    <div class="kpis" id="kpis-energia"></div>
+
+    <div class="card" style="margin-top:24px">
+      <h2>Curva de carga — dia útil típico</h2>
+      <p class="hint">A faixa destacada é a janela de madrugada. O menor valor observado nela é o
+        <strong>consumo de base</strong>: a carga que permanece ligada sem ninguém no prédio.</p>
+      <svg class="chart" id="cht-carga" viewBox="0 0 760 300" role="img"
+           aria-label="Curva de carga de 24 horas em quilowatts"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--energia)"></i> Potência (kW)</span>
+        <span><i class="swatch" style="background:var(--color-danger)"></i> Consumo de base</span>
+      </div>
+      <div class="msg msg-warning" id="veredito-base" style="margin-top:18px" role="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Demanda contratada × registrada</h2>
+      <p class="hint">Demanda contratada é paga integralmente, haja ou não consumo. Acima da tolerância de 5% incide ultrapassagem.</p>
+      <svg class="chart" id="cht-demanda" viewBox="0 0 760 300" role="img"
+           aria-label="Demanda registrada por mês comparada à demanda contratada"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--color-primary)"></i> Demanda registrada</span>
+        <span><i class="swatch" style="background:var(--color-danger)"></i> Ultrapassagem</span>
+        <span><i class="swatch" style="background:var(--gray-9)"></i> Contratada / tolerância</span>
+      </div>
+      <div class="msg msg-danger" id="veredito-demanda" style="margin-top:18px" role="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Linha de base energética — regressão consumo × graus-dia</h2>
+      <p class="hint">Método da ISO 50006. Ajusta-se um modelo do consumo esperado em função do clima; o
+        desvio entre o real e o esperado é o que efetivamente mede desempenho.</p>
+      <div class="grid2">
+        <div>
+          <svg class="chart" id="cht-regr" viewBox="0 0 380 300" role="img"
+               aria-label="Dispersão do consumo mensal contra graus-dia com reta ajustada"></svg>
+          <div class="legend"><span><i class="swatch dot" style="background:var(--color-primary)"></i> Mês</span>
+            <span><i class="swatch" style="background:var(--color-danger)"></i> Linha de base</span></div>
+        </div>
+        <div>
+          <svg class="chart" id="cht-resid" viewBox="0 0 380 300" role="img"
+               aria-label="Desvio mensal em relação à linha de base"></svg>
+          <div class="legend"><span><i class="swatch" style="background:var(--color-success)"></i> Abaixo do esperado</span>
+            <span><i class="swatch" style="background:var(--color-danger)"></i> Acima do esperado</span></div>
+        </div>
+      </div>
+      <div class="msg msg-info" id="veredito-regr" style="margin-top:18px" role="status"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ ÁGUA ═══════════════ -->
+  <section class="panel" id="p-agua" role="tabpanel" aria-labelledby="t-agua" hidden>
+    <div class="kpis" id="kpis-agua"></div>
+
+    <div class="card" style="margin-top:24px">
+      <h2>Nível do reservatório — 24 h</h2>
+      <p class="hint">Série do sensor ultrassônico do xAguada. Na janela de madrugada, com as bombas paradas,
+        a queda de nível é consumo real da rede — ou vazamento.</p>
+      <svg class="chart" id="cht-nivel" viewBox="0 0 760 300" role="img"
+           aria-label="Volume do reservatório ao longo de 24 horas"></svg>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--agua)"></i> Volume (m³)</span>
+        <span><i class="swatch" style="background:var(--color-danger)"></i> Janela de cálculo da VMN</span>
+      </div>
+      <div class="msg msg-danger" id="veredito-vmn" style="margin-top:18px" role="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Balanço hídrico — o que falta medir</h2>
+      <p class="hint">Sem hidrômetro por prédio, o lado do consumo é desconhecido e o índice de perdas
+        não pode ser calculado. Esta é a lacuna nº 1 do levantamento.</p>
+      <svg class="chart" id="cht-balanco" viewBox="0 0 760 200" role="img"
+           aria-label="Balanço hídrico mensal com parcela não medida"></svg>
+      <div class="msg msg-warning" style="margin-top:18px">
+        <span class="msg-icon" aria-hidden="true">!</span>
+        <div><b>Índice de perdas: não calculável.</b>
+          A entrada é macromedida pela fatura, mas não há micromedição setorial.
+          A parcela clara não é "perda comprovada" — é <em>indeterminação</em>.
+          A VMN é hoje a única evidência objetiva de vazamento disponível.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ CLIMATIZAÇÃO ═══════════════ -->
+  <section class="panel" id="p-clima" role="tabpanel" aria-labelledby="t-clima" hidden>
+    <div class="msg msg-info">
+      <span class="msg-icon" aria-hidden="true">i</span>
+      <div><b>Esta aba usa o inventário real.</b>
+        183 registros exportados do PMOC Refrigeração em 29/08/2026, com BTU, estado, criticidade,
+        marcação de inverter e de redundância. Só as premissas de eficiência elétrica (EER) são estimadas —
+        e são editáveis. As abas de energia e água seguem simuladas.</div>
+    </div>
+
+    <div class="card">
+      <h2>Retrato do parque</h2>
+      <p class="hint">Contagem e capacidade por tipo, direto do arquivo.</p>
+      <div class="kpis" id="kpis-parque"></div>
+      <table style="margin-top:24px">
+        <caption class="sr">Inventário por tipo</caption>
+        <thead><tr>
+          <th scope="col">Tipo</th><th scope="col">Total</th><th scope="col">Operante</th>
+          <th scope="col">Inoperante</th><th scope="col">BTU instalado</th>
+          <th scope="col">BTU parado</th><th scope="col">Inverter</th><th scope="col">Redundante</th>
+        </tr></thead>
+        <tbody id="tb-parque"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Onde está o problema</h2>
+      <p class="hint">Prédios ordenados por capacidade parada. A leitura por prédio muda a prioridade
+        em relação à leitura por tipo.</p>
+      <svg class="chart" id="cht-predio" viewBox="0 0 760 340" role="img"
+           aria-label="Capacidade instalada e parada por prédio"></svg>
+      <div class="legend">
+        <span><i class="swatch dot" style="background:var(--color-primary)"></i> Operante</span>
+        <span><i class="swatch dot" style="background:var(--color-danger)"></i> Inoperante</span>
+      </div>
+      <div class="msg msg-danger" id="veredito-predio" style="margin-top:18px" role="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Criticidade × estado</h2>
+      <p class="hint">Cruzamento que o inventário permite e que a contagem simples de inoperantes esconde.</p>
+      <table>
+        <caption class="sr">Equipamentos por criticidade e estado</caption>
+        <thead><tr><th scope="col">Criticidade</th><th scope="col">Total</th>
+          <th scope="col">Operante</th><th scope="col">Inoperante</th><th scope="col">% parado</th></tr></thead>
+        <tbody id="tb-crit"></tbody>
+      </table>
+      <div class="msg msg-danger" id="veredito-crit" style="margin-top:18px" role="status"></div>
+      <h3>Equipamentos críticos parados</h3>
+      <table>
+        <caption class="sr">Lista de equipamentos de criticidade crítica fora de operação</caption>
+        <thead><tr><th scope="col">Prédio</th><th scope="col">Local</th><th scope="col">Tipo</th>
+          <th scope="col">BTU</th><th scope="col">Regime</th></tr></thead>
+        <tbody id="tb-critlist"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Estimador de carga</h2>
+      <p class="hint">Agora calculado a partir do BTU real de cada equipamento, e não de uma potência média por tipo.
+        A carga redundante é abatida antes da diversidade, porque são efeitos distintos.</p>
+      <div class="ctrl" id="ctrl-eer"></div>
+      <div class="ctrl">
+        <div class="field"><label for="i-ganho">Ganho do inverter (×)</label>
+          <input type="number" id="i-ganho" min="1" max="1.6" step="0.05" value="1.20"></div>
+        <div class="field"><label for="i-divers">Diversidade térmica</label>
+          <input type="number" id="i-divers" min="0.1" max="1" step="0.05" value="0.70"></div>
+        <div class="field"><label for="i-horas">Horas equivalentes / ano</label>
+          <input type="number" id="i-horas" min="200" max="8760" step="100" value="2500"></div>
+      </div>
+      <div class="kpis" id="kpis-clima"></div>
+      <div class="msg" id="veredito-coerencia" style="margin-top:18px" role="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Redundância e criticidade</h2>
+      <p class="hint">Conjuntos identificados pela marcação de redundância no inventário, agrupados por prédio e local.</p>
+      <div class="kpis" id="kpis-red"></div>
+      <table style="margin-top:24px">
+        <caption class="sr">Conjuntos redundantes e sua integridade</caption>
+        <thead><tr><th scope="col">Prédio</th><th scope="col">Local</th><th scope="col">Máquinas</th>
+          <th scope="col">Operantes</th><th scope="col">Regime</th><th scope="col">Situação</th></tr></thead>
+        <tbody id="tb-red"></tbody>
+      </table>
+      <div class="msg msg-danger" id="veredito-red" style="margin-top:18px" role="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Penetração de tecnologia inverter</h2>
+      <p class="hint">Agora com a marcação real do inventário. O denominador muda a conclusão —
+        por isso os quatro escopos aparecem lado a lado.</p>
+      <div class="ctrl">
+        <label class="chk"><input type="checkbox" id="inv-oper">Considerar apenas equipamentos operantes</label>
+      </div>
+      <div class="kpis" id="kpis-inv"></div>
+      <table style="margin-top:24px">
+        <caption class="sr">Índice de penetração inverter por escopo</caption>
+        <thead><tr><th scope="col">Escopo</th><th scope="col">Composição</th>
+          <th scope="col">Inverter</th><th scope="col">Base</th><th scope="col">IPI</th>
+          <th scope="col">Para que serve</th></tr></thead>
+        <tbody id="tb-inv"></tbody>
+      </table>
+      <div class="msg msg-info" id="veredito-inv" style="margin-top:18px" role="status"></div>
+
+      <h3>Vale substituir o que já funciona?</h3>
+      <p class="hint">Retorno simples da troca de um equipamento de velocidade fixa por inverter equivalente.</p>
+      <div class="ctrl">
+        <div class="field"><label for="i-econ">Economia esperada (%)</label>
+          <input type="number" id="i-econ" min="5" max="60" step="1" value="32"></div>
+        <div class="field"><label for="i-horas-ac">Horas de uso / ano</label>
+          <input type="number" id="i-horas-ac" min="100" max="8760" step="100" value="2080"></div>
+        <div class="field"><label for="i-kw">Potência média on-off (kW)</label>
+          <input type="number" id="i-kw" min="0.3" max="30" step="0.1" value="3.4"></div>
+        <div class="field"><label for="i-preco">Custo de troca (R$)</label>
+          <input type="number" id="i-preco" min="500" step="100" value="7000"></div>
+      </div>
+      <div class="msg" id="veredito-payback" role="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Qualidade do inventário</h2>
+      <p class="hint">Verificações automáticas sobre o próprio arquivo. Um indicador só vale o que vale o cadastro.</p>
+      <table>
+        <caption class="sr">Achados de consistência do inventário</caption>
+        <thead><tr><th scope="col">Achado</th><th scope="col">Ocorrências</th><th scope="col">Efeito</th></tr></thead>
+        <tbody id="tb-qual"></tbody>
+      </table>
+      <h3>Completude de campos</h3>
+      <svg class="chart" id="cht-compl" viewBox="0 0 760 230" role="img"
+           aria-label="Percentual de preenchimento por campo do inventário"></svg>
+      <div class="msg msg-warning" style="margin-top:12px">
+        <span class="msg-icon" aria-hidden="true">!</span>
+        <div><b>São dois cadastros na mesma tabela, e o segundo ainda não foi feito.</b>
+          O inventário está completo no que serve à gestão de manutenção — criticidade, estado, local —
+          e vazio no que serve à gestão de energia. A corrente nominal está preenchida em todos os
+          183 registros, mas com valor zero em todos eles, e só um registro tem última manutenção.
+          Enquanto isso não mudar, a potência elétrica continuará sendo premissa de EER em vez de medida.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ CONCEITOS ═══════════════ -->
+  <section class="panel" id="p-conc" role="tabpanel" aria-labelledby="t-conc" hidden>
+    <div class="card">
+      <h2>Glossário dos indicadores</h2>
+      <p class="hint">Cada indicador do painel, com a fórmula, o motivo de existir e a origem do dado.
+        Os cartões de KPI abrem esta mesma explicação.</p>
+      <div class="conc" id="conc-lista"></div>
+    </div>
+
+    <div class="card">
+      <h2>Como plugar dados reais</h2>
+      <p class="hint">Toda a camada de dados está isolada no objeto <code>DADOS</code>, no topo do arquivo.
+        Substituir por consultas ao banco não exige tocar em nenhum gráfico.</p>
+
+      <h3>Esquema mínimo</h3>
+      <pre><code>-- Leituras brutas: energia, água, qualquer grandeza
+create table leitura (
+  id           bigserial primary key,
+  ponto_id     int  not null references ponto_medicao(id),
+  instante     timestamptz not null,
+  grandeza     text not null,   -- 'kwh' | 'kw' | 'm3' | 'nivel_m' | 'fp'
+  valor        numeric not null,
+  unique (ponto_id, instante, grandeza)
+);
+
+-- Pontos de medição: prédio, quadro, reservatório, entrada geral
+create table ponto_medicao (
+  id        serial primary key,
+  nome      text not null,
+  tipo      text not null,       -- 'energia' | 'agua'
+  escopo    text not null,       -- 'geral' | 'predio' | 'quadro' | 'reservatorio'
+  local_id  int references local(id)
+);
+
+-- Variáveis de normalização: sem elas não há EnPI
+create table variavel_periodo (
+  competencia   date primary key,   -- 1º dia do mês
+  area_util_m2  numeric not null,
+  efetivo_medio numeric not null,
+  graus_dia     numeric not null,
+  dias_uteis    int     not null
+);
+
+-- Fatura: fonte primária da Fase 1, anterior a qualquer sensor
+create table fatura (
+  competencia        date not null,
+  tipo               text not null,      -- 'energia' | 'agua'
+  consumo            numeric not null,
+  demanda_registrada numeric,
+  demanda_contratada numeric,
+  fator_potencia     numeric,
+  valor_total        numeric,
+  primary key (competencia, tipo)
+);</code></pre>
+
+      <h3>Substituindo a camada de demonstração</h3>
+      <pre><code>// No topo do arquivo, trocar o objeto DADOS por:
+async function carregarDados(){
+  const { data: faturas } = await supabase
+    .from('fatura').select('*')
+    .eq('tipo','energia').order('competencia');
+
+  const { data: vars } = await supabase
+    .from('variavel_periodo').select('*').order('competencia');
+
+  return {
+    meses:   faturas.map(f =&gt; rotuloMes(f.competencia)),
+    consumo: faturas.map(f =&gt; Number(f.consumo)),
+    demandaRegistrada: faturas.map(f =&gt; Number(f.demanda_registrada)),
+    grausDia: vars.map(v =&gt; Number(v.graus_dia)),
+    efetivo:  vars.map(v =&gt; Number(v.efetivo_medio)),
+    // ...
+  };
+}</code></pre>
+
+      <h3>Campo novo exigido pelo indicador inverter</h3>
+      <pre><code>-- O inventário atual do PMOC não distingue velocidade fixa de inverter.
+-- Sem estes campos o IPI não sai do papel.
+alter table equipamento_climatizacao
+  add column tecnologia_compressor text
+    check (tecnologia_compressor in
+      ('on_off','inverter','scroll_digital','vsd','desconhecido'))
+    default 'desconhecido',
+  add column ence_classe   text,      -- A..E, da etiqueta do equipamento
+  add column ano_fabricacao int;
+
+-- Índice de penetração inverter por escopo
+select
+  count(*) filter (where tecnologia_compressor = 'inverter')::numeric
+    / nullif(count(*),0) as ipi
+from equipamento_climatizacao
+where situacao = 'operante'
+  and tipo in ('SPLIT','PISO/TETO');   -- escopo de gestão
+
+-- Fila de levantamento: o que ainda não foi para campo
+select tipo, count(*) as pendentes
+from equipamento_climatizacao
+where tecnologia_compressor = 'desconhecido'
+group by tipo order by 2 desc;</code></pre>
+
+      <h3>Campos de redundância</h3>
+      <pre><code>-- Sem isto, "35 inoperantes" e um numero solto: nao se sabe quais deixaram
+-- um ambiente sem reserva.
+create table grupo_redundancia (
+  id       serial primary key,
+  nome     text not null,          -- 'Paiol 3', 'F21 - Sala de baterias'
+  local_id int  references local(id),
+  regime   text not null           -- 'rodizio' | 'principal_reserva'
+    check (regime in ('rodizio','principal_reserva'))
+);
+
+alter table equipamento_climatizacao
+  add column grupo_id int references grupo_redundancia(id),
+  add column papel    text check (papel in ('principal','reserva','unico'))
+                           default 'unico';
+
+-- Conjuntos que perderam a reserva: fila de reparo por criticidade,
+-- e nao por ordem de abertura da OS.
+select g.nome, g.regime,
+       count(*) filter (where e.situacao = 'operante') as operantes,
+       count(*)                                        as maquinas
+from grupo_redundancia g
+join equipamento_climatizacao e on e.grupo_id = g.id
+group by g.id, g.nome, g.regime
+having count(*) filter (where e.situacao = 'operante') &lt; count(*)
+order by g.nome;
+
+-- Carga que NAO entra na demanda simultanea (reserva estrutural)
+select sum(potencia_kw) as carga_reserva_kw
+from equipamento_climatizacao
+where papel = 'reserva' and situacao = 'operante';</code></pre>
+
+      <h3>Cálculo da VMN direto do xAguada</h3>
+      <pre><code>-- Vazão mínima noturna a partir da série de nível do reservatório.
+-- Só é válida na janela em que as bombas estão comprovadamente paradas.
+with janela as (
+  select instante, valor as volume_m3
+  from leitura
+  where ponto_id = :reservatorio
+    and grandeza = 'nivel_m3'
+    and instante::time between '02:00' and '04:00'
+    and instante::date = :dia
+)
+select
+  (max(volume_m3) - min(volume_m3)) * 1000
+  / extract(epoch from (max(instante) - min(instante))) * 3600
+  as vmn_litros_hora
+from janela;</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>Notas de implementação</h2>
+      <details>
+        <summary>Por que este arquivo não usa CDN</summary>
+        <p style="font-size:.88rem">O Padrão Digital de Governo é distribuído via <code>@govbr-ds/core</code> por CDN
+          (jsDelivr, SERPRO, Google Fonts). Numa rede de OM, depender de três domínios externos para a interface
+          renderizar é risco desnecessário: se o proxy bloquear, o painel abre sem estilo nenhum.</p>
+        <p style="font-size:.88rem">A opção adotada foi reimplementar localmente os <em>tokens</em> do DSGOV — paleta
+          institucional, escala tipográfica, espaçamento em múltiplos de 8 px, linguagem visual dos componentes — e os
+          requisitos do eMAG. O arquivo é autocontido e funciona offline, como o PMOC Refrigeração v2.8.
+          A família tipográfica é declarada como <code>'Rawline','Raleway',system-ui</code>: se a aplicação hospedeira
+          já carregar as fontes oficiais, elas são usadas; caso contrário, cai na fonte do sistema sem quebrar o layout.</p>
+        <p style="font-size:.88rem">Se a preferência for aderir ao pacote oficial, a troca é direta: incluir o
+          <code>core.min.css</code> e substituir as classes locais pelos componentes <code>br-*</code>.
+          A camada de dados e os gráficos não mudam.</p>
+      </details>
+      <details style="margin-top:12px">
+        <summary>Por que os gráficos são SVG escritos à mão</summary>
+        <p style="font-size:.88rem">Pelo mesmo motivo: nenhuma biblioteca externa. São quatro funções de desenho
+          (linha, barra, dispersão, barra horizontal) somando pouco código e sem dependência a atualizar.
+          Se o volume de séries crescer muito, vale migrar para uma biblioteca — mas aí ela deve ser
+          empacotada junto, não puxada de CDN.</p>
+      </details>
+      <details style="margin-top:12px">
+        <summary>O que falta para isto virar produção</summary>
+        <ul style="font-size:.88rem;padding-left:20px">
+          <li>Digitalizar 24 a 36 meses de fatura — sem isso não há linha de base e o gráfico de regressão é decorativo.</li>
+          <li>Cadastrar área útil por prédio e efetivo mensal na tabela de variáveis; hoje são constantes no código.</li>
+          <li>Confirmar a janela em que as bombas ficam comprovadamente paradas — a VMN só vale nessa condição.</li>
+          <li>Definir o nível de agregação de acesso irrestrito: curva de carga em resolução fina revela ritmo operacional.</li>
+        </ul>
+      </details>
+    </div>
+  </section>
+</div>
+
+<footer>
+  xEnergia · demonstração para integração ao CMASM.ERP / CMMS.ERP · arquivo único, sem dependências externas.
+</footer>
+
+<div class="backdrop" id="backdrop"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-tit" tabindex="-1">
+  <button class="close" id="drawer-close" aria-label="Fechar explicação">&times;</button>
+  <h3 id="drawer-tit"></h3>
+  <div id="drawer-body"></div>
+</aside>
+
+<script>
+"use strict";
+
+/* ══ INVENTÁRIO REAL — PMOC Refrigeração, exportado em 29/08/2026 (183 registros) ══ */
+const INVENTARIO = [{"id":"84","ar":"AZUL","pr":"ACADEMIA","lo":"BARBEARIA","tp":"JANELA","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"83","ar":"AZUL","pr":"ALMOXARIFADO","lo":"ALMOXARIFADO","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"73","ar":"AZUL","pr":"ALOJAMENTO CIVIS","lo":"ALOJAMENTO CIVIS","tp":"PISO/TETO","bt":38000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"69","ar":"AZUL","pr":"ALOJAMENTO DA ACADEMIA","lo":"2SG / 3SG","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"CONSUL","ia":"SEMI"},{"id":"70","ar":"AZUL","pr":"ALOJAMENTO DA ACADEMIA","lo":"2SG / 3SG (DORMITÓRIO)","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"SEMI"},{"id":"71","ar":"AZUL","pr":"ALOJAMENTO DA GRAMA","lo":"2SG / 3SG","tp":"PISO/TETO","bt":36000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"CARRIER","ia":"VELHA"},{"id":"72","ar":"AZUL","pr":"ALOJAMENTO DA GRAMA","lo":"2SG / 3SG (DORMITÓRIO)","tp":"PISO/TETO","bt":60000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"68","ar":"AZUL","pr":"ALOJAMENTO PRAÇAS FEMININO","lo":"DORMITÓRIO","tp":"SPLIT","bt":18000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"VELHA"},{"id":"67","ar":"AZUL","pr":"ALOJAMENTO PRAÇAS FEMININO","lo":"SALA DE ESTAR","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"CONSUL","ia":""},{"id":"66","ar":"AZUL","pr":"ALOJAMENTOS DA ORLA","lo":"CB / MN (DORMITÓRIO)","tp":"PISO/TETO","bt":48000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"62","ar":"AZUL","pr":"ALOJAMENTOS DA ORLA","lo":"SO / 1SG","tp":"PISO/TETO","bt":36000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"64","ar":"AZUL","pr":"ALOJAMENTOS DA ORLA","lo":"2SG / 3SG","tp":"SPLIT","bt":22000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"VELHA"},{"id":"65","ar":"AZUL","pr":"ALOJAMENTOS DA ORLA","lo":"2SG / 3SG (DORMITÓRIO)","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"VELHA"},{"id":"63","ar":"AZUL","pr":"ALOJAMENTOS DA ORLA","lo":"SO / 1SG (DORMITÓRIO)","tp":"SPLIT","bt":48000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"158","ar":"VERMELHA","pr":"ASPIDE I","lo":"SEÇÃO DE MONTAGEM","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"159","ar":"VERMELHA","pr":"ASPIDE II","lo":"SEÇÃO DE MONTAGEM","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"160","ar":"VERMELHA","pr":"ASPIDE II","lo":"SEÇÃO DE TESTES NÍVEL III","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"53","ar":"AZUL","pr":"AUDITÓRIO","lo":"AUDITÓRIO 1","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"54","ar":"AZUL","pr":"AUDITÓRIO","lo":"AUDITÓRIO 2","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"31","ar":"AZUL","pr":"COMANDO","lo":"CFTV","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"ELGIN","ia":"NOVA"},{"id":"20","ar":"AZUL","pr":"COMANDO","lo":"COM. DEP INFRAESTUTURA","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"SEMI"},{"id":"21","ar":"AZUL","pr":"COMANDO","lo":"COM. DEP INFRAESTUTURA","tp":"SPLIT","bt":9000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"SEMI"},{"id":"10","ar":"AZUL","pr":"COMANDO","lo":"COPA DO GABINETE","tp":"SPLIT","bt":9000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"COMFEE","ia":"SEMI"},{"id":"17","ar":"AZUL","pr":"COMANDO","lo":"DEPARTAMENTO DE ADMINISTRAÇÃO(CHEFE DO DEPARTAMENTO)","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"22","ar":"AZUL","pr":"COMANDO","lo":"DEPARTAMENTO DE ARMAS","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"SAMSUNG","ia":"NOVA"},{"id":"23","ar":"AZUL","pr":"COMANDO","lo":"DEPARTAMENTO DE ARMAS(CHEFE DO DEPARTAMENTO)","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"GREE","ia":"VELHA"},{"id":"29","ar":"AZUL","pr":"COMANDO","lo":"DEPARTAMENTO DE INFRAESTRUTURA","tp":"SPLIT","bt":9000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"SEMI"},{"id":"14","ar":"AZUL","pr":"COMANDO","lo":"DEPARTAMENTO DE PESSOAL (DP)","tp":"SPLIT","bt":30000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"15","ar":"AZUL","pr":"COMANDO","lo":"DEPARTAMENTO DE PESSOAL (DP)","tp":"SPLIT","bt":30000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"CONSUL","ia":"NOVA"},{"id":"16","ar":"AZUL","pr":"COMANDO","lo":"DEPARTAMENTO DE PESSOAL (DP)","tp":"SPLIT","bt":0,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"33","ar":"AZUL","pr":"COMANDO","lo":"EXECUÇÃO FINANCEIRA","tp":"SPLIT","bt":9000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"VELHA"},{"id":"34","ar":"AZUL","pr":"COMANDO","lo":"EXECUÇÃO FINANCEIRA","tp":"SPLIT","bt":9000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"SEMI"},{"id":"7","ar":"AZUL","pr":"COMANDO","lo":"GABINETE DA DIRETOR","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"8","ar":"AZUL","pr":"COMANDO","lo":"GABINETE DA DIRETOR(SECRETÁRIA)","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"SEMI"},{"id":"25","ar":"AZUL","pr":"COMANDO","lo":"INFORMÁTICA","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"26","ar":"AZUL","pr":"COMANDO","lo":"INFORMÁTICA","tp":"SPLIT","bt":12000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"27","ar":"AZUL","pr":"COMANDO","lo":"INFORMÁTICA(SERVIDOR)","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"CONSUL","ia":"NOVA"},{"id":"28","ar":"AZUL","pr":"COMANDO","lo":"INFORMÁTICA(SERVIDOR)","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":1,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"CONSUL","ia":"NOVA"},{"id":"11","ar":"AZUL","pr":"COMANDO","lo":"INTELIGÊNCIA","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"CONSUL","ia":"VELHA"},{"id":"12","ar":"AZUL","pr":"COMANDO","lo":"INTELIGÊNCIA","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"CONSUL","ia":"VELHA"},{"id":"19","ar":"AZUL","pr":"COMANDO","lo":"MUNICIAMENTO","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"SEMI"},{"id":"18","ar":"AZUL","pr":"COMANDO","lo":"OBTENÇÕES","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"30","ar":"AZUL","pr":"COMANDO","lo":"SALA DE REUNIÃO","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"AGRATTO","ia":"NOVA"},{"id":"9","ar":"AZUL","pr":"COMANDO","lo":"SALÃO NOBRE","tp":"SPLIT","bt":30000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"GREE","ia":"NOVA"},{"id":"32","ar":"AZUL","pr":"COMANDO","lo":"SECOM","tp":"SPLIT","bt":48000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"CARRIER","ia":"NOVA"},{"id":"24","ar":"AZUL","pr":"COMANDO","lo":"SEGURANÇA","tp":"SPLIT","bt":48000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"13","ar":"AZUL","pr":"COMANDO","lo":"VICE DIRETOR","tp":"SPLIT","bt":22000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"AGRATTO","ia":"NOVA"},{"id":"171","ar":"VERMELHA","pr":"ELETRÔNICA","lo":"BIBLIOTECA","tp":"SPLIT","bt":0,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"166","ar":"VERMELHA","pr":"EXOCET","lo":"MECÂNICA 1","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"167","ar":"VERMELHA","pr":"EXOCET","lo":"MECÂNICA 1","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"168","ar":"VERMELHA","pr":"EXOCET","lo":"MECÂNICA 2","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"169","ar":"VERMELHA","pr":"EXOCET","lo":"MECÂNICA 2","tp":"SELF CONTAINED","bt":54000,"es":"OP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"170","ar":"VERMELHA","pr":"EXOCET","lo":"SALA DE AULA","tp":"SPLIT","bt":36000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"163","ar":"VERMELHA","pr":"EXOCET","lo":"SALA DE CONTROLE","tp":"SELF CONTAINED","bt":90000,"es":"OP","iv":1,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"","ia":"VELHA"},{"id":"165","ar":"VERMELHA","pr":"EXOCET","lo":"SALA DE CONTROLE","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"162","ar":"VERMELHA","pr":"EXOCET","lo":"SALA DE CONVERSORES","tp":"SELF CONTAINED","bt":90000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"","ia":"NOVA"},{"id":"164","ar":"VERMELHA","pr":"EXOCET","lo":"SALA DE CONTROLE","tp":"SPLIT","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"","ia":"VELHA"},{"id":"161","ar":"VERMELHA","pr":"EXOCET","lo":"SEÇÃO DE TESTES NÍVEL II","tp":"SPLIT","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"","ia":"SEMI"},{"id":"134","ar":"VERMELHA","pr":"F21","lo":"AC Central de bombordo","tp":"SELF CONTAINED","bt":360000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":1,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"132","ar":"VERMELHA","pr":"F21","lo":"AC Central de boreste","tp":"SELF CONTAINED","bt":360000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":1,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"136","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SELF CONTAINED","bt":180000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"SEMI"},{"id":"137","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SELF CONTAINED","bt":180000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"SEMI"},{"id":"135","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SELF CONTAINED","bt":180000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"SEMI"},{"id":"133","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SELF CONTAINED","bt":180000,"es":"OR","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"SEMI"},{"id":"127","ar":"VERMELHA","pr":"F21","lo":"COPA/CORREDOR","tp":"SPLIT","bt":12000,"es":"INOP","iv":1,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"128","ar":"VERMELHA","pr":"F21","lo":"ELETRONICA 01","tp":"SPLIT","bt":90000,"es":"INOP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"Carrier","ia":"NOVA"},{"id":"129","ar":"VERMELHA","pr":"F21","lo":"ELETRONICA 02","tp":"SPLIT","bt":36000,"es":"INOP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"PHILCO","ia":"SEMI"},{"id":"130","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 01","tp":"SPLIT","bt":90000,"es":"INOP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"Carrier","ia":"SEMI"},{"id":"131","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 02","tp":"SPLIT","bt":90000,"es":"INOP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"Carrier","ia":"VELHA"},{"id":"140","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 04","tp":"SPLIT","bt":90000,"es":"INOP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"Carrier","ia":"VELHA"},{"id":"141","ar":"VERMELHA","pr":"F21","lo":"SALA DE ARMAZENAGEM","tp":"SPLIT","bt":36000,"es":"INOP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"174","ar":"VERMELHA","pr":"F21","lo":"Sala de Armazenagem da Bateria","tp":"SPLIT","bt":48000,"es":"INOP","iv":1,"rd":0,"cr":"CRÍTICA","pm":0,"h":null,"d":null,"fb":"Carrier","ia":"NOVA"},{"id":"175","ar":"VERMELHA","pr":"F21","lo":"Sala de Armazenagem da Bateria","tp":"SPLIT","bt":48000,"es":"INOP","iv":1,"rd":0,"cr":"CRÍTICA","pm":0,"h":null,"d":null,"fb":"Carrier","ia":"NOVA"},{"id":"142","ar":"VERMELHA","pr":"F21","lo":"SALA DE AULA","tp":"SPLIT","bt":38000,"es":"OP","iv":1,"rd":0,"cr":"BAIXA","pm":1,"h":24.0,"d":7.0,"fb":"PHILCO","ia":"SEMI"},{"id":"173","ar":"VERMELHA","pr":"F21","lo":"Sala de Carregamento da Bateria","tp":"SPLIT","bt":48000,"es":"INOP","iv":1,"rd":0,"cr":"CRÍTICA","pm":0,"h":null,"d":null,"fb":"Carrier","ia":"NOVA"},{"id":"143","ar":"VERMELHA","pr":"F21","lo":"SALA DE MONITORAMENTO DA BATERIA","tp":"SPLIT","bt":12000,"es":"OP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"172","ar":"VERMELHA","pr":"F21","lo":"Sala de Operacao da Bateria","tp":"SPLIT","bt":48000,"es":"INOP","iv":1,"rd":0,"cr":"CRÍTICA","pm":0,"h":null,"d":null,"fb":"Carrier","ia":"NOVA"},{"id":"144","ar":"VERMELHA","pr":"F21","lo":"SALA DE OPERAÇÕES","tp":"SPLIT","bt":18000,"es":"OP","iv":1,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"145","ar":"VERMELHA","pr":"F21","lo":"SALA DE REUNIÕES","tp":"SPLIT","bt":36000,"es":"OP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"PHILCO","ia":"SEMI"},{"id":"138","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SPLIT","bt":60000,"es":"OP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"138","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SPLIT","bt":60000,"es":"OP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"138","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SPLIT","bt":60000,"es":"OP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"138","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SPLIT","bt":60000,"es":"OP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"138","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SPLIT","bt":60000,"es":"INOP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"138","ar":"VERMELHA","pr":"F21","lo":"MECÂNICA 03","tp":"SPLIT","bt":60000,"es":"INOP","iv":1,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"74","ar":"AZUL","pr":"GARAGEM","lo":"ENCARREGADO","tp":"JANELA","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"76","ar":"AZUL","pr":"GARAGEM","lo":"ESCRITÓRIO","tp":"JANELA","bt":9000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"75","ar":"AZUL","pr":"GARAGEM","lo":"SARGENTEANTE TRANSPORTE","tp":"JANELA","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"151","ar":"VERMELHA","pr":"MINAS E BOMBAS","lo":"SALA DA M100","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"150","ar":"VERMELHA","pr":"MINAS E BOMBAS","lo":"SALA DA MFC","tp":"SPLIT","bt":36000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"149","ar":"VERMELHA","pr":"MINAS E BOMBAS","lo":"SALA DE ESTUDOS","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"146","ar":"VERMELHA","pr":"MINAS E BOMBAS","lo":"SALA DO ENCARREGADO","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"148","ar":"VERMELHA","pr":"MINAS E BOMBAS","lo":"SALA DO ENCARREGADO","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"147","ar":"VERMELHA","pr":"MINAS E BOMBAS","lo":"SALA MK9","tp":"SPLIT","bt":18000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"152","ar":"VERMELHA","pr":"MISTRAL","lo":"SALA DE MATERIAL DA SH","tp":"JANELA","bt":7500,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"153","ar":"VERMELHA","pr":"MISTRAL","lo":"SALA DO MISSIL","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"154","ar":"VERMELHA","pr":"MISTRAL","lo":"SALA DO SUPERVISOR","tp":"SPLIT","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"103","ar":"VERMELHA","pr":"MK46","lo":"SALA DE TESTES ELETRÔNICOS","tp":"SELF CONTAINED","bt":58000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"","ia":"VELHA"},{"id":"111","ar":"VERMELHA","pr":"MK46","lo":"SALA DE AULA","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"114","ar":"VERMELHA","pr":"MK46","lo":"SALA DE MONTAGEM","tp":"SPLIT","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"110","ar":"VERMELHA","pr":"MK46","lo":"SALA DO ENCARREGADO","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"112","ar":"VERMELHA","pr":"MK46","lo":"SALA ELETRONIC","tp":"SPLIT","bt":58000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"113","ar":"VERMELHA","pr":"MK46","lo":"SEÇÃO DE MECÂNICA","tp":"SPLIT","bt":57000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"116","ar":"VERMELHA","pr":"MK48","lo":"SALA ATE","tp":"CHILLER","bt":180000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"VELHA"},{"id":"118","ar":"VERMELHA","pr":"MK48","lo":"SALA 02","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"123","ar":"VERMELHA","pr":"MK48","lo":"SALA DA CALIBRAÇÃO","tp":"SPLIT","bt":57000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"120","ar":"VERMELHA","pr":"MK48","lo":"SALA DE ACESSÓRIOS","tp":"SPLIT","bt":36000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"126","ar":"VERMELHA","pr":"MK48","lo":"SALA DE REUNIÕES","tp":"SPLIT","bt":36000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"117","ar":"VERMELHA","pr":"MK48","lo":"SALA DO ATE","tp":"SPLIT","bt":57000,"es":"INOP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"","ia":"SEMI"},{"id":"119","ar":"VERMELHA","pr":"MK48","lo":"SALA DO ATE","tp":"SPLIT","bt":36000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"122","ar":"VERMELHA","pr":"MK48","lo":"SALA DO ENCARREGADO","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"121","ar":"VERMELHA","pr":"MK48","lo":"SALA DO MOTOR","tp":"SPLIT","bt":57000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"124","ar":"VERMELHA","pr":"MK48","lo":"SALA DO QUALIDADE","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"125","ar":"VERMELHA","pr":"MK48","lo":"SALA DO TMD","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"115","ar":"VERMELHA","pr":"MK48","lo":"SEÇÃO DE MONTAGEM","tp":"SPLIT","bt":57000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"","ia":"SEMI"},{"id":"93","ar":"VERMELHA","pr":"PAIOL","lo":"D-5","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"","ar":"VERMELHA","pr":"PAIOL","lo":"D-5","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"95","ar":"VERMELHA","pr":"PAIOL","lo":"G-5","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"96","ar":"VERMELHA","pr":"PAIOL","lo":"G-5","tp":"SELF CONTAINED","bt":180000,"es":"INOP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"97","ar":"VERMELHA","pr":"PAIOL","lo":"G-6","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"98","ar":"VERMELHA","pr":"PAIOL","lo":"G-6","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"99","ar":"VERMELHA","pr":"PAIOL","lo":"G-7","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"100","ar":"VERMELHA","pr":"PAIOL","lo":"G-7","tp":"SELF CONTAINED","bt":180000,"es":"INOP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"101","ar":"VERMELHA","pr":"PAIOL","lo":"G-8","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"102","ar":"VERMELHA","pr":"PAIOL","lo":"G-8","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"VELHA"},{"id":"94","ar":"VERMELHA","pr":"PAIOL","lo":"K-6","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"TRANE","ia":"VELHA"},{"id":"","ar":"VERMELHA","pr":"PAIOL","lo":"K-6","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":1,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"TRANE","ia":"VELHA"},{"id":"104","ar":"VERMELHA","pr":"PAIOL","lo":"U-6","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"105","ar":"VERMELHA","pr":"PAIOL","lo":"U-6","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"106","ar":"VERMELHA","pr":"PAIOL","lo":"U-7","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"107","ar":"VERMELHA","pr":"PAIOL","lo":"U-7","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"108","ar":"VERMELHA","pr":"PAIOL","lo":"U-8","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"109","ar":"VERMELHA","pr":"PAIOL","lo":"U-8","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"","ar":"VERMELHA","pr":"PAIOL","lo":"R-7","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"","ar":"VERMELHA","pr":"PAIOL","lo":"R-7","tp":"SELF CONTAINED","bt":180000,"es":"OP","iv":0,"rd":1,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"TRANE","ia":"NOVA"},{"id":"85","ar":"VERMELHA","pr":"PCI","lo":"SALA ENCARREGADO","tp":"JANELA","bt":10000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"88","ar":"VERMELHA","pr":"PCI","lo":"PAIOL DE COMPONENTES INERTES","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"89","ar":"VERMELHA","pr":"PCI","lo":"PAIOL DE COMPONENTES INERTES","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"90","ar":"VERMELHA","pr":"PCI","lo":"PAIOL DE COMPONENTES INERTES","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"91","ar":"VERMELHA","pr":"PCI","lo":"PAIOL DE COMPONENTES INERTES","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"92","ar":"VERMELHA","pr":"PCI","lo":"PAIOL DE COMPONENTES INERTES","tp":"SELF CONTAINED","bt":120000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"NOVA"},{"id":"86","ar":"VERMELHA","pr":"PCI","lo":"SALA DA DIVISÃO","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"87","ar":"VERMELHA","pr":"PCI","lo":"SALA DO SERVIDOR","tp":"SPLIT","bt":9000,"es":"INOP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"ELGIN","ia":"VELHA"},{"id":"155","ar":"VERMELHA","pr":"PENGUIN","lo":"SEÇÃO DE MONTAGEM","tp":"JANELA","bt":7500,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"156","ar":"VERMELHA","pr":"PENGUIN","lo":"SALA DO SUPERVISOR","tp":"SPLIT","bt":180000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"},{"id":"41","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"ALOJAMENTO OFICIAIS INTERMEDIÁRIOS","tp":"PISO/TETO","bt":36000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"PHILCO","ia":"NOVA"},{"id":"35","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"PRAÇA DARMAS","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"36","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"PRAÇA DARMAS","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"37","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"PRAÇA DARMAS","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"38","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"SALA DE JOGOS","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"40","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"ALOJAMENTO OFICIAIS FEMININO","tp":"SPLIT","bt":22000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"SEMI"},{"id":"39","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"ALOJAMENTO OFICIAIS SUBALTERNOS","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"42","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"ALOJAMENTO OFICIAIS SUPERIORES","tp":"SPLIT","bt":22000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"43","ar":"AZUL","pr":"PRAÇA DARMAS","lo":"CAMAROTE VICE DIRETOR","tp":"SPLIT","bt":22000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"78","ar":"AZUL","pr":"PREFEITURA","lo":"COBERTA ARMARIO","tp":"JANELA","bt":7500,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"CONSUL","ia":"VELHA"},{"id":"81","ar":"AZUL","pr":"PREFEITURA","lo":"PAIOL CAV","tp":"PISO/TETO","bt":48000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"77","ar":"AZUL","pr":"PREFEITURA","lo":"ENCARREGADO","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"SEMI"},{"id":"80","ar":"AZUL","pr":"PREFEITURA","lo":"OFICINA ELETRICA","tp":"SPLIT","bt":9000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"79","ar":"AZUL","pr":"PREFEITURA","lo":"SARGENTEANTE PREFEITURA","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"SEMI"},{"id":"47","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"CB / MN","tp":"PISO/TETO","bt":60000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"48","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"CB / MN","tp":"PISO/TETO","bt":60000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"49","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"CB / MN","tp":"PISO/TETO","bt":60000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"50","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"CB / MN","tp":"PISO/TETO","bt":60000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"51","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"CB / MN","tp":"PISO/TETO","bt":60000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"44","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"SO / SG","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"45","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"SO / SG","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"46","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"SO / SG","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"52","ar":"AZUL","pr":"RANCHO/COZINHA","lo":"PAIOL","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"COMFEE","ia":"NOVA"},{"id":"1","ar":"AZUL","pr":"SALA DE ESTADO","lo":"SALA DE ESTADO","tp":"PISO/TETO","bt":60000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"ELGIN","ia":"SEMI"},{"id":"4","ar":"AZUL","pr":"SALA DE ESTADO","lo":"ALOJAMENTO DA GUARDA","tp":"SPLIT","bt":48000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"ELGIN","ia":"SEMI"},{"id":"6","ar":"AZUL","pr":"SALA DE ESTADO","lo":"CAMAROTE DO OSE","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"AGRATTO","ia":"NOVA"},{"id":"5","ar":"AZUL","pr":"SALA DE ESTADO","lo":"CENTRAL TELEFÔNICA","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"ELGIN","ia":"VELHA"},{"id":"3","ar":"AZUL","pr":"SALA DE ESTADO","lo":"ESCOTERIA","tp":"SPLIT","bt":9000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"ELECTROLUX","ia":"SEMI"},{"id":"2","ar":"AZUL","pr":"SALA DE ESTADO","lo":"OSE","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"CRÍTICA","pm":1,"h":24.0,"d":7.0,"fb":"ELGIN","ia":"SEMI"},{"id":"61","ar":"AZUL","pr":"SAÚDE","lo":"ASSISTÊNCIA SOCIAL","tp":"JANELA","bt":12500,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"59","ar":"AZUL","pr":"SAÚDE","lo":"FISIOTERAPIA","tp":"JANELA","bt":21000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"SPRINGER","ia":"VELHA"},{"id":"55","ar":"AZUL","pr":"SAÚDE","lo":"DOC","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"MIDEA","ia":"NOVA"},{"id":"58","ar":"AZUL","pr":"SAÚDE","lo":"ENFERMARIA","tp":"SPLIT","bt":24000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"VELHA"},{"id":"57","ar":"AZUL","pr":"SAÚDE","lo":"ODONTO","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"ELGIN","ia":"NOVA"},{"id":"56","ar":"AZUL","pr":"SAÚDE","lo":"SALA ESTABILIZAÇÃO","tp":"SPLIT","bt":18000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"PHILCO","ia":"VELHA"},{"id":"60","ar":"AZUL","pr":"SAÚDE","lo":"SECRETARIA","tp":"SPLIT","bt":12000,"es":"OP","iv":0,"rd":0,"cr":"MÉDIA","pm":0,"h":8.0,"d":5.0,"fb":"PHILCO","ia":"VELHA"},{"id":"82","ar":"AZUL","pr":"SEGURANÇA","lo":"SEGURANÇA","tp":"SPLIT","bt":18000,"es":"INOP","iv":0,"rd":0,"cr":"ALTA","pm":0,"h":8.0,"d":5.0,"fb":"COMFEE","ia":"SEMI"},{"id":"157","ar":"VERMELHA","pr":"SIDEWINDER","lo":"SEÇÃO DE MONTAGEM","tp":"JANELA","bt":20000,"es":"OP","iv":0,"rd":0,"cr":"BAIXA","pm":0,"h":8.0,"d":5.0,"fb":"","ia":"SEMI"}];
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CAMADA DE DADOS — único ponto a substituir para uso com dados reais.
+   Ver a aba "Conceitos e integração" para o esquema de banco correspondente.
+
+   PROCEDÊNCIA:
+     real      → inventário do PMOC Refrigeração (171 equipamentos)
+     simulado  → séries de consumo, demanda, fator de potência, nível e fatura
+   ══════════════════════════════════════════════════════════════════════════ */
+const DADOS = {
+  competencia: "set/2025 a ago/2026",
+
+  // ── contexto da instalação (simulado) ────────────────────────────────────
+  areaUtil: 24000,          // m²
+  tarifaEnergia: 0.72,      // R$/kWh (médio, com tributos)
+  tarifaDemanda: 22.00,     // R$/kW·mês
+  tarifaAgua: 12.40,        // R$/m³
+  demandaContratada: 1000,  // kW
+  fpMinimo: 0.92,
+
+  meses: ["Set","Out","Nov","Dez","Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago"],
+
+  // ── energia (simulado) ───────────────────────────────────────────────────
+  consumo:          [233000,262000,264000,281000,310000,295000,290000,247000,238000,209000,214000,221000], // kWh
+  demandaRegistrada:[845,907,948,989,1046,1075,979,893,816,763,732,792],                                // kW
+  fatorPotencia:    [0.93,0.94,0.92,0.91,0.89,0.88,0.90,0.92,0.94,0.95,0.95,0.93],
+
+  // ── variáveis de normalização (simulado) ─────────────────────────────────
+  grausDia: [150,190,225,265,300,305,270,210,150,105,95,110],   // °C·dia, base 22 °C
+  efetivo:  [470,465,460,430,390,430,470,475,470,468,472,469],  // pessoas
+  diasUteis:[22,23,20,21,21,19,22,20,21,21,23,21],
+
+  // ── curva de carga de dia útil típico, 24 valores horários (simulado) ────
+  curvaCarga: [180,175,170,168,168,182,228,312,444,540,588,612,576,595,619,600,552,432,324,276,252,228,206,190],
+  janelaMadrugada: [2,4],       // índices horários usados para o consumo de base
+  horasForaExpediente: 6100,    // h/ano fora do horário de serviço
+
+  // ── água (simulado, exceto a existência do sensor) ───────────────────────
+  reservatorioCapacidade: 150,  // m³
+  consumoAguaMensal: 1350,      // m³ — macromedição da fatura
+  micromedidoMensal: 0,         // m³ — não há hidrômetro setorial instalado
+  // volume do reservatório de hora em hora, 00h a 23h
+  nivelReservatorio: [128.0,127.6,127.2,126.8,126.4,125.9,124.0,120.5,115.0,108.0,
+                      132.0,126.0,119.0,112.0,106.0,138.0,133.0,129.0,126.5,125.0,
+                      124.0,129.5,129.0,128.5],
+  bombasParadas: [0,6],         // janela em que as bombas estão comprovadamente paradas
+  janelaVMN: [2,4],             // janela usada no cálculo da VMN
+
+  // ── climatização (REAL — PMOC Refrigeração) ──────────────────────────────
+  // ── PARQUE: dados REAIS, exportados do PMOC Refrigeração em 29/08/2026 ──
+  // O array INVENTARIO (fim do script) traz os 183 registros unitários.
+  // Os agregados abaixo são calculados a partir dele, não digitados.
+
+  // eficiência elétrica por tipo, em BTU/(W·h) — PREMISSA, editável na tela.
+  // Substituir por corrente nominal × tensão quando o levantamento de placa fechar.
+  eer: { "SPLIT":9.5, "PISO/TETO":9.0, "JANELA":8.5, "SELF CONTAINED":9.0, "CHILLER":10.0 },
+  ganhoInverter: 1.20,   // fator de eficiência do inverter sobre o on-off equivalente
+
+  metaExport: { declarados:175, registros:183, exportado:"29/08/2026" }
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITÁRIOS
+   ══════════════════════════════════════════════════════════════════════════ */
+const NS = "http://www.w3.org/2000/svg";
+const nf = (v, d = 0) => v.toLocaleString("pt-BR", { minimumFractionDigits:d, maximumFractionDigits:d });
+const brl = v => "R$ " + nf(v, 0);
+const soma = a => a.reduce((x, y) => x + y, 0);
+const media = a => soma(a) / a.length;
+
+function el(tag, attrs, txt){
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (txt !== undefined) e.textContent = txt;
+  return e;
+}
+function limpa(svg){ while (svg.firstChild) svg.removeChild(svg.firstChild); }
+
+/* eixos e moldura comuns aos gráficos cartesianos */
+function moldura(svg, box, yMin, yMax, rotulosX, opts){
+  opts = opts || {};
+  const { x0, y0, w, h } = box;
+  const ticks = opts.ticks || 5;
+  for (let i = 0; i <= ticks; i++){
+    const v = yMin + (yMax - yMin) * i / ticks;
+    const y = y0 + h - h * i / ticks;
+    svg.appendChild(el("line", { x1:x0, y1:y, x2:x0 + w, y2:y, stroke:"#e4eaef", "stroke-width":1 }));
+    svg.appendChild(el("text", { x:x0 - 8, y:y + 4, "text-anchor":"end",
+      "font-size":10, fill:"#888" }, opts.fmtY ? opts.fmtY(v) : nf(v, 0)));
+  }
+  if (rotulosX){
+    const passo = w / rotulosX.length;
+    rotulosX.forEach((r, i) => {
+      svg.appendChild(el("text", { x:x0 + passo * (i + 0.5), y:y0 + h + 16,
+        "text-anchor":"middle", "font-size":10, fill:"#888" }, r));
+    });
+  }
+  if (opts.tituloY){
+    svg.appendChild(el("text", { x:x0 - 42, y:y0 + h / 2, "text-anchor":"middle",
+      "font-size":10, fill:"#888", transform:`rotate(-90 ${x0 - 42} ${y0 + h / 2})` }, opts.tituloY));
+  }
+}
+
+/* gráfico de linhas com faixa opcional */
+function graficoLinha(svg, cfg){
+  limpa(svg);
+  const box = { x0:56, y0:16, w:684, h:238 };
+  const { yMin, yMax } = cfg;
+  moldura(svg, box, yMin, yMax, cfg.rotulos, { fmtY:cfg.fmtY, tituloY:cfg.tituloY });
+
+  const n = cfg.series[0].valores.length;
+  const px = i => box.x0 + (n === 1 ? box.w / 2 : box.w * i / (n - 1));
+  const py = v => box.y0 + box.h - box.h * (v - yMin) / (yMax - yMin);
+
+  if (cfg.faixa){
+    const [a, b] = cfg.faixa;
+    svg.appendChild(el("rect", { x:px(a), y:box.y0, width:px(b) - px(a), height:box.h,
+      fill:"#e52207", opacity:.10 }));
+    if (cfg.faixaRotulo){
+      svg.appendChild(el("text", { x:(px(a) + px(b)) / 2, y:box.y0 + 14, "text-anchor":"middle",
+        "font-size":10, fill:"#a3180a", "font-weight":"700" }, cfg.faixaRotulo));
+    }
+  }
+  if (cfg.linhaRef !== undefined){
+    svg.appendChild(el("line", { x1:box.x0, y1:py(cfg.linhaRef), x2:box.x0 + box.w, y2:py(cfg.linhaRef),
+      stroke:"#333", "stroke-width":1.5, "stroke-dasharray":"6 4" }));
+    svg.appendChild(el("text", { x:box.x0 + box.w - 4, y:py(cfg.linhaRef) - 7, "text-anchor":"end",
+      "font-size":10, fill:"#333", "font-weight":"700" }, cfg.linhaRefRotulo || ""));
+  }
+  cfg.series.forEach(s => {
+    const d = s.valores.map((v, i) => (i ? "L" : "M") + px(i) + " " + py(v)).join(" ");
+    svg.appendChild(el("path", { d, fill:"none", stroke:s.cor, "stroke-width":s.largura || 2.5,
+      "stroke-linejoin":"round", "stroke-linecap":"round",
+      "stroke-dasharray":s.tracejada ? "5 4" : "" }));
+    if (s.pontos !== false){
+      s.valores.forEach((v, i) => {
+        const c = el("circle", { cx:px(i), cy:py(v), r:3, fill:s.cor });
+        c.appendChild(el("title", {}, (cfg.rotulos ? cfg.rotulos[i] + ": " : "") +
+          nf(v, cfg.casas || 0) + (cfg.unidade || "")));
+        svg.appendChild(c);
+      });
+    }
+  });
+}
+
+/* gráfico de barras verticais */
+function graficoBarra(svg, cfg){
+  limpa(svg);
+  const box = { x0:56, y0:16, w:684, h:238 };
+  const yMax = cfg.yMax, yMin = cfg.yMin || 0;
+  moldura(svg, box, yMin, yMax, cfg.rotulos, { fmtY:cfg.fmtY, tituloY:cfg.tituloY });
+  const n = cfg.valores.length;
+  const passo = box.w / n, larg = passo * 0.6;
+  const py = v => box.y0 + box.h - box.h * (v - yMin) / (yMax - yMin);
+
+  cfg.valores.forEach((v, i) => {
+    const y = py(Math.max(v, yMin >= 0 ? 0 : Math.min(0, v)));
+    const yz = py(Math.max(yMin, 0));
+    const alt = Math.abs(yz - py(v));
+    const r = el("rect", { x:box.x0 + passo * i + (passo - larg) / 2,
+      y:Math.min(y, yz), width:larg, height:Math.max(alt, 1),
+      fill:cfg.cores ? cfg.cores[i] : "#1351b4", rx:2 });
+    r.appendChild(el("title", {}, cfg.rotulos[i] + ": " + nf(v, cfg.casas || 0) + (cfg.unidade || "")));
+    svg.appendChild(r);
+  });
+  if (cfg.linhaRef !== undefined){
+    svg.appendChild(el("line", { x1:box.x0, y1:py(cfg.linhaRef), x2:box.x0 + box.w, y2:py(cfg.linhaRef),
+      stroke:"#333", "stroke-width":1.8 }));
+    svg.appendChild(el("text", { x:box.x0 + 4, y:py(cfg.linhaRef) + 14, "font-size":10,
+      fill:"#333", "font-weight":"700" }, cfg.linhaRefRotulo || ""));
+  }
+  if (cfg.linhaRef2 !== undefined){
+    svg.appendChild(el("line", { x1:box.x0, y1:py(cfg.linhaRef2), x2:box.x0 + box.w, y2:py(cfg.linhaRef2),
+      stroke:"#333", "stroke-width":1, "stroke-dasharray":"4 4" }));
+    svg.appendChild(el("text", { x:box.x0 + box.w - 4, y:py(cfg.linhaRef2) - 6, "text-anchor":"end",
+      "font-size":9, fill:"#666" }, cfg.linhaRef2Rotulo || ""));
+  }
+  if (yMin < 0){
+    svg.appendChild(el("line", { x1:box.x0, y1:py(0), x2:box.x0 + box.w, y2:py(0),
+      stroke:"#999", "stroke-width":1 }));
+  }
+}
+
+/* barras horizontais empilhadas (parte / total) */
+function graficoBarraH(svg, cfg){
+  limpa(svg);
+  const x0 = cfg.x0 || 112, larguraMax = cfg.largura || 200;
+  const alturaLinha = cfg.alturaLinha || 26, gap = 12;
+  const max = Math.max.apply(null, cfg.itens.map(i => i.total));
+  cfg.itens.forEach((it, i) => {
+    const y = 14 + i * (alturaLinha + gap);
+    svg.appendChild(el("text", { x:x0 - 10, y:y + alturaLinha / 2 + 4, "text-anchor":"end",
+      "font-size":10.5, fill:"#333", "font-weight":"600" }, it.tipo));
+    const wTotal = larguraMax * it.total / max;
+    const wParte = wTotal * (it.parte / it.total);
+    const fundo = el("rect", { x:x0, y, width:wTotal, height:alturaLinha, fill:"#cccccc", rx:3 });
+    fundo.appendChild(el("title", {}, it.tipo + ": " + it.total + " no total"));
+    svg.appendChild(fundo);
+    const frente = el("rect", { x:x0, y, width:wParte, height:alturaLinha, fill:cfg.cor || "#1351b4", rx:3 });
+    frente.appendChild(el("title", {}, it.tipo + ": " + nf(it.parte, 0) + " operantes"));
+    svg.appendChild(frente);
+    svg.appendChild(el("text", { x:x0 + wTotal + 8, y:y + alturaLinha / 2 + 4, "font-size":11,
+      fill:"#333", "font-weight":"700" }, String(it.total)));
+  });
+}
+
+/* dispersão com reta ajustada */
+function graficoDispersao(svg, cfg){
+  limpa(svg);
+  const box = { x0:52, y0:16, w:300, h:230 };
+  const xs = cfg.pontos.map(p => p.x), ys = cfg.pontos.map(p => p.y);
+  const xMin = 0, xMax = Math.max.apply(null, xs) * 1.1;
+  const yMin = Math.min.apply(null, ys) * 0.85, yMax = Math.max.apply(null, ys) * 1.08;
+  moldura(svg, box, yMin, yMax, null, { fmtY:cfg.fmtY, ticks:4 });
+
+  const px = v => box.x0 + box.w * (v - xMin) / (xMax - xMin);
+  const py = v => box.y0 + box.h - box.h * (v - yMin) / (yMax - yMin);
+
+  for (let i = 0; i <= 4; i++){
+    const v = xMin + (xMax - xMin) * i / 4;
+    svg.appendChild(el("text", { x:px(v), y:box.y0 + box.h + 16, "text-anchor":"middle",
+      "font-size":10, fill:"#888" }, nf(v, 0)));
+  }
+  svg.appendChild(el("text", { x:box.x0 + box.w / 2, y:box.y0 + box.h + 34, "text-anchor":"middle",
+    "font-size":10, fill:"#888" }, cfg.tituloX || ""));
+
+  svg.appendChild(el("line", { x1:px(xMin), y1:py(cfg.reta.a + cfg.reta.b * xMin),
+    x2:px(xMax), y2:py(cfg.reta.a + cfg.reta.b * xMax),
+    stroke:"#e52207", "stroke-width":2 }));
+
+  cfg.pontos.forEach(p => {
+    const c = el("circle", { cx:px(p.x), cy:py(p.y), r:4.5, fill:"#1351b4", opacity:.85 });
+    c.appendChild(el("title", {}, p.rotulo + " — " + nf(p.y, 0) + " kWh · " + nf(p.x, 0) + " °C·dia"));
+    svg.appendChild(c);
+  });
+}
+
+/* regressão linear simples */
+function regressao(xs, ys){
+  const n = xs.length, mx = media(xs), my = media(ys);
+  let sxy = 0, sxx = 0;
+  for (let i = 0; i < n; i++){ sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; }
+  const b = sxy / sxx, a = my - b * mx;
+  let ssRes = 0, ssTot = 0;
+  for (let i = 0; i < n; i++){ ssRes += (ys[i] - (a + b * xs[i])) ** 2; ssTot += (ys[i] - my) ** 2; }
+  return { a, b, r2:1 - ssRes / ssTot };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CONCEITOS — alimentam o glossário e o painel lateral dos KPIs
+   ══════════════════════════════════════════════════════════════════════════ */
+const CONCEITOS = {
+  ide: {
+    titulo:"Intensidade energética (IDE / EUI)",
+    formula:"kWh consumidos ÷ (área útil × ano)",
+    porque:"É a referência universal para comparar edificações de portes diferentes. Serve de base ao método INI-C e permite confrontar a OM com instalações semelhantes.",
+    cuidado:"Só faz sentido se a área útil estiver cadastrada e atualizada. Área errada produz indicador errado com aparência de precisão.",
+    origem:"Fatura de energia + cadastro de área por prédio."
+  },
+  percapita:{
+    titulo:"Consumo per capita",
+    formula:"kWh ÷ efetivo presente no período",
+    porque:"Numa OM o efetivo varia bastante ao longo do ano. Sem este indicador, uma queda de consumo por férias coletivas é lida como ganho de eficiência.",
+    cuidado:"Precisa do efetivo médio presente, não do efetivo lotado.",
+    origem:"Fatura + registro mensal de efetivo."
+  },
+  fc:{
+    titulo:"Fator de carga",
+    formula:"potência média do período ÷ demanda máxima registrada",
+    porque:"Mede o aproveitamento da demanda contratada. Fator baixo indica que a instalação paga por uma demanda usada em poucos instantes do mês.",
+    cuidado:"Fator de carga baixo não é defeito em si — é sinal para investigar picos e verificar se podem ser deslocados.",
+    origem:"Fatura: consumo e demanda registrada."
+  },
+  fp:{
+    titulo:"Fator de potência",
+    formula:"potência ativa ÷ potência aparente (referência mínima 0,92)",
+    porque:"Abaixo do limite regulatório há cobrança de energia e demanda reativas excedentes. É custo puro, sem contrapartida de consumo.",
+    cuidado:"A correção por banco de capacitores exige estudo — sobrecorreção também é penalizada.",
+    origem:"Fatura de energia."
+  },
+  demanda:{
+    titulo:"Demanda contratada × registrada",
+    formula:"% utilização = demanda registrada ÷ contratada",
+    porque:"A demanda contratada é paga integralmente todo mês, haja ou não consumo. Contratar acima do necessário é desperdício silencioso; contratar abaixo gera ultrapassagem, cobrada em dobro.",
+    cuidado:"O ajuste exige análise dos 12 meses. Reduzir olhando só o mês mais fraco provoca ultrapassagem no verão.",
+    origem:"Fatura: demanda registrada e contratada."
+  },
+  base:{
+    titulo:"Consumo de base noturno",
+    formula:"menor potência observada na janela de madrugada",
+    porque:"É a carga que permanece ligada com o prédio vazio. Melhor indicador isolado de desperdício em instalação predial.",
+    cuidado:"Nem toda carga de base é desperdício: servidores, câmeras, sistemas de segurança e câmaras frias são legítimos. O indicador serve para investigar, não para concluir.",
+    origem:"Medição com registro horário. Não obtenível da fatura convencional."
+  },
+  vmn:{
+    titulo:"Vazão mínima noturna (VMN)",
+    formula:"variação de volume do reservatório ÷ tempo, com bombas paradas",
+    porque:"É a evidência objetiva de vazamento mais acessível num campus. Com o prédio vazio, o que continua saindo da rede é perda.",
+    cuidado:"Só vale se as bombas estiverem comprovadamente paradas na janela. Se houver recalque no período, o cálculo mede a bomba, não o vazamento.",
+    origem:"Sensor ultrassônico do xAguada — dado já disponível hoje."
+  },
+  perdas:{
+    titulo:"Índice de perdas",
+    formula:"(volume macromedido − Σ volumes micromedidos) ÷ volume macromedido",
+    porque:"Indicador consagrado do setor de saneamento. Separa consumo efetivo de perda física e aparente.",
+    cuidado:"Depende de micromedição setorial. Sem hidrômetro por prédio, o valor é indeterminado — e é honesto informar isso em vez de estimar.",
+    origem:"Bloqueado. Exige instalação de hidrômetros (Fase 3 do roteiro)."
+  },
+  aguapercapita:{
+    titulo:"Consumo de água per capita",
+    formula:"litros ÷ (pessoas × dias)",
+    porque:"Permite comparar com referências do setor e detectar desvio agregado antes de haver micromedição.",
+    cuidado:"Em OM com refeitório, oficinas e irrigação, o valor é naturalmente superior ao de um prédio administrativo. Comparar com referência do mesmo perfil.",
+    origem:"Fatura de água + registro de efetivo."
+  },
+  linhabase:{
+    titulo:"Linha de base energética (EnB)",
+    formula:"consumo esperado = a + b × graus-dia",
+    porque:"É o método da ISO 50006 e do IPMVP. Em vez de dividir o consumo por uma variável — o que supercorrige, pois parte da carga não depende do clima — ajusta-se um modelo em que o coeficiente 'a' representa a carga fixa e 'b' a sensibilidade ao clima.",
+    cuidado:"Exige pelo menos 12 meses de dados. R² baixo indica que o clima não explica o consumo e que falta variável relevante no modelo.",
+    origem:"Fatura + série de graus-dia."
+  },
+  redundancia:{
+    titulo:"Carga redundante × diversidade térmica",
+    formula:"carga operacional = carga instalada − carga em reserva; simultânea = operacional × diversidade",
+    porque:"São dois abatimentos de naturezas diferentes e precisam ser aplicados separadamente. Redundância é estrutural: a máquina reserva nunca opera junto com a principal, por projeto. Diversidade é térmica: máquinas ativas não atingem carga máxima ao mesmo tempo.",
+    cuidado:"Aplicar só o fator de diversidade sobre o parque inteiro conta o mesmo abatimento duas vezes e subestima a demanda. Separados os efeitos, o fator de diversidade das máquinas efetivamente ativas sobe — tipicamente para a faixa de 0,65 a 0,80.",
+    origem:"Regime de operação informado pela DME. Exige campo de grupo de redundância no inventário."
+  },
+  redEfetiva:{
+    titulo:"Índice de redundância efetiva",
+    formula:"conjuntos com ambas as máquinas operantes ÷ conjuntos redundantes",
+    porque:"Transforma o número solto de equipamentos inoperantes em informação de criticidade. Um conjunto com a reserva parada não está redundante: está a uma falha de perder a climatização do ambiente.",
+    cuidado:"Não confundir com disponibilidade. Um conjunto pode estar 100% disponível hoje e sem nenhuma reserva — que é exatamente a situação perigosa em paiol.",
+    origem:"Inventário do PMOC cruzado com o grupo de redundância — cruzamento ainda não existente."
+  },
+  ipi:{
+    titulo:"Índice de penetração inverter (IPI)",
+    formula:"equipamentos inverter ÷ equipamentos do escopo considerado",
+    porque:"Mede quanto do parque já opera com compressor de velocidade variável. Em carga parcial — que é o regime real quase o tempo todo — o inverter evita o ciclo liga-desliga e reduz consumo de forma relevante. É o indicador que traduz política de compra em número.",
+    cuidado:"O denominador decide a conclusão. Sobre o parque inteiro o índice fica diluído por equipamentos onde inverter não é o critério técnico correto. Sobre a família de expansão direta de pequeno porte, mede o que a gestão de fato controla. Nunca apresentar o número sem dizer qual escopo foi usado.",
+    origem:"Campo ainda inexistente no inventário do PMOC — precisa ser criado e preenchido por levantamento de placa."
+  },
+  janelaObs:{
+    titulo:"Índice de tecnologia obsoleta (janela)",
+    formula:"aparelhos de janela ÷ total do parque",
+    porque:"O aparelho de janela é a tecnologia menos eficiente do parque e a de maior custo operacional por BTU. Concentra o melhor retorno de substituição.",
+    cuidado:"Existe janela inverter no mercado brasileiro, mas a oferta é residual — poucos modelos e faixas de capacidade. Na prática a substituição é por split inverter, não por janela inverter.",
+    origem:"Inventário real do PMOC Refrigeração."
+  },
+  carga:{
+    titulo:"Carga instalada de climatização",
+    formula:"Σ (equipamentos operantes × potência elétrica por tipo)",
+    porque:"Quantifica o peso da climatização na demanda da OM. Se domina a ponta, o indicador energético é, na prática, um indicador de climatização.",
+    cuidado:"Estimativa por tipo, não medição. Substituir por dados de placa assim que consolidados.",
+    origem:"Inventário real do PMOC Refrigeração + premissas de potência."
+  }
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CÁLCULOS
+   ══════════════════════════════════════════════════════════════════════════ */
+const D = DADOS;
+const HORAS_MES = 730;
+
+const consumoAnual   = soma(D.consumo);
+const custoEnergia   = consumoAnual * D.tarifaEnergia;
+const ide            = consumoAnual / D.areaUtil;
+const efetivoMedio   = media(D.efetivo);
+const perCapita      = consumoAnual / efetivoMedio;
+const demandaMax     = Math.max.apply(null, D.demandaRegistrada);
+const fatorCarga     = (consumoAnual / 12 / HORAS_MES) / demandaMax;
+const fpMin          = Math.min.apply(null, D.fatorPotencia);
+const mesesFpBaixo   = D.fatorPotencia.filter(v => v < D.fpMinimo).length;
+const utilizacaoMin  = Math.min.apply(null, D.demandaRegistrada) / D.demandaContratada;
+const tolerancia     = D.demandaContratada * 1.05;
+const mesesUltrap    = D.demandaRegistrada.filter(v => v > tolerancia).length;
+
+// consumo de base
+const [jm0, jm1]     = D.janelaMadrugada;
+const consumoBase    = Math.min.apply(null, D.curvaCarga.slice(jm0, jm1 + 1));
+const energiaBase    = consumoBase * D.horasForaExpediente;
+const custoBase      = energiaBase * D.tarifaEnergia;
+
+// água
+const diasMes        = 30;
+const aguaPerCapita  = D.consumoAguaMensal * 1000 / (efetivoMedio * diasMes);
+const [jv0, jv1]     = D.janelaVMN;
+const vmn            = (D.nivelReservatorio[jv0] - D.nivelReservatorio[jv1]) * 1000 / (jv1 - jv0); // L/h
+const vmnDia         = vmn * 24 / 1000;                          // m³/dia
+const vmnMes         = vmnDia * 30;                              // m³/mês
+const vmnPct         = vmnMes / D.consumoAguaMensal;
+const custoVMN       = vmnMes * D.tarifaAgua * 12;
+
+// regressão consumo × graus-dia
+const REG            = regressao(D.grausDia, D.consumo);
+const esperado       = D.grausDia.map(g => REG.a + REG.b * g);
+const residuo        = D.consumo.map((c, i) => c - esperado[i]);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MONTAGEM DA INTERFACE
+   ══════════════════════════════════════════════════════════════════════════ */
+document.getElementById("proc-dados").textContent =
+  "São reais: o inventário de climatização (171 equipamentos, " + D.operantes + " operantes / " +
+  D.inoperantes + " inoperantes, divisão por tipo e por área) e a existência do sensor de nível do xAguada. " +
+  "São simulados: consumo, demanda, fator de potência, faturas, série de nível, graus-dia e a " +
+  "contagem de equipamentos inverter — este último campo ainda nem existe no inventário. " +
+  "Servem para demonstrar o cálculo, não para embasar decisão.";
+
+function cartaoKPI(cfg){
+  const b = document.createElement("button");
+  b.className = "kpi " + (cfg.classe || "");
+  b.type = "button";
+  b.innerHTML =
+    '<span class="kpi-q" aria-hidden="true">?</span>' +
+    '<span class="kpi-label">' + cfg.rotulo + '</span>' +
+    '<span class="kpi-value">' + cfg.valor + (cfg.unidade ? ' <small>' + cfg.unidade + '</small>' : '') + '</span>' +
+    '<span class="kpi-sub ' + (cfg.tom || '') + '">' + cfg.sub + '</span>';
+  b.setAttribute("aria-label", cfg.rotulo + ": " + cfg.valor + " " + (cfg.unidade || "") +
+    ". " + cfg.sub + ". Abrir explicação do indicador.");
+  b.addEventListener("click", () => abrirConceito(cfg.conceito));
+  return b;
+}
+function preencheKPIs(id, lista){
+  const c = document.getElementById(id);
+  c.innerHTML = "";
+  lista.forEach(k => c.appendChild(cartaoKPI(k)));
+}
+
+preencheKPIs("kpis-geral", [
+  { rotulo:"Intensidade energética", valor:nf(ide,1), unidade:"kWh/m²·ano",
+    sub:"Área útil de " + nf(D.areaUtil) + " m²", conceito:"ide", classe:"energia" },
+  { rotulo:"Consumo per capita", valor:nf(perCapita,0), unidade:"kWh/pessoa·ano",
+    sub:"Efetivo médio de " + nf(efetivoMedio,0), conceito:"percapita", classe:"energia" },
+  { rotulo:"Custo anual de energia", valor:brl(custoEnergia), unidade:"",
+    sub:nf(consumoAnual) + " kWh no período", conceito:"ide", classe:"energia" },
+  { rotulo:"Água per capita", valor:nf(aguaPerCapita,0), unidade:"L/pessoa·dia",
+    sub:nf(D.consumoAguaMensal) + " m³/mês na fatura", conceito:"aguapercapita", classe:"agua" },
+  { rotulo:"Vazão mínima noturna", valor:nf(vmn,0), unidade:"L/h",
+    sub:"≈ " + nf(vmnPct*100,0) + "% do volume faturado", tom:"alerta", conceito:"vmn", classe:"danger" },
+  { rotulo:"Índice de perdas", valor:"—", unidade:"",
+    sub:"Bloqueado: sem micromedição", conceito:"perdas", classe:"" }
+]);
+
+preencheKPIs("kpis-energia", [
+  { rotulo:"Fator de carga", valor:nf(fatorCarga,2), unidade:"",
+    sub:fatorCarga < 0.5 ? "Baixo — demanda pouco aproveitada" : "Dentro do usual",
+    tom:fatorCarga < 0.5 ? "alerta" : "ok", conceito:"fc", classe:fatorCarga < 0.5 ? "danger" : "success" },
+  { rotulo:"Fator de potência mínimo", valor:nf(fpMin,2), unidade:"",
+    sub:mesesFpBaixo + " mês(es) abaixo de " + nf(D.fpMinimo,2) + " — há reativo cobrado",
+    tom:"alerta", conceito:"fp", classe:"danger" },
+  { rotulo:"Utilização mínima da demanda", valor:nf(utilizacaoMin*100,0), unidade:"%",
+    sub:"Contratada: " + nf(D.demandaContratada) + " kW", conceito:"demanda", classe:"energia" },
+  { rotulo:"Consumo de base noturno", valor:nf(consumoBase,0), unidade:"kW",
+    sub:nf(energiaBase/1000,0) + " MWh/ano fora do expediente", tom:"alerta",
+    conceito:"base", classe:"danger" },
+  { rotulo:"Aderência da linha de base", valor:"R² " + nf(REG.r2,2), unidade:"",
+    sub:"Clima explica " + nf(REG.r2*100,0) + "% da variação", conceito:"linhabase", classe:"energia" }
+]);
+
+preencheKPIs("kpis-agua", [
+  { rotulo:"Consumo faturado", valor:nf(D.consumoAguaMensal), unidade:"m³/mês",
+    sub:brl(D.consumoAguaMensal*D.tarifaAgua) + " por mês", conceito:"aguapercapita", classe:"agua" },
+  { rotulo:"Água per capita", valor:nf(aguaPerCapita,0), unidade:"L/pessoa·dia",
+    sub:"Efetivo médio de " + nf(efetivoMedio,0), conceito:"aguapercapita", classe:"agua" },
+  { rotulo:"Vazão mínima noturna", valor:nf(vmn,0), unidade:"L/h",
+    sub:nf(vmnDia,1) + " m³/dia com o prédio vazio", tom:"alerta", conceito:"vmn", classe:"danger" },
+  { rotulo:"Perda anual estimada", valor:brl(custoVMN), unidade:"",
+    sub:"Se a VMN persistir nos 12 meses", tom:"alerta", conceito:"vmn", classe:"danger" },
+  { rotulo:"Volume micromedido", valor:nf(D.micromedidoMensal), unidade:"m³/mês",
+    sub:"Nenhum hidrômetro setorial instalado", conceito:"perdas", classe:"" }
+]);
+
+/* ── tabela de situação ── */
+const SITUACAO = [
+  ["Intensidade energética (kWh/m²·ano)", "Calculável — depende só de fatura e área"],
+  ["Consumo per capita", "Calculável — depende de fatura e efetivo"],
+  ["Fator de carga e fator de potência", "Calculável — dados constam da fatura"],
+  ["Demanda contratada × registrada", "Calculável — dados constam da fatura"],
+  ["Consumo de base noturno", "Exige medição com registro horário"],
+  ["Vazão mínima noturna", "Derivável hoje do xAguada, sem hardware novo"],
+  ["Índice de perdas de água", "Bloqueado — exige hidrômetro por prédio"],
+  ["Consumo por uso final", "Bloqueado — exige medição dedicada"]
+];
+document.getElementById("tb-situacao").innerHTML = SITUACAO.map(([a,b]) =>
+  "<tr><td>" + a + "</td><td>" + b + "</td></tr>").join("");
+
+/* ── gráfico de normalização (elemento central) ── */
+const chks = { area:"n-area", gd:"n-gd", efet:"n-efet", dias:"n-dias" };
+function desenhaNormalizacao(){
+  const usa = {};
+  for (const k in chks) usa[k] = document.getElementById(chks[k]).checked;
+
+  const norm = D.consumo.map((c, i) => {
+    let v = c;
+    if (usa.area) v /= D.areaUtil;
+    if (usa.gd)   v /= D.grausDia[i];
+    if (usa.efet) v /= D.efetivo[i];
+    if (usa.dias) v /= D.diasUteis[i];
+    return v;
+  });
+  const idxBruto = D.consumo.map(v => 100 * v / D.consumo[0]);
+  const idxNorm  = norm.map(v => 100 * v / norm[0]);
+  const todos = idxBruto.concat(idxNorm);
+  const yMin = Math.floor(Math.min.apply(null, todos) / 10) * 10 - 5;
+  const yMax = Math.ceil (Math.max.apply(null, todos) / 10) * 10 + 5;
+
+  graficoLinha(document.getElementById("cht-norm"), {
+    rotulos:D.meses, yMin, yMax, tituloY:"Índice (set = 100)",
+    series:[
+      { valores:idxBruto, cor:"#c8791e" },
+      { valores:idxNorm,  cor:"#1351b4" }
+    ]
+  });
+
+  const varBruto = idxBruto[11] - idxBruto[0];
+  const varNorm  = idxNorm[11] - idxNorm[0];
+  const algumaMarcada = Object.values(usa).some(Boolean);
+  const box = document.getElementById("veredito-norm");
+
+  if (!algumaMarcada){
+    box.className = "msg msg-warning";
+    box.innerHTML = '<span class="msg-icon" aria-hidden="true">!</span><div><b>Nenhuma normalização aplicada.</b> ' +
+      'As duas curvas são idênticas. O gráfico mostra apenas que o consumo sobe no verão — ' +
+      'informação climática, não de eficiência. Marque ao menos uma variável.</div>';
+  } else if (!usa.gd && !usa.efet && !usa.dias){
+    box.className = "msg msg-warning";
+    box.innerHTML = '<span class="msg-icon" aria-hidden="true">!</span><div>' +
+      '<b>Normalizar por uma constante não muda nada.</b> ' +
+      'A área útil não varia no período, então dividir por ela desloca a escala mas mantém o índice idêntico. ' +
+      'Normalização só produz informação quando a variável de fato varia entre os períodos comparados.</div>';
+  } else {
+    const inverteu = (varBruto > 0 && varNorm < 0) || (varBruto < 0 && varNorm > 0);
+    const superCorrige = usa.gd && varNorm > varBruto + 15;
+    box.className = "msg " + (inverteu || superCorrige ? "msg-danger" : "msg-info");
+    box.innerHTML = '<span class="msg-icon" aria-hidden="true">' + (inverteu || superCorrige ? "!" : "i") + '</span><div>' +
+      '<b>' + (inverteu ? "A conclusão se inverteu ao normalizar."
+                        : "Normalização aplicada.") + '</b> ' +
+      'No bruto, o último mês está ' + nf(Math.abs(varBruto),1) + '% ' +
+      (varBruto >= 0 ? "acima" : "abaixo") + ' do primeiro. Normalizado, está ' +
+      nf(Math.abs(varNorm),1) + '% ' + (varNorm >= 0 ? "acima" : "abaixo") + '. ' +
+      (superCorrige
+        ? 'Atenção: dividir pelo grau-dia <em>supercorrige</em>. Parte da carga da OM não depende do clima — ' +
+          'iluminação, equipamentos, cargas de base — e continua no numerador enquanto o denominador despenca no inverno. ' +
+          'A divisão simples serve para ilustrar o conceito; o método correto é a regressão da aba Energia, ' +
+          'que separa a parcela fixa da parcela sensível ao clima.'
+        : (inverteu ? 'Um relatório baseado no gráfico bruto teria concluído o oposto do que os dados dizem.' : ''))
+      + '</div>';
+  }
+}
+Object.values(chks).forEach(id =>
+  document.getElementById(id).addEventListener("change", desenhaNormalizacao));
+
+/* ── curva de carga ── */
+function desenhaCarga(){
+  const rot = D.curvaCarga.map((_, i) => (i % 3 === 0 ? String(i).padStart(2,"0") + "h" : ""));
+  graficoLinha(document.getElementById("cht-carga"), {
+    rotulos:rot, yMin:0, yMax:Math.ceil(Math.max.apply(null, D.curvaCarga)/50)*50 + 25,
+    tituloY:"kW", unidade:" kW", faixa:D.janelaMadrugada, faixaRotulo:"madrugada",
+    linhaRef:consumoBase, linhaRefRotulo:"consumo de base " + nf(consumoBase,0) + " kW",
+    series:[{ valores:D.curvaCarga, cor:"#c8791e" }]
+  });
+  const pctBase = energiaBase / consumoAnual;
+  document.getElementById("veredito-base").innerHTML =
+    '<span class="msg-icon" aria-hidden="true">!</span><div>' +
+    '<b>Consumo de base: ' + nf(consumoBase,0) + ' kW.</b> ' +
+    'Fora do expediente (' + nf(D.horasForaExpediente) + ' h/ano) isso representa ' +
+    nf(energiaBase/1000,0) + ' MWh, ou ' + nf(pctBase*100,0) + '% do consumo anual — ' + brl(custoBase) + '. ' +
+    'Nem tudo é desperdício: parte é carga essencial (servidores, CFTV, câmaras). ' +
+    'Reduzir 20% dessa base economizaria ' + brl(custoBase*0.2) + ' por ano. ' +
+    'O indicador serve para abrir investigação, não para concluir.</div>';
+}
+
+/* ── demanda ── */
+function desenhaDemanda(){
+  const cores = D.demandaRegistrada.map(v => v > tolerancia ? "#e52207" : "#1351b4");
+  graficoBarra(document.getElementById("cht-demanda"), {
+    rotulos:D.meses, valores:D.demandaRegistrada, cores, unidade:" kW", tituloY:"kW",
+    yMax:Math.ceil(Math.max(demandaMax, tolerancia)/50)*50 + 50,
+    linhaRef:D.demandaContratada, linhaRefRotulo:"contratada " + nf(D.demandaContratada) + " kW",
+    linhaRef2:tolerancia, linhaRef2Rotulo:"tolerância +5%"
+  });
+  const ociosa = D.demandaContratada - media(D.demandaRegistrada);
+  const custoOcioso = ociosa * D.tarifaDemanda * 12;
+  document.getElementById("veredito-demanda").innerHTML =
+    '<span class="msg-icon" aria-hidden="true">!</span><div>' +
+    '<b>Dois problemas opostos no mesmo contrato.</b> ' +
+    'Em ' + mesesUltrap + ' mês(es) a demanda registrada superou a tolerância de 5% — há ultrapassagem cobrada. ' +
+    'Ao mesmo tempo, no mês mais fraco a utilização caiu a ' + nf(utilizacaoMin*100,0) + '%, e a demanda média ociosa ' +
+    'de ' + nf(ociosa,0) + ' kW equivale a ' + brl(custoOcioso) + ' por ano. ' +
+    'Reduzir a contratação sem antes tratar o pico do verão apenas troca um custo pelo outro: ' +
+    'a sequência correta é achatar a ponta e só depois renegociar.</div>';
+}
+
+/* ── linha de base ── */
+function desenhaRegressao(){
+  graficoDispersao(document.getElementById("cht-regr"), {
+    pontos:D.grausDia.map((g, i) => ({ x:g, y:D.consumo[i], rotulo:D.meses[i] })),
+    reta:REG, tituloX:"Graus-dia de refrigeração (°C·dia)",
+    fmtY:v => nf(v/1000,0) + "k"
+  });
+  const maxAbs = Math.max.apply(null, residuo.map(Math.abs));
+  graficoBarraResiduo(document.getElementById("cht-resid"), maxAbs);
+
+  document.getElementById("veredito-regr").innerHTML =
+    '<span class="msg-icon" aria-hidden="true">i</span><div>' +
+    '<b>Modelo ajustado: consumo ≈ ' + nf(REG.a,0) + ' + ' + nf(REG.b,0) + ' × graus-dia (R² = ' + nf(REG.r2,2) + ').</b> ' +
+    'O termo constante — ' + nf(REG.a,0) + ' kWh/mês — é a carga que não depende do clima: iluminação, ' +
+    'equipamentos, cargas de base. O coeficiente indica que cada grau-dia adicional custa cerca de ' +
+    nf(REG.b,0) + ' kWh. Com R² de ' + nf(REG.r2,2) + ', o clima explica ' + nf(REG.r2*100,0) + '% da variação; ' +
+    'o restante é o que a gestão pode influenciar. É sobre o desvio, e não sobre o consumo bruto, que ' +
+    'metas de economia devem ser fixadas.</div>';
+}
+function graficoBarraResiduo(svg, maxAbs){
+  const lim = Math.ceil(maxAbs/1000)*1000;
+  limpa(svg);
+  const box = { x0:52, y0:16, w:300, h:230 };
+  moldura(svg, box, -lim, lim, D.meses.map((m,i)=> i%2===0?m:""), { fmtY:v => nf(v/1000,0)+"k", ticks:4 });
+  const n = residuo.length, passo = box.w/n, larg = passo*0.62;
+  const py = v => box.y0 + box.h - box.h * (v + lim) / (2*lim);
+  svg.appendChild(el("line",{x1:box.x0,y1:py(0),x2:box.x0+box.w,y2:py(0),stroke:"#999","stroke-width":1}));
+  residuo.forEach((v,i)=>{
+    const y = Math.min(py(v), py(0));
+    const r = el("rect",{ x:box.x0+passo*i+(passo-larg)/2, y, width:larg,
+      height:Math.max(Math.abs(py(v)-py(0)),1), rx:2,
+      fill: v > 0 ? "#e52207" : "#168821" });
+    r.appendChild(el("title",{}, D.meses[i]+": "+(v>0?"+":"")+nf(v,0)+" kWh vs. esperado"));
+    svg.appendChild(r);
+  });
+  svg.appendChild(el("text",{x:box.x0+box.w/2,y:box.y0+box.h+34,"text-anchor":"middle",
+    "font-size":10,fill:"#888"},"Desvio mensal em relação à linha de base"));
+}
+
+/* ── água ── */
+function desenhaAgua(){
+  const rot = D.nivelReservatorio.map((_,i)=> i%3===0 ? String(i).padStart(2,"0")+"h" : "");
+  graficoLinha(document.getElementById("cht-nivel"), {
+    rotulos:rot, yMin:100, yMax:145, tituloY:"m³", unidade:" m³", casas:1,
+    faixa:D.janelaVMN, faixaRotulo:"janela da VMN",
+    series:[{ valores:D.nivelReservatorio, cor:"#1c7293" }]
+  });
+  document.getElementById("veredito-vmn").innerHTML =
+    '<span class="msg-icon" aria-hidden="true">!</span><div>' +
+    '<b>VMN de ' + nf(vmn,0) + ' L/h — investigar.</b> ' +
+    'Entre ' + String(jv0).padStart(2,"0") + 'h e ' + String(jv1).padStart(2,"0") + 'h — dentro da janela de ' +
+    String(D.bombasParadas[0]).padStart(2,"0") + 'h a ' + String(D.bombasParadas[1]).padStart(2,"0") + 'h em que as bombas ficam paradas — ' +
+    'o reservatório perdeu ' + nf((D.nivelReservatorio[jv0]-D.nivelReservatorio[jv1]),1) + ' m³. ' +
+    'Projetado para 24 h são ' + nf(vmnDia,1) + ' m³/dia, cerca de ' + nf(vmnPct*100,0) + '% do volume faturado ' +
+    'e ' + brl(custoVMN) + ' por ano. Antes de concluir por vazamento, confirmar que nenhuma bomba, ' +
+    'torre de arrefecimento ou irrigação opera nessa janela.</div>';
+
+  // balanço hídrico
+  const svg = document.getElementById("cht-balanco");
+  limpa(svg);
+  const x0 = 56, w = 660, y = 40, h = 46;
+  const total = D.consumoAguaMensal;
+  const medido = D.micromedidoMensal;
+  const evid = vmnMes;
+  const wMed = w * medido/total, wEvid = w * evid/total;
+
+  svg.appendChild(el("text",{x:x0,y:24,"font-size":11,fill:"#333","font-weight":"700"},
+    "Entrada macromedida: " + nf(total) + " m³/mês"));
+  svg.appendChild(el("rect",{x:x0,y,width:w,height:h,fill:"#dfe9ee",stroke:"#1c7293","stroke-width":1.5,rx:3}));
+  if (wMed > 0) svg.appendChild(el("rect",{x:x0,y,width:wMed,height:h,fill:"#1c7293",rx:3}));
+  svg.appendChild(el("rect",{x:x0+w-wEvid,y,width:wEvid,height:h,fill:"#e52207",opacity:.75,rx:3}));
+
+  const legendas = [
+    ["#1c7293","Consumo micromedido: " + nf(medido) + " m³ (não há hidrômetro setorial)"],
+    ["#dfe9ee","Não medido: " + nf(total-medido-evid) + " m³ — indeterminado, não é perda comprovada"],
+    ["#e52207","Perda evidenciada pela VMN: " + nf(evid,0) + " m³ (" + nf(vmnPct*100,0) + "%)"]
+  ];
+  legendas.forEach((l,i)=>{
+    const yy = 110 + i*24;
+    svg.appendChild(el("rect",{x:x0,y:yy-9,width:13,height:13,fill:l[0],stroke:"#999","stroke-width":.5,rx:2}));
+    svg.appendChild(el("text",{x:x0+20,y:yy+2,"font-size":11,fill:"#333"},l[1]));
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CLIMATIZAÇÃO — tudo derivado do INVENTARIO real
+   ══════════════════════════════════════════════════════════════════════════ */
+const TIPOS = ["SPLIT","SELF CONTAINED","PISO/TETO","JANELA","CHILLER"];
+const rotTipo = t => ({ "SPLIT":"Split","SELF CONTAINED":"Self contained",
+  "PISO/TETO":"Piso-teto","JANELA":"Janela","CHILLER":"Chiller" }[t] || t);
+const isOP = r => r.es === "OP" || r.es === "OR";
+
+const INV_TOTAL   = INVENTARIO.length;
+const INV_OP      = INVENTARIO.filter(isOP).length;
+const INV_INOP    = INV_TOTAL - INV_OP;
+const BTU_TOTAL   = soma(INVENTARIO.map(r => r.bt));
+const BTU_PARADO  = soma(INVENTARIO.filter(r => !isOP(r)).map(r => r.bt));
+
+function lerEER(){
+  const e = {};
+  TIPOS.forEach((t,i) => {
+    const inp = document.getElementById("eer-"+i);
+    e[t] = inp ? (parseFloat(inp.value) || D.eer[t]) : D.eer[t];
+  });
+  return e;
+}
+/* potência elétrica de um equipamento, em kW */
+function kwDe(r, eer, ganho){
+  const base = eer[r.tp] || 9.0;
+  return r.bt / (base * (r.iv ? ganho : 1)) / 1000;
+}
+
+/* ── retrato do parque ── */
+function desenhaParque(){
+  const eer = lerEER(), ganho = parseFloat(document.getElementById("i-ganho").value) || D.ganhoInverter;
+  const linhas = TIPOS.map(t => {
+    const g = INVENTARIO.filter(r => r.tp === t);
+    return { t, total:g.length, op:g.filter(isOP).length, inop:g.filter(r => !isOP(r)).length,
+      btu:soma(g.map(r => r.bt)), btuParado:soma(g.filter(r => !isOP(r)).map(r => r.bt)),
+      inv:g.filter(r => r.iv).length, red:g.filter(r => r.rd).length };
+  });
+  document.getElementById("tb-parque").innerHTML = linhas.map(l =>
+    "<tr" + (l.inop / l.total > 0.4 ? " class='alerta'" : "") + "><td>" + rotTipo(l.t) + "</td>" +
+    "<td class='num'>" + l.total + "</td><td class='num'>" + l.op + "</td>" +
+    "<td class='num'>" + l.inop + "</td><td class='num'>" + nf(l.btu) + "</td>" +
+    "<td class='num'>" + nf(l.btuParado) + "</td><td class='num'>" + l.inv + "</td>" +
+    "<td class='num'>" + l.red + "</td></tr>").join("") +
+    "<tr><td><strong>Total</strong></td><td class='num'><strong>" + INV_TOTAL + "</strong></td>" +
+    "<td class='num'><strong>" + INV_OP + "</strong></td><td class='num'><strong>" + INV_INOP + "</strong></td>" +
+    "<td class='num'><strong>" + nf(BTU_TOTAL) + "</strong></td>" +
+    "<td class='num'><strong>" + nf(BTU_PARADO) + "</strong></td>" +
+    "<td class='num'><strong>" + soma(linhas.map(l => l.inv)) + "</strong></td>" +
+    "<td class='num'><strong>" + soma(linhas.map(l => l.red)) + "</strong></td></tr>";
+
+  const tr = BTU_TOTAL / 12000;
+  preencheKPIs("kpis-parque", [
+    { rotulo:"Equipamentos", valor:nf(INV_TOTAL), unidade:"",
+      sub:INV_OP + " operantes · " + INV_INOP + " parados", conceito:"carga", classe:"energia" },
+    { rotulo:"Capacidade instalada", valor:nf(tr,0), unidade:"TR",
+      sub:nf(BTU_TOTAL) + " BTU/h no total", conceito:"carga", classe:"energia" },
+    { rotulo:"Capacidade parada", valor:nf(BTU_PARADO / 12000, 0), unidade:"TR",
+      sub:nf(100 * BTU_PARADO / BTU_TOTAL, 0) + "% da capacidade fora de operação",
+      tom:"alerta", conceito:"carga", classe:"danger" },
+    { rotulo:"Equipamentos parados", valor:nf(100 * INV_INOP / INV_TOTAL, 0), unidade:"%",
+      sub:INV_INOP + " de " + INV_TOTAL + " unidades", tom:"alerta", conceito:"carga", classe:"danger" },
+    { rotulo:"Regime 24/7", valor:nf(INVENTARIO.filter(r => r.h === 24).length), unidade:"equip.",
+      sub:"Operação permanente declarada", conceito:"carga", classe:"" }
+  ]);
+
+  /* por prédio */
+  const preds = {};
+  INVENTARIO.forEach(r => {
+    if (!preds[r.pr]) preds[r.pr] = { btu:0, parado:0, n:0, inop:0 };
+    preds[r.pr].btu += r.bt; preds[r.pr].n++;
+    if (!isOP(r)){ preds[r.pr].parado += r.bt; preds[r.pr].inop++; }
+  });
+  const lista = Object.keys(preds).map(k => ({ nome:k, ...preds[k] }))
+    .sort((a,b) => b.btu - a.btu).slice(0, 12);
+  barrasPredio(document.getElementById("cht-predio"), lista);
+
+  /* mesmo retrato, resumido, na aba Visão geral */
+  graficoBarraH(document.getElementById("cht-parque"), {
+    itens:linhas.map(l => ({ tipo:rotTipo(l.t), total:l.total, parte:l.op })),
+    cor:"#1351b4", x0:112, largura:196
+  });
+
+  const pior = Object.keys(preds).map(k => ({ nome:k, ...preds[k] }))
+    .filter(p => p.n >= 3).sort((a,b) => b.parado - a.parado)[0];
+  document.getElementById("veredito-predio").innerHTML =
+    '<span class="msg-icon" aria-hidden="true">!</span><div>' +
+    '<b>' + pior.nome + ' concentra ' + nf(pior.parado / 12000, 0) + ' TR parados — ' +
+    nf(100 * pior.parado / BTU_PARADO, 0) + '% de toda a capacidade fora de operação da OM.</b> ' +
+    'São ' + pior.inop + ' de ' + pior.n + ' equipamentos do prédio (' + nf(100 * pior.inop / pior.n, 0) + '%). ' +
+    'Uma lista de 39 inoperantes espalhada por tipo não mostra isso; o mesmo dado agrupado por prédio ' +
+    'transforma manutenção corretiva difusa em uma intervenção concentrada, que pode ser contratada como um lote só.' +
+    '</div>';
+}
+function barrasPredio(svg, lista){
+  limpa(svg);
+  const x0 = 168, larg = 430, alt = 20, gap = 6;
+  const max = Math.max.apply(null, lista.map(p => p.btu));
+  lista.forEach((p, i) => {
+    const y = 8 + i * (alt + gap);
+    svg.appendChild(el("text", { x:x0 - 8, y:y + alt / 2 + 4, "text-anchor":"end",
+      "font-size":10.5, fill:"#333", "font-weight":"600" }, p.nome));
+    const w = larg * p.btu / max, wp = larg * p.parado / max;
+    const a = el("rect", { x:x0, y, width:w, height:alt, fill:"#1351b4", rx:2 });
+    a.appendChild(el("title", {}, p.nome + ": " + nf(p.btu) + " BTU instalados"));
+    svg.appendChild(a);
+    if (wp > 0){
+      const b = el("rect", { x:x0 + w - wp, y, width:wp, height:alt, fill:"#e52207", rx:2 });
+      b.appendChild(el("title", {}, p.nome + ": " + nf(p.parado) + " BTU parados (" + p.inop + " equip.)"));
+      svg.appendChild(b);
+    }
+    svg.appendChild(el("text", { x:x0 + w + 8, y:y + alt / 2 + 4, "font-size":10, fill:"#666" },
+      nf(p.btu / 12000, 0) + " TR" + (p.parado ? "  ·  " + nf(p.parado / 12000, 0) + " parados" : "")));
+  });
+}
+
+/* ── criticidade ── */
+function desenhaCriticidade(){
+  const ordem = ["CRÍTICA","ALTA","MÉDIA","BAIXA"];
+  const linhas = ordem.map(c => {
+    const g = INVENTARIO.filter(r => r.cr === c);
+    return { c, total:g.length, op:g.filter(isOP).length, inop:g.filter(r => !isOP(r)).length };
+  });
+  document.getElementById("tb-crit").innerHTML = linhas.map(l =>
+    "<tr" + (l.c === "CRÍTICA" && l.inop ? " class='alerta'" : "") + "><td>" + l.c + "</td>" +
+    "<td class='num'>" + l.total + "</td><td class='num'>" + l.op + "</td>" +
+    "<td class='num'>" + l.inop + "</td><td class='num'>" +
+    nf(100 * l.inop / l.total, 0) + "%</td></tr>").join("");
+
+  const criticos = INVENTARIO.filter(r => r.cr === "CRÍTICA" && !isOP(r));
+  document.getElementById("tb-critlist").innerHTML = criticos.map(r =>
+    "<tr class='alerta'><td>" + r.pr + "</td><td>" + r.lo + "</td><td>" + rotTipo(r.tp) + "</td>" +
+    "<td class='num'>" + nf(r.bt) + "</td><td>" +
+    (r.h ? r.h + " h × " + r.d + " d" : "<strong>não informado</strong>") + "</td></tr>").join("");
+
+  const bat = criticos.filter(r => r.lo.toUpperCase().indexOf("BATERIA") >= 0).length;
+  document.getElementById("veredito-crit").innerHTML =
+    '<span class="msg-icon" aria-hidden="true">!</span><div>' +
+    '<b>' + criticos.length + ' equipamentos de criticidade CRÍTICA estão fora de operação.</b> ' +
+    (bat ? bat + ' deles climatizam salas de bateria do F21 — e nenhum desses quatro tem regime de uso preenchido, ' +
+      'o que sugere que foram cadastrados às pressas e nunca revisados. ' : '') +
+    'Este é o cruzamento que a contagem de inoperantes não entrega: dos ' + INV_INOP + ' parados, ' +
+    'estes são os que têm consequência imediata sobre material sensível. ' +
+    'Deveriam encabeçar a fila de reparo, independentemente da ordem de abertura das OS.' +
+    '</div>';
+}
+
+/* ── estimador de carga ── */
+function desenhaClima(){
+  const eer = lerEER();
+  const ganho  = parseFloat(document.getElementById("i-ganho").value)  || D.ganhoInverter;
+  const divers = parseFloat(document.getElementById("i-divers").value) || 0.70;
+  const horas  = parseFloat(document.getElementById("i-horas").value)  || 2500;
+
+  const ativos = INVENTARIO.filter(isOP);
+  const cargaTotal   = soma(ativos.map(r => kwDe(r, eer, ganho)));
+  const cargaReserva = soma(ativos.filter(r => r.rd).map(r => kwDe(r, eer, ganho)));
+  const cargaOper    = cargaTotal - cargaReserva;
+  const simultanea   = cargaOper * divers;
+  const consumoClima = simultanea * horas;
+  const pctPonta     = simultanea / demandaMax;
+  const pctConsumo   = consumoClima / consumoAnual;
+  const cargaParada  = soma(INVENTARIO.filter(r => !isOP(r)).map(r => kwDe(r, eer, ganho)));
+
+  preencheKPIs("kpis-clima", [
+    { rotulo:"Carga instalada operante", valor:nf(cargaTotal,0), unidade:"kW",
+      sub:"Calculada do BTU de cada equipamento", conceito:"carga", classe:"energia" },
+    { rotulo:"Carga em reserva", valor:nf(cargaReserva,0), unidade:"kW",
+      sub:soma(ativos.filter(r => r.rd).map(() => 1)) + " unidades marcadas como redundantes",
+      conceito:"redundancia", classe:"success" },
+    { rotulo:"Carga operacional", valor:nf(cargaOper,0), unidade:"kW",
+      sub:"Instalada menos a reserva estrutural", conceito:"redundancia", classe:"energia" },
+    { rotulo:"Carga simultânea", valor:nf(simultanea,0), unidade:"kW",
+      sub:"Operacional × diversidade " + nf(divers,2), conceito:"carga", classe:"energia" },
+    { rotulo:"Participação na ponta", valor:nf(pctPonta*100,0), unidade:"%",
+      sub:"Da demanda máxima simulada de " + nf(demandaMax) + " kW",
+      tom:pctPonta > 0.45 ? "alerta" : "", conceito:"carga",
+      classe:pctPonta > 0.45 ? "danger" : "energia" },
+    { rotulo:"Carga latente parada", valor:nf(cargaParada,0), unidade:"kW",
+      sub:"Voltará à demanda quando os " + INV_INOP + " forem reparados",
+      tom:"alerta", conceito:"carga", classe:"danger" }
+  ]);
+
+  const cx = document.getElementById("veredito-coerencia");
+  const excede = simultanea > demandaMax;
+  cx.className = "msg " + (excede ? "msg-danger" : "msg-info");
+  cx.innerHTML = '<span class="msg-icon" aria-hidden="true">' + (excede ? "!" : "i") + '</span><div>' +
+    '<b>Teste de coerência: ' + nf(simultanea,0) + ' kW de climatização contra ' + nf(demandaMax,0) +
+    ' kW de demanda máxima.</b> ' +
+    (excede
+      ? 'A carga estimada de climatização <strong>excede</strong> a demanda registrada — o que é impossível. ' +
+        'Uma das três premissas está errada: o EER adotado, o fator de diversidade ou a série de demanda. ' +
+        'Este teste é a razão de o painel expor as premissas em vez de escondê-las.'
+      : 'Os dois valores são compatíveis. Vale registrar que a demanda desta demonstração é simulada e foi ' +
+        'recalibrada depois que o inventário real chegou: a série anterior era pequena demais para sustentar ' +
+        'um parque de ' + nf(BTU_TOTAL/12000,0) + ' TR. Quando a fatura real entrar, este teste passa a ser ' +
+        'a validação cruzada entre cadastro e medição — se não fechar, um dos dois está errado.') +
+    ' Reparar os ' + INV_INOP + ' equipamentos parados acrescentaria cerca de ' +
+    nf(cargaParada * divers,0) + ' kW à demanda: melhora de serviço que <em>aumenta</em> o consumo, e por isso ' +
+    'precisa ser explicada antes de aparecer no gráfico do ano que vem.' +
+    '</div>';
+
+  desenhaRedundancia(eer, ganho, horas);
+  desenhaInverter();
+}
+function montaControlesEER(){
+  document.getElementById("ctrl-eer").innerHTML = TIPOS.map((t,i) =>
+    '<div class="field"><label for="eer-' + i + '">' + rotTipo(t) + ' — EER</label>' +
+    '<input type="number" id="eer-' + i + '" min="4" max="16" step="0.1" value="' + D.eer[t] + '"></div>').join("") +
+    '<div class="field" style="min-width:230px"><label>Unidade</label>' +
+    '<span style="font-size:.8rem;color:var(--gray-7)">BTU por watt-hora. Premissa — substituir por ' +
+    'corrente nominal × tensão quando o levantamento de placa fechar.</span></div>';
+  TIPOS.forEach((_,i) => document.getElementById("eer-"+i).addEventListener("input", desenhaTudoClima));
+  ["i-ganho","i-divers","i-horas"].forEach(id =>
+    document.getElementById(id).addEventListener("input", desenhaTudoClima));
+  ["i-econ","i-horas-ac","i-kw","i-preco"].forEach(id =>
+    document.getElementById(id).addEventListener("input", desenhaInverter));
+  document.getElementById("inv-oper").addEventListener("change", desenhaInverter);
+}
+function desenhaTudoClima(){ desenhaParque(); desenhaClima(); }
+
+/* ── redundância ── */
+function conjuntosRedundantes(){
+  const mapa = {};
+  INVENTARIO.forEach(r => {
+    const k = r.pr + " ▸ " + r.lo;
+    if (!mapa[k]) mapa[k] = { pr:r.pr, lo:r.lo, itens:[] };
+    mapa[k].itens.push(r);
+  });
+  return Object.keys(mapa).map(k => mapa[k])
+    .filter(c => c.itens.some(r => r.rd))
+    .map(c => ({
+      ...c,
+      maquinas:c.itens.length,
+      operantes:c.itens.filter(isOP).length,
+      reservaOP:c.itens.filter(r => r.rd && isOP(r)).length,
+      reservaTotal:c.itens.filter(r => r.rd).length,
+      permanente:c.itens.some(r => r.pm)
+    }))
+    .sort((a,b) => (a.operantes / a.maquinas) - (b.operantes / b.maquinas));
+}
+function desenhaRedundancia(eer, ganho, horas){
+  const conj = conjuntosRedundantes();
+  const comprometidos = conj.filter(c => c.operantes < c.maquinas);
+  const efetiva = conj.length ? (conj.length - comprometidos.length) / conj.length : 0;
+  const ativos = INVENTARIO.filter(isOP);
+  const cargaReserva = soma(ativos.filter(r => r.rd).map(r => kwDe(r, eer, ganho)));
+  const evitado = cargaReserva * horas * D.tarifaEnergia;
+  const semMarca = INVENTARIO.filter(r => r.pr.toUpperCase().indexOf("F21") >= 0 && r.rd).length;
+
+  document.getElementById("tb-red").innerHTML = conj.map(c =>
+    "<tr" + (c.operantes < c.maquinas ? " class='alerta'" : "") + "><td>" + c.pr + "</td>" +
+    "<td>" + c.lo + "</td><td class='num'>" + c.maquinas + "</td>" +
+    "<td class='num'>" + c.operantes + "</td>" +
+    "<td>" + (c.permanente ? "24/7" : "8 h × 5 d") + "</td>" +
+    "<td>" + (c.operantes < c.maquinas
+      ? "<strong>sem reserva real</strong>" : "reserva íntegra") + "</td></tr>").join("");
+
+  preencheKPIs("kpis-red", [
+    { rotulo:"Conjuntos redundantes", valor:nf(conj.length), unidade:"",
+      sub:"Identificados pela marcação no inventário", conceito:"redEfetiva", classe:"energia" },
+    { rotulo:"Redundância efetiva", valor:nf(efetiva*100,0), unidade:"%",
+      sub:comprometidos.length + " conjunto(s) sem reserva real",
+      tom:efetiva < 0.9 ? "alerta" : "ok", conceito:"redEfetiva",
+      classe:efetiva < 0.9 ? "danger" : "success" },
+    { rotulo:"Carga em reserva", valor:nf(cargaReserva,0), unidade:"kW",
+      sub:"Não entra na demanda simultânea", conceito:"redundancia", classe:"success" },
+    { rotulo:"Custo evitado pela reserva", valor:brl(evitado), unidade:"",
+      sub:"Se as reservas operassem junto com as principais", conceito:"redundancia", classe:"energia" },
+    { rotulo:"Redundância marcada no F21", valor:nf(semMarca), unidade:"equip.",
+      sub:"Regime informado pela DME, ausente do cadastro",
+      tom:"alerta", conceito:"redEfetiva", classe:"danger" }
+  ]);
+
+  const nomes = comprometidos.map(c => c.pr + " " + c.lo).join(", ");
+  document.getElementById("veredito-red").className = "msg " + (comprometidos.length ? "msg-danger" : "msg-info");
+  document.getElementById("veredito-red").innerHTML =
+    '<span class="msg-icon" aria-hidden="true">' + (comprometidos.length ? "!" : "i") + '</span><div>' +
+    '<b>' + (comprometidos.length
+      ? comprometidos.length + " conjunto(s) operando sem reserva: " + nomes + "."
+      : "Todos os conjuntos com reserva íntegra.") + '</b> ' +
+    '<strong>Lacuna de cadastro:</strong> o inventário marca redundância apenas nos paióis e em um ponto do Comando. ' +
+    'O F21 tem ' + semMarca + ' equipamentos marcados como redundantes, embora a DME informe que ali o self é ' +
+    'principal e os splits são reserva. Enquanto isso não for cadastrado, a carga do F21 entra inteira no cálculo ' +
+    'de demanda e os conjuntos daquele prédio não aparecem nesta tabela. ' +
+    '<strong>Rodízio:</strong> em regime alternado cada máquina acumula cerca de metade das horas do ambiente, ' +
+    'então plano por horímetro tem de seguir a máquina, não o local. ' +
+    '<strong>Reserva não se testa sozinha:</strong> a que só liga quando a principal falha é justamente a que ' +
+    'ninguém percebe estar quebrada.' +
+    '</div>';
+}
+
+/* ── penetração inverter ── */
+const ESCOPOS = [
+  { id:"total", nome:"Parque inteiro", tipos:TIPOS,
+    composicao:"Todos os tipos", uso:"Reporte institucional. Diluído por equipamento onde inverter não é o critério." },
+  { id:"dx", nome:"Total − (self + chiller)", tipos:["SPLIT","PISO/TETO","JANELA"],
+    composicao:"Split + Piso-teto + Janela", uso:"Toda a expansão direta. Escopo pedido; defensável e comparável." },
+  { id:"sj", nome:"Split + Janela", tipos:["SPLIT","JANELA"],
+    composicao:"Split (hi-wall) + Janela", uso:"Escopo literal do pedido. Deixa o piso-teto de fora." },
+  { id:"dxp", nome:"Expansão direta de pequeno porte", tipos:["SPLIT","PISO/TETO"],
+    composicao:"Split + Piso-teto", uso:"Escopo de gestão: onde inverter é norma de mercado e a decisão é de compra." }
+];
+function desenhaInverter(){
+  const soOper = document.getElementById("inv-oper").checked;
+  const base = soOper ? INVENTARIO.filter(isOP) : INVENTARIO;
+  const res = {};
+  ESCOPOS.forEach(e => {
+    const g = base.filter(r => e.tipos.indexOf(r.tp) >= 0);
+    res[e.id] = { base:g.length, inv:g.filter(r => r.iv).length,
+      ipi:g.length ? g.filter(r => r.iv).length / g.length : 0 };
+  });
+  document.getElementById("tb-inv").innerHTML = ESCOPOS.map(e => {
+    const r = res[e.id];
+    return "<tr><td><strong>" + e.nome + "</strong></td><td>" + e.composicao + "</td>" +
+      "<td class='num'>" + r.inv + "</td><td class='num'>" + r.base + "</td>" +
+      "<td class='num'><strong>" + nf(r.ipi*100,1) + "%</strong></td><td>" + e.uso + "</td></tr>";
+  }).join("");
+
+  const janela = base.filter(r => r.tp === "JANELA").length;
+  const invSelf = base.filter(r => r.tp === "SELF CONTAINED" && r.iv).length;
+  const invF21 = base.filter(r => r.iv && r.pr.toUpperCase().indexOf("F21") >= 0).length;
+  const invTotal = base.filter(r => r.iv).length;
+  const invParado = INVENTARIO.filter(r => r.iv && !isOP(r)).length;
+
+  preencheKPIs("kpis-inv", [
+    { rotulo:"IPI — parque inteiro", valor:nf(res.total.ipi*100,1), unidade:"%",
+      sub:res.total.inv + " de " + res.total.base + " equipamentos", conceito:"ipi", classe:"" },
+    { rotulo:"IPI — sem self e chiller", valor:nf(res.dx.ipi*100,1), unidade:"%",
+      sub:"Base: " + res.dx.base + " de expansão direta", conceito:"ipi", classe:"energia" },
+    { rotulo:"IPI — split e janela", valor:nf(res.sj.ipi*100,1), unidade:"%",
+      sub:"Base: " + res.sj.base + " — sem o piso-teto", conceito:"ipi", classe:"energia" },
+    { rotulo:"IPI — expansão direta pequena", valor:nf(res.dxp.ipi*100,1), unidade:"%",
+      sub:"Base: " + res.dxp.base + " — escopo de gestão",
+      tom:res.dxp.ipi < 0.25 ? "alerta" : "ok", conceito:"ipi",
+      classe:res.dxp.ipi < 0.25 ? "danger" : "success" },
+    { rotulo:"Inverter fora de operação", valor:nf(invParado), unidade:"equip.",
+      sub:"de " + INVENTARIO.filter(r => r.iv).length + " inverter no parque",
+      tom:"alerta", conceito:"ipi", classe:"danger" }
+  ]);
+
+  document.getElementById("veredito-inv").innerHTML =
+    '<span class="msg-icon" aria-hidden="true">i</span><div>' +
+    '<b>O índice é real, mas quase todo o parque inverter está concentrado e parado.</b> ' +
+    'Dos ' + INVENTARIO.filter(r => r.iv).length + ' equipamentos inverter do inventário, ' + invF21 +
+    ' estão no F21 e ' + invParado + ' estão inoperantes. ' +
+    'O IPI mede tecnologia instalada, não tecnologia em uso — por isso o painel oferece o filtro por operantes: ' +
+    'a diferença entre as duas leituras é exatamente o que já foi comprado e não está entregando economia. ' +
+    '<strong>Sobre self contained:</strong> o inventário registra ' +
+    invSelf + ' self contained inverter, o que confirma na prática que o segmento tem oferta de velocidade variável. ' +
+    'Ainda assim, para self e chiller o indicador correto não é o binário inverter, e sim a modulação em carga ' +
+    'parcial medida por IPLV. ' +
+    '<strong>Sobre janela:</strong> os ' + janela + ' aparelhos de janela seguem com zero inverter e assim ' +
+    'permanecerão — a oferta no Brasil é residual. Mantê-los no denominador piora o índice por limitação de mercado.' +
+    '</div>';
+
+  /* retorno da substituição */
+  const econ  = (parseFloat(document.getElementById("i-econ").value) || 32) / 100;
+  const horas = parseFloat(document.getElementById("i-horas-ac").value) || 2080;
+  const kw    = parseFloat(document.getElementById("i-kw").value) || 3.4;
+  const preco = parseFloat(document.getElementById("i-preco").value) || 7000;
+  const economiaAno = kw * horas * econ * D.tarifaEnergia;
+  const payback = economiaAno > 0 ? preco / economiaAno : Infinity;
+  const onOffAtivos = INVENTARIO.filter(r => isOP(r) && !r.iv && !r.rd &&
+    (r.tp === "SPLIT" || r.tp === "PISO/TETO")).length;
+  const bom = payback <= 5;
+
+  const cx = document.getElementById("veredito-payback");
+  cx.className = "msg " + (bom ? "msg-info" : "msg-warning");
+  cx.innerHTML = '<span class="msg-icon" aria-hidden="true">' + (bom ? "i" : "!") + '</span><div>' +
+    '<b>Retorno simples: ' + nf(payback,1) + ' anos por aparelho</b> — economia de ' + brl(economiaAno) +
+    '/ano contra ' + brl(preco) + ' de troca. ' +
+    'Há ' + onOffAtivos + ' equipamentos de velocidade fixa operantes e não redundantes na expansão direta de ' +
+    'pequeno porte: ' + brl(onOffAtivos * preco) + ' de investimento para ' + brl(onOffAtivos * economiaAno) +
+    ' por ano. ' +
+    (bom
+      ? 'Com essas premissas o retorno fecha, mas confirme as horas por ambiente antes de generalizar.'
+      : 'Com essas premissas, <strong>substituir equipamento em funcionamento não se justifica só por eficiência</strong>. ' +
+        'Há um alvo melhor e mais barato: os ' + invParado + ' inverter já instalados e parados. ' +
+        'Recolocá-los em operação custa manutenção, não aquisição, e o ganho de eficiência já foi pago.') +
+    '</div>';
+}
+
+/* ── qualidade do inventário ── */
+function desenhaQualidade(){
+  const ids = INVENTARIO.map(r => r.id);
+  const semId = ids.filter(i => !i).length;
+  const cont = {};
+  ids.filter(Boolean).forEach(i => cont[i] = (cont[i] || 0) + 1);
+  const repetidos = Object.keys(cont).filter(k => cont[k] > 1);
+  const dupExtras = soma(repetidos.map(k => cont[k] - 1));
+  const semHoras = INVENTARIO.filter(r => r.h === null).length;
+  const permDiverg = INVENTARIO.filter(r => r.pm && r.h !== 24).length;
+  const estadoFora = INVENTARIO.filter(r => r.es !== "OP" && r.es !== "INOP").length;
+  const f21red = INVENTARIO.filter(r => r.pr.toUpperCase().indexOf("F21") >= 0 && r.rd).length;
+
+  const achados = [
+    ["Registros no arquivo × declarados no cabeçalho",
+     INV_TOTAL + " linhas contra 175 declarados",
+     "Diferença de " + (INV_TOTAL - 175) + ". Todo indicador com denominador de contagem muda conforme a escolha."],
+    ["Registros sem identificador", semId + " linhas",
+     "Não há como abrir OS nem rastrear histórico dessas máquinas."],
+    ["Identificadores repetidos", repetidos.length + " id(s), " + dupExtras + " linha(s) excedentes",
+     "O id 138 cobre 6 máquinas distintas em MECÂNICA 03 (4 operantes e 2 paradas). Horímetro e histórico ficam embaralhados."],
+    ["Regime de uso em branco", semHoras + " equipamentos",
+     "Todos são splits CRÍTICOS das salas de bateria do F21. Sem horas não há estimativa de consumo nem plano por horímetro."],
+    ["Marcado como permanente com jornada de 8 h", permDiverg + " equipamentos",
+     "As centrais de bombordo e boreste do F21. Uma das duas informações está errada."],
+    ["Estado fora do domínio", estadoFora + " registro",
+     "Valor OR, não previsto no domínio. Aqui foi tratado como operante — decisão que precisa ser confirmada."],
+    ["Redundância do F21 não cadastrada", f21red + " equipamentos marcados",
+     "A DME informa regime principal-reserva no prédio, mas o campo está vazio. A carga do F21 entra inteira na demanda."]
+  ];
+  document.getElementById("tb-qual").innerHTML = achados.map(a =>
+    "<tr class='alerta'><td><strong>" + a[0] + "</strong></td><td class='num'>" + a[1] + "</td><td>" + a[2] + "</td></tr>").join("");
+
+  const campos = [
+    ["Criticidade", INVENTARIO.filter(r => r.cr).length],
+    ["BTU", INVENTARIO.filter(r => r.bt > 0).length],
+    ["Identificador", INVENTARIO.filter(r => r.id).length],
+    ["Regime de uso", INVENTARIO.filter(r => r.h !== null).length],
+    ["Fabricante", INVENTARIO.filter(r => r.fb).length],
+    ["Corrente nominal", 0],
+    ["Última manutenção", 1]
+  ];
+  const svg = document.getElementById("cht-compl");
+  limpa(svg);
+  const x0 = 140, larg = 500, alt = 20, gap = 10;
+  campos.forEach((c, i) => {
+    const y = 10 + i * (alt + gap), pct = c[1] / INV_TOTAL;
+    svg.appendChild(el("text", { x:x0 - 10, y:y + alt / 2 + 4, "text-anchor":"end",
+      "font-size":11, fill:"#333", "font-weight":"600" }, c[0]));
+    svg.appendChild(el("rect", { x:x0, y, width:larg, height:alt, fill:"#ededed", rx:3 }));
+    const r = el("rect", { x:x0, y, width:larg * pct, height:alt, rx:3,
+      fill: pct > 0.9 ? "#168821" : pct > 0.5 ? "#fa7d1e" : "#e52207" });
+    r.appendChild(el("title", {}, c[0] + ": " + c[1] + " de " + INV_TOTAL));
+    svg.appendChild(r);
+    svg.appendChild(el("text", { x:x0 + larg + 8, y:y + alt / 2 + 4, "font-size":11,
+      fill:"#333", "font-weight":"700" }, nf(pct * 100, 0) + "%"));
+  });
+}
+
+/* ── glossário ── */
+document.getElementById("conc-lista").innerHTML = Object.keys(CONCEITOS).map(k => {
+  const c = CONCEITOS[k];
+  return "<article><h3>" + c.titulo + "</h3>" +
+    "<div class='formula'>" + c.formula + "</div>" +
+    "<p><strong>Por que importa.</strong> " + c.porque + "</p>" +
+    "<p><strong>Cuidado.</strong> " + c.cuidado + "</p>" +
+    "<p class='origem'>Origem do dado: " + c.origem + "</p></article>";
+}).join("");
+
+/* ── painel lateral ── */
+const drawer = document.getElementById("drawer");
+const backdrop = document.getElementById("backdrop");
+let ultimoFoco = null;
+function abrirConceito(chave){
+  const c = CONCEITOS[chave];
+  if (!c) return;
+  ultimoFoco = document.activeElement;
+  document.getElementById("drawer-tit").textContent = c.titulo;
+  document.getElementById("drawer-body").innerHTML =
+    "<div class='formula'>" + c.formula + "</div>" +
+    "<p><strong>Por que importa.</strong> " + c.porque + "</p>" +
+    "<p><strong>Cuidado.</strong> " + c.cuidado + "</p>" +
+    "<p class='origem'>Origem do dado: " + c.origem + "</p>";
+  drawer.classList.add("open"); backdrop.classList.add("open");
+  drawer.focus();
+}
+function fecharConceito(){
+  drawer.classList.remove("open"); backdrop.classList.remove("open");
+  if (ultimoFoco) ultimoFoco.focus();
+}
+document.getElementById("drawer-close").addEventListener("click", fecharConceito);
+backdrop.addEventListener("click", fecharConceito);
+document.addEventListener("keydown", e => { if (e.key === "Escape") fecharConceito(); });
+
+/* ── abas ── */
+const abas = Array.from(document.querySelectorAll(".tab"));
+abas.forEach(t => t.addEventListener("click", () => selecionaAba(t)));
+abas.forEach((t, i) => t.addEventListener("keydown", e => {
+  let alvo = null;
+  if (e.key === "ArrowRight") alvo = abas[(i + 1) % abas.length];
+  if (e.key === "ArrowLeft")  alvo = abas[(i - 1 + abas.length) % abas.length];
+  if (alvo){ e.preventDefault(); alvo.focus(); selecionaAba(alvo); }
+}));
+function selecionaAba(t){
+  abas.forEach(o => {
+    const sel = o === t;
+    o.setAttribute("aria-selected", sel ? "true" : "false");
+    document.getElementById(o.getAttribute("aria-controls")).hidden = !sel;
+  });
+}
+
+/* ── inicialização ── */
+document.getElementById("n-gd").checked = true;
+document.getElementById("n-area").checked = true;
+desenhaNormalizacao();
+desenhaCarga();
+desenhaDemanda();
+desenhaRegressao();
+desenhaAgua();
+montaControlesEER();
+desenhaParque();
+desenhaCriticidade();
+desenhaClima();
+desenhaQualidade();
+</script>
+</body>
+</html>

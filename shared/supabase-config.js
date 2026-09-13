@@ -1,3 +1,5 @@
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase-env.js'
+
 let CONFIG_CACHE = null
 
 async function lerConfigDeArquivo(url) {
@@ -15,6 +17,17 @@ async function lerConfigDeArquivo(url) {
 export async function obterSupabaseConfig() {
   if (CONFIG_CACHE) return CONFIG_CACHE
 
+  // Caminho normal: o valor está DECLARADO em shared/supabase-env.js, não
+  // inferido de outro arquivo. Sem rede, sem fetch, sem regex — e sem o
+  // modo de falha em que um refactor em maquinas/app.js derruba os nove
+  // módulos de uma vez.
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    CONFIG_CACHE = { url: SUPABASE_URL, key: SUPABASE_ANON_KEY }
+    return CONFIG_CACHE
+  }
+
+  // Resgate, só para o caso de supabase-env.js chegar vazio num deploy
+  // parcial: continua achando o valor nos dois arquivos que o declaram.
   const candidatos = [
     new URL('../maquinas/app.js', import.meta.url),
     new URL('../refrigeracao/index.html', import.meta.url),
