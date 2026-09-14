@@ -2936,3 +2936,20 @@ só o navegador prova:
 ### Produção
 
 - [ ] Mesmo roteiro em `https://pmoc-orcin.vercel.app/calibracao` depois do deploy.
+
+## Portal — Paiol em branco, Bio integrado e card de energia (13/09/2026)
+
+Coberto por gate: caminhos de raiz do Paiol e do Bio (`tests/modulos-caminhos.test.js`), as
+listas de `shell` e `mobile-375`, a lista de cards do portal (`tests/gestao-modulo.test.js`) e
+os gates do Bio (`tests/bio-modulo.test.js`, `tests/bio-schema.test.js`). O que só o navegador
+prova é a rota **sem barra final**, que é o link do portal e o que o servidor local não
+reescreve:
+
+### Produção (`https://pmoc-orcin.vercel.app`)
+
+- [ ] Portal → card **Paióis** (abre `/paiois`, sem barra) → Livre → a tela do Paiol aparece
+      (mapa dos blocos, abas), não uma página em branco. DevTools sem 404 de `estilo.css`.
+- [ ] Portal → card **Bio** → Livre → o módulo Bio (fichas), não uma cópia do portal.
+- [ ] Portal → seção **Em desenvolvimento** → card **Energia e água** → painel xEnergia,
+      marcado como demonstração.
+- [ ] Em 375px, o portal com as duas seções e sem rolagem horizontal.

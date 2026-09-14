@@ -8,16 +8,18 @@
 <title>PMOC Paióis</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link rel="stylesheet" href="../shared/pmoc.css"/>
-<link rel="stylesheet" href="./estilo.css"/>
+<!-- Caminho de raiz (D-td4-07). Em /paiois, sem barra final (é o link do
+     portal), "./estilo.css" virava /estilo.css, 404 — e a regra
+     #app.pronto{display:block} mora nessa folha: o app montava e ficava
+     escondido, tela em branco depois do login (medido em 13/09/2026). -->
+<link rel="stylesheet" href="/paiois/estilo.css"/>
 <style>:root{--accent:#8a9a55}</style>
 </head>
 <body>
 <div id="login-screen"></div>
 <div id="app"></div>
-<script type="module">
-// resolve app.js tanto em /paiois (rewrite do Vercel) quanto em /paiois/index.html
-const base = location.pathname.replace(/\/[^/]*\.[^/]*$/, '').replace(/\/$/, '')
-import(`${base}/app.js`)
-</script>
+<!-- Tag estática, caminho de raiz: a forma de /maquinas, /gestao, /transportes
+     e /mapa, que abandonaram o loader por location.pathname em 05/09/2026. -->
+<script type="module" src="/paiois/app.js"></script>
 </body>
 </html>
