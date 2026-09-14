@@ -28,8 +28,9 @@ e Armas Submarinas da Marinha — UASG 744030 · São Gonçalo/RJ.
 | `/equipes` | **PMOC Equipes** v1.0 | 8 ofícios · 2 turnos · escala semanal e capacidade | ⚠️ sem pessoas cadastradas |
 | `/gestao` | **PMOC Gestão** v1.0 | Painel NBR 5674 · ações 5W2H com GUT · calendário consolidado · ferramentas da qualidade · POP | ✅ |
 | `/mapa` | **Mapa CMASM** v1.0 | Leaflet · 5 camadas de ativos · zonas, prédios e planta vetorial | ✅ |
+| `/bio` | **CMASM Bio** v0.1 | Fichas de fauna, pragas e árvores · árvores etiquetadas com QR · presenças · serviços de poda e controle com periodicidade | ✅ migrações 61–62 aplicadas · sem árvore cadastrada |
 
-O portal lista onze rotas; `/reparos` não aparece nele por decisão de projeto — o catálogo
+O portal lista doze rotas, mais um card de demonstração (`energy/xenergia-demo.html`); `/reparos` não aparece nele por decisão de projeto — o catálogo
 de diagnóstico é alcançado de dentro de `/maquinas`, que é onde a OS corretiva é aberta.
 
 ### Refrigeração
@@ -219,7 +220,8 @@ pmoc/
 │   ├── 52–53  acervo de documentos (normas, formulários, conceitos)
 │   ├── 54–55  refrigeração: serviços do plano e regra por tipo
 │   ├── 56–59  checks de faixa e de grandezas físicas; deriva do /calibracao
-│   └── 60     gestão e qualidade (ges_acoes, ges_indicadores, ges_pop, ges_causas)
+│   ├── 60     gestão e qualidade (ges_acoes, ges_indicadores, ges_pop, ges_causas)
+│   └── 61–62  bio: schema e RLS; seed de 29 fichas
 ├── tests/                     Gates automatizados (node --test tests/*.test.js)
 ├── ref/                       Fontes legadas: planilhas, PDFs, HTMLs originais
 └── docs/historico/            Registros já resolvidos, e os artefatos GSD aposentados

@@ -33,7 +33,9 @@ const RAIZ = path.join(__dirname, '..')
 // o modulo: medida contra os 9 modulos reais, ela devolve exatamente as
 // referencias verdadeiras de cada um, com zero falso positivo -- inclusive na
 // calibracao, que tem uma lib de QR embutida com fragmentos multilinha.
-const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'calibracao', 'refrigeracao', 'gestao']
+// `paiois` e `bio` entraram em 13/09/2026: o Paiol ficou fora desta lista e
+// quebrou exatamente como ela descreve (./estilo.css em /paiois, tela em branco).
+const MODULOS = ['maquinas', 'transportes', 'eletrica', 'fonoclama', 'predial', 'reparos', 'mapa', 'calibracao', 'refrigeracao', 'gestao', 'paiois', 'bio']
 
 function referenciasLocais(html) {
   const refs = []
@@ -130,7 +132,7 @@ test('refrigeracao/index.html so usa new URL(...) com primeiro argumento absolut
 // `mapa` tinha o mesmo loader e o mesmo defeito (corrigido em 05/09/2026, logo
 // depois do transportes) — os dois entram no mesmo caso, para que um terceiro
 // módulo que copie o loader antigo seja pego pela lista, não pela sorte.
-for (const modulo of ['transportes', 'mapa']) {
+for (const modulo of ['transportes', 'mapa', 'paiois', 'bio']) {
   test(`${modulo} carrega app.js por tag estatica raiz-absoluta, sem montar URL a partir de location.pathname`, () => {
     const html = fs.readFileSync(path.join(RAIZ, modulo, 'index.html'), 'utf8')
     assert.match(html, new RegExp(`<script type="module" src="/${modulo}/app\\.js"></script>`),

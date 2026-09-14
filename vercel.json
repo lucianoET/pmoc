@@ -13,6 +13,7 @@
     { "source": "/calibracao",   "destination": "/calibracao/index.html" },
     { "source": "/equipes",      "destination": "/equipes/index.html" },
     { "source": "/gestao",       "destination": "/gestao/index.html" },
-    { "source": "/paiois",       "destination": "/paiois/index.html" }
+    { "source": "/paiois",       "destination": "/paiois/index.html" },
+    { "source": "/bio",          "destination": "/bio/index.html" }
   ]
 }

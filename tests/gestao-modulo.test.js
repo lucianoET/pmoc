@@ -302,8 +302,11 @@ test('o portal ganhou um card para /gestao, sem mexer nos que já existiam', () 
   assert.equal(destinos.filter(d => d === '/gestao').length, 1,
     'o portal precisa de exatamente um card apontando para /gestao')
   assert.deepStrictEqual(destinos, ['/refrigeracao', '/maquinas', '/transportes', '/eletrica',
-    '/fonoclama', '/predial', '/mapa', '/equipes', '/gestao', '/paiois', '/calibracao'],
-    'a lista de cards do portal mudou além do acréscimo de /gestao')
+    '/fonoclama', '/predial', '/mapa', '/equipes', '/gestao', '/paiois', '/bio', '/calibracao',
+    '/energy/xenergia-demo.html'],
+    // /bio e o card de demonstração de energia entraram em 13/09/2026 — o gate
+    // aprendeu o fato novo, nenhum caso apagado.
+    'a lista de cards do portal mudou além dos acréscimos de /gestao, /bio e energia')
   // O recorte termina no PRÓXIMO card, não num destino nomeado: com o
   // nome fixo, entrar um módulo entre /gestao e /calibracao fazia o
   // trecho verificado passar a conter dois cards em silêncio — foi o que

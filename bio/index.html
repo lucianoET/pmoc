@@ -5,161 +5,205 @@
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <meta name="theme-color" content="#1a1a18"/>
 <script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t!=='claro'&&t!=='escuro'){t=(typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: light)').matches)?'claro':'escuro'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','escuro')}})()/* script classico de proposito: modulo ES e adiado, rodaria depois do primeiro desenho e reintroduziria a piscada de tema */</script>
-<title>PMOC · CMASM</title>
+<title>PMOC Bio</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- Gerador de QR hospedado (qrcode-generator, MIT) — cópia do que
+     /refrigeracao já embarca, servido daqui pela regra de caminho raiz-absoluto. -->
+<script src="/bio/vendor/qrcode.js"></script>
+<link rel="stylesheet" href="../shared/pmoc.css"/>
 <style>
-:root{--bg:#1a1a18;--surface:#242420;--surface2:#2e2e2a;--border:#38382f;
- --text:#e8e4d8;--text2:#a09a88;--text3:#6a6458;
- --green:#5a9e6f;--yellow:#c9a84c;--red:#b85c4a;--blue:#4a7fa0;
- --ff:'Inter',system-ui,sans-serif}
-/* tema claro embutido — o portal nao carrega shared/pmoc.css e duplica os
-   tokens no proprio bloco de estilo; estes 11 valores sao copia deliberada
-   do bloco [data-theme="claro"] de shared/pmoc.css e os dois lugares
-   precisam mudar juntos */
-[data-theme="claro"]{
- --bg:#f4f2ec;--surface:#ffffff;--surface2:#e8e4d8;--border:#cec7b4;
- --text:#24231f;--text2:#55503f;--text3:#67604f;
- --green:#2f6b45;--yellow:#7a6010;--red:#9c3826;--blue:#2b5f80}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:var(--ff);min-height:100vh}
-.hd{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;
- display:flex;align-items:center;justify-content:space-between}
-.brand{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
-.hd-sub{font-size:12px;color:var(--text3)}
-.main{max-width:920px;margin:0 auto;padding:48px 20px}
-h1{font-size:24px;font-weight:700;margin-bottom:6px}
-.sub{font-size:14px;color:var(--text2);margin-bottom:36px;line-height:1.6}
-.lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
- color:var(--text3);margin:32px 0 14px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;
- text-decoration:none;color:inherit;display:block;transition:.2s}
-.card:hover{border-color:var(--yellow);transform:translateY(-2px)}
-.card.off{opacity:.42;pointer-events:none}
-.ico{font-size:30px;margin-bottom:12px}
-.nm{font-size:15px;font-weight:700;margin-bottom:4px}
-.ds{font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:12px}
-.tags{display:flex;gap:6px;flex-wrap:wrap}
-.t{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px}
-.t-ok{background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}
-.t-wip{background:color-mix(in srgb,var(--yellow) 15%,transparent);color:var(--yellow)}
-.t-plan{background:color-mix(in srgb,var(--blue) 15%,transparent);color:var(--blue)}
-.ft{text-align:center;padding:40px 20px;font-size:12px;color:var(--text3);
- border-top:1px solid var(--border);margin-top:56px}
-.hd-right{display:flex;align-items:center;gap:12px}
-.btn-tema{background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:4px 9px;font-size:13px;line-height:1;cursor:pointer;font-family:var(--ff);transition:.15s}
-.btn-tema:hover{border-color:var(--green);color:var(--green)}
-.btn-tema{display:inline-flex;align-items:center;justify-content:center}
-.ft-acoes{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:10px}
-.ft-marca{display:inline-flex;align-items:center;gap:5px;color:inherit;text-decoration:none;opacity:.85;font-size:11px}
-.ft-marca:hover{opacity:1;color:var(--green)}
-.ico{flex-shrink:0}
+/* Única cor declarada pelo módulo: a de destaque. Tema é da folha comum. */
+:root{--accent:#4f9a5c}
+
+/* ── painel do Início ──
+   Item de grid nasce com min-width:auto e cresce até o conteúdo: a tabela
+   de vencidos empurrava o cartão 44px para fora dos 375px, medido. Com
+   min-width:0 quem rola é o .tbl-wrap, como nas outras listas. */
+#view-inicio .section-split>.panel-card{min-width:0}
+
+/* ── grade de fichas ──
+   Cartão por espécie, foto em cima. Três colunas no computador, uma no
+   celular — mesma quebra de .section-split. */
+.fichas-grade{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.fichas-grade{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.fichas-grade{grid-template-columns:1fr}}
+.ficha-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer}
+.ficha-card:hover{border-color:var(--accent)}
+.ficha-foto{height:120px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}
+.ficha-foto img{width:100%;height:100%;object-fit:cover}
+.ficha-corpo{padding:10px 12px}
+.ficha-nome{font-weight:600;color:var(--text);font-size:14px}
+.ficha-cient{font-size:11px;color:var(--text3);font-style:italic;margin-bottom:6px}
+.ficha-linha{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+
+/* ── detalhe (ficha, árvore, presença) ──
+   Bloco de texto com rótulo em caixa alta; quebra em qualquer ponto
+   porque o texto de "o que fazer" é livre. */
+.det-bloco{margin-bottom:14px}
+.det-rotulo{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:4px}
+.det-texto{font-size:13px;color:var(--text2);line-height:1.5;overflow-wrap:anywhere}
+.det-foto{max-width:100%;max-height:240px;border-radius:8px;display:block;margin-bottom:12px}
+
+/* ── QR na tela ── */
+.qr-caixa{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.qr-caixa svg{width:120px;height:120px;background:#fff;padding:6px;border-radius:6px}
+
+/* ── etiqueta A6 ──
+   Só existe na impressão. Preto e branco, sem fundo, como os formulários
+   PMOC. Fora de @media print o bloco fica escondido; dentro, é a ÚNICA
+   coisa que imprime. */
+#etiqueta{display:none}
+@media print{
+  @page{size:A6;margin:6mm}
+  body>*:not(#etiqueta){display:none!important}
+  #etiqueta{display:block;font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;text-align:center}
+  #etiqueta .et-codigo{font-size:26pt;font-weight:700;letter-spacing:.04em;margin-top:4mm}
+  #etiqueta .et-nome{font-size:14pt;font-weight:600;margin-top:2mm}
+  #etiqueta .et-cient{font-size:10pt;font-style:italic}
+  #etiqueta svg{width:48mm;height:48mm;margin:5mm auto;display:block}
+  #etiqueta .et-rodape{font-size:8pt;margin-top:3mm}
+}
 </style>
 </head>
 <body>
-<div class="hd">
-  <div class="brand"><div class="dot"></div> PMOC · CMASM</div>
-  <div class="hd-right">
-    <div class="hd-sub">Marinha do Brasil · Ilha do Engenho · São Gonçalo/RJ</div>
-  </div>
-</div>
-<div class="main">
-  <h1>Plano de Manutenção, Operação e Controle</h1>
-  <div class="sub">Sistemas de manutenção da instalação. Acesse com seu cargo e senha.</div>
+<div id="login-screen"></div>
 
-  <div class="lbl">🔧 Em produção</div>
-  <div class="grid">
-    <a class="card" href="/refrigeracao">
-      <div class="ico">❄️</div>
-      <div class="nm">Refrigeração</div>
-      <div class="ds">171 unidades de climatização. OS com fluxo de contratação/ARP, fiscalização e certificação. QR code e impressão.</div>
-      <div class="tags"><span class="t t-ok">v2.8</span><span class="t t-ok">171 equip.</span></div>
-    </a>
-    <a class="card" href="/maquinas">
-      <div class="ico">⚙️</div>
-      <div class="nm">Máquinas de corte</div>
-      <div class="ds">7 máquinas com planos por horímetro, 34 peças com preço, consumo de combustível, ciclo de vida e lista de compras.</div>
-      <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-ok">59 planos</span></div>
-    </a>
-    <a class="card" href="/transportes">
-      <div class="ico">🚚</div>
-      <div class="nm">Transportes</div>
-      <div class="ds">Viaturas e embarcações com frota importada do mapa VTR/EMB, programação de viagens, manutenção e relatórios.</div>
-      <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-ok">9 ativos</span></div>
-    </a>
-    <a class="card" href="/eletrica">
-      <div class="ico">⚡</div>
-      <div class="nm">Elétrica</div>
-      <div class="ds">Geradores, QGBTs, nobreaks e iluminação. Planos por horas de operação, OS com baixa de estoque e lista de compras.</div>
-      <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-ok">13 ativos</span></div>
-    </a>
-    <a class="card" href="/fonoclama">
-      <div class="ico">📢</div>
-      <div class="nm">Fonoclama</div>
-      <div class="ds">PA 70V — amplificadores, consoles, cornetas, linhas e sirenes. Testes periódicos com registro de não conformidade.</div>
-      <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-ok">10 ativos</span></div>
-    </a>
-    <a class="card" href="/predial">
-      <div class="ico">🏛️</div>
-      <div class="nm">Predial</div>
-      <div class="ds">Inspeção predial NBR 5674/16747. Árvore de locais do CMASM, checklist por template, matriz GUT e laudos.</div>
-      <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-ok">150 locais</span><span class="t t-ok">206 itens</span></div>
-    </a>
-    <a class="card" href="/mapa">
-      <div class="ico">🗺️</div>
-      <div class="nm">Mapa</div>
-      <div class="ds">Mapa Leaflet do CMASM com basemaps de mapa/satélite e camadas por módulo (Aguada, Grama, Elétrica).</div>
-      <div class="tags"><span class="t t-ok">v0.1</span><span class="t t-wip">Camadas demo</span></div>
-    </a>
-    <a class="card" href="/equipes">
-      <div class="ico">👷</div>
-      <div class="nm">Equipes</div>
-      <div class="ds">Pessoas, ofícios e equipes da oficina, com escala semanal por turno e capacidade em homem-hora. Cadastro compartilhado por todos os módulos.</div>
-      <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-wip">sem pessoal cadastrado</span></div>
-    </a>
-    <a class="card" href="/gestao">
-      <div class="ico">📈</div>
-      <div class="nm">Gestão e Qualidade</div>
-      <div class="ds">Gestão à vista com os indicadores da NBR 5674, plano de ação 5W2H priorizado por GUT, calendário de todos os módulos e as ferramentas da qualidade.</div>
-      <div class="tags"><span class="t t-ok">v1.0</span><span class="t t-wip">aguarda a migração 60</span></div>
-    </a>
-    <a class="card" href="/bio">
-      <div class="ico">🌿</div>
-      <div class="nm">Bio</div>
-      <div class="ds">Gestão biológica do terreno: fichas de fauna, pragas e árvores, árvores etiquetadas com QR, onde animais e pragas ocorrem, e os serviços de poda e controle com periodicidade.</div>
-      <div class="tags"><span class="t t-ok">v0.1</span><span class="t t-wip">sem árvore cadastrada</span></div>
-    </a>
-    <a class="card" href="/calibracao">
-      <div class="ico">🔬</div>
-      <div class="nm">Calibração</div>
-      <div class="ds">~500 instrumentos metrológicos. Vencimentos e laudos.</div>
-      <div class="tags"><span class="t t-ok">standalone</span><span class="t t-wip">dados locais</span></div>
-    </a>
+<!-- O miolo mora aqui, dentro do #app, antes de aplicarShell — o shell
+     põe o topo com afterbegin e o rodapé com beforeend. -->
+<div id="app">
+  <div class="main">
+
+    <div class="view active" id="view-inicio">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Gestão biológica</div>
+          <div class="view-sub">Árvores etiquetadas, animais e pragas do terreno, e os serviços de poda e controle.</div>
+        </div>
+        <div class="section-row" style="margin-bottom:0">
+          <a class="btn btn-s btn-sm" href="/mapa">Abrir mapa</a>
+        </div>
+      </div>
+      <div id="inicio-kpis" class="kpi-row"></div>
+      <div id="inicio-aviso"></div>
+      <div class="section-split">
+        <div class="panel-card"><h3>Serviços vencidos</h3><div id="inicio-vencidos"></div></div>
+        <div class="panel-card"><h3>Presenças de risco alto</h3><div id="inicio-risco"></div></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-fichas">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Fichas</div>
+          <div class="view-sub">Guia de campo: o que é, que risco oferece, o que fazer ao encontrar.</div>
+        </div>
+        <div id="fichas-acoes"></div>
+      </div>
+      <div class="section-row">
+        <input id="fichas-busca" type="search" placeholder="Buscar por nome…" oninput="renderFichas()" style="flex:1;min-width:160px"/>
+        <div id="fichas-chips"></div>
+      </div>
+      <div id="fichas-lista" class="fichas-grade"></div>
+    </div>
+
+    <div class="view" id="view-arvores">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Árvores</div>
+          <div class="view-sub">Inventário etiquetado. Cada árvore tem código, QR e histórico de poda.</div>
+        </div>
+        <div id="arvores-acoes"></div>
+      </div>
+      <div id="arvores-lista"></div>
+    </div>
+
+    <div class="view" id="view-presencas">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Presenças</div>
+          <div class="view-sub">Onde os animais e as pragas ocorrem hoje. Estado do terreno, não histórico.</div>
+        </div>
+        <div id="presencas-acoes"></div>
+      </div>
+      <div id="presencas-lista"></div>
+    </div>
+
+    <div class="view" id="view-servicos">
+      <div class="view-head">
+        <div>
+          <div class="view-title">Serviços</div>
+          <div class="view-sub">Poda, controle de praga e monitoramento. Realizado com periodicidade gera o próximo.</div>
+        </div>
+        <div id="servicos-acoes"></div>
+      </div>
+      <div id="servicos-seletor"></div>
+      <div id="servicos-lista"></div>
+    </div>
+
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal hidden" id="modal-ficha">
+      <div class="modal-hd"><h3 id="modal-ficha-titulo">Nova ficha</h3></div>
+      <div class="modal-body" id="modal-ficha-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="salvarFicha()">Salvar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-arvore">
+      <div class="modal-hd"><h3 id="modal-arvore-titulo">Nova árvore</h3></div>
+      <div class="modal-body" id="modal-arvore-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="salvarArvore()">Salvar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-presenca">
+      <div class="modal-hd"><h3 id="modal-presenca-titulo">Nova presença</h3></div>
+      <div class="modal-body" id="modal-presenca-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="salvarPresenca()">Salvar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-servico">
+      <div class="modal-hd"><h3 id="modal-servico-titulo">Novo serviço</h3></div>
+      <div class="modal-body" id="modal-servico-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="salvarServico()">Salvar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-realizar">
+      <div class="modal-hd"><h3>Marcar como realizado</h3></div>
+      <div class="modal-body" id="modal-realizar-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="confirmarRealizado()">Confirmar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-detalhe">
+      <div class="modal-hd"><h3 id="modal-detalhe-titulo">Detalhe</h3></div>
+      <div class="modal-body" id="modal-detalhe-corpo"></div>
+      <div class="modal-ft" id="modal-detalhe-acoes">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Fechar</button>
+      </div>
+    </div>
+    <div class="modal hidden" id="modal-confirmacao">
+      <div class="modal-hd"><h3 id="modal-confirmacao-titulo">Confirmar</h3></div>
+      <div class="modal-body" id="modal-confirmacao-corpo"></div>
+      <div class="modal-ft">
+        <button class="btn btn-s btn-sm" onclick="fecharModal()">Voltar</button>
+        <button class="btn btn-d btn-sm" onclick="executarConfirmacao()">Confirmar</button>
+      </div>
+    </div>
   </div>
 </div>
-<div class="ft">
-  Sistemas Digitais para Gerenciamento de infraestrutura de organizacoes · <br>
-  PMOC.ERP.IOT
-  <!-- Tema e marca no rodapé, como nos 6 módulos (padronização de
-       19/08/2026): o tema é preferência de exibição, escolhida uma vez. O
-       ícone é preenchido pelo mesmo conjunto comum que o shell usa. -->
-  <div class="ft-acoes">
-    <button id="btn-tema" class="btn-tema" onclick="alternarTema()" title="Ir para o tema claro" aria-label="Ir para o tema claro"></button>
-    <a class="ft-marca" href="https://luctronics.com.br" target="_blank" rel="noopener noreferrer" title="Luctronics" aria-label="Luctronics — site da empresa"><span>Luctronics</span></a>
-  </div>
-</div>
-<!-- o script anti-FOUC ja aplicou o tema antes do desenho; este modulo so
-     sincroniza o rotulo do botao e expoe alternarTema — mesma implementacao
-     que os 6 modulos usam via shared/shell.js, sem logica de tema duplicada -->
-<script type="module">
-import { iniciarTema } from './shared/tema.js'
-import { icone } from './shared/icones.js'
-// Os dois ícones do rodapé vêm do conjunto comum, não de emoji: o portal
-// não carrega shared/shell.js (é a exceção registrada na convenção de
-// tema), então preenche à mão o que o shell preencheria.
-document.getElementById('btn-tema').insertAdjacentHTML('afterbegin', icone('claro'))
-document.querySelector('.ft-marca').insertAdjacentHTML('afterbegin', icone('empresa'))
-iniciarTema()
-</script>
+
+<!-- Etiqueta: preenchida por imprimirEtiqueta(), visível só na impressão. -->
+<div id="etiqueta"></div>
+
+<script type="module" src="/bio/app.js"></script>
 </body>
 </html>
