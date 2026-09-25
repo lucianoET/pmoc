@@ -83,6 +83,8 @@ const MARCADORES_FICHA = [
   // 260831-2mx: fichaBlocoLocal chama fichaAcaoMovimentacao, que devolve
   // vazio enquanto MAN_FLUXO_OK/MOV_OK forem falsos — é por isso que o
   // fixture da gaveta continua byte a byte igual sem a migração 42.
+  // 25/09/2026: "Ver no mapa" no bloco 1 (só para máquina instalada).
+  'function fichaVerNoMapa(e){',
   'function fichaAcaoMovimentacao(e){',
   // 260829-500: fichaBlocoDados chama fichaAtributos, que devolve vazio
   // enquanto ATRIB_OK for falso — é por isso que o fixture da gaveta

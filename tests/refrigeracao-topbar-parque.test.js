@@ -159,19 +159,37 @@ test('as 5 ocorrências de "Guardada — volta ao inventário" continuam intacta
   assert.equal(ocorrencias, 5, `esperado 5, achado ${ocorrencias}`);
 });
 
-test('dentro do @media (min-width:1024px): #topbar vira display:contents, #bottom-nav ocupa a linha 1 da grade, #app fica escuro e #content claro', () => {
+// 25/09/2026: as abas saíram de dentro do topo escuro para uma faixa própria
+// logo abaixo (linha 2 da grade), no desenho da faixa dos outros módulos;
+// Portal e Sair ganharam rótulo no computador. Os dois casos abaixo
+// substituem os de D-3a6-07/08 (abas na linha 1, ativo em branco).
+test('dentro do @media (min-width:1024px): #topbar vira display:contents, #bottom-nav é a faixa da linha 2, #app fica escuro e #content claro na linha 3', () => {
   const bloco = extrairBlocoMedia1024(HTML);
   assert.match(bloco, /#topbar\{[^}]*display:contents[^}]*\}/);
   assert.match(bloco, /#app\{[^}]*background:#071D41[^}]*\}/);
-  assert.match(bloco, /#content\{[^}]*background:#F0F2F5[^}]*\}/);
-  assert.match(bloco, /#bottom-nav\{[^}]*grid-row:1[^}]*\}/);
+  assert.match(bloco, /#app\{[^}]*grid-template-rows:56px auto 1fr auto[^}]*\}/);
+  assert.match(bloco, /#content\{[^}]*grid-row:3[^}]*background:#F0F2F5[^}]*\}/);
+  assert.match(bloco, /#bottom-nav\{[^}]*grid-row:2[^}]*grid-column:1\/-1[^}]*background:#fff[^}]*\}/);
+  assert.match(bloco, /#topbar \.tb-rot\{[^}]*display:inline !important[^}]*\}/);
 });
 
-test('.nav-btn.active carrega os quatro sinais (sublinhado, fundo, peso 700, cor clara) na paleta do escuro', () => {
+test('.nav-btn.active na faixa clara: fundo azul-claro, borda azul, peso 700, ícone azul', () => {
   const bloco = extrairBlocoMedia1024(HTML);
-  assert.match(bloco, /\.nav-btn\.active\{[^}]*font-weight:700[^}]*color:#fff[^}]*\}/);
-  assert.match(bloco, /\.nav-btn\.active::before\{[^}]*background:#fff[^}]*\}/);
-  assert.match(bloco, /\.nav-btn\.active i\{[^}]*color:#fff[^}]*\}/);
+  assert.match(bloco, /\.nav-btn\.active\{[^}]*background:#E8F1FF[^}]*border-color:#1351B4[^}]*font-weight:700[^}]*\}/);
+  assert.match(bloco, /\.nav-btn\.active i\{[^}]*color:#1351B4[^}]*\}/);
+});
+
+test('o topo tem Portal antes de Sair, os dois com rótulo, e a tela de login volta ao portal', () => {
+  const ini = HTML.indexOf('<div id="topbar">');
+  const fim = HTML.indexOf('<!-- CONTENT -->', ini);
+  const topo = HTML.slice(ini, fim);
+  const iPortal = topo.indexOf('id="topbar-portal"');
+  const iSair = topo.indexOf('supa.auth.signOut()');
+  assert.ok(iPortal > 0 && iSair > iPortal, 'Portal precisa vir antes de Sair');
+  assert.match(topo, /onclick="location\.href='\/'"/);
+  assert.match(topo, /<b class="tb-rot"[^>]*>Portal<\/b>/);
+  assert.match(topo, /<b class="tb-rot"[^>]*>Sair<\/b>/);
+  assert.match(HTML, /<a href="\/"[^>]*>[^<]*<i class="fas fa-arrow-left"[^>]*><\/i>Voltar ao portal<\/a>/);
 });
 
 test('a coluna lateral de 220px e grid-template-areas deixaram de existir no arquivo', () => {
@@ -343,5 +361,9 @@ test('um fabricante ou modelo contendo <script> sai escapado na célula', () => 
 test('D-3a6-23: dentro do @media, #inv-list ganha overflow:auto e um teto de altura — o cabeçalho grudento depende disso', () => {
   const bloco = extrairBlocoMedia1024(HTML);
   assert.match(bloco, /#inv-list\{[^}]*overflow:auto[^}]*\}/);
-  assert.match(bloco, /#inv-list\{[^}]*max-height:[^}]*\}/);
+  // 25/09/2026: o teto deixou de ser um max-height calculado e passou a vir
+  // do flex (#page-inv em coluna, #inv-list com flex:1 e min-height). O
+  // requisito é o mesmo — altura limitada para o <thead> grudar.
+  assert.match(bloco, /#page-inv\.active\{[^}]*display:flex[^}]*flex-direction:column[^}]*\}/);
+  assert.match(bloco, /#inv-list\{[^}]*flex:1 1 auto[^}]*\}/);
 });

@@ -143,7 +143,6 @@ html,body{margin:0;padding:0;height:100%;background:#F0F2F5;font-family:-apple-s
   outline:none;transition:border .15s
 }
 .search-box:focus{border-color:#1351B4}
-.search-wrap{position:relative}
 .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#aaa;font-size:15px;pointer-events:none}
 
 /* ═══════════════════════════════════════════
