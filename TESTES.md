@@ -2953,3 +2953,21 @@ reescreve:
 - [ ] Portal → seção **Em desenvolvimento** → card **Energia e água** → painel xEnergia,
       marcado como demonstração.
 - [ ] Em 375px, o portal com as duas seções e sem rolagem horizontal.
+
+
+## Transportes — rotinas por calendário com medições (07/10/2026)
+
+Pré-requisito: frontend publicado, depois `65_transportes_rotinas.sql` e `66_transportes_vpx_seed.sql`
+rodados no SQL Editor. Conferir: `select codigo, count(*) from transp_rotinas r join transp_rotina_itens i
+on i.rotina_id = r.id group by 1` → 6 rotinas, 48 itens no total. Rodar o 66 duas vezes não duplica.
+
+- [ ] Sem a migração 65: aba Manutenção idêntica a antes — sem "Executar rotina", sem tabela de rotinas.
+- [ ] Com a 65: Livre (observador) vê a tabela de rotinas do VTR-024, **sem** botão Executar.
+- [ ] Técnico → Manutenção → VPX-M → Executar: 6 campos de bateria, 18 de densidade, 1 de banco.
+- [ ] Digitar `6,20` numa bateria → selo "fora"; `6,40` → "dentro". Vírgula aceita.
+- [ ] Baterias com diferença > 0,10 V → resumo cita a "diferença entre pontos".
+- [ ] Salvar com um check sem resposta → erro na tela, nada gravado.
+- [ ] Salvar completo → OS aparece no histórico ("VPX-M — … (N não conformidade(s))"), a rotina passa
+      a "Em dia" com próxima = data + 30 dias, e "Ver" lista os valores com OK/NC.
+- [ ] Anon pela API REST: `POST` em `transp_execucoes` → 401; `PATCH` → recusado.
+- [ ] Em 375px, o modal sem rolagem horizontal.

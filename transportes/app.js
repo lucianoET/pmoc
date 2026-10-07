@@ -3,6 +3,8 @@ import { criarClienteSupabase } from '../shared/supabase-config.js'
 import { aplicarShell } from '../shared/shell.js'
 import { cartaoIndicador } from '../shared/indicadores.js'
 import { verNoMapa } from '../shared/componentes.js'
+import { validarNumero } from '../maquinas/numeros.js'
+import { PONTOS, hojeISO, situacaoRotina, montarLinhas, naoConformidades } from './rotinas.js'
 
 let supa = null
 let auth = null
@@ -16,6 +18,11 @@ let PLANO_MATS = []
 let MATERIAIS = []
 let ESTOQUE_MOV = []
 let COMPRAS = []
+let ROT_OK = false
+let ROTINAS = []
+let ROTINA_ITENS = []
+let EXECUCOES = []
+let EXEC_NC = {}
 let ERRO_CARGA = null
 
 let ATIVO_EDIT_ID = null
@@ -207,6 +214,7 @@ async function carregarTudo() {
     ESTOQUE_MOV = []
   }
 
+  await carregarRotinas()
   renderTudo()
 }
 
@@ -221,6 +229,7 @@ function renderTudo() {
   renderMovimentos()
   renderCompras()
   renderRelatorios()
+  renderRotinas()
 }
 
 function trocarView(id, botao) {
@@ -1070,6 +1079,291 @@ function renderRelatorios() {
   `).join('')
 }
 
+// ── rotinas por calendário (migração 65) ──
+// Carregadas FORA do Promise.all principal, como carregarCatalogoReparos() em
+// Máquinas: sem a migração 65 o módulo se comporta exatamente como antes —
+// sem botão, sem tabela, sem erro. ROT_OK é a sonda (uma leitura só).
+async function carregarRotinas() {
+  ROT_OK = false
+  ROTINAS = []
+  ROTINA_ITENS = []
+  EXECUCOES = []
+  EXEC_NC = {}
+  try {
+    const [rotRes, itensRes, execRes, ncRes] = await Promise.all([
+      supa.from('transp_rotinas').select('*').order('ordem'),
+      supa.from('transp_rotina_itens').select('*').order('ordem'),
+      supa.from('transp_execucoes').select('*, transp_ativos(codigo,nome), transp_rotinas(codigo,nome)').order('data_execucao', { ascending: false }).order('criado_em', { ascending: false }).limit(300),
+      supa.from('transp_execucao_valores').select('execucao_id').eq('conforme', false).limit(5000),
+    ])
+    const erro = rotRes.error || itensRes.error || execRes.error || ncRes.error
+    if (erro) throw erro
+    ROTINAS = rotRes.data || []
+    ROTINA_ITENS = itensRes.data || []
+    EXECUCOES = execRes.data || []
+    for (const linha of ncRes.data || []) EXEC_NC[linha.execucao_id] = (EXEC_NC[linha.execucao_id] || 0) + 1
+    ROT_OK = true
+  } catch (error) {
+    console.warn('Rotinas indisponíveis (migração 65 aplicada?):', error.message || error)
+  }
+}
+
+function rotinasDoAtivo(ativo) {
+  return ROTINAS.filter(r => r.ativo !== false && r.tipo_modelo === ativo.tipo_modelo)
+}
+
+function ultimaExecucao(ativoId, rotinaId) {
+  return EXECUCOES.find(e => e.ativo_id === ativoId && e.rotina_id === rotinaId) || null
+}
+
+const ROTINA_ESTADO = {
+  nunca: ['Nunca executada', 'b-warn', 1],
+  vencida: ['Vencida', 'b-red', 0],
+  proxima: ['Próxima', 'b-warn', 2],
+  em_dia: ['Em dia', 'b-ok', 3],
+}
+
+function renderRotinas() {
+  const bloco = document.getElementById('rotinas-bloco')
+  const botao = document.getElementById('btn-exec-rotina')
+  const ativas = ROT_OK && ATIVOS.some(a => a.ativo !== false && rotinasDoAtivo(a).length)
+  bloco.classList.toggle('hidden', !ativas)
+  botao.classList.toggle('hidden', !ativas || !podeEditar())
+  if (!ativas) return
+
+  const linhas = []
+  for (const ativo of ATIVOS.filter(a => a.ativo !== false)) {
+    for (const rotina of rotinasDoAtivo(ativo)) {
+      const ultima = ultimaExecucao(ativo.id, rotina.id)
+      linhas.push({ ativo, rotina, ultima, sit: situacaoRotina(ultima?.data_execucao, rotina.intervalo_dias) })
+    }
+  }
+  linhas.sort((a, b) => ROTINA_ESTADO[a.sit.estado][2] - ROTINA_ESTADO[b.sit.estado][2] || a.rotina.ordem - b.rotina.ordem)
+
+  document.getElementById('tb-rotinas').innerHTML = linhas.map(({ ativo, rotina, ultima, sit }) => {
+    const [rotulo, classe] = ROTINA_ESTADO[sit.estado]
+    const prazo = sit.dias == null ? '' : sit.dias < 0 ? ` · há ${Math.abs(sit.dias)} dia(s)` : ` · em ${sit.dias} dia(s)`
+    return `
+      <tr>
+        <td><div class="hi">${esc(ativo.codigo)}</div><div class="tagline">${esc(ativo.nome)}</div></td>
+        <td><div class="hi">${esc(rotina.nome)}</div><div class="tagline">${esc(rotina.codigo)} · ${rotina.responsavel === 'OP' ? 'Operador' : 'Técnico'}</div></td>
+        <td>a cada ${rotina.intervalo_dias} dia(s)</td>
+        <td class="mono">${ultima ? fmtDate(ultima.data_execucao) : '—'}</td>
+        <td class="mono">${sit.proxima ? fmtDate(sit.proxima) : '—'}</td>
+        <td><span class="badge ${classe}">${rotulo}</span>${esc(prazo)}</td>
+        <td>${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalRotina(${ativo.id}, ${rotina.id})">Executar</button>` : '—'}</td>
+      </tr>`
+  }).join('')
+
+  const recentes = EXECUCOES.slice(0, 30)
+  document.getElementById('tb-execucoes').innerHTML = !recentes.length
+    ? '<tr><td colspan="6" class="tagline">Nenhuma execução registrada.</td></tr>'
+    : recentes.map(e => {
+      const nc = EXEC_NC[e.id] || 0
+      return `
+        <tr>
+          <td class="mono">${fmtDate(e.data_execucao)}</td>
+          <td><div class="hi">${esc(e.transp_ativos?.codigo || '—')}</div></td>
+          <td>${esc(e.transp_rotinas?.nome || '—')}</td>
+          <td>${esc(e.executado_por || '—')}</td>
+          <td>${nc ? `<span class="badge b-red">${nc}</span>` : '<span class="badge b-ok">0</span>'}</td>
+          <td><button class="btn btn-s btn-sm" onclick="verExecucao('${e.id}')">Ver</button></td>
+        </tr>`
+    }).join('')
+}
+
+function abrirModalRotina(ativoId = null, rotinaId = null) {
+  if (!podeEditar() || !ROT_OK) return
+  const selAtivo = document.getElementById('rt-ativo')
+  const selRotina = document.getElementById('rt-rotina')
+  const comRotina = ATIVOS.filter(a => a.ativo !== false && rotinasDoAtivo(a).length)
+  selAtivo.innerHTML = comRotina.map(a => `<option value="${a.id}">${esc(a.codigo)} — ${esc(a.nome)}</option>`).join('')
+  selAtivo.value = String(ativoId ?? comRotina[0]?.id ?? '')
+
+  const preencherRotinas = (escolhida = null) => {
+    const ativo = ATIVOS.find(a => a.id === Number(selAtivo.value))
+    const lista = ativo ? rotinasDoAtivo(ativo) : []
+    selRotina.innerHTML = lista.map(r => `<option value="${r.id}">${esc(r.nome)} (${esc(r.codigo)})</option>`).join('')
+    if (escolhida) selRotina.value = String(escolhida)
+    desenharItensRotina()
+  }
+  selAtivo.onchange = () => preencherRotinas()
+  selRotina.onchange = desenharItensRotina
+
+  document.getElementById('rt-data').value = hojeISO()
+  document.getElementById('rt-uso').value = ''
+  document.getElementById('rt-executado').value = USUARIO?.nome || ''
+  document.getElementById('rt-obs').value = ''
+  document.getElementById('rt-erro').classList.add('hidden')
+  preencherRotinas(rotinaId)
+  document.getElementById('modal-rotina').classList.add('open')
+}
+
+function itensDaRotina(rotinaId) {
+  return ROTINA_ITENS.filter(i => i.rotina_id === rotinaId && i.ativo !== false)
+}
+
+function desenharItensRotina() {
+  const itens = itensDaRotina(Number(document.getElementById('rt-rotina').value))
+  let sistema = null
+  document.getElementById('rt-itens').innerHTML = itens.map(item => {
+    const cab = item.sistema !== sistema ? `<div class="view-title" style="font-size:13px;margin:14px 0 6px">${esc(sistema = item.sistema || 'Geral')}</div>` : ''
+    const ajuda = `<div class="help">${esc(item.criterio || '')}${item.acao_se_nc ? ` · Se não conforme: ${esc(item.acao_se_nc)}` : ''}</div>`
+    if (item.tipo === 'check') {
+      return `${cab}
+        <div class="frow" style="border-top:1px solid var(--border);padding-top:8px">
+          <label style="text-transform:none;letter-spacing:0">${esc(item.descricao)}</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <label style="text-transform:none;letter-spacing:0;display:inline-flex;align-items:center;gap:6px"><input type="radio" name="rt-c-${item.id}" value="ok" onchange="atualizarResumoRotina()"/> Conforme</label>
+            <label style="text-transform:none;letter-spacing:0;display:inline-flex;align-items:center;gap:6px"><input type="radio" name="rt-c-${item.id}" value="nc" onchange="atualizarResumoRotina()"/> Não conforme</label>
+          </div>
+          ${ajuda}
+        </div>`
+    }
+    const faixa = item.minimo != null || item.maximo != null
+      ? `faixa ${item.minimo != null ? `≥ ${String(item.minimo).replace('.', ',')}` : ''}${item.minimo != null && item.maximo != null ? ' e ' : ''}${item.maximo != null ? `≤ ${String(item.maximo).replace('.', ',')}` : ''} ${esc(item.unidade)}`
+      : 'sem faixa cadastrada — valor só é registrado'
+    const campos = PONTOS[item.registro_por].map(ponto => `
+      <div>
+        <div class="tagline" style="margin-bottom:2px">${esc(ponto)}</div>
+        <input type="text" inputmode="decimal" autocomplete="off" data-item="${item.id}" data-ponto="${esc(ponto)}" oninput="atualizarResumoRotina()" style="width:100%"/>
+        <span class="badge rt-st" style="display:none"></span>
+      </div>`).join('')
+    return `${cab}
+      <div class="frow" style="border-top:1px solid var(--border);padding-top:8px">
+        <label style="text-transform:none;letter-spacing:0">${esc(item.descricao)} <span class="tagline">(${esc(item.unidade)} · ${faixa})</span></label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px">${campos}</div>
+        ${ajuda}
+      </div>`
+  }).join('')
+  atualizarResumoRotina()
+}
+
+function leiturasDaTela() {
+  const leituras = {}
+  document.querySelectorAll('#rt-itens input[data-item]').forEach(el => {
+    leituras[`${el.dataset.item}|${el.dataset.ponto}`] = el.value
+  })
+  document.querySelectorAll('#rt-itens input[type=radio]:checked').forEach(el => {
+    leituras[`${el.name.replace('rt-c-', '')}|`] = el.value
+  })
+  return leituras
+}
+
+function atualizarResumoRotina() {
+  const itens = itensDaRotina(Number(document.getElementById('rt-rotina').value))
+  const { linhas } = montarLinhas(itens, leiturasDaTela())
+  const porChave = new Map(linhas.map(l => [`${l.item_id}|${l.ponto}`, l]))
+
+  document.querySelectorAll('#rt-itens input[data-item]').forEach(el => {
+    const sel = el.parentElement.querySelector('.rt-st')
+    const l = porChave.get(`${el.dataset.item}|${el.dataset.ponto}`)
+    sel.style.display = l && l.conforme != null ? '' : 'none'
+    if (l && l.conforme != null) {
+      sel.className = `badge rt-st ${l.conforme ? 'b-ok' : 'b-red'}`
+      sel.textContent = l.conforme ? 'dentro' : 'fora'
+    }
+  })
+
+  const { nc, dispersoes, total } = naoConformidades(itens, linhas)
+  const resumo = document.getElementById('rt-resumo')
+  resumo.className = `callout ${total ? 'co-red' : 'co-ok'}`
+  resumo.innerHTML = total
+    ? `<strong>${total} não conformidade(s)</strong>: ${nc.map(x => esc(`${x.item.descricao}${x.ponto ? ` [${x.ponto}]` : ''}`)).join('; ')}${dispersoes.map(d => `; diferença entre pontos de "${esc(d.item.descricao)}" = ${d.spread.toFixed(3).replace('.', ',')} (máx. ${String(d.item.dif_max).replace('.', ',')})`).join('')}`
+    : `Nenhuma não conformidade até agora (${linhas.length} registro(s)).`
+}
+
+// Três escritas em sequência, não uma transação (mesma dívida registrada para a
+// conclusão de OS de Máquinas): OS → execução → valores. A OS vem primeiro de
+// propósito — se algo falhar adiante, a manutenção aparece no histórico e o
+// alerta diz exatamente o que faltou, em vez de valores órfãos.
+async function salvarRotina() {
+  if (!podeEditar() || !ROT_OK) return
+  const erroEl = document.getElementById('rt-erro')
+  const falha = texto => { erroEl.textContent = texto; erroEl.classList.remove('hidden'); erroEl.scrollIntoView({ block: 'nearest' }) }
+  erroEl.classList.add('hidden')
+
+  const ativoId = Number(document.getElementById('rt-ativo').value)
+  const rotina = ROTINAS.find(r => r.id === Number(document.getElementById('rt-rotina').value))
+  const data = document.getElementById('rt-data').value
+  if (!ativoId || !rotina || !data) return falha('Escolha ativo, rotina e data.')
+
+  const uso = validarNumero(document.getElementById('rt-uso').value, { rotulo: 'Uso de referência', min: 0 })
+  if (!uso.ok) return falha(uso.erro)
+
+  const itens = itensDaRotina(rotina.id)
+  const { linhas, erros } = montarLinhas(itens, leiturasDaTela())
+  if (erros.length) return falha(erros.join(' · '))
+  if (!linhas.length) return falha('Nenhum item respondido.')
+
+  const { total } = naoConformidades(itens, linhas)
+  const executado = document.getElementById('rt-executado').value.trim() || null
+  const obs = document.getElementById('rt-obs').value.trim() || null
+
+  const osRes = await supa.from('transp_manutencoes').insert({
+    ativo_id: ativoId,
+    tipo: rotina.tipo_os,
+    data_manutencao: data,
+    descricao: `${rotina.codigo} — ${rotina.nome}${total ? ` (${total} não conformidade(s))` : ''}`,
+    uso_referencia: uso.valor,
+    executado_por: executado,
+    observacoes: obs,
+    status: 'concluida',
+  }).select().single()
+  if (osRes.error) { alert(`Erro: ${osRes.error.message}`); return }
+
+  const execRes = await supa.from('transp_execucoes').insert({
+    ativo_id: ativoId,
+    rotina_id: rotina.id,
+    manutencao_id: osRes.data.id,
+    data_execucao: data,
+    uso_referencia: uso.valor,
+    executado_por: executado,
+    observacoes: obs,
+  }).select().single()
+  if (execRes.error) { alert(`OS registrada, mas a execução da rotina não: ${execRes.error.message}`); await carregarTudo(); return }
+
+  const valRes = await supa.from('transp_execucao_valores').insert(linhas.map(l => ({ ...l, execucao_id: execRes.data.id })))
+  if (valRes.error) { alert(`Execução registrada, mas os valores não: ${valRes.error.message}`); await carregarTudo(); return }
+
+  const ativo = ATIVOS.find(a => a.id === ativoId)
+  if (uso.valor != null && ativo && uso.valor > Number(ativo.uso_atual || 0)) {
+    const upd = await supa.from('transp_ativos').update({ uso_atual: uso.valor }).eq('id', ativoId)
+    if (upd.error) alert(`Execução salva, mas o ativo não foi atualizado: ${upd.error.message}`)
+  }
+
+  fecharModal('rotina')
+  await carregarTudo()
+}
+
+async function verExecucao(id) {
+  const exec = EXECUCOES.find(e => e.id === id)
+  if (!exec) return
+  const res = await supa.from('transp_execucao_valores').select('*').eq('execucao_id', id)
+  if (res.error) { alert(`Erro: ${res.error.message}`); return }
+
+  const itens = itensDaRotina(exec.rotina_id)
+  const { dispersoes } = naoConformidades(itens, res.data)
+  const porItem = new Map(itens.map(i => [i.id, i]))
+  const estado = c => c == null ? '<span class="badge">—</span>' : c ? '<span class="badge b-ok">OK</span>' : '<span class="badge b-red">NC</span>'
+
+  document.getElementById('ev-titulo').textContent = `${exec.transp_rotinas?.codigo || ''} · ${exec.transp_ativos?.codigo || ''} · ${fmtDate(exec.data_execucao)}`
+  document.getElementById('ev-corpo').innerHTML = `
+    <div class="tagline" style="margin-bottom:10px">${esc(exec.transp_rotinas?.nome || '')} · ${esc(exec.executado_por || 'executor não informado')}${exec.observacoes ? ` · ${esc(exec.observacoes)}` : ''}</div>
+    ${dispersoes.map(d => `<div class="callout co-red">Diferença entre pontos de "${esc(d.item.descricao)}": ${d.spread.toFixed(3).replace('.', ',')} (máx. ${String(d.item.dif_max).replace('.', ',')})</div>`).join('')}
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Item</th><th>Ponto</th><th>Valor</th><th>Situação</th></tr></thead>
+      <tbody>${res.data.sort((a, b) => (porItem.get(a.item_id)?.ordem || 0) - (porItem.get(b.item_id)?.ordem || 0)).map(l => `
+        <tr>
+          <td>${esc(porItem.get(l.item_id)?.descricao || `item ${l.item_id}`)}</td>
+          <td>${esc(l.ponto || '—')}</td>
+          <td class="mono">${l.valor == null ? '—' : `${String(Number(l.valor)).replace('.', ',')} ${esc(porItem.get(l.item_id)?.unidade || '')}`}</td>
+          <td>${estado(l.conforme)}</td>
+        </tr>`).join('')}</tbody>
+    </table></div>`
+  document.getElementById('modal-execucao-ver').classList.add('open')
+}
+
 function fecharModal(chave) {
   document.getElementById(`modal-${chave}`).classList.remove('open')
 }
@@ -1560,6 +1854,10 @@ function exporNoWindow() {
     abrirModalViagem,
     abrirModalManutencao,
     abrirModalPlano,
+    abrirModalRotina,
+    atualizarResumoRotina,
+    salvarRotina,
+    verExecucao,
     abrirModalMaterial,
     abrirModalMovimento,
     adicionarPecaAoPlano,
