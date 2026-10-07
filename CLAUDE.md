@@ -10,7 +10,7 @@ PMOC · CMASM — maintenance management systems (Plano de Manutenção, Operaç
 
 ## Workspace boundaries
 
-- `/home/luc/cmms-monorepo/pmoc-overlay` is the only development target in this workspace.
+- `/home/luc/pmoc-overlay` is the only development target in this workspace (clone of `lucianoET/pmoc`). `/home/luc/cmms-monorepo/cmms-refrigeracao` is an older clone of the same repo, stopped at 08/08/2026 — never develop there.
 - `/home/luc/cmms-monorepo` is a reference monorepo and is strictly read-only, including every descendant directory and repository.
 - In `/home/luc/cmms-monorepo`, use only read/search operations. Never edit, create, delete, rename, format, generate, install, build, test, start services, run migrations, or perform Git operations there.
 - Patterns and domain knowledge found in `/home/luc/cmms-monorepo` may be adapted into new changes under `pmoc-overlay`; all generated files and command side effects must remain under `pmoc-overlay`.
