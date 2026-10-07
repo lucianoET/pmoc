@@ -131,10 +131,40 @@
           <div class="view-title">Manutenção</div>
           <div class="view-sub">Registro de preventivas, corretivas e inspeções da frota.</div>
         </div>
-        <button class="btn btn-p btn-sm" id="btn-nova-manut" onclick="abrirModalManutencao()">+ Registrar</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-s btn-sm hidden" id="btn-exec-rotina" onclick="abrirModalRotina()">Executar rotina</button>
+          <button class="btn btn-p btn-sm" id="btn-nova-manut" onclick="abrirModalManutencao()">+ Registrar</button>
+        </div>
       </div>
       <div id="manut-alertas"></div>
       <div id="venc-lista-manut"></div>
+      <div id="rotinas-bloco" class="hidden">
+        <div class="view-head" style="margin-bottom:10px">
+          <div>
+            <div class="view-title" style="font-size:15px">Rotinas por calendário</div>
+            <div class="view-sub" style="margin:0">Checklists com valores medidos (bateria, densidade, pneus). O prazo conta da última execução.</div>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Ativo</th><th>Rotina</th><th>Periodicidade</th><th>Última</th><th>Próxima</th><th>Situação</th><th>Ações</th>
+            </tr></thead>
+            <tbody id="tb-rotinas"></tbody>
+          </table>
+        </div>
+        <div class="view-head" style="margin:16px 0 10px">
+          <div class="view-title" style="font-size:15px">Execuções recentes</div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Data</th><th>Ativo</th><th>Rotina</th><th>Executado por</th><th>Fora da faixa / NC</th><th>Ações</th>
+            </tr></thead>
+            <tbody id="tb-execucoes"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="tbl-wrap">
         <table class="tbl">
           <thead><tr>
@@ -350,6 +380,36 @@
       </div>
     </div>
     <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('manutencao')">Cancelar</button><button class="btn btn-p" onclick="salvarOS()">Salvar</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-rotina">
+  <div class="modal">
+    <div class="modal-hd"><h3>Executar rotina de manutenção</h3><button class="btn btn-s btn-sm" onclick="fecharModal('rotina')">Fechar</button></div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Ativo</label><select id="rt-ativo"></select></div>
+        <div class="frow"><label>Rotina</label><select id="rt-rotina"></select></div>
+      </div>
+      <div class="fgrid3">
+        <div class="frow"><label>Data</label><input id="rt-data" type="date"/></div>
+        <div class="frow"><label>Uso de referência (km)</label><input id="rt-uso" type="text" inputmode="decimal" autocomplete="off"/></div>
+        <div class="frow"><label>Executado por</label><input id="rt-executado"/></div>
+      </div>
+      <div id="rt-itens"></div>
+      <div id="rt-resumo" class="callout co-ok" style="margin-top:12px"></div>
+      <div class="frow"><label>Observações</label><textarea id="rt-obs"></textarea></div>
+      <div id="rt-erro" class="callout co-red hidden"></div>
+    </div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('rotina')">Cancelar</button><button class="btn btn-p" onclick="salvarRotina()">Salvar execução</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-execucao-ver">
+  <div class="modal">
+    <div class="modal-hd"><h3 id="ev-titulo">Execução</h3><button class="btn btn-s btn-sm" onclick="fecharModal('execucao-ver')">Fechar</button></div>
+    <div class="modal-body" id="ev-corpo"></div>
+    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('execucao-ver')">Fechar</button></div>
   </div>
 </div>
 
