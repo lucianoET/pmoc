@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>(function(){try{var t=localStorage.getItem('pmoc-tema');if(t==='claro')document.documentElement.setAttribute('data-theme','light');else if(t==='escuro')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+<title>Listas de Material · PMOC Refrigeração</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --primary:#1351b4;--primary-dark:#0c326f;--primary-ink:#071d41;--primary-soft:#e8effa;
+  --bg:#f3f5f8;--surface:#ffffff;--surface-2:#f8f9fb;--line:#d6dbe3;--line-soft:#e7eaf0;
+  --text:#1b2433;--muted:#5d6879;--success:#168821;--warning:#b45309;--warning-bg:#fff4e0;--danger:#c81e1e;
+  --focus:#c2850c;--shadow:0 1px 3px rgba(7,29,65,.08),0 4px 16px rgba(7,29,65,.06);
+  --font:'Rawline','Raleway',system-ui,sans-serif;--mono:'Roboto Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;--primary:#5c9bff;--primary-dark:#8fb8ff;--primary-ink:#0b1830;--primary-soft:#16294a;
+  --bg:#0e1420;--surface:#161e2c;--surface-2:#1b2536;--line:#2b3850;--line-soft:#223047;
+  --text:#e6ebf3;--muted:#9aa6b8;--success:#4cc35a;--warning:#f2a13a;--warning-bg:#33260f;--danger:#ff6b6b;--focus:#ffcd07;
+  --shadow:0 1px 3px rgba(0,0,0,.4);}}
+:root[data-theme="dark"]{
+  color-scheme:dark;--primary:#5c9bff;--primary-dark:#8fb8ff;--primary-ink:#0b1830;--primary-soft:#16294a;
+  --bg:#0e1420;--surface:#161e2c;--surface-2:#1b2536;--line:#2b3850;--line-soft:#223047;
+  --text:#e6ebf3;--muted:#9aa6b8;--success:#4cc35a;--warning:#f2a13a;--warning-bg:#33260f;--danger:#ff6b6b;--focus:#ffcd07;
+  --shadow:0 1px 3px rgba(0,0,0,.4);}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--text);font:14px/1.45 var(--font);margin:0;font-variant-numeric:lining-nums}
+input,select{font-variant-numeric:lining-nums tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.top{background:var(--primary-ink);color:#fff;padding:14px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.top .sig{display:flex;flex-direction:column;gap:2px;flex:1;min-width:220px}
+.top .org{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.75}
+.top h1{margin:0;font-size:19px;font-weight:800;letter-spacing:.01em}
+.top .meta{font-size:12px;opacity:.8}
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,.08);border-radius:999px;padding:4px}
+.tabs button{border:0;background:transparent;color:#fff;padding:6px 14px;border-radius:999px;font-weight:600;cursor:pointer}
+.tabs button[aria-selected="true"]{background:#fff;color:var(--primary-ink)}
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:16px;padding:16px;align-items:start;max-width:1500px;margin:0 auto}
+.panel{background:var(--surface);border:1px solid var(--line-soft);border-radius:8px;box-shadow:var(--shadow)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;padding:12px;border-bottom:1px solid var(--line-soft);align-items:center;position:sticky;top:env(safe-area-inset-top,0px);background:var(--surface);z-index:3;border-radius:8px 8px 0 0}
+.search{flex:1 1 240px;display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:6px;padding:0 10px;background:var(--surface-2)}
+.search input{border:0;background:transparent;padding:9px 0;width:100%;outline:none}
+.search:focus-within{outline:3px solid var(--focus);outline-offset:1px}
+select.sel{border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--surface-2);max-width:100%}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn{border:1px solid var(--primary);background:var(--surface);color:var(--primary);border-radius:999px;padding:7px 16px;font-weight:700;cursor:pointer;white-space:nowrap}
+.btn.pri{background:var(--primary);color:#fff}
+.btn.ghost{border-color:transparent}
+.btn.small{padding:4px 12px;font-size:12.5px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.count{font-size:12.5px;color:var(--muted);margin-left:auto}
+.grp{padding:10px 14px 6px;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:800;color:var(--primary);background:var(--surface-2);border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;gap:8px}
+.grp span{color:var(--muted);font-weight:600;letter-spacing:.02em}
+.row{display:grid;grid-template-columns:92px minmax(0,1fr) 150px 128px;gap:10px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line-soft)}
+.row.on{background:var(--primary-soft)}
+.code{font:500 11.5px var(--mono);color:var(--muted)}
+.name{font-weight:500}
+.sub{font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:4px;padding:1px 6px;border:1px solid var(--line);color:var(--muted)}
+.tag.peca{color:var(--primary);border-color:var(--primary)}
+.tag.ferramenta{color:var(--warning);border-color:var(--warning)}
+.tag.baixo{color:#fff;background:var(--danger);border-color:var(--danger)}
+.tag.ok{color:var(--success);border-color:var(--success)}
+.aviso{margin:12px;padding:10px 14px;border-radius:6px;background:var(--warning-bg);color:var(--warning);font-weight:600;font-size:13px}
+.tag.aparelho{color:var(--success);border-color:var(--success)}
+.nums{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums;line-height:1.35}
+.nums b{color:var(--text);font-weight:600}
+.step{display:flex;align-items:center;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--surface);justify-self:end}
+.step button{border:0;background:transparent;width:32px;height:32px;cursor:pointer;font-size:17px;font-weight:700;color:var(--primary)}
+.step input{width:52px;border:0;text-align:center;background:transparent;font-variant-numeric:tabular-nums;padding:0;-moz-appearance:textfield}
+.step input::-webkit-inner-spin-button{display:none}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.kits{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;padding:12px}
+.kit{border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
+.kit h3{margin:0;font-size:15px}
+.kit p{margin:0;color:var(--muted);font-size:12.5px}
+.kit details summary{cursor:pointer;font-size:12.5px;color:var(--primary);font-weight:600}
+.kit ul{margin:6px 0 0;padding-left:18px;font-size:12.5px}
+.kit .act{display:flex;gap:8px;align-items:center;margin-top:auto}
+.kit .act label{font-size:12.5px;color:var(--muted)}
+.kit .act input{width:60px;border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--surface-2)}
+aside{position:sticky;top:12px;max-height:calc(100vh - 24px);display:flex;flex-direction:column}
+aside header{padding:14px 14px 10px;border-bottom:1px solid var(--line-soft)}
+aside h2{margin:0 0 8px;font-size:16px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fields label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted)}
+.fields label.full{grid-column:1/-1}
+.fields input{width:100%;min-width:0;border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:var(--surface-2);font-weight:500;font-size:13.5px}
+.items{overflow:auto;flex:1;min-height:120px}
+.it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;padding:9px 14px;border-bottom:1px solid var(--line-soft)}
+.it .n{font-size:13px;font-weight:500}
+.it .d{font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.it .q{display:flex;align-items:center;gap:6px;grid-row:span 2}
+.it .q input{width:64px;border:1px solid var(--line);border-radius:6px;padding:5px 6px;text-align:right;background:var(--surface-2);font-variant-numeric:tabular-nums}
+.it .q .u{font-size:12px;color:var(--muted);min-width:34px}
+.x{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:18px;line-height:1;padding:4px}
+.x:hover{color:var(--danger)}
+.foot{padding:12px 14px;border-top:1px solid var(--line-soft);display:flex;flex-direction:column;gap:10px}
+.tot{display:flex;justify-content:space-between;align-items:baseline;font-variant-numeric:tabular-nums}
+.tot strong{font-size:18px}
+.tot small{color:var(--muted)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.saved{display:flex;gap:6px;align-items:center}
+.saved select{flex:1;min-width:0}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--primary-ink);color:#fff;padding:10px 18px;border-radius:999px;font-weight:600;box-shadow:var(--shadow);z-index:20}
+.fab{display:none}
+.fab-close{display:none}
+.note{font-size:12px;color:var(--muted);padding:10px 14px}
+.confirm{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--danger);font-weight:600}
+@media (max-width:980px){
+  .wrap{grid-template-columns:1fr;padding:12px 16px 90px}
+  aside{position:fixed;left:0;right:0;bottom:0;top:auto;max-height:82vh;border-radius:14px 14px 0 0;z-index:15;transform:translateY(105%);transition:transform .2s;padding-bottom:env(safe-area-inset-bottom,0px)}
+  aside.open{transform:none}
+  .fab-close{display:inline-block}
+  .fab{display:flex;position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:14;gap:8px;align-items:center;box-shadow:var(--shadow)}
+  .row{grid-template-columns:minmax(0,1fr) auto;padding:10px 12px}
+  .row .code{grid-column:1/-1;margin-bottom:-6px}
+  .row .nums{grid-column:1;text-align:left}
+  .row .step{grid-column:2;grid-row:2 / span 2}
+}
+@media (prefers-reduced-motion:reduce){aside{transition:none}}
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="sig">
+    <span class="org">CMASM · Divisão de Manutenção Especializada · Refrigeração</span>
+    <h1>Listão de Materiais — Refrigeração</h1>
+    <span class="meta" id="meta">Carregando catálogo…</span>
+  </div>
+  <a class="btn small" style="border-color:#fff;color:#fff;background:transparent" href="/refrigeracao">← PMOC Refrigeração</a>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-cat" aria-selected="true">Catálogo</button>
+    <button role="tab" id="tab-kit" aria-selected="false">Kits</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <main class="panel" id="main">
+    <div class="tools" id="tools-cat">
+      <label class="search"><span aria-hidden="true">⌕</span><input id="q" type="search" placeholder="Buscar: 5/8, capacitor 35, R-410A, TUB-004…" autocomplete="off"></label>
+      <select class="sel" id="grupo" aria-label="Grupo"></select>
+      <div class="chips" id="tipos"></div>
+      <button class="btn small" id="soLista" aria-pressed="false">Só itens na lista</button>
+      <button class="btn small" id="soBaixo" aria-pressed="false">Abaixo do mínimo</button>
+      <button class="btn small ghost" id="addMin" title="Soma à lista o estoque mínimo dos itens filtrados">+ Estoque mínimo do filtro</button>
+      <span class="count" id="count"></span>
+    </div>
+    <div id="aviso" class="aviso" hidden></div>
+    <div id="cat"></div>
+    <div id="kits" class="kits" hidden></div>
+  </main>
+
+  <aside class="panel" id="lista" aria-label="Lista em montagem">
+    <header>
+      <h2><span>Lista de material <span id="nItens" class="tag"></span></span><button class="x fab-close" id="fecha" aria-label="Fechar lista">×</button></h2>
+      <div class="fields">
+        <label class="full">Finalidade / título<input id="f-titulo" placeholder="Ex.: Instalação 4 splits 24k — Oficina F21"></label>
+        <label>OS / equipamento<input id="f-os" placeholder="OS 123 / EQ-045"></label>
+        <label>Local<input id="f-local" placeholder="Prédio / sala"></label>
+        <label>Técnico<input id="f-tec" placeholder="Nome"></label>
+        <label>Data<input id="f-data" type="date"></label>
+      </div>
+    </header>
+    <div class="items" id="itens"></div>
+    <div class="foot">
+      <div class="tot"><span><small>Valor de referência</small><br><small id="semPreco"></small></span><strong id="total">R$ 0,00</strong></div>
+      <div class="actions">
+        <button class="btn pri" id="copiar">Copiar lista</button>
+        <button class="btn" id="csv">Baixar CSV</button>
+        <button class="btn" id="salvar">Salvar</button>
+        <button class="btn ghost danger" id="limpar">Limpar itens</button>
+      </div>
+      <div class="confirm" id="confLimpar" hidden>Apagar todos os itens? <button class="btn small danger" id="simLimpar">Apagar</button><button class="btn small ghost" id="naoLimpar">Cancelar</button></div>
+      <div class="saved" id="statusBox" hidden><select class="sel" id="status" aria-label="Situação da lista"><option value="aberta">Aberta</option><option value="enviada">Enviada ao almoxarifado/compras</option><option value="atendida">Atendida</option><option value="cancelada">Cancelada</option></select><button class="btn small" id="novo">Nova lista</button></div>
+      <div class="note" id="authNote" hidden></div>
+      <div class="saved"><select class="sel" id="salvas" aria-label="Listas salvas"></select><button class="btn small" id="abrir">Abrir</button><button class="btn small ghost danger" id="excluir">Arquivar</button></div>
+    </div>
+  </aside>
+</div>
+<button class="btn pri fab" id="fab">Ver lista <span id="fabN" class="tag" style="color:#fff;border-color:#fff"></span></button>
+<div class="toast" id="toast" hidden></div>
+
+
+<script type="module">
+// /refrigeracao/listas — listão de materiais + kits + listas de material (migrações 63/64).
+// Catálogo e kits vêm do Supabase (materiais, kits, kit_itens); a lista em montagem
+// fica em rascunho no navegador até ser salva em listas_material(+_itens).
+import { obterSupabaseConfig } from '/shared/supabase-config.js'
+
+const $ = id => document.getElementById(id)
+const TIPOS = { consumivel: 'Consumível', peca: 'Peça', ferramenta: 'Ferramenta', aparelho: 'Aparelho' }
+const nf = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 })
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const norm = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const parse = v => +String(v).replace(/\./g, '').replace(',', '.') || 0
+const hoje = () => new Date().toISOString().slice(0, 10)
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d } catch (e) { return d } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) {} },
+}
+
+let supa = null, sessao = null
+let MAT = [], BY = {}, BYID = {}, KITS = [], KITS_OK = false
+let L = store.get('pmoc-listas.rascunho', null) || novaLista()
+const F = { q: '', g: '', t: new Set(), so: false, baixo: false }
+
+function novaLista() { return { id: null, status: 'aberta', titulo: '', os: '', local: '', tec: '', data: hoje(), itens: {} } }
+function toast(t) { const e = $('toast'); e.textContent = t; e.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (e.hidden = true), 2400) }
+function salvaRasc() { store.set('pmoc-listas.rascunho', L) }
+const ordem = cs => cs.filter(c => BY[c]).sort((a, b) => BY[a]._i - BY[b]._i)
+const baixo = m => m.min > 0 && (m.est ?? 0) < m.min
+
+async function carregar() {
+  const cfg = await obterSupabaseConfig()
+  supa = window.supabase.createClient(cfg.url, cfg.key)
+  const { data: { session } } = await supa.auth.getSession()
+  sessao = session
+  const r = await supa.from('materiais').select('*').eq('ativo', true).order('codigo')
+  if (r.error) { $('meta').textContent = 'Não foi possível ler o catálogo: ' + r.error.message; return }
+  MAT = r.data.map((m, i) => ({ id: m.id, c: m.codigo || ('ID-' + m.id), g: m.grupo || 'SEM GRUPO', n: m.nome, u: m.unidade || 'un',
+    t: m.classe || m.tipo || 'consumivel', min: +m.estoque_minimo || 0, est: m.estoque_atual == null ? null : +m.estoque_atual,
+    emb: +m.embalagem || 1, eu: m.unidade_compra || m.unidade || 'un', p: m.preco == null ? null : +m.preco }))
+  // mantém a ordem dos grupos como o seed os criou (código), não alfabética
+  const gOrd = [...new Set(MAT.map(m => m.g))]
+  MAT.sort((a, b) => gOrd.indexOf(a.g) - gOrd.indexOf(b.g) || a.c.localeCompare(b.c))
+  MAT.forEach((m, i) => { m._i = i; m._s = norm(m.c + ' ' + m.n + ' ' + m.g + ' ' + (TIPOS[m.t] || '')) })
+  BY = Object.fromEntries(MAT.map(m => [m.c, m])); BYID = Object.fromEntries(MAT.map(m => [m.id, m]))
+  const k = await supa.from('kits').select('id,nome,descricao,ordem,kit_itens(quantidade,material_id)').eq('ativo', true).order('ordem')
+  KITS_OK = !k.error
+  KITS = KITS_OK ? k.data.map(x => ({ id: x.id, nome: x.nome, desc: x.descricao || '', itens: (x.kit_itens || []).filter(i => BYID[i.material_id]).map(i => [BYID[i.material_id].c, +i.quantidade]) })) : []
+  if (!KITS_OK) { $('tab-kit').hidden = true; aviso('A migração 63 ainda não foi aplicada: kits e listas salvas ficam indisponíveis. O catálogo funciona.') }
+  else if (!MAT.length) aviso('Catálogo vazio: aplique a migração 64 (seed do listão).')
+  const nb = MAT.filter(baixo).length
+  $('meta').textContent = `${MAT.length} itens · ${KITS.length} kits · ${nb} abaixo do mínimo · ${sessao ? 'conectado' : 'modo leitura (entre pelo PMOC para salvar)'}`
+  $('grupo').innerHTML = '<option value="">Todos os grupos</option>' + gOrd.map(g => `<option>${esc(g)}</option>`).join('')
+  campos(); renderCat(); renderKits(); renderLista(); await renderSalvas()
+}
+function aviso(t) { const a = $('aviso'); a.textContent = t; a.hidden = false }
+
+function filtrados() {
+  const ws = norm(F.q).split(/\s+/).filter(Boolean)
+  return MAT.filter(m => (!F.g || m.g === F.g) && (!F.t.size || F.t.has(m.t)) && (!F.so || L.itens[m.c]) && (!F.baixo || baixo(m)) && ws.every(w => m._s.includes(w)))
+}
+function linha(m) {
+  const q = L.itens[m.c] || ''
+  const saldo = m.est == null ? '' : `saldo <b>${nf.format(m.est)}</b> · `
+  const st = m.min > 0 ? (baixo(m) ? '<span class="tag baixo">abaixo do mín.</span>' : '<span class="tag ok">ok</span>') : ''
+  return `<div class="row${q ? ' on' : ''}" id="r-${m.c}">
+    <span class="code">${esc(m.c)}</span>
+    <div><div class="name">${esc(m.n)}</div><div class="sub"><span class="tag ${m.t}">${TIPOS[m.t] || m.t}</span>${st}${m.emb > 1 ? `<span>compra: ${esc(m.eu)}</span>` : ''}</div></div>
+    <div class="nums">${saldo}${m.min ? `mín. <b>${nf.format(m.min)}</b> ${esc(m.u)}` : 'sem mínimo'}<br>${m.p ? `<b>${brl.format(m.p)}</b>/${esc(m.u)}` : 'sem preço ref.'}</div>
+    <div class="step"><button data-d="-1" data-c="${m.c}" aria-label="Diminuir">−</button><input data-c="${m.c}" inputmode="decimal" aria-label="Quantidade em ${esc(m.u)}" value="${q ? nf.format(q) : ''}" placeholder="0"><button data-d="1" data-c="${m.c}" aria-label="Aumentar">+</button></div>
+  </div>`
+}
+function renderCat() {
+  const r = filtrados(); $('count').textContent = `${r.length} de ${MAT.length}`
+  if (!r.length) { $('cat').innerHTML = '<div class="empty">Nenhum item com esse filtro.</div>'; return }
+  let h = '', g = null
+  for (const m of r) { if (m.g !== g) { g = m.g; h += `<div class="grp">${esc(g)}<span>${r.filter(x => x.g === g).length}</span></div>` } h += linha(m) }
+  $('cat').innerHTML = h
+}
+function syncRow(c) { const e = $('r-' + c); if (!e) return; const q = L.itens[c]; e.classList.toggle('on', !!q); const i = e.querySelector('input'); if (document.activeElement !== i) i.value = q ? nf.format(q) : '' }
+function setQ(c, q) { q = Math.max(0, Math.round((+q || 0) * 1000) / 1000); if (q > 0) L.itens[c] = q; else delete L.itens[c]; salvaRasc(); renderLista(); syncRow(c) }
+const compraTxt = (m, q) => m.emb > 1 ? `${Math.ceil(q / m.emb - 1e-9)} × ${m.eu}` : ''
+function renderLista() {
+  const cs = ordem(Object.keys(L.itens))
+  $('nItens').textContent = cs.length + ' itens'; $('fabN').textContent = cs.length
+  let tot = 0, sp = 0
+  $('itens').innerHTML = cs.length ? cs.map(c => {
+    const m = BY[c], q = L.itens[c], v = m.p ? m.p * q : null; if (v) tot += v; else sp++
+    const falta = m.est != null && m.est < q ? ` · <b style="color:var(--danger)">saldo ${nf.format(m.est)}</b>` : ''
+    return `<div class="it"><div class="n">${esc(m.n)}</div><div class="q"><input data-li="${c}" inputmode="decimal" value="${nf.format(q)}" aria-label="Quantidade"><span class="u">${esc(m.u)}</span><button class="x" data-rm="${c}" aria-label="Remover">×</button></div>
+      <div class="d">${esc(c)}${m.emb > 1 ? ' · ' + compraTxt(m, q) : ''}${v ? ' · ' + brl.format(v) : ''}${falta}</div></div>`
+  }).join('') : '<div class="empty">Lista vazia.<br>Use + no catálogo ou adicione um kit.</div>'
+  $('total').textContent = brl.format(tot); $('semPreco').textContent = sp ? `${sp} ${sp > 1 ? 'itens' : 'item'} sem preço de referência` : ''
+  $('statusBox').hidden = !L.id; $('status').value = L.status || 'aberta'
+  $('salvar').textContent = L.id ? 'Atualizar' : 'Salvar'
+  $('salvar').disabled = !sessao || !KITS_OK
+  $('authNote').hidden = !!(sessao && KITS_OK)
+  $('authNote').textContent = !KITS_OK ? 'Salvar no banco exige a migração 63.' : 'Para salvar no banco, entre no PMOC Refrigeração (Técnico ou Gestor) e volte a esta página. Copiar e CSV funcionam sem login.'
+}
+function renderKits() {
+  $('kits').innerHTML = KITS.length ? KITS.map(k => `<div class="kit"><h3>${esc(k.nome)}</h3><p>${esc(k.desc)}</p>
+    <details><summary>${k.itens.length} itens</summary><ul>${k.itens.map(([c, q]) => `<li>${nf.format(q)} ${esc(BY[c].u)} — ${esc(BY[c].n)}</li>`).join('')}</ul></details>
+    <div class="act"><label for="k-${k.id}">Quantidade</label><input id="k-${k.id}" type="number" min="1" step="1" value="1"><button class="btn pri small" data-kit="${k.id}">Adicionar à lista</button></div></div>`).join('')
+    : '<div class="empty">Nenhum kit cadastrado.</div>'
+}
+function campos() { for (const k of ['titulo', 'os', 'local', 'tec', 'data']) { const e = $('f-' + k); e.value = L[k] || ''; e.oninput = () => { L[k] = e.value; salvaRasc() } } }
+
+async function renderSalvas() {
+  if (!KITS_OK) { $('salvas').innerHTML = '<option value="">—</option>'; $('abrir').disabled = $('excluir').disabled = true; return }
+  const r = await supa.from('listas_material').select('id,titulo,data,status,referencia,local,tecnico,listas_material_itens(material_id,quantidade)').eq('ativo', true).order('criado_em', { ascending: false }).limit(50)
+  renderSalvas.dados = r.data || []
+  $('salvas').innerHTML = renderSalvas.dados.length ? renderSalvas.dados.map(x => `<option value="${x.id}">${esc(x.titulo)} · ${esc((x.data || '').split('-').reverse().join('/'))} · ${esc(x.status)} · ${x.listas_material_itens.length} itens</option>`).join('') : '<option value="">Nenhuma lista salva</option>'
+  $('abrir').disabled = !renderSalvas.dados.length; $('excluir').disabled = !renderSalvas.dados.length || !sessao
+}
+async function salvar() {
+  const cs = ordem(Object.keys(L.itens)); if (!cs.length) return toast('A lista está vazia')
+  if (!L.titulo) return toast('Dê um título à lista antes de salvar')
+  const cab = { titulo: L.titulo, referencia: L.os || null, local: L.local || null, tecnico: L.tec || null, data: L.data || hoje(), status: L.status || 'aberta' }
+  let id = L.id
+  if (id) { const u = await supa.from('listas_material').update(cab).eq('id', id); if (u.error) return toast('Erro ao salvar: ' + u.error.message)
+    const d = await supa.from('listas_material_itens').delete().eq('lista_id', id); if (d.error) return toast('Erro ao salvar itens: ' + d.error.message) }
+  else { const i = await supa.from('listas_material').insert(cab).select('id').single(); if (i.error) return toast('Erro ao salvar: ' + i.error.message); id = i.data.id }
+  const itens = cs.map(c => ({ lista_id: id, material_id: BY[c].id, quantidade: L.itens[c], unidade: BY[c].u, preco_unit: BY[c].p }))
+  const r = await supa.from('listas_material_itens').insert(itens); if (r.error) return toast('Erro ao salvar itens: ' + r.error.message)
+  L.id = id; salvaRasc(); renderLista(); await renderSalvas(); $('salvas').value = id; toast('Lista salva no PMOC')
+}
+function texto() {
+  const cs = ordem(Object.keys(L.itens))
+  const cab = ['LISTA DE MATERIAL — REFRIGERAÇÃO CMASM', L.titulo && `Finalidade: ${L.titulo}`, L.os && `OS/Equipamento: ${L.os}`, L.local && `Local: ${L.local}`, `Técnico: ${L.tec || '—'}   Data: ${L.data ? L.data.split('-').reverse().join('/') : '—'}`].filter(Boolean)
+  return cab.join('\n') + '\n\n' + cs.map((c, i) => { const m = BY[c], q = L.itens[c]; return `${String(i + 1).padStart(2, '0')}. ${nf.format(q)} ${m.u} — ${m.n} [${c}]${m.emb > 1 ? ' (compra: ' + compraTxt(m, q) + ')' : ''}` }).join('\n')
+}
+function csv() {
+  const cs = ordem(Object.keys(L.itens))
+  const f = v => { v = String(v ?? ''); return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v }
+  const n = v => v == null ? '' : String(Math.round(v * 100) / 100).replace('.', ',')
+  const rows = [['Item', 'Código', 'Grupo', 'Tipo', 'Descrição', 'Qtd', 'Unid.', 'Saldo', 'Embalagem de compra', 'Qtd de compra', 'Preço ref. (R$/unid.)', 'Total ref. (R$)']]
+  cs.forEach((c, i) => { const m = BY[c], q = L.itens[c]; rows.push([i + 1, c, m.g, TIPOS[m.t] || m.t, m.n, n(q), m.u, n(m.est), m.emb > 1 ? m.eu : m.u, m.emb > 1 ? Math.ceil(q / m.emb - 1e-9) : n(q), n(m.p), m.p ? n(m.p * q) : '']) })
+  const cab = [['Lista de material — Refrigeração CMASM'], ['Finalidade', L.titulo], ['OS/Equipamento', L.os], ['Local', L.local], ['Técnico', L.tec], ['Data', L.data], []]
+  return '﻿' + [...cab, ...rows].map(r => r.map(f).join(';')).join('\r\n')
+}
+
+// ── eventos ─────────────────────────────────────────────────────────
+$('q').oninput = e => { F.q = e.target.value; renderCat() }
+$('grupo').onchange = e => { F.g = e.target.value; renderCat() }
+$('tipos').innerHTML = Object.entries(TIPOS).map(([k, v]) => `<button class="chip" data-t="${k}" aria-pressed="false">${v}</button>`).join('')
+$('tipos').onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; const t = b.dataset.t; F.t.has(t) ? F.t.delete(t) : F.t.add(t); b.setAttribute('aria-pressed', F.t.has(t)); renderCat() }
+const toggle = (id, k) => { $(id).onclick = e => { F[k] = !F[k]; e.currentTarget.setAttribute('aria-pressed', F[k]); e.currentTarget.classList.toggle('pri', F[k]); renderCat() } }
+toggle('soLista', 'so'); toggle('soBaixo', 'baixo')
+$('addMin').title = 'Soma à lista o que falta para chegar ao mínimo (mínimo − saldo) nos itens filtrados'
+$('addMin').textContent = '+ Repor até o mínimo (filtro)'
+$('addMin').onclick = () => { const r = filtrados().filter(baixo); r.forEach(m => { L.itens[m.c] = Math.max(L.itens[m.c] || 0, Math.round((m.min - (m.est ?? 0)) * 1000) / 1000) }); salvaRasc(); renderLista(); renderCat(); toast(`${r.length} itens abaixo do mínimo na lista`) }
+$('cat').onclick = e => { const b = e.target.closest('button[data-d]'); if (b) setQ(b.dataset.c, (L.itens[b.dataset.c] || 0) + +b.dataset.d) }
+$('cat').onchange = e => { const i = e.target.closest('input[data-c]'); if (i) setQ(i.dataset.c, parse(i.value)) }
+$('itens').onchange = e => { const i = e.target.closest('input[data-li]'); if (i) setQ(i.dataset.li, parse(i.value)) }
+$('itens').onclick = e => { const b = e.target.closest('[data-rm]'); if (b) setQ(b.dataset.rm, 0) }
+$('kits').onclick = e => { const b = e.target.closest('[data-kit]'); if (!b) return; const k = KITS.find(x => x.id === b.dataset.kit); const n = Math.max(1, +$('k-' + k.id).value || 1)
+  k.itens.forEach(([c, q]) => (L.itens[c] = Math.round(((L.itens[c] || 0) + q * n) * 1000) / 1000)); if (!L.titulo) { L.titulo = (n > 1 ? n + '× ' : '') + k.nome; campos() }
+  salvaRasc(); renderLista(); toast(`Kit adicionado: ${n}× ${k.nome}`) }
+function tab(t) { $('tab-cat').setAttribute('aria-selected', t === 'cat'); $('tab-kit').setAttribute('aria-selected', t === 'kit'); $('cat').hidden = $('tools-cat').hidden = t !== 'cat'; $('kits').hidden = t !== 'kit'; $('aviso').hidden = $('aviso').hidden || t !== 'cat' }
+$('tab-cat').onclick = () => tab('cat'); $('tab-kit').onclick = () => tab('kit')
+$('copiar').onclick = async () => { const t = texto(); try { await navigator.clipboard.writeText(t); toast('Lista copiada') } catch (e) { toast('Não foi possível copiar') } }
+$('csv').onclick = () => { if (!Object.keys(L.itens).length) return toast('A lista está vazia'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv()], { type: 'text/csv;charset=utf-8' }))
+  a.download = ('lista-material-' + (L.titulo || 'refrigeracao')).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '-').slice(0, 60) + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000) }
+$('salvar').onclick = salvar
+$('status').onchange = async e => { L.status = e.target.value; salvaRasc(); if (L.id && sessao) { const u = await supa.from('listas_material').update({ status: L.status }).eq('id', L.id); toast(u.error ? 'Erro: ' + u.error.message : 'Situação atualizada'); renderSalvas() } }
+$('novo').onclick = () => { L = novaLista(); L.tec = store.get('pmoc-listas.rascunho', {}).tec || ''; salvaRasc(); campos(); renderLista(); renderCat() }
+$('limpar').onclick = () => { $('confLimpar').hidden = false }
+$('naoLimpar').onclick = () => { $('confLimpar').hidden = true }
+$('simLimpar').onclick = () => { L.itens = {}; salvaRasc(); renderLista(); renderCat(); $('confLimpar').hidden = true; toast('Itens apagados') }
+$('abrir').onclick = () => { const x = (renderSalvas.dados || []).find(y => y.id === $('salvas').value); if (!x) return
+  L = { id: x.id, status: x.status, titulo: x.titulo, os: x.referencia || '', local: x.local || '', tec: x.tecnico || '', data: x.data || hoje(), itens: {} }
+  x.listas_material_itens.forEach(i => { const m = BYID[i.material_id]; if (m) L.itens[m.c] = +i.quantidade }); salvaRasc(); campos(); renderLista(); renderCat(); toast('Lista aberta') }
+$('excluir').onclick = async () => { const id = $('salvas').value; if (!id) return; const u = await supa.from('listas_material').update({ ativo: false }).eq('id', id); if (u.error) return toast('Erro: ' + u.error.message); if (L.id === id) { L.id = null; salvaRasc(); renderLista() } await renderSalvas(); toast('Lista arquivada') }
+$('fab').onclick = () => $('lista').classList.add('open'); $('fecha').onclick = () => $('lista').classList.remove('open')
+
+carregar().catch(e => { $('meta').textContent = 'Erro ao carregar: ' + (e?.message || e) })
+
+</script>
+</body>
+</html>
