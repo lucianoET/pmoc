@@ -2953,3 +2953,17 @@ reescreve:
 - [ ] Portal → seção **Em desenvolvimento** → card **Energia e água** → painel xEnergia,
       marcado como demonstração.
 - [ ] Em 375px, o portal com as duas seções e sem rolagem horizontal.
+
+## Listas de material — listão, kits e listas (/refrigeracao/listas, migrações 63/64)
+
+Aplicar no SQL editor, nesta ordem: `63_refrigeracao_listao_kits_listas.sql` e depois `64_refrigeracao_listao_seed.sql`.
+As duas foram ensaiadas em Postgres 16 descartável (44 → 63 → 63 → 64 → 64 sem erro).
+
+- [ ] Conferir contagens: `materiais` 318 (código `AAA-000`), `kits` 14, `kit_itens` 141; 16 policies nas 4 tabelas novas.
+- [ ] Botão **Listas** no topo do /refrigeracao abre /refrigeracao/listas.
+- [ ] Sem login: catálogo e kits aparecem, "modo leitura" no cabeçalho, **Salvar** desabilitado; Copiar e CSV funcionam.
+- [ ] Logado (Técnico/Gestor): Kits → 4× "Instalação split 24k" → lista com 16 itens e compra em rolos (ex.: 12 m de 1/4" → 1 × rolo 15 m).
+- [ ] **Abaixo do mínimo** + **Repor até o mínimo** soma (mínimo − saldo) de cada item filtrado.
+- [ ] **Salvar** grava `listas_material` + `listas_material_itens` com `preco_unit` congelado; **Atualizar** regrava os itens da mesma lista.
+- [ ] Trocar a situação (aberta → enviada) grava na hora; **Arquivar** faz `ativo=false` (não apaga).
+- [ ] Estoque existente (aba Estoque do /refrigeracao) passa a listar os 318 itens; todos com mínimo > 0 aparecem abaixo do mínimo até o primeiro inventário.

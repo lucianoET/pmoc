@@ -1288,7 +1288,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="topbar">
     <img src="/refrigeracao/icone-192.png" alt="" style="width:30px;height:30px;flex-shrink:0"/>
     <div class="logo">PMOC.Refrigeração</div>
-    <button id="topbar-action" onclick="showSearch()" title="Buscar" aria-label="Buscar equipamento"><i class="fas fa-search" aria-hidden="true"></i></button><button id="topbar-portal" onclick="location.href='/'" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:8px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%" title="Voltar ao portal" aria-label="Voltar ao portal"><i class="fas fa-th-large" aria-hidden="true"></i><b class="tb-rot" style="display:none">Portal</b></button><button onclick="supa.auth.signOut()" style="background:none;border:none;color:rgba(255,255,255,.7);font-size:16px;cursor:pointer;padding:8px;width:40px;height:40px;display:flex;align-items:center;justify-content:center" title="Sair" aria-label="Sair"><i class="fas fa-sign-out-alt" aria-hidden="true"></i><b class="tb-rot" style="display:none">Sair</b></button>
+    <button id="topbar-action" onclick="showSearch()" title="Buscar" aria-label="Buscar equipamento"><i class="fas fa-search" aria-hidden="true"></i></button><button id="topbar-listas" onclick="location.href='/refrigeracao/listas'" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:8px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%" title="Listas de material (catálogo e kits)" aria-label="Listas de material"><i class="fas fa-list-ul" aria-hidden="true"></i><b class="tb-rot" style="display:none">Listas</b></button><button id="topbar-portal" onclick="location.href='/'" style="background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:8px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%" title="Voltar ao portal" aria-label="Voltar ao portal"><i class="fas fa-th-large" aria-hidden="true"></i><b class="tb-rot" style="display:none">Portal</b></button><button onclick="supa.auth.signOut()" style="background:none;border:none;color:rgba(255,255,255,.7);font-size:16px;cursor:pointer;padding:8px;width:40px;height:40px;display:flex;align-items:center;justify-content:center" title="Sair" aria-label="Sair"><i class="fas fa-sign-out-alt" aria-hidden="true"></i><b class="tb-rot" style="display:none">Sair</b></button>
   </div>
 
   <!-- CONTENT -->
@@ -8306,7 +8306,7 @@ async function doLoginRole(){
      sairia claro (texto branco invisível) e o conteúdo sairia escuro. */
   #app{
     display:grid;
-    grid-template-columns:auto auto 1fr auto auto auto;
+    grid-template-columns:auto auto 1fr auto auto auto auto;
     grid-template-rows:56px auto 1fr auto;
     column-gap:10px;
     background:#071D41;
@@ -8321,20 +8321,21 @@ async function doLoginRole(){
   #topbar img{ grid-row:1; grid-column:1; align-self:center; margin-left:16px; }
   #topbar .logo{ grid-row:1; grid-column:2; align-self:center; }
   #topbar-action{ grid-row:1; grid-column:4; align-self:center; }
-  #topbar-portal{ grid-row:1; grid-column:5; align-self:center; }
-  #topbar>button:last-child{ grid-row:1; grid-column:6; align-self:center; margin-right:16px; }
+  #topbar-listas{ grid-row:1; grid-column:5; align-self:center; }
+  #topbar-portal{ grid-row:1; grid-column:6; align-self:center; }
+  #topbar>button:last-child{ grid-row:1; grid-column:7; align-self:center; margin-right:16px; }
   #content{ grid-row:3; grid-column:1/-1; background:#F0F2F5; }
 
   /* Portal e Sair como nos outros módulos: botões com
      rótulo, mesmo peso, Portal antes de Sair. O !important vence o estilo
      inline dos dois botões, que é o desenho do celular (só ícone). */
-  #topbar-portal, #topbar>button:last-child{
+  #topbar-listas, #topbar-portal, #topbar>button:last-child{
     width:auto !important; height:34px !important; padding:0 12px !important;
     gap:6px; border:1px solid rgba(255,255,255,.35) !important;
     background:rgba(255,255,255,.08) !important; border-radius:7px !important;
     color:#fff !important; font-size:13px !important;
   }
-  #topbar-portal:hover, #topbar>button:last-child:hover{ background:rgba(255,255,255,.18) !important; }
+  #topbar-listas:hover, #topbar-portal:hover, #topbar>button:last-child:hover{ background:rgba(255,255,255,.18) !important; }
   #topbar .tb-rot{ display:inline !important; font-weight:600; }
 
   /* Barra de rolagem visível no computador: a folha do celular a esconde,
