@@ -4,7 +4,7 @@ import { aplicarShell } from '../shared/shell.js'
 import { cartaoIndicador } from '../shared/indicadores.js'
 import { verNoMapa } from '../shared/componentes.js'
 import { validarNumero } from '../maquinas/numeros.js'
-import { PONTOS, hojeISO, situacaoRotina, montarLinhas, naoConformidades } from './rotinas.js'
+import { PONTOS, hojeISO, situacaoRotina, montarLinhas, naoConformidades, rotuloPeriodicidade, textoPrazo } from './rotinas.js'
 
 let supa = null
 let auth = null
@@ -334,6 +334,14 @@ function renderPainel() {
   document.getElementById('kpi-manut').textContent = alertas
   document.getElementById('kpi-vencidas').textContent = calcVencimentos().filter(item => item.falta <= 0).length
 
+  const rotinas = situacoesRotinas()
+  const pendentesPorAtivo = new Map()
+  for (const linha of rotinas.filter(rotinaPendente)) {
+    pendentesPorAtivo.set(linha.ativo.id, [...(pendentesPorAtivo.get(linha.ativo.id) || []), linha])
+  }
+  document.getElementById('kpi-rotinas-card').classList.toggle('hidden', !rotinas.length)
+  document.getElementById('kpi-rotinas').textContent = rotinas.filter(rotinaPendente).length
+
   const painelViagens = document.getElementById('painel-viagens')
   const agoraChave = `${new Date().toISOString().slice(0, 10)} ${new Date().toTimeString().slice(0, 5)}`
   const ordenadas = ordenarViagens(VIAGENS)
@@ -358,12 +366,24 @@ function renderPainel() {
   const ativosAtencao = ATIVOS.filter(ativo => ativo.status !== 'disponivel')
   const primeirosAlertas = calcularAlertasManutencao().slice(0, 3)
 
-  if (!ativosAtencao.length && !primeirosAlertas.length) {
+  if (!ativosAtencao.length && !primeirosAlertas.length && !pendentesPorAtivo.size) {
     painelAtivos.innerHTML = '<div class="empty"><div class="empty-ico">✅</div><p>Sem alertas no momento.</p></div>'
     return
   }
 
   const blocos = []
+  for (const linhas of pendentesPorAtivo.values()) {
+    const atrasadas = linhas.filter(l => l.sit.estado === 'vencida').length
+    blocos.push(`
+      <div class="mat-alert">
+        <div class="mat-info">
+          <div class="mat-nome">${esc(linhas[0].ativo.codigo)} — ${esc(linhas[0].ativo.nome)}</div>
+          <div class="mat-stock">${linhas.length} checklist(s) pendente(s): ${esc(linhas.map(l => rotuloPeriodicidade(l.rotina.intervalo_dias)).join(', '))}</div>
+        </div>
+        <span class="badge ${atrasadas ? 'b-red' : 'b-warn'}">${atrasadas ? `${atrasadas} atrasada(s)` : 'nunca executado'}</span>
+      </div>
+    `)
+  }
   for (const ativo of ativosAtencao.slice(0, 4)) {
     blocos.push(`
       <div class="mat-alert">
@@ -408,6 +428,16 @@ function renderAtivos() {
     return
   }
 
+  const rotinas = situacoesRotinas()
+  const proxManutencao = ativo => {
+    const doAtivo = rotinas.filter(l => l.ativo.id === ativo.id)
+    const pendentes = doAtivo.filter(rotinaPendente).length
+    const proxRotina = doAtivo.map(l => l.sit.proxima).filter(Boolean).sort()[0] || null
+    const data = [ativo.prox_manutencao, proxRotina].filter(Boolean).sort()[0] || null
+    const selo = pendentes ? `<span class="badge b-warn">${pendentes} checklist(s) pendente(s)</span>` : ''
+    return selo + (data ? `<div class="tagline">${fmtDate(data)}</div>` : (selo ? '' : '—'))
+  }
+
   tbody.innerHTML = lista.map(ativo => `
     <tr>
       <td class="hi mono">${esc(ativo.codigo)}</td>
@@ -419,11 +449,12 @@ function renderAtivos() {
       <td class="mono">${esc(ativo.identificacao || '—')}</td>
       <td>${Number(ativo.uso_atual || 0).toLocaleString('pt-BR')} ${esc(ativo.unidade_uso || '')}</td>
       <td>${badgeStatus(ativo.status, STATUS_ATIVO)}</td>
-      <td>${fmtDate(ativo.prox_manutencao)}</td>
+      <td>${proxManutencao(ativo)}</td>
       <td>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalViagem(${ativo.id})">+ Viagem</button>` : ''}
           ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalManutencao(${ativo.id})">+ Manut.</button>` : ''}
+          ${podeEditar() && rotinas.some(l => l.ativo.id === ativo.id) ? `<button class="btn btn-s btn-sm" onclick="abrirModalRotina(${ativo.id}, ${rotinas.find(l => l.ativo.id === ativo.id).rotina.id})">Checklist</button>` : ''}
           ${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalAtivo(${ativo.id})">Editar</button>` : ''}
           ${verNoMapa('transportes', ativo.id)}
         </div>
@@ -467,8 +498,11 @@ function renderViagens() {
 function renderManutencoes() {
   const alertas = calcularAlertasManutencao().filter(item => item.dias <= 30)
   const divAlertas = document.getElementById('manut-alertas')
+  const porUso = calcVencimentos().filter(item => item.falta <= 0 || item.pct >= LIMIAR_PROXIMO)
   if (!alertas.length) {
-    divAlertas.innerHTML = '<div class="callout co-ok">Nenhum ativo com manutenção vencida ou próxima nos próximos 30 dias.</div>'
+    // Um aviso só: antes eram dois blocos verdes empilhados ("por data" e "por
+    // uso") dizendo a mesma coisa, e empurravam o que precisa de ação para baixo.
+    divAlertas.innerHTML = porUso.length ? '' : '<div class="callout co-ok">Nenhuma manutenção vencida ou próxima, por data (30 dias) ou por uso.</div>'
   } else {
     divAlertas.innerHTML = alertas.map(item => `
       <div class="callout ${item.dias < 0 ? 'co-red' : 'co-warn'}">
@@ -558,7 +592,7 @@ function renderVencimentos() {
   const vencLista = document.getElementById('venc-lista')
   if (vencLista) vencLista.innerHTML = html
   const vencListaManut = document.getElementById('venc-lista-manut')
-  if (vencListaManut) vencListaManut.innerHTML = html
+  if (vencListaManut) vencListaManut.innerHTML = items.length ? html : ''
 
   const kpiVencidas = document.getElementById('kpi-vencidas')
   if (kpiVencidas) kpiVencidas.textContent = items.filter(item => item.falta <= 0).length
@@ -568,7 +602,7 @@ function renderPlanos() {
   const tbody = document.getElementById('tb-planos')
 
   if (!PLANOS.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="tagline">Nenhum plano cadastrado.</td></tr>'
+    tbody.innerHTML = `<tr><td colspan="7" class="tagline">Nenhum plano por km/h cadastrado.${ROT_OK && ROTINAS.length ? ' Os planos por calendário estão logo abaixo.' : ''}</td></tr>`
     return
   }
 
@@ -1117,20 +1151,18 @@ function ultimaExecucao(ativoId, rotinaId) {
 }
 
 const ROTINA_ESTADO = {
+  vencida: ['Atrasada', 'b-red', 0],
   nunca: ['Nunca executada', 'b-warn', 1],
-  vencida: ['Vencida', 'b-red', 0],
-  proxima: ['Próxima', 'b-warn', 2],
+  proxima: ['Vence em breve', 'b-warn', 2],
   em_dia: ['Em dia', 'b-ok', 3],
 }
 
-function renderRotinas() {
-  const bloco = document.getElementById('rotinas-bloco')
-  const botao = document.getElementById('btn-exec-rotina')
-  const ativas = ROT_OK && ATIVOS.some(a => a.ativo !== false && rotinasDoAtivo(a).length)
-  bloco.classList.toggle('hidden', !ativas)
-  botao.classList.toggle('hidden', !ativas || !podeEditar())
-  if (!ativas) return
+const rotinaPendente = linha => linha.sit.estado === 'vencida' || linha.sit.estado === 'nunca'
 
+// Situação de cada par ativo × rotina, já em ordem de urgência. Painel, Frota,
+// Manutenção e Planos leem daqui: uma regra de prazo, quatro telas.
+function situacoesRotinas() {
+  if (!ROT_OK) return []
   const linhas = []
   for (const ativo of ATIVOS.filter(a => a.ativo !== false)) {
     for (const rotina of rotinasDoAtivo(ativo)) {
@@ -1138,38 +1170,118 @@ function renderRotinas() {
       linhas.push({ ativo, rotina, ultima, sit: situacaoRotina(ultima?.data_execucao, rotina.intervalo_dias) })
     }
   }
-  linhas.sort((a, b) => ROTINA_ESTADO[a.sit.estado][2] - ROTINA_ESTADO[b.sit.estado][2] || a.rotina.ordem - b.rotina.ordem)
+  return linhas.sort((a, b) => ROTINA_ESTADO[a.sit.estado][2] - ROTINA_ESTADO[b.sit.estado][2]
+    || (a.sit.dias ?? 0) - (b.sit.dias ?? 0)
+    || a.rotina.ordem - b.rotina.ordem)
+}
 
-  document.getElementById('tb-rotinas').innerHTML = linhas.map(({ ativo, rotina, ultima, sit }) => {
-    const [rotulo, classe] = ROTINA_ESTADO[sit.estado]
-    const prazo = sit.dias == null ? '' : sit.dias < 0 ? ` · há ${Math.abs(sit.dias)} dia(s)` : ` · em ${sit.dias} dia(s)`
-    return `
-      <tr>
-        <td><div class="hi">${esc(ativo.codigo)}</div><div class="tagline">${esc(ativo.nome)}</div></td>
-        <td><div class="hi">${esc(rotina.nome)}</div><div class="tagline">${esc(rotina.codigo)} · ${rotina.responsavel === 'OP' ? 'Operador' : 'Técnico'}</div></td>
-        <td>a cada ${rotina.intervalo_dias} dia(s)</td>
-        <td class="mono">${ultima ? fmtDate(ultima.data_execucao) : '—'}</td>
-        <td class="mono">${sit.proxima ? fmtDate(sit.proxima) : '—'}</td>
-        <td><span class="badge ${classe}">${rotulo}</span>${esc(prazo)}</td>
-        <td>${podeEditar() ? `<button class="btn btn-s btn-sm" onclick="abrirModalRotina(${ativo.id}, ${rotina.id})">Executar</button>` : '—'}</td>
-      </tr>`
-  }).join('')
+function faixaDoItem(item) {
+  if (item.minimo == null && item.maximo == null) return 'sem faixa cadastrada — valor só é registrado'
+  const num = v => String(v).replace('.', ',')
+  const partes = []
+  if (item.minimo != null) partes.push(`≥ ${num(item.minimo)}`)
+  if (item.maximo != null) partes.push(`≤ ${num(item.maximo)}`)
+  return `faixa ${partes.join(' e ')} ${item.unidade}`
+}
+
+function linhaRotina(linha) {
+  const { ativo, rotina, ultima, sit } = linha
+  const [rotulo, classe] = ROTINA_ESTADO[sit.estado]
+  const detalhe = [
+    `${rotuloPeriodicidade(rotina.intervalo_dias)} · ${rotina.responsavel === 'OP' ? 'Operador' : 'Técnico'}`,
+    ultima ? `última ${fmtDate(ultima.data_execucao)}` : null,
+    sit.proxima ? `próxima ${fmtDate(sit.proxima)} (${textoPrazo(sit)})` : null,
+  ].filter(Boolean).join(' · ')
+  return `
+    <div class="rt-linha ${sit.estado}">
+      <div class="mat-info">
+        <div class="mat-nome">${esc(rotina.nome)} <span class="tagline">${esc(rotina.codigo)}</span></div>
+        <div class="mat-stock">${esc(detalhe)}</div>
+      </div>
+      <div class="rt-acao">
+        <span class="badge ${classe}">${rotulo}</span>
+        ${podeEditar() ? `<button class="btn ${rotinaPendente(linha) ? 'btn-p' : 'btn-s'} btn-sm" onclick="abrirModalRotina(${ativo.id}, ${rotina.id})">Executar</button>` : ''}
+      </div>
+    </div>`
+}
+
+function renderRotinas() {
+  const linhas = situacoesRotinas()
+  const ativas = linhas.length > 0
+  document.getElementById('rotinas-bloco').classList.toggle('hidden', !ativas)
+  document.getElementById('execucoes-bloco').classList.toggle('hidden', !ativas)
+  document.getElementById('btn-exec-rotina').classList.toggle('hidden', !ativas || !podeEditar())
+  renderPlanosRotinas()
+  if (!ativas) return
+
+  document.getElementById('rt-chips').innerHTML = [
+    ['vencida', 'atrasada(s)', 'b-red'],
+    ['nunca', 'nunca executada(s)', 'b-warn'],
+    ['proxima', 'vence(m) em breve', 'b-warn'],
+    ['em_dia', 'em dia', 'b-ok'],
+  ].map(([estado, rotulo, classe]) => [linhas.filter(l => l.sit.estado === estado).length, rotulo, classe])
+    .filter(([n]) => n > 0)
+    .map(([n, rotulo, classe]) => `<span class="badge ${classe}">${n} ${rotulo}</span>`)
+    .join('')
+
+  // Agrupado por ativo, na ordem do ativo mais urgente primeiro.
+  const grupos = new Map()
+  for (const linha of linhas) {
+    if (!grupos.has(linha.ativo.id)) grupos.set(linha.ativo.id, { ativo: linha.ativo, linhas: [] })
+    grupos.get(linha.ativo.id).linhas.push(linha)
+  }
+  document.getElementById('lista-rotinas').innerHTML = [...grupos.values()].map(g => `
+    <div class="panel-card rt-ativo">
+      <h3>${esc(g.ativo.codigo)} <span class="tagline">${esc(g.ativo.nome)}</span></h3>
+      ${g.linhas.map(linhaRotina).join('')}
+    </div>`).join('')
 
   const recentes = EXECUCOES.slice(0, 30)
   document.getElementById('tb-execucoes').innerHTML = !recentes.length
-    ? '<tr><td colspan="6" class="tagline">Nenhuma execução registrada.</td></tr>'
+    ? '<tr><td colspan="6" class="tagline">Nenhum checklist executado ainda.</td></tr>'
     : recentes.map(e => {
       const nc = EXEC_NC[e.id] || 0
       return `
         <tr>
           <td class="mono">${fmtDate(e.data_execucao)}</td>
-          <td><div class="hi">${esc(e.transp_ativos?.codigo || '—')}</div></td>
+          <td class="hi">${esc(e.transp_ativos?.codigo || '—')}</td>
           <td>${esc(e.transp_rotinas?.nome || '—')}</td>
+          <td>${nc ? `<span class="badge b-red">${nc} fora / NC</span>` : '<span class="badge b-ok">Conforme</span>'}</td>
           <td>${esc(e.executado_por || '—')}</td>
-          <td>${nc ? `<span class="badge b-red">${nc}</span>` : '<span class="badge b-ok">0</span>'}</td>
           <td><button class="btn btn-s btn-sm" onclick="verExecucao('${e.id}')">Ver</button></td>
         </tr>`
     }).join('')
+}
+
+function renderPlanosRotinas() {
+  const secao = document.getElementById('planos-rotinas')
+  const rotinas = ROT_OK ? ROTINAS.filter(r => r.ativo !== false) : []
+  secao.classList.toggle('hidden', !rotinas.length)
+  if (!rotinas.length) return
+  document.getElementById('lista-planos-rotinas').innerHTML = rotinas.map(rotina => {
+    const itens = itensDaRotina(rotina.id)
+    const medidas = itens.filter(i => i.tipo === 'medida').length
+    const ativos = ATIVOS.filter(a => a.ativo !== false && a.tipo_modelo === rotina.tipo_modelo).map(a => a.codigo)
+    const resumo = [
+      rotina.codigo,
+      rotuloPeriodicidade(rotina.intervalo_dias),
+      rotina.responsavel === 'OP' ? 'Operador' : 'Técnico',
+      `${itens.length} itens${medidas ? `, ${medidas} com medição` : ''}`,
+      `${rotina.tipo_modelo}${ativos.length ? ` (${ativos.join(', ')})` : ''}`,
+    ].join(' · ')
+    return `
+      <details class="panel-card rt-plano">
+        <summary><b>${esc(rotina.nome)}</b> <span class="tagline">${esc(resumo)}</span></summary>
+        <ol class="rt-plano-itens">${itens.map(item => `
+          <li>
+            <div>${esc(item.descricao)}</div>
+            <div class="tagline">${item.tipo === 'medida'
+              ? `Medição em ${esc(item.unidade)}, ${PONTOS[item.registro_por].length} ponto(s) · ${esc(faixaDoItem(item))}`
+              : esc(item.criterio || 'Conforme / não conforme')}${item.acao_se_nc ? ` · Se não conforme: ${esc(item.acao_se_nc)}` : ''}</div>
+          </li>`).join('')}
+        </ol>
+      </details>`
+  }).join('')
 }
 
 function abrirModalRotina(ativoId = null, rotinaId = null) {
@@ -1207,35 +1319,39 @@ function desenharItensRotina() {
   const itens = itensDaRotina(Number(document.getElementById('rt-rotina').value))
   let sistema = null
   document.getElementById('rt-itens').innerHTML = itens.map(item => {
-    const cab = item.sistema !== sistema ? `<div class="view-title" style="font-size:13px;margin:14px 0 6px">${esc(sistema = item.sistema || 'Geral')}</div>` : ''
+    const cab = item.sistema !== sistema ? `<div class="rt-sistema">${esc(sistema = item.sistema || 'Geral')}</div>` : ''
     const ajuda = `<div class="help">${esc(item.criterio || '')}${item.acao_se_nc ? ` · Se não conforme: ${esc(item.acao_se_nc)}` : ''}</div>`
     if (item.tipo === 'check') {
       return `${cab}
-        <div class="frow" style="border-top:1px solid var(--border);padding-top:8px">
-          <label style="text-transform:none;letter-spacing:0">${esc(item.descricao)}</label>
-          <div style="display:flex;gap:16px;flex-wrap:wrap">
-            <label style="text-transform:none;letter-spacing:0;display:inline-flex;align-items:center;gap:6px"><input type="radio" name="rt-c-${item.id}" value="ok" onchange="atualizarResumoRotina()"/> Conforme</label>
-            <label style="text-transform:none;letter-spacing:0;display:inline-flex;align-items:center;gap:6px"><input type="radio" name="rt-c-${item.id}" value="nc" onchange="atualizarResumoRotina()"/> Não conforme</label>
+        <div class="rt-item">
+          <div class="rt-desc">${esc(item.descricao)}</div>
+          <div class="rt-seg" role="radiogroup" aria-label="${esc(item.descricao)}">
+            <label><input type="radio" name="rt-c-${item.id}" value="ok" onchange="atualizarResumoRotina()"/>Conforme</label>
+            <label><input type="radio" name="rt-c-${item.id}" value="nc" onchange="atualizarResumoRotina()"/>Não conforme</label>
           </div>
           ${ajuda}
         </div>`
     }
-    const faixa = item.minimo != null || item.maximo != null
-      ? `faixa ${item.minimo != null ? `≥ ${String(item.minimo).replace('.', ',')}` : ''}${item.minimo != null && item.maximo != null ? ' e ' : ''}${item.maximo != null ? `≤ ${String(item.maximo).replace('.', ',')}` : ''} ${esc(item.unidade)}`
-      : 'sem faixa cadastrada — valor só é registrado'
     const campos = PONTOS[item.registro_por].map(ponto => `
-      <div>
-        <div class="tagline" style="margin-bottom:2px">${esc(ponto)}</div>
-        <input type="text" inputmode="decimal" autocomplete="off" data-item="${item.id}" data-ponto="${esc(ponto)}" oninput="atualizarResumoRotina()" style="width:100%"/>
+      <div class="rt-ponto">
+        <div class="tagline">${esc(ponto)}</div>
+        <input type="text" inputmode="decimal" autocomplete="off" data-item="${item.id}" data-ponto="${esc(ponto)}" aria-label="${esc(item.descricao)} — ${esc(ponto)} (${esc(item.unidade)})" oninput="atualizarResumoRotina()"/>
         <span class="badge rt-st" style="display:none"></span>
       </div>`).join('')
     return `${cab}
-      <div class="frow" style="border-top:1px solid var(--border);padding-top:8px">
-        <label style="text-transform:none;letter-spacing:0">${esc(item.descricao)} <span class="tagline">(${esc(item.unidade)} · ${faixa})</span></label>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px">${campos}</div>
+      <div class="rt-item">
+        <div class="rt-desc">${esc(item.descricao)} <span class="tagline">(${esc(item.unidade)} · ${esc(faixaDoItem(item))})</span></div>
+        <div class="rt-grade">${campos}</div>
         ${ajuda}
       </div>`
   }).join('')
+  atualizarResumoRotina()
+}
+
+function marcarChecksConformes() {
+  document.querySelectorAll('#rt-itens .rt-seg').forEach(grupo => {
+    if (!grupo.querySelector('input:checked')) grupo.querySelector('input[value="ok"]').checked = true
+  })
   atualizarResumoRotina()
 }
 
@@ -1252,20 +1368,44 @@ function leiturasDaTela() {
 
 function atualizarResumoRotina() {
   const itens = itensDaRotina(Number(document.getElementById('rt-rotina').value))
-  const { linhas } = montarLinhas(itens, leiturasDaTela())
+  const leituras = leiturasDaTela()
+  const { linhas } = montarLinhas(itens, leituras)
   const porChave = new Map(linhas.map(l => [`${l.item_id}|${l.ponto}`, l]))
 
+  // Cada campo diz o que é, enquanto se digita: dentro, fora da faixa, ou um
+  // texto que não é número (antes, "6,3x" só aparecia como erro ao salvar).
+  let invalidos = 0
   document.querySelectorAll('#rt-itens input[data-item]').forEach(el => {
-    const sel = el.parentElement.querySelector('.rt-st')
-    const l = porChave.get(`${el.dataset.item}|${el.dataset.ponto}`)
-    sel.style.display = l && l.conforme != null ? '' : 'none'
-    if (l && l.conforme != null) {
-      sel.className = `badge rt-st ${l.conforme ? 'b-ok' : 'b-red'}`
-      sel.textContent = l.conforme ? 'dentro' : 'fora'
-    }
+    const selo = el.parentElement.querySelector('.rt-st')
+    const linha = porChave.get(`${el.dataset.item}|${el.dataset.ponto}`)
+    const invalido = el.value.trim() !== '' && !validarNumero(el.value, { rotulo: '' }).ok
+    if (invalido) invalidos++
+    const estado = invalido ? 'invalido' : linha && linha.conforme != null ? (linha.conforme ? 'dentro' : 'fora') : ''
+    for (const c of ['invalido', 'dentro', 'fora']) el.classList.toggle(c, estado === c)
+    el.setAttribute('aria-invalid', estado === 'invalido' || estado === 'fora' ? 'true' : 'false')
+    selo.style.display = estado ? '' : 'none'
+    selo.className = `badge rt-st ${estado === 'dentro' ? 'b-ok' : 'b-red'}`
+    selo.textContent = estado === 'dentro' ? 'dentro' : estado === 'fora' ? 'fora da faixa' : 'não é número'
+  })
+  document.querySelectorAll('#rt-itens .rt-item').forEach(bloco => {
+    bloco.classList.toggle('respondido-nc', !!bloco.querySelector('input[value="nc"]:checked'))
   })
 
   const { nc, dispersoes, total } = naoConformidades(itens, linhas)
+  const checks = itens.filter(i => i.tipo === 'check')
+  const respondidos = checks.filter(i => leituras[`${i.id}|`]).length
+  const pontos = itens.filter(i => i.tipo === 'medida').reduce((soma, i) => soma + PONTOS[i.registro_por].length, 0)
+  const medidos = linhas.filter(l => l.valor != null).length
+  document.getElementById('rt-progresso').innerHTML = [
+    checks.length ? `<b>${respondidos}/${checks.length}</b> checks` : '',
+    pontos ? `<b>${medidos}/${pontos}</b> medições` : '',
+    total ? `<span class="nc">${total} NC</span>` : '',
+    invalidos ? `<span class="nc">${invalidos} inválido(s)</span>` : '',
+  ].filter(Boolean).join(' · ')
+  const marcar = document.getElementById('rt-marcar-ok')
+  marcar.classList.toggle('hidden', !checks.length)
+  marcar.disabled = respondidos === checks.length
+
   const resumo = document.getElementById('rt-resumo')
   resumo.className = `callout ${total ? 'co-red' : 'co-ok'}`
   resumo.innerHTML = total
@@ -1855,6 +1995,7 @@ function exporNoWindow() {
     abrirModalManutencao,
     abrirModalPlano,
     abrirModalRotina,
+    marcarChecksConformes,
     atualizarResumoRotina,
     salvarRotina,
     verExecucao,
