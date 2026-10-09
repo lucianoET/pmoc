@@ -10,6 +10,46 @@
 <link rel="stylesheet" href="../shared/pmoc.css"/>
 <style>
 :root{--accent:#4aa0a0}
+.sec-tit{font-size:15px;font-weight:600;color:var(--text);margin:20px 0 4px}
+.sec-tit+.tagline{margin-bottom:12px}
+.rt-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.rt-ativo h3{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.rt-ativo h3 .tagline{font-weight:400}
+.rt-linha{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 14px;background:var(--surface2);border-radius:6px;border-left:3px solid transparent}
+.rt-linha+.rt-linha{margin-top:6px}
+.rt-linha.vencida{border-left-color:var(--red)}
+.rt-linha.nunca,.rt-linha.proxima{border-left-color:var(--yellow)}
+.rt-linha.em_dia{border-left-color:var(--green)}
+.rt-linha .mat-info{flex:1 1 220px;min-width:0}
+.rt-acao{display:flex;align-items:center;gap:8px;margin-left:auto}
+.rt-barra{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
+.rt-sistema{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin:18px 0 2px}
+.rt-item{border-top:1px solid var(--border);padding:10px 0}
+.rt-item>.rt-desc{font-size:13px;color:var(--text);margin-bottom:6px}
+.rt-item.respondido-nc>.rt-desc{color:var(--red);font-weight:600}
+.rt-seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.rt-seg label{position:relative;display:flex;align-items:center;gap:6px;min-height:40px;padding:0 16px;margin:0;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;color:var(--text2);background:var(--surface)}
+.rt-seg label+label{border-left:1px solid var(--border)}
+.rt-seg input{position:absolute;opacity:0;pointer-events:none}
+.rt-seg label:has(input[value="ok"]:checked){background:color-mix(in srgb,var(--green) 18%,var(--surface));color:var(--green);font-weight:700}
+.rt-seg label:has(input[value="nc"]:checked){background:color-mix(in srgb,var(--red) 18%,var(--surface));color:var(--red);font-weight:700}
+.rt-seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:-2px}
+.rt-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.rt-ponto .tagline{margin-bottom:2px}
+.rt-ponto input{width:100%}
+.rt-ponto input.dentro{border-color:var(--green)}
+.rt-ponto input.fora,.rt-ponto input.invalido{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
+.rt-ponto .badge{display:inline-block;margin-top:3px}
+.rt-progresso{margin-right:auto;align-self:center;font-size:12px;color:var(--text2)}
+.rt-progresso b{color:var(--text)}
+.rt-progresso .nc{color:var(--red);font-weight:700}
+#modal-rotina .modal-ft{flex-wrap:wrap}
+#modal-rotina .modal-ft .btn{white-space:nowrap}
+@media(max-width:600px){#modal-rotina .rt-progresso{flex-basis:100%;margin-right:0}}
+.rt-plano summary{cursor:pointer;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;list-style-position:outside}
+.rt-plano summary b{color:var(--text)}
+.rt-plano[open] summary{margin-bottom:10px}
+.rt-plano-itens{margin:0 0 0 20px;display:grid;gap:8px;font-size:13px;color:var(--text)}
 </style>
 </head>
 <body>
@@ -29,6 +69,7 @@
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-manut">—</div><div class="kpi-l">Manutenções próximas</div></div>
         <div class="kpi kc-red"><div class="kpi-n" id="kpi-vencidas">—</div><div class="kpi-l">Manutenções vencidas (uso)</div></div>
         <div class="kpi kc-warn"><div class="kpi-n" id="kpi-estoque-baixo">—</div><div class="kpi-l">Peças abaixo do mínimo</div></div>
+        <div class="kpi kc-red hidden" id="kpi-rotinas-card"><div class="kpi-n" id="kpi-rotinas">—</div><div class="kpi-l">Checklists pendentes</div></div>
       </div>
       <!-- Cartões de indicador (Fase 13, Onda C) — shared/indicadores.js, o
            mesmo componente do /gestao e do /maquinas. Entram AO LADO da fila de
@@ -41,11 +82,7 @@
       <div class="panel-card" style="margin-bottom:20px">
         <h3>Indicadores</h3>
         <div class="fgrid" id="painel-indicadores" style="align-items:start"></div>
-        <div class="help">Meta só onde o cadastro a sustenta: o intervalo de cada plano
-          (<code>transp_planos.intervalo</code>) e o mínimo de cada peça
-          (<code>transp_materiais.estoque_minimo</code>) declaram um alvo, e nos dois casos ele é zero.
-          Onde não há alvo cadastrado o cartão diz "Sem meta definida" em tom de informação, em vez de
-          inventar um número.</div>
+        <div class="help">A meta aparece só onde o cadastro a define: o intervalo de cada plano de manutenção e o estoque mínimo de cada peça. Nos demais cartões, "Sem meta definida".</div>
       </div>
       <div class="section-split">
         <div class="stack">
@@ -129,50 +166,46 @@
       <div class="view-head">
         <div>
           <div class="view-title">Manutenção</div>
-          <div class="view-sub">Registro de preventivas, corretivas e inspeções da frota.</div>
+          <div class="view-sub">Inspeções por checklist, preventivas, corretivas e o histórico de ordens de serviço.</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-s btn-sm hidden" id="btn-exec-rotina" onclick="abrirModalRotina()">Executar rotina</button>
-          <button class="btn btn-p btn-sm" id="btn-nova-manut" onclick="abrirModalManutencao()">+ Registrar</button>
+          <button class="btn btn-s btn-sm hidden" id="btn-exec-rotina" onclick="abrirModalRotina()">Executar checklist</button>
+          <button class="btn btn-p btn-sm" id="btn-nova-manut" onclick="abrirModalManutencao()">+ Registrar OS</button>
         </div>
       </div>
       <div id="manut-alertas"></div>
-      <div id="venc-lista-manut"></div>
-      <div id="rotinas-bloco" class="hidden">
-        <div class="view-head" style="margin-bottom:10px">
-          <div>
-            <div class="view-title" style="font-size:15px">Rotinas por calendário</div>
-            <div class="view-sub" style="margin:0">Checklists com valores medidos (bateria, densidade, pneus). O prazo conta da última execução.</div>
-          </div>
-        </div>
+      <div id="venc-lista-manut" class="stack"></div>
+
+      <section id="rotinas-bloco" class="hidden">
+        <h2 class="sec-tit">Inspeções e rotinas por calendário</h2>
+        <p class="tagline">Checklists com valores medidos. O prazo conta da última execução de cada rotina.</p>
+        <div id="rt-chips" class="rt-chips"></div>
+        <div id="lista-rotinas" class="stack"></div>
+      </section>
+
+      <section id="execucoes-bloco" class="hidden">
+        <h2 class="sec-tit">Checklists executados</h2>
         <div class="tbl-wrap">
           <table class="tbl">
             <thead><tr>
-              <th>Ativo</th><th>Rotina</th><th>Periodicidade</th><th>Última</th><th>Próxima</th><th>Situação</th><th>Ações</th>
-            </tr></thead>
-            <tbody id="tb-rotinas"></tbody>
-          </table>
-        </div>
-        <div class="view-head" style="margin:16px 0 10px">
-          <div class="view-title" style="font-size:15px">Execuções recentes</div>
-        </div>
-        <div class="tbl-wrap">
-          <table class="tbl">
-            <thead><tr>
-              <th>Data</th><th>Ativo</th><th>Rotina</th><th>Executado por</th><th>Fora da faixa / NC</th><th>Ações</th>
+              <th>Data</th><th>Ativo</th><th>Rotina</th><th>Resultado</th><th>Executado por</th><th></th>
             </tr></thead>
             <tbody id="tb-execucoes"></tbody>
           </table>
         </div>
-      </div>
-      <div class="tbl-wrap">
-        <table class="tbl">
-          <thead><tr>
-            <th>Data</th><th>Ativo</th><th>Tipo</th><th>Descrição</th><th>Uso ref.</th><th>Próx. manutenção</th><th>Executado por</th><th>Status</th><th>Ações</th>
-          </tr></thead>
-          <tbody id="tb-manutencoes"><tr><td colspan="9" class="tagline">Carregando...</td></tr></tbody>
-        </table>
-      </div>
+      </section>
+
+      <section>
+        <h2 class="sec-tit">Ordens de serviço</h2>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Data</th><th>Ativo</th><th>Tipo</th><th>Descrição</th><th>Uso ref.</th><th>Próx. manutenção</th><th>Executado por</th><th>Status</th><th>Ações</th>
+            </tr></thead>
+            <tbody id="tb-manutencoes"><tr><td colspan="9" class="tagline">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <div class="view" id="view-planos">
@@ -192,6 +225,11 @@
           <tbody id="tb-planos"><tr><td colspan="7" class="tagline">Carregando...</td></tr></tbody>
         </table>
       </div>
+      <section id="planos-rotinas" class="hidden">
+        <h2 class="sec-tit">Planos por calendário (checklists)</h2>
+        <p class="tagline">Rotinas por data, com os itens de cada checklist e a faixa aceita em cada medição. Executadas pela aba Manutenção.</p>
+        <div id="lista-planos-rotinas" class="stack"></div>
+      </section>
     </div>
 
     <div class="view" id="view-estoque">
@@ -396,12 +434,16 @@
         <div class="frow"><label>Uso de referência (km)</label><input id="rt-uso" type="text" inputmode="decimal" autocomplete="off"/></div>
         <div class="frow"><label>Executado por</label><input id="rt-executado"/></div>
       </div>
+      <div class="rt-barra">
+        <span class="tagline">Responda cada item. Medição em branco conta como "não medido".</span>
+        <button type="button" class="btn btn-s btn-sm" id="rt-marcar-ok" onclick="marcarChecksConformes()">Marcar pendentes como conforme</button>
+      </div>
       <div id="rt-itens"></div>
       <div id="rt-resumo" class="callout co-ok" style="margin-top:12px"></div>
       <div class="frow"><label>Observações</label><textarea id="rt-obs"></textarea></div>
       <div id="rt-erro" class="callout co-red hidden"></div>
     </div>
-    <div class="modal-ft"><button class="btn btn-s" onclick="fecharModal('rotina')">Cancelar</button><button class="btn btn-p" onclick="salvarRotina()">Salvar execução</button></div>
+    <div class="modal-ft"><span id="rt-progresso" class="rt-progresso"></span><button class="btn btn-s" onclick="fecharModal('rotina')">Cancelar</button><button class="btn btn-p" onclick="salvarRotina()">Salvar execução</button></div>
   </div>
 </div>
 

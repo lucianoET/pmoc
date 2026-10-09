@@ -58,11 +58,11 @@ test('todo onclick/oninput/onchange das rotinas está exposto em window e existe
   const app = fs.readFileSync(new URL('../transportes/app.js', import.meta.url), 'utf8')
   const html = fs.readFileSync(new URL('../transportes/index.html', import.meta.url), 'utf8')
   const expostas = app.slice(app.indexOf('function exporNoWindow'))
-  for (const fn of ['abrirModalRotina', 'salvarRotina', 'verExecucao', 'atualizarResumoRotina']) {
+  for (const fn of ['abrirModalRotina', 'salvarRotina', 'verExecucao', 'atualizarResumoRotina', 'marcarChecksConformes']) {
     assert.ok(new RegExp(`\\b${fn},`).test(expostas), `${fn} fora de exporNoWindow`)
     assert.ok(new RegExp(`function ${fn}\\(`).test(app), `${fn} não definida`)
   }
-  for (const id of ['rotinas-bloco', 'btn-exec-rotina', 'tb-rotinas', 'tb-execucoes', 'modal-rotina', 'modal-execucao-ver', 'rt-itens', 'rt-resumo', 'rt-erro', 'ev-corpo', 'ev-titulo']) {
+  for (const id of ['rotinas-bloco', 'btn-exec-rotina', 'lista-rotinas', 'execucoes-bloco', 'planos-rotinas', 'rt-progresso', 'rt-marcar-ok', 'kpi-rotinas', 'tb-execucoes', 'modal-rotina', 'modal-execucao-ver', 'rt-itens', 'rt-resumo', 'rt-erro', 'ev-corpo', 'ev-titulo']) {
     assert.ok(html.includes(`id="${id}"`), `#${id} ausente do HTML`)
   }
 })
@@ -72,4 +72,15 @@ test('campos de medição não são type="number" (a vírgula seria descartada)'
   const html = fs.readFileSync(new URL('../transportes/index.html', import.meta.url), 'utf8')
   assert.ok(!/data-item[^>]*type="number"|type="number"[^>]*data-item/.test(app))
   assert.ok(!/id="rt-uso"[^>]*type="number"/.test(html))
+})
+
+test('rótulos de periodicidade e prazo', async () => {
+  const { rotuloPeriodicidade, textoPrazo } = await import('../transportes/rotinas.js')
+  assert.equal(rotuloPeriodicidade(1), 'Diária')
+  assert.equal(rotuloPeriodicidade(365), 'Anual')
+  assert.equal(rotuloPeriodicidade(45), 'a cada 45 dias')
+  assert.equal(textoPrazo({ estado: 'nunca', dias: null }), 'nunca executada')
+  assert.equal(textoPrazo({ estado: 'proxima', dias: 0 }), 'vence hoje')
+  assert.equal(textoPrazo({ estado: 'vencida', dias: -1 }), 'atrasada 1 dia')
+  assert.equal(textoPrazo({ estado: 'em_dia', dias: 12 }), 'em 12 dias')
 })

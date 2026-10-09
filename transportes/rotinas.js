@@ -99,3 +99,18 @@ export function naoConformidades(itens, linhas) {
   }
   return { nc, dispersoes, total: nc.length + dispersoes.length }
 }
+
+const PERIODICIDADES = { 1: 'Diária', 7: 'Semanal', 15: 'Quinzenal', 30: 'Mensal', 60: 'Bimestral', 90: 'Trimestral', 180: 'Semestral', 365: 'Anual' }
+
+/** Nome da periodicidade para a tela; intervalo fora da lista vira "a cada N dias". */
+export function rotuloPeriodicidade(dias) {
+  return PERIODICIDADES[dias] || `a cada ${dias} dias`
+}
+
+/** Texto curto do prazo: "vence hoje", "em 3 dias", "atrasada 2 dias", "nunca executada". */
+export function textoPrazo(sit) {
+  if (sit.estado === 'nunca') return 'nunca executada'
+  if (sit.dias === 0) return 'vence hoje'
+  if (sit.dias < 0) return `atrasada ${Math.abs(sit.dias)} dia${Math.abs(sit.dias) === 1 ? '' : 's'}`
+  return `em ${sit.dias} dia${sit.dias === 1 ? '' : 's'}`
+}

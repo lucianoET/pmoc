@@ -2984,3 +2984,8 @@ on i.rotina_id = r.id group by 1` → 6 rotinas, 48 itens no total. Rodar o 66 d
       a "Em dia" com próxima = data + 30 dias, e "Ver" lista os valores com OK/NC.
 - [ ] Anon pela API REST: `POST` em `transp_execucoes` → 401; `PATCH` → recusado.
 - [ ] Em 375px, o modal sem rolagem horizontal.
+
+- [ ] (UI 07/10) Em 375px, Manutenção mostra cada rotina como cartão com o selo de situação visível, sem rolar para o lado.
+- [ ] (UI 07/10) No checklist, "Marcar pendentes como conforme" não desfaz um "Não conforme" já marcado; o rodapé mostra checks, medições e NC.
+- [ ] (UI 07/10) Aba Planos lista os 6 planos por calendário; abrir um mostra os itens e as faixas.
+- [ ] (UI 07/10) Painel mostra "Checklists pendentes" e o VTR-024 em "Ativos com atenção".
